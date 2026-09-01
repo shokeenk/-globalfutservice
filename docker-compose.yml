@@ -1,0 +1,103 @@
+# =============================================================================
+#  Local development stack.
+#
+#     docker compose up -d
+#
+#  Brings up Postgres, a throwaway SMTP catcher, the API and the storefront.
+#  Razorpay stays disabled unless you set the keys, so the whole checkout flow
+#  can be walked end to end without live credentials.
+# =============================================================================
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gfs
+      POSTGRES_USER: gfs
+      POSTGRES_PASSWORD: ${GFS_DB_PASSWORD:-gfs}
+    ports:
+      - "5432:5432"
+    volumes:
+      - gfs-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gfs -d gfs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Catches every outbound email and shows it at http://localhost:8025 instead of
+  # delivering it. Worth having from day one: it is the only way to actually read
+  # the delivery email, which under the Terms is the notice that closes the refund
+  # window.
+  mail:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build:
+      context: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GFS_DB_URL: jdbc:postgresql://db:5432/gfs
+      GFS_DB_USER: gfs
+      GFS_DB_PASSWORD: ${GFS_DB_PASSWORD:-gfs}
+      GFS_JWT_SECRET: ${GFS_JWT_SECRET:?set GFS_JWT_SECRET in .env — openssl rand -base64 48}
+      GFS_QUOTE_SECRET: ${GFS_QUOTE_SECRET:?set GFS_QUOTE_SECRET in .env — openssl rand -base64 48}
+      GFS_CREDENTIAL_MASTER_KEY: ${GFS_CREDENTIAL_MASTER_KEY:?set GFS_CREDENTIAL_MASTER_KEY in .env — openssl rand -base64 32}
+      GFS_BOOTSTRAP_ADMIN_EMAIL: ${GFS_BOOTSTRAP_ADMIN_EMAIL:-}
+      GFS_BOOTSTRAP_ADMIN_PASSWORD: ${GFS_BOOTSTRAP_ADMIN_PASSWORD:-}
+      GFS_CORS_ORIGINS: http://localhost:5173
+      GFS_PUBLIC_URL: http://localhost:5173
+      GFS_RAZORPAY_ENABLED: ${GFS_RAZORPAY_ENABLED:-false}
+      GFS_RAZORPAY_KEY_ID: ${GFS_RAZORPAY_KEY_ID:-}
+      GFS_RAZORPAY_KEY_SECRET: ${GFS_RAZORPAY_KEY_SECRET:-}
+      GFS_RAZORPAY_WEBHOOK_SECRET: ${GFS_RAZORPAY_WEBHOOK_SECRET:-}
+      # Social sign-in. Blank is a supported state, not a broken one: the
+      # /auth/providers endpoint reports what is configured and the register page
+      # renders no buttons at all, so an install without these shows a plain
+      # password form rather than a button that fails after leaving the site.
+      GFS_GOOGLE_CLIENT_ID: ${GFS_GOOGLE_CLIENT_ID:-}
+      GFS_GOOGLE_CLIENT_SECRET: ${GFS_GOOGLE_CLIENT_SECRET:-}
+      GFS_DISCORD_CLIENT_ID: ${GFS_DISCORD_CLIENT_ID:-}
+      GFS_DISCORD_CLIENT_SECRET: ${GFS_DISCORD_CLIENT_SECRET:-}
+      # Coin fulfilment. Off by default so a dev stack never reaches a live supplier
+      # with a real customer's EA sign-in.
+      GFS_FUTTRANSFER_ENABLED: ${GFS_FUTTRANSFER_ENABLED:-false}
+      GFS_FUTTRANSFER_API_USER: ${GFS_FUTTRANSFER_API_USER:-}
+      GFS_FUTTRANSFER_API_KEY: ${GFS_FUTTRANSFER_API_KEY:-}
+      GFS_FUTTRANSFER_RISK_LEVEL: ${GFS_FUTTRANSFER_RISK_LEVEL:-2}
+      # Order alerts. GFS_EMAIL_ENABLED alone does nothing: OperatorEmailNotifier
+      # requires a recipient too, so leaving this blank meant the compose stack looked
+      # configured and still told nobody. Mail is caught by the `mail` service below
+      # and read in its web UI — no real address is contacted from a dev stack.
+      GFS_EMAIL_ENABLED: "true"
+      GFS_OPERATOR_EMAILS: ${GFS_OPERATOR_EMAILS:-operator@example.test}
+      GFS_SMTP_HOST: mail
+      GFS_SMTP_PORT: "1025"
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: ./frontend
+      # Deliberately not passing VITE_API_BASE_URL. The image's nginx proxies
+      # /api, /oauth2 and /login/oauth2 to the `api` service, so the bundle makes
+      # same-origin calls and compose behaves the way production does. Baking in
+      # http://localhost:8080 here used to send the browser cross-origin, which
+      # meant social sign-in could never work under compose even when it worked
+      # everywhere else — the refresh cookie belonged to :8080, not :5173.
+    environment:
+      API_UPSTREAM: api:8080
+      API_CONNECT_SRC: ""
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  gfs-db:

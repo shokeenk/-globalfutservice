@@ -1,0 +1,317 @@
+# =============================================================================
+#  Global FUT Services — application configuration
+#
+#  Nothing secret has a default. A missing signing key stops the application from
+#  starting rather than silently falling back to a development constant that then
+#  ships to production — which is how JWT secrets end up being "changeit".
+#
+#  Copy .env.example to .env and fill it in. See README.md.
+# =============================================================================
+
+spring:
+  application:
+    name: gfs-backend
+
+  # ---------------------------------------------------------------------------
+  #  Read .env directly, so no runner has to be configured to do it.
+  #
+  #  Spring does not read .env on its own, and for a long time only `docker
+  #  compose` did — which meant the same checkout behaved differently depending on
+  #  how it was started. Run from IntelliJ or `mvn spring-boot:run`, the OAuth
+  #  variables were simply absent, `/auth/providers` answered `[]`, and the social
+  #  sign-in buttons silently disappeared from the storefront. The symptom looked
+  #  like missing UI; the cause was a missing property source.
+  #
+  #  Both paths are listed because the working directory differs by runner: the
+  #  Maven plugin starts in `backend/`, most IDE run configurations in the repo
+  #  root. `optional:` means a deployment without the file — Render, where the
+  #  values are real environment variables — starts normally rather than failing.
+  #
+  #  This does NOT override production. OS environment variables outrank imported
+  #  config data in Spring's precedence order, so Render's dashboard values still
+  #  win wherever both exist.
+  #
+  #  The `[.properties]` suffix tells Spring to parse an extension-less file as
+  #  properties. That works because .env keeps its comments on their own lines —
+  #  `#` only starts a comment at the beginning of a line in a properties file, so
+  #  an inline one would be read as part of the value.
+  # ---------------------------------------------------------------------------
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]
+
+  datasource:
+    url: ${GFS_DB_URL:jdbc:postgresql://localhost:5432/gfs}
+    username: ${GFS_DB_USER:gfs}
+    password: ${GFS_DB_PASSWORD:gfs}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      # Below Postgres' own idle timeout, so the pool discards connections before
+      # the server does and nobody sees a "connection closed" on the money path.
+      max-lifetime: 600000
+
+  jpa:
+    open-in-view: false          # An HTTP thread must not hold a database connection
+    hibernate:
+      ddl-auto: validate         # Flyway owns the schema. Never 'update' on a table
+                                 # that holds orders.
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 25
+          time_zone: UTC
+        order_inserts: true
+        order_updates: true
+        # Fails startup if a lazy association would need a connection outside a
+        # transaction — catches N+1 in development rather than in production.
+        enable_lazy_load_no_trans: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    validate-on-migrate: true
+
+  mail:
+    host: ${GFS_SMTP_HOST:localhost}
+    port: ${GFS_SMTP_PORT:1025}
+    username: ${GFS_SMTP_USER:}
+    password: ${GFS_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${GFS_SMTP_AUTH:false}
+          starttls:
+            enable: ${GFS_SMTP_TLS:false}
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  threads:
+    virtual:
+      enabled: true              # Servlet requests on virtual threads (JDK 21)
+  # ---------------------------------------------------------------- oauth ----
+  #
+  # Deliberately NOT configured here. See OAuthClientsConfig.
+  #
+  # These four used to sit under `spring.security.oauth2.client.registration` with
+  # `${GFS_GOOGLE_CLIENT_ID:}`-style empty defaults, on the assumption that an empty
+  # client-id meant "provider off". It does not. Spring Boot binds every declared
+  # registration and validates it before anything else runs, and an empty client-id is
+  # a hard startup failure:
+  #
+  #     Client id of registration 'google' must not be empty.
+  #
+  # So a deployment that had simply not set the secrets could not boot — the opposite
+  # of optional. The registrations are now built in code from the same four environment
+  # variables, where "absent" is something that can actually be expressed.
+  #
+  #     GFS_GOOGLE_CLIENT_ID / GFS_GOOGLE_CLIENT_SECRET
+  #     GFS_DISCORD_CLIENT_ID / GFS_DISCORD_CLIENT_SECRET
+
+
+
+server:
+  port: ${GFS_PORT:8080}
+  # Trust X-Forwarded-* from the reverse proxy so getRemoteAddr and scheme are
+  # correct. Reading the header directly in application code would let any caller
+  # spoof its own IP past the rate limiter.
+  forward-headers-strategy: framework
+  error:
+    include-message: never       # Error bodies come from GlobalExceptionHandler only
+    include-stacktrace: never
+    include-binding-errors: never
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json
+    min-response-size: 1024
+  tomcat:
+    max-http-form-post-size: 256KB
+    max-swallow-size: 256KB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Everything else is ADMIN-gated in SecurityConfig; keeping the exposure
+        # list short means a misconfigured security rule cannot leak /env or
+        # /heapdump, which between them contain every secret the process holds.
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: false
+
+springdoc:
+  # Interactive docs are a development convenience. Disable in production: an
+  # endpoint catalogue is a gift to anyone probing the API.
+  swagger-ui:
+    enabled: ${GFS_SWAGGER_ENABLED:true}
+  api-docs:
+    enabled: ${GFS_SWAGGER_ENABLED:true}
+
+logging:
+  level:
+    root: INFO
+    com.globalfutservice: ${GFS_LOG_LEVEL:INFO}
+    # Never DEBUG in a deployed environment: Hibernate logs bound parameters, and
+    # bound parameters on this application include an email and, briefly, a
+    # ciphertext blob.
+    org.hibernate.SQL: WARN
+    org.springframework.web: WARN
+
+# ----------------------------------------------------------------- application ---
+gfs:
+  season: ${GFS_SEASON:FC26}
+  season-year: ${GFS_SEASON_YEAR:26}
+  public-url: ${GFS_PUBLIC_URL:http://localhost:5173}
+
+  security:
+    jwt-secret: ${GFS_JWT_SECRET}                       # openssl rand -base64 48
+    quote-signing-secret: ${GFS_QUOTE_SECRET}           # openssl rand -base64 48
+    credential-master-key: ${GFS_CREDENTIAL_MASTER_KEY} # openssl rand -base64 32
+    access-token-ttl: 15m
+    refresh-token-ttl: 30d
+    cors-allowed-origins: ${GFS_CORS_ORIGINS:http://localhost:5173}
+    bootstrap-admin-email: ${GFS_BOOTSTRAP_ADMIN_EMAIL:}
+    bootstrap-admin-password: ${GFS_BOOTSTRAP_ADMIN_PASSWORD:}
+    require-https: ${GFS_REQUIRE_HTTPS:false}
+    max-failed-logins: 5
+    login-lockout: 15m
+
+  pricing:
+    market-tax-bps: ${GFS_MARKET_TAX_BPS:500}       # EA transfer market tax, 5%
+    # INCLUDED: the listed price already covers EA's 5%, and the quote shows the line at
+    # zero so the customer can see the charge they are not paying. ADDED bills it on top.
+    #
+    # INCLUDED is what the storefront has always advertised. Switching to ADDED without
+    # also changing that copy puts two different claims in front of the same customer.
+    market-tax-mode: ${GFS_MARKET_TAX_MODE:INCLUDED}
+    gateway-fee-bps: ${GFS_GATEWAY_FEE_BPS:250}     # Razorpay processing, 2.5%
+    gateway-fee-mode: ${GFS_GATEWAY_FEE_MODE:PASS_THROUGH}
+    max-wallet-redemption-bps: 2000                 # Points may pay at most 20%
+    point-value-minor: 100                          # 1 point = Rs.1
+    earn-spend-unit-minor: 200000                   # per Rs.2,000 spent...
+    earn-points-per-unit: 20                        # ...earn 20 points (1% back)
+    quote-ttl: 10m
+    # Currencies offered in the storefront picker, intersected with whichever have
+    # live rate-card rows. A currency here is a promise the gateway must keep:
+    # Razorpay needs international payments activated before anything but INR can
+    # actually be charged. Startup warns when this is wider than INR.
+    enabled-currencies: ${GFS_CURRENCIES:INR,USD,EUR,GBP}
+    # The six-tier ladder discounting orders automatically. A switch, not a
+    # redeploy: it stacks with the points rebate, so a Diamond customer redeeming
+    # their balance costs roughly 6% of gross between the two, and that is a
+    # margin decision the owner may need to reverse on a bad month.
+    tier-discount-enabled: ${GFS_PRICING_TIER_DISCOUNT_ENABLED:true}
+
+  loyalty:
+    daily-bonus-points: ${GFS_LOYALTY_DAILY_BONUS_POINTS:3}
+    # Deliberately not UTC. With a UTC boundary an Indian customer's day rolls
+    # over at 05:30 local, so checking in at 11pm and again at 6am counts as two
+    # days while 9am on consecutive days counts as one.
+    bonus-zone: ${GFS_LOYALTY_BONUS_ZONE:Asia/Kolkata}
+
+  coaching:
+    session-length: ${GFS_COACHING_SESSION_LENGTH:60m}
+    slot-step: ${GFS_COACHING_SLOT_STEP:30m}       # slots on the hour and half hour
+    min-lead-time: ${GFS_COACHING_MIN_LEAD_TIME:2h}
+    max-advance: ${GFS_COACHING_MAX_ADVANCE:60d}
+    change-cutoff: ${GFS_COACHING_CHANGE_CUTOFF:12h}   # notice to keep the credit
+    max-reschedules: ${GFS_COACHING_MAX_RESCHEDULES:2}
+    no-show-grace: ${GFS_COACHING_NO_SHOW_GRACE:15m}
+    credit-validity: ${GFS_COACHING_CREDIT_VALIDITY:30d}
+    # Sessions granted per rate-card variant. A new pack is a rate-card row plus
+    # a line here, not a code change.
+    # Quoted: the default itself contains colons. Spring splits the placeholder on
+    # the FIRST colon only, so the default reads as the whole mapping string.
+    credits-per-variant: "${GFS_COACHING_CREDITS_PER_VARIANT:SINGLE_SESSION:1,MONTHLY_6_SESSIONS:6}"
+
+  fulfilment:
+    guarantee-window: 7d
+    credential-retention: 24h    # after which EA sign-ins are destroyed regardless
+    delivery-sla: 48h            # the contractual outer bound, not the promise
+    default-delivery-method: PLAYER_AUCTION   # needs no credentials — prefer it
+    refund-fee-bps: 500
+    guarantee-cash-bps: 5000     # 50% cash, or...
+    guarantee-credit-bps: 10000  # ...100% as store credit. The gap is deliberate.
+
+  razorpay:
+    enabled: ${GFS_RAZORPAY_ENABLED:false}
+    key-id: ${GFS_RAZORPAY_KEY_ID:}
+    key-secret: ${GFS_RAZORPAY_KEY_SECRET:}
+    webhook-secret: ${GFS_RAZORPAY_WEBHOOK_SECRET:}
+    api-base-url: https://api.razorpay.com/v1
+    timeout: 10s
+
+  # ------------------------------------------------------------- fulfilment ----
+  #
+  # The supplier that actually moves the coins. Disabled leaves the whole flow intact
+  # and stops at READY_FOR_DELIVERY for an operator to work by hand, which is exactly
+  # how the system behaved before this integration existed.
+  #
+  # risk-level: 2 is the supplier's own default and the only value compatible with the
+  # seven-day ban guarantee this storefront sells — 3 and above are documented as
+  # escalating ban risk with no refunds.
+  fut-transfer:
+    enabled: ${GFS_FUTTRANSFER_ENABLED:false}
+    base-url: ${GFS_FUTTRANSFER_BASE_URL:https://futtransfer.top}
+    api-user: ${GFS_FUTTRANSFER_API_USER:}
+    api-key: ${GFS_FUTTRANSFER_API_KEY:}
+    transfer-method: ${GFS_FUTTRANSFER_METHOD:snipe}
+    risk-level: ${GFS_FUTTRANSFER_RISK_LEVEL:2}
+    poll-interval: 60s
+    timeout: 15s
+    max-dispatch-attempts: 3
+
+  notifications:
+    whatsapp-enabled: ${GFS_WHATSAPP_ENABLED:false}
+    whatsapp-phone-number-id: ${GFS_WHATSAPP_PHONE_ID:}
+    whatsapp-access-token: ${GFS_WHATSAPP_TOKEN:}
+    whatsapp-operator-number: ${GFS_WHATSAPP_TO:}
+    whatsapp-template-name: ${GFS_WHATSAPP_TEMPLATE:gfs_new_order}
+    whatsapp-api-base-url: https://graph.facebook.com/v20.0
+    telegram-enabled: ${GFS_TELEGRAM_ENABLED:false}
+    telegram-bot-token: ${GFS_TELEGRAM_TOKEN:}
+    telegram-chat-id: ${GFS_TELEGRAM_CHAT_ID:}
+    telegram-api-base-url: https://api.telegram.org
+    email-enabled: ${GFS_EMAIL_ENABLED:false}
+    # Who is on shift. Comma-separated. Blank means nobody gets order alerts.
+    operator-emails: ${GFS_OPERATOR_EMAILS:}
+    email-from: ${GFS_EMAIL_FROM:orders@globalfutservices.com}
+    email-from-name: Global FUT Services
+
+  rate-limit:
+    enabled: true
+    quotes-per-minute: 30          # the price-scraping surface
+    auth-per-minute: 10            # the credential-stuffing surface
+    order-creation-per-minute: 5   # the card-testing surface
+    default-per-minute: 120
+
+---
+# ------------------------------------------------------------------ production ---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
+logging:
+  level:
+    com.globalfutservice: INFO
+
+gfs:
+  security:
+    require-https: true

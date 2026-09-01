@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#E7E2FA" />
+    <!--
+      Two icons, in this order on purpose. Browsers that understand SVG take the
+      first and get a mark that stays crisp at any size, including the 16px
+      favourites-bar slot. Everything else — and iOS, which ignores SVG icons
+      entirely — falls through to the PNGs rendered from the real badge.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+
+    <title>Global FUT Services — Safe Trading Service for EA FC 26</title>
+    <meta name="description"
+          content="The safest, fastest place to grow your FC 26 club. Safe Trading Service, Champs and Rivals boosting, delivered by traders who do this all day. 7-day guarantee." />
+
+    <!--
+      Fonts are self-hosted through @fontsource rather than loaded from Google.
+      Two reasons: every visitor's IP stops being handed to a third party, and the
+      strict Content-Security-Policy this site ships with does not need a hole in
+      it for someone else's CDN.
+    -->
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Global FUT Services — Safe Trading Service for EA FC 26" />
+    <meta property="og:description"
+          content="Grow your FC 26 club safely. Trading service, Champs and Rivals boosting, 7-day guarantee." />
+    <!--
+      The share card. `twitter:card` was already declaring `summary_large_image`
+      with no image to show it, so every link pasted into WhatsApp, Instagram or
+      X rendered as a bare row of text — on a site whose customers share links
+      constantly. An absolute URL is required: the crawlers do not resolve
+      relative paths, and several refuse to follow a redirect to find one.
+    -->
+    <meta property="og:image" content="https://globalfutservices.com/brand/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt"
+          content="Global FUT Services — safe trading, boosting and coaching for EA FC 26." />
+    <meta property="og:site_name" content="Global FUT Services" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://globalfutservices.com/brand/og-card.png" />
+  </head>
+  <body class="bg-ink text-chalk antialiased">
+    <div id="root"></div>
+    <noscript>
+      <div style="padding:2rem;font-family:system-ui;color:#F7F5FE;background:#1D1636">
+        <h1>JavaScript is required</h1>
+        <p>Global FUT Services needs JavaScript to price and place orders.
+           If you would rather not enable it, email support and we will take your order by hand.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,925 @@
+/*
+ * Two variable families, self-hosted.
+ *
+ * What was here before was Inter plus Chakra Petch — the two most predictable
+ * choices available. Inter is the face every dashboard and every AI-generated
+ * landing page reaches for, and Chakra Petch is the same reflex applied to
+ * "gaming". Neither was chosen; both were defaulted to.
+ *
+ * Archivo is loaded from `wdth.css` rather than the default entry point, which
+ * costs 90KB instead of 35KB and buys a real width axis — 62% to 125%. That is
+ * the whole reason it is here: width becomes something the design can set per
+ * role rather than a fixed property of the file. Headlines run slightly narrow
+ * for density and impact; small-caps labels run wide, because letterspaced caps
+ * at 11px need the extra room to stop reading as a solid bar.
+ *
+ * Schibsted Grotesk was drawn for a newsroom — editorial text and interface at
+ * the same time, which is exactly this site's problem. It has more character
+ * than Inter in the places you notice (a, g, R, the numerals) and none of the
+ * softness that would undermine a price.
+ */
+/*
+ * Poppins, in the four weights this site actually sets: 400 body, 500 labels,
+ * 600 the workhorse, 700/800 display. Listing them rather than importing the
+ * family keeps four files in the bundle instead of eighteen.
+ *
+ * Poppins is a static family, not variable — which is the one thing that matters
+ * when swapping it in for Archivo. Archivo carried a width axis and this
+ * stylesheet used it: `font-stretch: 94%` on every heading. Against a face with
+ * no such axis that declaration is not an error and not a fallback, it is simply
+ * ignored, so the headings would quietly render at normal width and the loss
+ * would look like nothing in particular. The stretch declarations are removed
+ * below and the tracking retuned instead.
+ */
+@import '@fontsource/poppins/400.css';
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/600.css';
+@import '@fontsource/poppins/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /*
+     * Left at `dark` through the whole conversion from the black theme, which is
+     * more than a stale keyword: `color-scheme` is what the browser reads to paint
+     * everything it owns rather than the stylesheet. On `dark` it renders native
+     * selects, checkboxes, date pickers, Chrome's autofill wash and the default
+     * scrollbar in its dark palette — dark chrome dropped onto a cream page — and
+     * it sets the UA default text colour to white, which was the last pure white left
+     * in the computed tree after every stylesheet value had been converted.
+     */
+    color-scheme: light;
+
+    /*
+     * Vertical rhythm, as three steps rather than a free-for-all.
+     *
+     * Section spacing was previously chosen per page — py-16 here, py-20 there,
+     * py-24 somewhere else — and inconsistent rhythm is one of the things the eye
+     * reads as cheap without being able to name. Three tiers is enough: a page
+     * break, a section, and a group.
+     */
+    /*
+     * Tightened. The three tiers were 144 / 72 / 36 at the top of the clamp, which
+     * on a page-tier section is 128px of air above the content and 128px below —
+     * more than the content itself was tall on most interior pages. Rhythm is worth
+     * keeping; that much of it just makes people scroll past sections they never
+     * saw. The ratios between the three tiers are unchanged, so the page still reads
+     * as one system, only closer together.
+     */
+    --rhythm-page: clamp(3.5rem, 6.5vw, 6rem);
+    --rhythm-section: clamp(2.25rem, 4vw, 3.25rem);
+    --rhythm-group: clamp(1.25rem, 2vw, 1.75rem);
+
+    /*
+     * Layering, named once.
+     *
+     * Ad-hoc z-index is how a sticky header ends up under a dropdown at 2am. Six
+     * values, and nothing in the codebase is allowed to invent a seventh.
+     */
+    --z-raised: 10;
+    --z-sticky: 20;
+    --z-header: 40;
+    --z-overlay: 60;
+    --z-modal: 80;
+    --z-toast: 100;
+  }
+
+  /*
+   * The sticky header's height, as a variable rather than a number copied around.
+   *
+   * One bar on phones, where the links live in the sheet behind the hamburger.
+   * Two bars from `lg` up, where the navigation gets a row of its own. Anchor
+   * scrolling has to know this — a jump to `#reviews` that assumes 72px lands
+   * 78px of the section underneath the header — and it was previously a literal
+   * in three files, so growing the header silently broke all three.
+   */
+  html {
+    --header-h: 56px;
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      --header-h: 120px;
+    }
+  }
+
+  /*
+   * Everything drawn a tenth smaller, from `lg` up.
+   *
+   * The complaint this solves is vertical: on a laptop the three service cards were
+   * cut off by the fold, so a reader had to scroll to learn there were three. Zoom is
+   * the honest instrument for that — it scales type, spacing, borders and the several
+   * hundred `px` literals in this codebase together, where a root `font-size` change
+   * would move only the rem-based half and leave the rest at full size, which reads as
+   * a broken layout rather than a smaller one.
+   *
+   * Deliberately not applied on phones. There is no fold to win back when everything is
+   * already a single column, and 10% off a 16px body size lands under the threshold
+   * where iOS zooms the page on focusing an input — so the phone would get worse
+   * reading and a jumping viewport in exchange for nothing.
+   *
+   * `--header-h` needs no adjustment: it is declared in the same zoomed coordinate
+   * space that `scroll-padding-top` is resolved in, so anchor offsets stay correct.
+   */
+  @media (min-width: 1024px) {
+    html {
+      zoom: 0.9;
+    }
+  }
+
+  html {
+    /*
+     * The UA default colour is black, which `body` immediately overrides — so it
+     * paints nothing. Set anyway, because "nothing currently inherits it" is a fact
+     * about today's markup, not a property of the stylesheet, and it was the last
+     * non-palette value the computed tree reported.
+     */
+    color: #111114;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+    /* Anchored sections must not land underneath the sticky header. */
+    scroll-padding-top: calc(var(--header-h) + 1rem);
+  }
+
+  body {
+    @apply bg-ink text-chalk font-sans;
+    text-rendering: optimizeLegibility;
+    font-optical-sizing: auto;
+    /*
+     * `cv11` and `ss01` were Inter's own character-variant switches and mean
+     * nothing to Schibsted Grotesk — left in place they would either no-op or,
+     * worse, collide with an unrelated feature under the same tag. What this
+     * face actually wants is its contextual alternates, which is the default.
+     */
+    font-feature-settings: 'calt' 1;
+    /*
+     * Nothing on this site may cause a horizontal scrollbar. Several sections use
+     * layers that intentionally overhang the viewport — floodlights, drifting haze,
+     * oversized display type — and on a 360px phone any one of them would otherwise
+     * add a few pixels of sideways scroll, which is the single most obvious sign
+     * that nobody tested the page on a phone.
+     */
+    overflow-x: clip;
+  }
+
+  /*
+   * A visible focus ring is an accessibility requirement, not a decoration.
+   * Removing outlines without replacing them makes a site unusable by keyboard,
+   * which on a checkout flow means unusable by some paying customers.
+   *
+   * Two rings rather than one: a dark inner halo separates the bright outer ring
+   * from whatever is behind it, so the indicator stays visible on a red button and
+   * on a near-black page alike. WCAG 2.2 asks for 3:1 against adjacent colours, and
+   * a single ring fails that on at least one of those two surfaces.
+   */
+  /*
+   * Two rings, so the indicator survives on any surface the site has. The inner one
+   * is the page colour and the outer the brand red; on white the red is doing the
+   * work and the spacer stops it merging into a red button's own edge.
+   */
+  /*
+   * Outline, not box-shadow.
+   *
+   * This ring was drawn with `box-shadow`, which loses to any element carrying a
+   * Tailwind `shadow-*` class — utilities are a later layer than base, so every card,
+   * button and dialog with elevation had no visible focus ring at all. `outline` cannot
+   * collide with `box-shadow`, follows border-radius in every current browser, and is
+   * never clipped by an `overflow: hidden` ancestor the way a shadow is.
+   *
+   * Instant on purpose: a focus ring that fades in is a focus ring a keyboard user
+   * out-runs. Everything else on this site transitions; this does not.
+   */
+  :focus-visible {
+    outline: 2px solid theme('colors.red.600');
+    outline-offset: 2px;
+    transition: none;
+  }
+
+  /* On a red ground the red ring is invisible; white is the only thing that reads. */
+  .bg-red-600:focus-visible,
+  .bg-brand-500:focus-visible,
+  .bg-brand-400:focus-visible {
+    outline-color: #FFFFFF;
+    outline-offset: -4px;
+  }
+
+  /*
+   * Nothing on this site changes state instantly except the focus ring.
+   *
+   * A baseline rather than a per-component decision: 22 of the 31 hand-written buttons
+   * had no transition, so pressing around the site felt uneven — some things eased,
+   * others snapped. The curve is the same one the cards use, so a hover anywhere has
+   * the same weight.
+   *
+   * `background-color` and `border-color` only. Transitioning `all` would also animate
+   * layout properties on unrelated state changes, which is how a hover ends up costing
+   * a reflow.
+   */
+  a,
+  button,
+  [role='button'],
+  [role='tab'],
+  summary {
+    transition:
+      color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    a, button, [role='button'], [role='tab'], summary { transition: none; }
+  }
+
+  /*
+   * Tint only — the text keeps whatever colour it already had.
+   *
+   * Forcing a selection colour breaks on exactly one ground and it happens to be the
+   * most important one: setting `text-chalk` turned the white hero headline near-black
+   * the moment anyone dragged across it, on a dark photograph. A selection style has to
+   * work on both light and dark type, and the only way to guarantee that is not to
+   * specify the type colour at all.
+   */
+  ::selection {
+    background-color: rgb(193 40 27 / 0.28);
+  }
+
+  /* Respect the operating-system preference. Motion for its own sake is one thing;
+     motion someone has explicitly asked not to see is another. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+    /*
+     * The ticker is the one exception that needs stating rather than suppressing.
+     * The blanket rule above would snap it to its final keyframe — translated 50%
+     * left — leaving a visibly half-empty rail. Cancelling the animation outright
+     * parks it at its authored position instead.
+     */
+    .rail-track {
+      animation: none !important;
+      transform: none !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+   * Display type, set narrow.
+   *
+   * The tracking here is a floor for headings set with arbitrary sizes; where a
+   * `text-display-*` token is applied its own tracking wins, because utilities
+   * beat components in Tailwind's layer order.
+   *
+   * Tracking is what does the work now. Archivo was condensed to 94% at headline
+   * sizes, which fits more of a sentence on a line and reads as deliberate rather
+   * than merely large. Poppins has no width axis to condense, so the same job falls
+   * to negative letter-spacing — and it needs more of it than a grotesque would,
+   * because its round geometric forms leave wider gaps at the same nominal size.
+   * `.display-wide` still exists for the small end, where tight tracking only
+   * makes 15px harder to read.
+   */
+  .display {
+    @apply font-display;
+    font-weight: 700;
+    /*
+     * No `font-stretch`. Poppins is a single width, so the 94% that Archivo's axis
+     * answered would be silently dropped here. Poppins is also a geometric face
+     * with generous round forms, so it needs more negative tracking than a
+     * grotesque did to hold together at headline size — this is that compensation,
+     * not a preference.
+     */
+    letter-spacing: -0.035em;
+  }
+
+  /* Display type at small sizes: normal width, since condensing 15px helps nothing. */
+  .display-wide {
+    @apply font-display;
+    font-weight: 600;
+    letter-spacing: -0.016em;
+  }
+
+  /*
+   * Numbers that change in place — prices, points, countdowns — use tabular
+   * figures so the layout does not jitter as the customer drags the slider.
+   */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  .hairline {
+    @apply border border-ink-400;
+  }
+
+  /*
+   * The standard raised surface.
+   *
+   * A border plus a background is flat. The gradient here is almost invisible on
+   * its own — a two-percent lift at the top edge — but it is what makes a card look
+   * lit from above rather than pasted on, and it is the difference the eye reads as
+   * quality without noticing why.
+   */
+  /*
+   * A white card on a white page.
+   *
+   * It has no colour of its own to separate it from the ground, so the separation is
+   * doing all the work: a hairline, one step of elevation, and a barely-there shade
+   * falling away at the bottom edge. That last one is what a white object on white
+   * paper actually does, and it is the difference between a card and a rectangle.
+   */
+  /*
+   * Section texture: one technique, used everywhere, rather than three.
+   *
+   * The page ground is a single flat fill, so every band below the hero reads as the
+   * same dead rectangle — which is what makes scrolling out of the hero feel like a
+   * drop in quality rather than a continuation. Two very large, very soft colour fields
+   * behind the content give the ground tonal variation without becoming a pattern
+   * anyone consciously notices.
+   *
+   * This is the treatment the rewards panels were already using locally (a gold blob at
+   * 10% under a 100px blur). Promoting it to a utility is what stops the site
+   * accumulating a dot grid in one place, a gradient wash in another and blobs in a
+   * third — three techniques reading as three different designers.
+   *
+   * `isolate` on the section and negative z-index here keep it strictly behind content
+   * without needing a stacking context per child. `pointer-events: none` because it is
+   * decoration that must never eat a click.
+   */
+  .section-wash {
+    position: relative;
+    isolation: isolate;
+  }
+  .section-wash::before,
+  .section-wash::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 9999px;
+    /*
+     * 0.07 and 0.05. Above about 0.09 the blobs stop being ground and start being
+     * shapes — you can see where one ends, and a reader begins reading it as an
+     * element rather than as light. Below 0.03 they are indistinguishable from the
+     * flat fill they replaced.
+     */
+  }
+  .section-wash::before {
+    top: -14%;
+    right: -8%;
+    width: 46rem;
+    height: 46rem;
+    background: rgb(193 40 27 / 0.07);
+    filter: blur(120px);
+  }
+  .section-wash::after {
+    bottom: -18%;
+    left: -12%;
+    width: 38rem;
+    height: 38rem;
+    background: rgb(255 201 60 / 0.05);
+    filter: blur(130px);
+  }
+
+  /*
+   * Half the strength, for a band that sits directly beside another washed one. Two
+   * sections at full strength stacked read as a gradient down the whole page rather
+   * than as two distinct grounds.
+   */
+  .section-wash-soft::before { background: rgb(193 40 27 / 0.04); }
+  .section-wash-soft::after  { background: rgb(255 201 60 / 0.03); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Nothing animates here — the wash is static by design. A drifting background is
+       the kind of effect that looks impressive once and is distracting every time
+       after, on a page people come back to in order to buy something. */
+  }
+
+  .surface {
+    @apply hairline rounded-panel shadow-sm;
+    /*
+     * The shade at the bottom edge stays, but it is no longer the only thing separating
+     * a card from the page — the page is now a step below the card, so this is back to
+     * being a finishing touch rather than the whole mechanism.
+     */
+    background-image: linear-gradient(
+      180deg,
+      rgb(255 255 255 / 0) 68%,
+      rgb(17 17 20 / 0.020) 100%
+    );
+    background-color: theme('colors.white');
+    transition:
+      box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /*
+   * The lift is opt-in, on `.surface-interactive`, because most cards on this site are
+   * not clickable. A card that rises under the cursor and then does nothing when you
+   * press it is worse than one that never moved.
+   */
+  .surface-interactive:hover {
+    @apply shadow-md;
+    transform: translateY(-2px);
+    border-color: theme('colors.gray.300');
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .surface,
+    .surface-interactive:hover {
+      transition: none;
+      transform: none;
+    }
+  }
+
+  .surface-raised {
+    @apply surface shadow-e3;
+  }
+
+  /*
+   * A data plate — the HUD surface.
+   *
+   * Nearly square corners, a darker ground than a card, and a hairline. This is for
+   * anything that presents *readings* rather than content: price rows, stat blocks,
+   * status panels. The squareness is the whole point. A 4px radius reads as an
+   * instrument; the same panel at 16px reads as a marketing card, and the eye sorts
+   * those two into different categories before it reads a single word.
+   */
+  .plate {
+    @apply rounded-edge border border-ink-400/80;
+    /*
+     * The instrument surface, rebuilt for paper.
+     *
+     * On black this was a translucent dark pane lit along its top edge. On white
+     * that reading is gone: the panel has to be *recessed* to read as an instrument,
+     * not raised. So it sits a shade below the card it lives on, with a hairline of
+     * shadow inside the top edge — the way a milled recess catches light — and no
+     * ambient shadow at all, because a sunken thing does not cast one.
+     *
+     * <b>Opaque, and one step down the neutral ramp.</b> It was `#FFF` at 92%, which
+     * over a white card composites to something within a percent of the card itself —
+     * so the recess was carried entirely by a 1px inset shadow and vanished the moment
+     * it sat on the page instead of on a card. Naming the ground makes the step real
+     * and, more usefully, makes it *constant*: a translucent plate changed colour
+     * depending on what happened to be behind it, which is the opposite of what a
+     * recessed instrument should do. With the page at #F5F5F7 and cards at #FFFFFF,
+     * this is a third rung the eye can actually place.
+     *
+     * Dropping the alpha also drops the `backdrop-filter`, which was blurring a
+     * background it no longer lets through — a compositor layer per plate, bought for
+     * nothing.
+     */
+    background-color: theme('colors.ink.500');
+    /*
+     * No gradient. It used to fake the ground: with the plate translucent there was
+     * nothing to darken the top edge, so a wash stood in for the recess. Now that the
+     * plate has a ground of its own the two stack, and the top of every plate landed
+     * near #EEEAEB — where the quiet text step measures 4.42:1 and misses AA. The step
+     * down plus the inset shadow already say "recessed"; the wash only cost contrast.
+     */
+    box-shadow:
+      inset 0 1px 2px 0 rgb(17 17 20 / 0.07),
+      0 1px 0 0 rgb(255 255 255 / 0.9);
+  }
+
+  /*
+   * Corner ticks, broadcast-style.
+   *
+   * Two short rules at opposing corners rather than a full frame. A complete border
+   * closes an element off; ticks imply a frame the eye completes on its own, which
+   * is how sports broadcast graphics have marked out live data for thirty years.
+   */
+  .ticks {
+    position: relative;
+  }
+  .ticks::before,
+  .ticks::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: theme('colors.brand.500');
+    opacity: 0.65;
+    pointer-events: none;
+  }
+  .ticks::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1.5px solid;
+    border-left: 1.5px solid;
+  }
+  .ticks::after {
+    right: -1px;
+    bottom: -1px;
+    border-right: 1.5px solid;
+    border-bottom: 1.5px solid;
+  }
+
+  /*
+   * Paper tooth.
+   *
+   * The dark theme used grain to dither the banding that wide near-black gradients
+   * produce on 8-bit panels. White has almost no banding to hide, so the job here is
+   * different: the same noise, much weaker, gives the ground the faintest texture of
+   * a printed sheet — which is what the logo was photographed on.
+   *
+   * `multiply` rather than `overlay`: on a light ground overlay barely registers,
+   * while multiply lets the noise settle into the paper as tone.
+   */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.12;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  }
+
+  /*
+   * Small caps, set wide.
+   *
+   * The counterpart to the headline treatment. Uppercase at 11px with 0.2em of
+   * tracking is close to unreadable in a normal-width face — the letters lose
+   * their internal rhythm and the line reads as a grey bar. Widening to 112%
+   * gives each glyph back the room the tracking took away.
+   */
+  .eyebrow {
+    @apply font-display text-[11px] uppercase tracking-[0.18em] text-chalk-faint;
+    font-weight: 600;
+  }
+
+  /*
+   * The broadcast label: a red tick, then small caps.
+   *
+   * This is the site's signature piece of micro-typography. It marks *every*
+   * section opening, which is what turns a set of pages into one publication — the
+   * reader learns the mark in the hero and recognises it on the checkout screen.
+   */
+  .stamp {
+    @apply inline-flex items-center gap-2.5 font-display text-[11px] uppercase
+           tracking-[0.2em] text-chalk-faint;
+    font-weight: 600;
+  }
+  .stamp::before {
+    content: '';
+    width: 14px;
+    height: 2px;
+    background: theme('colors.brand.500');
+    flex: none;
+  }
+
+  /*
+   * The brand plate: the badge's paper, rebuilt.
+   *
+   * The supplied artwork is red ink on a photographed white sheet. Cutting the sheet
+   * away left the mark on transparency, and on a near-black page that reads as a red
+   * outline rather than as the crest it is. This puts the ground back — not as flat
+   * white, which would be a hole punched in the page, but shaded centre-to-edge the
+   * way the original sheet was lit, with a hairline and a contact shadow so it sits
+   * *on* the surface rather than in it.
+   */
+  /*
+   * The brand plate is a no-op now, and that is the point.
+   *
+   * It existed to give the mark back the white paper it was drawn on, because the
+   * artwork is red ink on white and the dark theme had cut that ground away. The
+   * page *is* that ground now, so painting a white disc onto white would draw a
+   * seam around a logo that no longer needs one. The class stays so every call site
+   * keeps working; it simply has nothing left to do.
+   */
+  .brand-plate {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /*
+   * The aura: a colour ring that turns to face the pointer.
+   *
+   * <p>One conic gradient, rotated by a custom property the pointer handler writes.
+   * Because both the rotation and the brightness are properties rather than React
+   * state, a cursor crossing the page costs one style write per frame and no renders
+   * at all.
+   *
+   * <p>The hues are the site's own — brand red into gold into the cool platform blue
+   * and back — so the ring reads as the brand catching light rather than as a rainbow
+   * bolted onto a logo. Red leads and red closes the sweep, which keeps it ours.
+   *
+   * <p>`--aura-near` rests at 0 until the pointer comes within range, so the ring sits
+   * almost dark and lifts as you approach: an object noticing you, rather than a
+   * decoration running all day. With no pointer to follow — a touchscreen, or reduced
+   * motion — the hook never attaches, the properties keep the defaults below, and the
+   * ring simply holds still at its resting brightness.
+   *
+   * <p>The plate is a child, not the host: see the note in Logo.tsx for why.
+   */
+  .brand-aura {
+    --aura-angle: 0deg;
+    --aura-near: 0;
+    --aura-lit: 0;
+    border-radius: 9999px;
+  }
+  .brand-aura > .brand-plate {
+    position: relative;
+    z-index: 1;
+  }
+  .brand-aura::before,
+  .brand-aura::after {
+    content: '';
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+  }
+  /* The rim, just outside the plate. Masked hollow so it is a ring, not a disc. */
+  .brand-aura::before {
+    inset: -7%;
+    background: conic-gradient(
+      from var(--aura-angle),
+      rgb(193 40 27 / 0.95) 0deg,
+      rgb(174 36 24 / 0.75) 38deg,
+      rgb(95 81 144 / 0.6) 92deg,
+      rgb(70 60 107 / 0.35) 168deg,
+      rgb(193 40 27 / 0.1) 252deg,
+      rgb(193 40 27 / 0.95) 360deg
+    );
+    -webkit-mask: radial-gradient(circle, transparent 62%, #111114 69%);
+    mask: radial-gradient(circle, transparent 62%, #111114 69%);
+    /* Quieter on paper. The same ring at dark-theme strength reads as a glowing
+       sticker on white; at rest it is now almost nothing and only lifts on approach. */
+    opacity: calc(0.14 + 0.5 * var(--aura-lit));
+    transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* The spill: the same light thrown onto the page around the plate. */
+  .brand-aura::after {
+    inset: -20%;
+    background: conic-gradient(
+      from var(--aura-angle),
+      rgb(193 40 27 / 0.55) 0deg,
+      rgb(174 36 24 / 0.3) 90deg,
+      rgb(95 81 144 / 0.22) 180deg,
+      rgb(193 40 27 / 0.55) 360deg
+    );
+    filter: blur(16px);
+    opacity: calc(0.05 + 0.3 * var(--aura-lit));
+    transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /*
+   * The light the cursor carries.
+   *
+   * <p>Two sources in one element: a small warm core, and a wide halo with the
+   * faintest brand tint in it. The core is what makes the cursor feel like it is
+   * holding something; the halo is what makes the page ground look like a surface
+   * rather than a colour.
+   *
+   * <p>Deliberately dim. At the strength that looks impressive in isolation this
+   * becomes the loudest thing on every page, competing with the one red button that
+   * is supposed to be. It should be the sort of effect a visitor notices on the
+   * second visit.
+   *
+   * <p>`will-change: transform` promotes it once, up front, so that every subsequent
+   * move is a composite rather than a repaint of a 1100px gradient.
+   */
+  .cursor-light {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+    /*
+     * A light source makes no sense on paper — brightening white does nothing. So
+     * the cursor now carries a *tint* instead: the faintest wash of the brand red,
+     * as though the ink under the pointer were bleeding very slightly. Same
+     * mechanic, same cost, opposite physics.
+     */
+    background:
+      radial-gradient(circle at center,
+        rgb(193 40 27 / 0.030) 0%,
+        rgb(193 40 27 / 0.016) 12%,
+        transparent 26%),
+      radial-gradient(circle at center,
+        rgb(193 40 27 / 0.020) 0%,
+        rgb(124 26 17 / 0.010) 30%,
+        transparent 55%);
+  }
+
+  .link-quiet {
+    @apply text-chalk-muted transition-colors duration-200 hover:text-chalk;
+  }
+
+  /*
+   * Bright text with a slight fall-off toward the baseline. On a dark ground this
+   * reads as a light source above the type rather than as flat white, and it is
+   * the cheapest way to make a headline feel considered.
+   */
+  /*
+   * The hero headline, lifted off the white.
+   *
+   * A single soft glow rather than a drop shadow: on flat white a directional shadow
+   * reads as a cheap 2003 bevel, while a low-opacity blur with no offset just gives the
+   * type a little air. Deliberately not a utility applied to every heading — used once,
+   * on the largest headline on the page, which is the only place the weight of the type
+   * can carry it.
+   */
+  .text-lift {
+    text-shadow: 0 2px 12px rgba(17, 17, 20, 0.08);
+  }
+
+  /* Over a photograph the same idea has to work harder, so it gets a real shadow. */
+  .text-lift-on-image {
+    text-shadow: 0 2px 18px rgba(17, 17, 20, 0.45);
+  }
+
+  .text-sheen {
+    /* Dark type with a slight lift toward the baseline — the same "lit from above"
+       gesture as the dark theme, run the other way so the fall-off is *lighter*
+       rather than darker, which is what ink on paper does under a raking light. */
+    background-image: linear-gradient(175deg, #111114 0%, #1C1C21 40%, #3F3F46 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /*
+   * Etched display type, for the clause of a headline that names the product.
+   *
+   * <p>The idea it replaces was right and the execution was not: a 1.25px wire at 30%
+   * white. Two things were wrong with it. It measured 2.60:1 against the page, under
+   * the 3:1 floor large text has to clear — so the half of the headline carrying the
+   * product name was the least legible thing on the screen. And at display sizes a
+   * fixed hairline goes wiry: the stroke does not grow with the type, so the bigger
+   * the headline the thinner it looks.
+   *
+   * <p>So: the outline stays, but it becomes the legible element at 55% white —
+   * 6.26:1, comfortably clear — and its width is set in `em`, so it thickens with the
+   * type instead of thinning. Inside it sits a soft gradient, brightest at the top and
+   * faintly cool, the colour of a floodlight rather than of paint. That reads as raised
+   * lettering catching the light the `Atmosphere` layer is already casting, and it
+   * gives the letterforms a body the hollow version never had.
+   *
+   * <p>Still clearly quieter than the solid first clause, which is the whole point:
+   * one headline at two levels of presence. And still no red — red on this screen means
+   * the button, and nothing else.
+   */
+  .text-etched {
+    background-image: linear-gradient(
+      172deg,
+      rgb(29 22 54 / 0.30) 0%,
+      rgb(29 22 54 / 0.17) 54%,
+      rgb(29 22 54 / 0.10) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    /* The outline is still the legible element and still scales with the type; on
+       paper it is ink rather than light, so it darkens instead of brightening. */
+    -webkit-text-stroke: 0.028em rgb(29 22 54 / 0.62);
+  }
+  @supports not (-webkit-text-stroke: 1px black) {
+    .text-etched {
+      -webkit-text-stroke: 0;
+      background-image: none;
+      color: rgb(29 22 54 / 0.62);
+    }
+  }
+
+  /*
+   * Outlined display type, for decoration only.
+   *
+   * <p>Both remaining users of this — the wordmark ghosted behind the footer and the
+   * 404 numeral — are `aria-hidden` and are not read as content, which is what lets
+   * them sit below the contrast floor. Headline text uses `.text-etched` instead; if
+   * this class ever ends up on something a reader is meant to read, that is a bug.
+   */
+  .text-hollow {
+    color: transparent;
+    -webkit-text-stroke: 1.25px rgb(17 17 20 / 0.16);
+  }
+  @supports not (-webkit-text-stroke: 1px black) {
+    .text-hollow {
+      color: rgb(17 17 20 / 0.13);
+      -webkit-text-stroke: 0;
+    }
+  }
+
+  /*
+   * Horizontal rails fade out at both edges instead of being cut off by a hard
+   * container boundary. The fade is what tells the reader there is more content
+   * off-screen; a clean edge tells them the row has ended.
+   */
+  .fade-x {
+    mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+  }
+
+  /* A hairline that dissolves at both ends rather than butting into the margin. */
+  .rule {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      theme('colors.ink.300') 18%,
+      theme('colors.ink.300') 82%,
+      transparent
+    );
+  }
+
+  /* Vertical rhythm helpers, so pages stop inventing their own spacing. */
+  .rhythm-page { padding-block: var(--rhythm-page); }
+  .rhythm-section { padding-block: var(--rhythm-section); }
+
+  /*
+   * The measure. Body copy is capped in characters, not pixels, because legibility
+   * is a function of how far the eye travels before it has to find the next line —
+   * and that is counted in glyphs.
+   */
+  .measure { max-width: 62ch; }
+  .measure-tight { max-width: 46ch; }
+
+  /*
+   * The amount slider.
+   *
+   * `accent-color` gets you a coloured native slider in about one line, and it also
+   * gets you a 4px track and a 12px thumb — a control sized for a settings dialog,
+   * not for the single most important gesture on a checkout page. This one is built
+   * by hand for three reasons:
+   *
+   *   1. The thumb is 22px with a 44px-tall hit area from the input's own height, so
+   *      it clears the touch minimum without a visually enormous handle.
+   *   2. The filled portion of the track is drawn from `--fill`, set inline by React.
+   *      Seeing how far along the range you are is the entire advantage a slider has
+   *      over a number box, and a uniformly grey track throws that away.
+   *   3. WebKit and Gecko need completely separate rules and cannot be combined into
+   *      one selector list — a single unrecognised pseudo-element invalidates the
+   *      whole rule in both engines, so they are written out twice on purpose.
+   */
+  .slider-range {
+    --track: 6px;
+    --thumb: 22px;
+  }
+  .slider-range::-webkit-slider-runnable-track {
+    height: var(--track);
+    border-radius: 99px;
+    background:
+      linear-gradient(90deg, theme('colors.brand.500'), theme('colors.brand.400')) 0 / var(--fill, 0%)
+        no-repeat,
+      theme('colors.ink.400');
+  }
+  .slider-range::-moz-range-track {
+    height: var(--track);
+    border-radius: 99px;
+    background: theme('colors.ink.400');
+  }
+  .slider-range::-moz-range-progress {
+    height: var(--track);
+    border-radius: 99px;
+    background: linear-gradient(90deg, theme('colors.brand.500'), theme('colors.brand.400'));
+  }
+  .slider-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: var(--thumb);
+    height: var(--thumb);
+    /* Centres the thumb on the track: half the difference between the two heights. */
+    margin-top: calc((var(--track) - var(--thumb)) / 2);
+    border-radius: 99px;
+    background: #FFFFFF;
+    border: 5px solid theme('colors.brand.500');
+    box-shadow: 0 2px 10px rgb(17 17 20 / 0.30);
+    cursor: grab;
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .slider-range::-moz-range-thumb {
+    width: var(--thumb);
+    height: var(--thumb);
+    box-sizing: border-box;
+    border-radius: 99px;
+    background: #FFFFFF;
+    border: 5px solid theme('colors.brand.500');
+    box-shadow: 0 2px 10px rgb(17 17 20 / 0.30);
+    cursor: grab;
+  }
+  .slider-range:active::-webkit-slider-thumb {
+    transform: scale(1.12);
+    cursor: grabbing;
+  }
+}
+
+/* Scrollbar, restrained. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #F2F2F4; }
+::-webkit-scrollbar-thumb { background: #D1D1D8; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+/* Firefox has no pseudo-elements for this; two keywords is the whole API. */
+html { scrollbar-color: #D1D1D8 #F2F2F4; }

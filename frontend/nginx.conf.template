@@ -1,0 +1,146 @@
+# =============================================================================
+#  Storefront hosting, and the reverse proxy that keeps the API same-origin.
+#
+#  Rendered from this template at container start: the official nginx image runs
+#  envsubst over everything in /etc/nginx/templates and writes the result into
+#  /etc/nginx/conf.d. That is what lets one image serve every environment — the
+#  API address is a runtime value here, not a baked one.
+#
+#  Only ${API_UPSTREAM} and ${API_CONNECT_SRC} are substituted. Nginx's own $vars
+#  are escaped as $${...} so envsubst leaves them alone.
+# =============================================================================
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Do not advertise the version. It is free reconnaissance for anyone matching
+    # a CVE list against a banner.
+    server_tokens off;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    # ---- the API, served from this origin -----------------------------------
+    #
+    # Three prefixes are proxied rather than served, and all three for the same
+    # reason: the browser must believe the API lives here.
+    #
+    #   /api          every call the bundle makes. `VITE_API_BASE_URL` is left
+    #                 empty at build time so those calls are relative, which is
+    #                 what makes this block the thing that resolves them.
+    #
+    #   /oauth2       the outbound leg of a social sign-in.
+    #   /login/oauth2 the callback the provider redirects back to.
+    #
+    # The OAuth pair is the one that breaks silently if forgotten. The refresh
+    # cookie is SameSite=Strict and is set by the backend; issued from the API's
+    # own hostname it belongs to that hostname, and the storefront on this one
+    # could never read it. The customer would complete the whole Google flow, be
+    # redirected back, and arrive signed out with no error anywhere. Proxying
+    # keeps the entire exchange first-party, so the cookie the provider flow
+    # issues is the same cookie the password flow issues.
+    #
+    # These win over `location /` because nginx picks the longest matching prefix,
+    # not the first one in the file — so the SPA fallback cannot swallow them. Worth
+    # knowing when adding another: a new prefix only needs to be more specific than
+    # `/`, but a *regex* location would jump ahead of all of these regardless.
+
+    location /api/ {
+        proxy_pass         http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $$host;
+        proxy_set_header   X-Real-IP         $$remote_addr;
+        proxy_set_header   X-Forwarded-For   $$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $$scheme;
+        proxy_set_header   X-Forwarded-Host  $$host;
+        proxy_read_timeout 60s;
+    }
+
+    # `Host` is forwarded unchanged on purpose. Spring builds each provider's
+    # `redirect_uri` from `{baseUrl}`, resolved through the forwarded headers
+    # (`server.forward-headers-strategy: framework`). Rewriting the host would
+    # make it announce the API's own hostname to Google — which is neither the
+    # URL the browser is on nor the one registered in the console — and the
+    # provider would reject the callback.
+    location /oauth2/ {
+        proxy_pass         http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $$host;
+        proxy_set_header   X-Real-IP         $$remote_addr;
+        proxy_set_header   X-Forwarded-For   $$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $$scheme;
+        proxy_set_header   X-Forwarded-Host  $$host;
+    }
+
+    location /login/oauth2/ {
+        proxy_pass         http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $$host;
+        proxy_set_header   X-Real-IP         $$remote_addr;
+        proxy_set_header   X-Forwarded-For   $$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $$scheme;
+        proxy_set_header   X-Forwarded-Host  $$host;
+    }
+
+    # ---- security headers ---------------------------------------------------
+    #
+    # The CSP is the important one, and it is written tightly on purpose:
+    #
+    #   default-src 'self'   nothing loads from anywhere else by default
+    #   script-src           our own bundle, plus Razorpay Checkout, which has to
+    #                        run in the page to take a payment
+    #   style-src            'unsafe-inline' is required because Tailwind's
+    #                        arbitrary values and React's style prop emit inline
+    #                        styles; scripts are NOT given the same latitude,
+    #                        which is where it would actually matter
+    #   connect-src          the payment gateway, and 'self' — which now covers
+    #                        the API too, because it is proxied through this
+    #                        origin rather than called cross-site. ${API_CONNECT_SRC}
+    #                        exists only for a deployment that chooses not to
+    #                        proxy; it is empty by default.
+    #   frame-ancestors      nobody may frame this site (clickjacking)
+    #
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.razorpay.com ${API_CONNECT_SRC}; frame-src https://api.razorpay.com https://checkout.razorpay.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+    # Render terminates TLS in front of this container, so this is safe to send.
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+
+    # ---- caching ------------------------------------------------------------
+    # Asset filenames contain a content hash, so they can be cached indefinitely.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    location ~* \.(woff2|svg|png|webp|ico)$$ {
+        expires 30d;
+        add_header Cache-Control "public";
+    }
+
+    # index.html must never be cached, or a deploy leaves returning visitors
+    # loading an old shell that references assets which no longer exist.
+    location = /index.html {
+        add_header Cache-Control "no-store, must-revalidate";
+    }
+
+    # Client-side routing: unknown paths return the shell, not a 404.
+    location / {
+        try_files $$uri $$uri/ /index.html;
+    }
+
+    # Hidden files are never legitimate here, and .env, .git and .DS_Store all
+    # start with a dot.
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+}

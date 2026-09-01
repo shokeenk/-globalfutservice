@@ -1,0 +1,23 @@
+# Marketing pages are indexable. The transactional funnel is not.
+#
+# A price configurator generates a near-infinite number of near-duplicate URL
+# states, and an order page has nothing a search engine should ever hold. Rank the
+# landing pages; keep the application out of the index.
+
+User-agent: *
+Allow: /$
+Allow: /boosting
+Allow: /rewards
+Allow: /affiliate
+Allow: /terms
+Allow: /privacy
+Allow: /aml-kyc
+Disallow: /order
+Disallow: /checkout
+Disallow: /track
+Disallow: /account
+Disallow: /admin
+Disallow: /login
+Disallow: /register
+
+Sitemap: https://globalfutservices.com/sitemap.xml

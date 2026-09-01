@@ -1,0 +1,39 @@
+# --- secrets -----------------------------------------------------------------
+# First entry on purpose. Everything else in this file is tidiness; this is the
+# one that matters, and it belongs here before the first commit rather than after
+# the first leak.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+application-local.properties
+application-local.yml
+
+# --- java --------------------------------------------------------------------
+target/
+*.class
+*.jar
+# The Maven wrapper is meant to be committed — it is how a clean checkout builds
+# with the right Maven version and no local install.
+!.mvn/wrapper/maven-wrapper.jar
+
+# --- node --------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+coverage/
+
+# --- editors and os ----------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- logs --------------------------------------------------------------------
+*.log
+npm-debug.log*
