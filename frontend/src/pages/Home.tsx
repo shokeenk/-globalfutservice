@@ -54,7 +54,6 @@ export default function Home() {
 /* -------------------------------------------------------------------- hero --- */
 
 function Hero() {
-  const { policy } = useCatalog()
   const t = useT()
 
   return (
@@ -219,7 +218,7 @@ function Hero() {
                              font-medium text-white">
                 {[
                   t.home.hero.trustSpeed,
-                  t.home.hero.trustGuarantee(policy?.guaranteeDays ?? 7),
+                  t.home.hero.trustGuarantee(),
                   t.home.hero.trustTax,
                 ].map((fact, i) => (
                   <li key={fact} className="flex w-full items-center gap-3 sm:w-auto">
@@ -778,12 +777,19 @@ function WhyUs() {
   const t = useT()
   const money = useMoney()
 
+  /*
+   * Each reason carries a glyph rather than a position.
+   *
+   * They were numbered 01–05, which is the shape of a sequence — and these are five
+   * independent reasons, not five steps in an order. A reader who sees "03" looks for
+   * what came before it. The icons say what each one is about instead.
+   */
   const pillars = [
-    { title: t.home.why.safeTitle, body: t.home.why.safeBody(policy?.guaranteeDays ?? 7) },
-    { title: t.home.why.simpleTitle, body: t.home.why.simpleBody },
-    { title: t.home.why.fastTitle, body: t.home.why.fastBody },
-    { title: t.home.why.alwaysTitle, body: t.home.why.alwaysBody },
-    { title: t.home.why.privateTitle, body: t.home.why.privateBody },
+    { icon: 'shield', title: t.home.why.safeTitle, body: t.home.why.safeBody(policy?.guaranteeDays ?? 7) },
+    { icon: 'cursor', title: t.home.why.simpleTitle, body: t.home.why.simpleBody },
+    { icon: 'bolt', title: t.home.why.fastTitle, body: t.home.why.fastBody },
+    { icon: 'clock', title: t.home.why.alwaysTitle, body: t.home.why.alwaysBody },
+    { icon: 'lock', title: t.home.why.privateTitle, body: t.home.why.privateBody },
   ]
 
   /*
@@ -816,8 +822,12 @@ function WhyUs() {
             delay={(index % 3) * 80}
             className="group border-t border-ink-400 pt-6"
           >
-            <span className="tnum text-[11px] font-semibold tracking-widest text-brand-400">
-              {String(index + 1).padStart(2, '0')}
+            <span
+              aria-hidden="true"
+              className="grid h-9 w-9 place-items-center rounded-edge bg-brand-500/[0.10]
+                         text-brand-500 ring-1 ring-brand-500/30"
+            >
+              <PillarIcon name={pillar.icon} />
             </span>
             <h3 className="display mt-2.5 text-display-sm text-chalk">{pillar.title}</h3>
             <p className="mt-2.5 text-body-sm leading-relaxed text-chalk-muted">{pillar.body}</p>
@@ -1174,4 +1184,38 @@ function ChatGlyph() {
       <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
     </svg>
   )
+}
+
+/**
+ * The glyphs for the five reasons.
+ *
+ * <p>Drawn rather than taken from an emoji font. An emoji is somebody else's artwork:
+ * it arrives at a different size, weight and colour on every operating system, ignores
+ * the palette entirely, and on Windows renders a full-colour cartoon next to type that
+ * is deliberately monochrome. These are the same 1.7-stroke family the navigation
+ * already uses, so the row looks like part of this site.
+ *
+ * <p>`aria-hidden` at the call site: each one sits directly above the heading it
+ * illustrates, so announcing it would read the same idea twice.
+ */
+function PillarIcon({ name }: { name: string }) {
+  const common = {
+    width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 1.9,
+    strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
+  }
+  switch (name) {
+    case 'shield':   // safe
+      return <svg {...common}><path d="M12 3l7 3v5c0 4.4-2.9 8.2-7 9.4C7.9 19.2 5 15.4 5 11V6l7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+    case 'cursor':   // simple
+      return <svg {...common}><path d="M5 3.5 19 11l-6.2 1.9L11 19 5 3.5Z" /></svg>
+    case 'bolt':     // fast
+      return <svg {...common}><path d="M13 3 5 13.5h5.5L11 21l8-10.5h-5.5L13 3Z" /></svg>
+    case 'clock':    // always on
+      return <svg {...common}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
+    case 'lock':     // private
+      return <svg {...common}><rect x="4.5" y="10.5" width="15" height="9.5" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg>
+    default:
+      return null
+  }
 }

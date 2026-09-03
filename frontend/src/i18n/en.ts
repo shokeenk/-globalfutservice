@@ -130,7 +130,7 @@ const en = {
     seoTitle: (season: string) => `Safe Trading Service for EA ${season}`,
     seoDescription: (season: string) =>
       `Grow your EA ${season} club without the grind. Our traders work the transfer ` +
-      `market on your account — you keep the coins. Delivery in under an hour, 7-day guarantee.`,
+      `market on your account — you keep the coins. Delivery in under an hour, 100% Safety Policy.`,
 
     promo: { label: 'Offers and announcements' },
     hero: {
@@ -145,7 +145,7 @@ const en = {
       // eyebrow and price card both carry it anyway. The argument stays in the
       // signature because every locale is typed against this one and a caller
       // already passes it.
-      titleAccent: (_season: string) => 'FC coins, boosting and coaching',
+      titleAccent: (_season: string) => 'FC coins, boosting & coaching',
       /*
        * The claim, then the evidence.
        *
@@ -159,7 +159,7 @@ const en = {
        */
       subLine: 'A solution for every FC problem.',
       trustSpeed: 'Most orders in under an hour',
-      trustGuarantee: (days: number) => `${days}-day guarantee`,
+      trustGuarantee: () => '100% Safety Policy',
       trustTax: 'EA tax already in the price',
       body:
         'Our traders work the transfer market on your behalf — finding undervalued cards, ' +
@@ -183,8 +183,8 @@ const en = {
       statDeliveryLabel: 'Typical delivery',
       statShiftValue: '24 / 7',
       statShiftLabel: 'Traders on shift',
-      statGuaranteeValue: '7 days',
-      statGuaranteeLabel: 'Ban guarantee',
+      statGuaranteeValue: '100% Safety Policy',
+      statGuaranteeLabel: 'Every order covered',
       cardTitle: 'Safe Trading Service',
       cardSubtitle: (season: string) => `Live rates · ${season}`,
       popular: 'Popular',
@@ -199,7 +199,7 @@ const en = {
       delivery: 'Fastest delivery',
       encrypted: 'Your sign-in is encrypted and deleted',
       payments: 'UPI, cards and net banking',
-      guarantee: '7-day ban guarantee',
+      guarantee: 'Comes with 100% Safety Policy',
       humans: 'Real traders, not bots',
     },
 
@@ -328,10 +328,9 @@ const en = {
         'Fastest delivery',
         'Traders on shift 24/7',
         'Sign-in encrypted, then destroyed',
-        'UPI · Cards · Net banking',
-        'Seven-day ban guarantee',
-        'Real traders, never bots',
-        'Prices include the EA market tax',
+        'UPI · Cards · Net Banking · Crypto',
+        'Comes with 100% Safety Policy',
+        '5% EA Tax Covered',
       ],
     },
 
@@ -341,12 +340,12 @@ const en = {
       lead:
         'Not marketing figures. These are the commitments the guarantee is actually written ' +
         'against, which is why they are conservative.',
-      deliveryLabel: 'Minutes, typical delivery',
+      deliveryLabel: 'Typical delivery',
       deliveryNote: 'The published window is longer on purpose.',
-      shiftLabel: 'Hours a day on shift',
+      shiftLabel: 'On shift, every day',
       shiftNote: 'Including the hours weekend league runs.',
-      guaranteeLabel: 'Days of cover after delivery',
-      guaranteeNote: 'Cash or store credit — your choice.',
+      guaranteeLabel: '100% Safety Policy',
+      guaranteeNote: 'Full refund or a replacement account — your choice.',
       tiersLabel: 'Loyalty tiers to climb',
       tiersNote: 'A tier discount never expires.',
     },
@@ -443,9 +442,14 @@ const en = {
     timingBody:
       "Champs and Rivals both run on EA's weekly clock. Order early in the window and there " +
       'is room to work; order on the last evening and there may not be.',
+    discordTitle: 'Talk to us on Discord',
+    discordBody:
+      'If a run falls short of the rank you ordered, the price difference is credited back ' +
+        'to you — usable on another order or refundable. Claims and questions go through our ' +
+        'official Discord.',
     coveredTitle: 'You are covered',
-    coveredBody: (days: number, cash: number, credit: number) =>
-      `The same ${days}-day guarantee applies. If EA acts against the account inside that ` +
+    coveredBody: (cash: number, credit: number) =>
+      `Our 100% Safety Policy applies. If EA acts against the account inside that ` +
       `window, you get ${cash}% back in cash or ${credit}% as store credit — your choice.`,
   },
 
@@ -885,6 +889,10 @@ const en = {
     ruleDailyBody:
       'One claim per day, from your account page. They spend like any other point and they ' +
       'count toward your tier.',
+    ruleNoCash: 'Points have no cash value.',
+    ruleNoCashBody:
+        'They are a discount on future orders, not a balance you can withdraw. Guest orders '
+        + 'cannot earn or store them.',
     startedTitle: 'Getting started',
     startedBody:
       'Points need an account — a guest order has nowhere to put them. Creating one takes a ' +
@@ -927,10 +935,10 @@ const en = {
       'pace suits you.',
     singleBody:
       'One session. A good way to see whether this is for you before committing to a block.',
-    buyBlock: 'Buy the block',
+    buyBlock: 'Buy the package',
     buySession: 'Buy a session',
     saveBadge: (pct: number) => `Save ${pct}%`,
-    whoTitle: 'Who you would be working with',
+    whoTitle: 'Meet your coach',
     peak: 'Peak:',
     speaks: 'Speaks:',
     bookTitle: 'Book a session',
@@ -944,6 +952,9 @@ const en = {
     noSlotsInMonth: (month: string): string => `Nothing free in ${month}`,
     timesShownIn: 'Times shown in',
     coachesFrom: (name: string, zone: string) => `${name} coaches from ${zone}`,
+    coachDiscord:
+      'After ordering, reach your coach or GFS Support on our official Discord for scheduling ' +
+      'and session communication:',
     policyLine: (minutes: number, hours: number) =>
       `${minutes} minutes · free to move up to ${hours}h before`,
     bookedFor: 'Booked for',
@@ -1071,7 +1082,7 @@ const en = {
       DIV_2_TO_1: 'Division 2 to 1',
       DIV_1_TO_ELITE: 'Division 1 to Elite',
       SINGLE_SESSION: 'Single session · 1 hour',
-      MONTHLY_6_SESSIONS: '6 sessions × 1 hour',
+      MONTHLY_6_SESSIONS: '6 sessions × 40 minutes',
     },
     /** Coin quantities, which are written differently per language. */
     millions: (qty: string): string => `${qty}M`,

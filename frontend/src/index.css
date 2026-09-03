@@ -107,28 +107,19 @@
   }
 
   /*
-   * Everything drawn a tenth smaller, from `lg` up.
+   * No global zoom. It was `zoom: 0.9` above `lg`, and it was the wrong instrument.
    *
-   * The complaint this solves is vertical: on a laptop the three service cards were
-   * cut off by the fold, so a reader had to scroll to learn there were three. Zoom is
-   * the honest instrument for that — it scales type, spacing, borders and the several
-   * hundred `px` literals in this codebase together, where a root `font-size` change
-   * would move only the rem-based half and leave the rest at full size, which reads as
-   * a broken layout rather than a smaller one.
+   * It was added to win back vertical space — three service cards were falling under
+   * the fold on a laptop — and it did that by shrinking every pixel in the codebase at
+   * once. The cost only shows up at the other end: at 100% browser zoom the whole site
+   * reads a size too small, and looks correct only when the reader compensates at 125%.
+   * A design that needs the browser set to 125% to look right is not a design that has
+   * been sized; it is one that has been scaled down and had the difference passed to
+   * the user.
    *
-   * Deliberately not applied on phones. There is no fold to win back when everything is
-   * already a single column, and 10% off a 16px body size lands under the threshold
-   * where iOS zooms the page on focusing an input — so the phone would get worse
-   * reading and a jumping viewport in exchange for nothing.
-   *
-   * `--header-h` needs no adjustment: it is declared in the same zoomed coordinate
-   * space that `scroll-padding-top` is resolved in, so anchor offsets stay correct.
+   * The fold problem is real but belongs to the section that has it, solved with its own
+   * spacing, not by making body copy, form labels and hit targets smaller everywhere.
    */
-  @media (min-width: 1024px) {
-    html {
-      zoom: 0.9;
-    }
-  }
 
   html {
     /*

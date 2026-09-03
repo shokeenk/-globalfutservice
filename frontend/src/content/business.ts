@@ -21,6 +21,17 @@ export const BUSINESS = {
   email: 'globalfutservices@gmail.com',
 
   /**
+   * The official Discord.
+   *
+   * <p>Named in the terms of service as the route for coaching scheduling, support,
+   * safety-policy claims and disputes — which makes it a contractual contact channel
+   * rather than a social link, and it is why it sits here with the address and the
+   * phone number rather than beside the Instagram icon.
+   */
+  discordName: 'globalfutservices',
+  discordInvite: 'https://discord.com/invite/8FeP7C6tXt',
+
+  /**
    * The line-of-business statement.
    *
    * <p>Written to be accurate rather than flattering: a gateway reviewing this

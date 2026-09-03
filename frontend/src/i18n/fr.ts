@@ -114,10 +114,10 @@ const fr: Dictionary = {
       scroll: 'Faire défiler',
       ratesEyebrow: 'Tarifs en direct',
       titleLead: 'L’endroit le plus sûr, le plus rapide et le plus fiable pour acheter',
-      titleAccent: () => 'crédits FC, boosting et coaching',
+      titleAccent: () => 'crédits FC, boosting & coaching',
       subLine: 'Une solution pour chaque problème FC.',
       trustSpeed: 'La plupart en moins d’une heure',
-      trustGuarantee: (days) => `Garantie ${days} jours`,
+      trustGuarantee: () => '100% Safety Policy',
       trustTax: 'Taxe EA déjà comprise',
       body:
         'Nos traders travaillent le marché des transferts pour toi : ils repèrent les cartes ' +
@@ -241,7 +241,7 @@ const fr: Dictionary = {
       step3Title: 'Le bénéfice reste chez toi',
       step3Body:
         'Les crédits atterrissent dans ton club. Tu reçois un e-mail dès que c’est fait, ' +
-        'et sept jours de couverture à partir de là.',
+        'et la 100% Safety Policy à partir de là.',
     },
 
     rewards: {
@@ -268,10 +268,9 @@ const fr: Dictionary = {
         'La livraison la plus rapide',
         'Traders en poste 24h/24',
         'Vos identifiants sont chiffrés puis détruits',
-        'UPI · Cartes · Virement',
-        'Garantie de sept jours',
-        'De vrais traders, jamais des bots',
-        'Les prix incluent la taxe du marché EA',
+        'UPI · Cartes · Virement · Crypto',
+        'Livré avec la 100% Safety Policy',
+        'Taxe EA de 5 % couverte',
       ],
     },
 
@@ -381,9 +380,14 @@ const fr: Dictionary = {
     timingBody:
       'Champs et Rivals suivent l’horloge hebdomadaire d’EA. Commande tôt dans la fenêtre et ' +
       'il y a de la marge ; commande le dernier soir et il n’y en aura peut-être pas.',
+    discordTitle: 'Parlez-nous sur Discord',
+    discordBody:
+      'Si une série n’atteint pas le rang commandé, la différence de prix vous est ' +
+        'créditée — utilisable sur une autre commande ou remboursable. Les réclamations ' +
+        'passent par notre Discord officiel.',
     coveredTitle: 'Tu es couvert',
-    coveredBody: (days, cash, credit) =>
-      `La même garantie de ${days} jours s’applique. Si EA sanctionne le compte dans ce ` +
+    coveredBody: (cash, credit) =>
+      `Notre 100% Safety Policy s’applique. Si EA sanctionne le compte dans ce ` +
       `délai, tu récupères ${cash}% en espèces ou ${credit}% en avoir — à toi de choisir.`,
   },
 
@@ -803,6 +807,10 @@ const fr: Dictionary = {
     ruleDailyBody:
       'Une fois par jour, depuis ton compte. Ils se dépensent comme n’importe quel point et ' +
       'comptent pour ton palier.',
+    ruleNoCash: 'Les points n’ont aucune valeur en espèces.',
+    ruleNoCashBody:
+        'Ils constituent une remise sur vos prochaines commandes, pas un solde retirable. Les '
+        + 'commandes en tant qu’invité ne peuvent ni en gagner ni en conserver.',
     startedTitle: 'Pour commencer',
     startedBody:
       'Les points nécessitent un compte — une commande invité n’a nulle part où les mettre. ' +
@@ -842,10 +850,10 @@ const fr: Dictionary = {
       'rythme qui te convient.',
     singleBody:
       'Une séance. Un bon moyen de voir si cela te convient avant de t’engager sur un bloc.',
-    buyBlock: 'Acheter le bloc',
+    buyBlock: 'Acheter le pack',
     buySession: 'Acheter une séance',
     saveBadge: (pct) => `Économise ${pct}%`,
-    whoTitle: 'Avec qui tu travaillerais',
+    whoTitle: 'Rencontre ton coach',
     peak: 'Meilleur niveau :',
     speaks: 'Parle :',
     bookTitle: 'Réserver une séance',
@@ -859,6 +867,9 @@ const fr: Dictionary = {
     noSlotsInMonth: (month) => `Aucun créneau en ${month}`,
     timesShownIn: 'Horaires affichés en',
     coachesFrom: (name, zone) => `${name} coache depuis ${zone}`,
+    coachDiscord:
+      'Après la commande, contactez votre coach ou le support GFS sur notre Discord officiel ' +
+      'pour la planification et les échanges liés à la séance :',
     policyLine: (minutes, hours) =>
       `${minutes} minutes · déplaçable gratuitement jusqu’à ${hours} h avant`,
     bookedFor: 'Réservée le',
@@ -962,7 +973,7 @@ const fr: Dictionary = {
       DIV_2_TO_1: 'De la Division 2 à la 1',
       DIV_1_TO_ELITE: 'De la Division 1 à Elite',
       SINGLE_SESSION: 'Séance unique · 1 heure',
-      MONTHLY_6_SESSIONS: '6 séances × 1 heure',
+      MONTHLY_6_SESSIONS: '6 séances × 40 minutes',
     },
     millions: (qty: string): string => `${qty} M`,
     lines: {
