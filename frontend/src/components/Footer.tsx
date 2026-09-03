@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandBadge, Logo } from '../brand/Logo'
 import { useT } from '../i18n'
+import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
 import { useCatalog } from '../state/CatalogContext'
 import { ButtonLink } from './ui'
 
@@ -27,18 +28,30 @@ export function Footer() {
     {
       title: t.footer.menu,
       links: [
+        { to: '/about', label: t.footer.about },
+        { to: '/contact', label: t.footer.contact },
         { to: '/rewards', label: t.footer.rewards },
         { to: '/help', label: t.footer.help },
-        { to: '/support', label: t.footer.support },
+        { to: '/track', label: t.nav.track },
       ],
     },
     {
+      /*
+       * Every policy document, on every page, without hunting.
+       *
+       * The four a payment gateway checks for by name — refund, cancellation, shipping
+       * and privacy — now sit together rather than being reachable only from inside
+       * another document. `/track` moved up to the menu column, which is where someone
+       * would look for it anyway: it was never a legal document, it was filling space.
+       */
       title: t.footer.legal,
       links: [
         { to: '/terms', label: t.footer.terms },
         { to: '/privacy', label: t.footer.privacy },
+        { to: '/refund-policy', label: t.footer.refund },
+        { to: '/cancellation-policy', label: t.footer.cancellation },
+        { to: '/shipping-policy', label: t.footer.shipping },
         { to: '/aml-kyc', label: t.footer.aml },
-        { to: '/track', label: t.nav.track },
       ],
     },
   ]
@@ -168,7 +181,23 @@ export function Footer() {
           <p className="mt-5 max-w-3xl text-[12px] leading-relaxed text-chalk-faint">
             {t.footer.legalLanguageNotice}
           </p>
-          <p className="mt-5 text-[12px] text-chalk-faint">
+          {/*
+            The line of business, in plain words, on every page.
+
+            It is the sentence that answers "what does this company actually sell" for
+            anyone who arrives without context — a payment gateway reviewing the site, or
+            a customer who followed a link straight to a policy page. Cheap to state
+            once here; expensive to be vague about.
+          */}
+          <p className="mt-5 max-w-3xl text-[12px] leading-relaxed text-chalk-faint">
+            {BUSINESS.lineOfBusiness}
+          </p>
+          <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
+            Operated by {BUSINESS.legalName} · {BUSINESS.registeredAddress} ·{' '}
+            <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> ·{' '}
+            <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
+          </p>
+          <p className="mt-3 text-[12px] text-chalk-faint">
             © {year} Global FUT Services. All rights reserved.
           </p>
         </div>

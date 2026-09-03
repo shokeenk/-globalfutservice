@@ -48,6 +48,11 @@ const en = {
     terms: 'Terms of service',
     privacy: 'Privacy policy',
     aml: 'AML & KYC',
+    about: 'About us',
+    contact: 'Contact us',
+    refund: 'Refund policy',
+    cancellation: 'Cancellation policy',
+    shipping: 'Shipping policy',
     rights:
       'In-game currency, items and player cards are the property of Electronic Arts ' +
       'Inc. We are not affiliated with EA.',

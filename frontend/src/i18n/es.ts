@@ -45,6 +45,11 @@ const es: Dictionary = {
     terms: 'Términos del servicio',
     privacy: 'Política de privacidad',
     aml: 'Prevención de blanqueo y KYC',
+    about: 'Sobre nosotros',
+    contact: 'Contacto',
+    refund: 'Política de reembolso',
+    cancellation: 'Política de cancelación',
+    shipping: 'Política de envío',
     rights:
       'La moneda del juego, los objetos y las cartas de jugador son propiedad de ' +
       'Electronic Arts Inc. No estamos afiliados a EA.',

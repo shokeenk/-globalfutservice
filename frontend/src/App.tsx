@@ -22,6 +22,7 @@ const Track = lazy(() => import('./pages/Track'))
 const Help = lazy(() => import('./pages/Help'))
 const Support = lazy(() => import('./pages/Support'))
 const Legal = lazy(() => import('./pages/Legal'))
+const About = lazy(() => import('./pages/About'))
 const ComingSoon = lazy(() => import('./pages/ComingSoon'))
 const Coaching = lazy(() => import('./pages/Coaching'))
 const Login = lazy(() => import('./pages/Login'))
@@ -62,6 +63,22 @@ export default function App() {
             <Route path="/terms" element={<Legal doc="terms" />} />
             <Route path="/privacy" element={<Legal doc="privacy" />} />
             <Route path="/aml-kyc" element={<Legal doc="aml" />} />
+            {/*
+              The policy pages a payment gateway checks for by name. The paths use the
+              wording a reviewer searches for rather than something shorter — /shipping
+              on a site that ships nothing is deliberate, because that is the name on
+              the checklist.
+            */}
+            <Route path="/refund-policy" element={<Legal doc="refund" />} />
+            <Route path="/cancellation-policy" element={<Legal doc="cancellation" />} />
+            <Route path="/shipping-policy" element={<Legal doc="shipping" />} />
+            <Route path="/about" element={<About />} />
+            {/*
+              /contact is the name people and reviewers look for; /support is the name
+              this site has always used and the one existing links point at. Both render
+              the same page rather than one redirecting, so neither link can rot.
+            */}
+            <Route path="/contact" element={<Support />} />
 
             {/*
               Cards remains priced but not sellable. Coaching shipped: the reference

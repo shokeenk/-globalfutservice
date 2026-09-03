@@ -4,12 +4,23 @@ import { Reveal } from '../motion/Reveal'
 import { Alert, Button, Checkbox, Field, Input, Section, Textarea } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
+import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
 import { useSeo } from '../lib/seo'
 import { useAuth } from '../state/AuthContext'
 
 export default function Support() {
   const t = useT()
-  useSeo({ title: t.support.seoTitle, description: t.support.seoDescription, noindex: true })
+  /*
+   * Indexable, deliberately.
+   *
+   * This was `noindex` when it was only a support form — a page with nothing on it a
+   * search engine should rank. It is now also the contact page: it carries the operating
+   * entity, the registered address and a phone number, and it is linked from the footer
+   * of every page as "Contact us". A contact page that tells crawlers to ignore it is
+   * one a payment gateway's reviewer may not find, and one that cannot corroborate the
+   * business behind the site.
+   */
+  useSeo({ title: t.support.seoTitle, description: t.support.seoDescription })
 
   const { account } = useAuth()
   const [email, setEmail] = useState(account?.email ?? '')
@@ -117,6 +128,46 @@ export default function Support() {
         </Reveal>
 
         <div className="space-y-4">
+          {/*
+            Who you are actually contacting, above the tips rather than below them.
+
+            A support page offering a form and a chat widget but never saying which legal
+            entity is on the other end is the shape of every scam in this market. Naming
+            the operator, the registered address and a phone number a person answers is
+            the cheapest trust signal available — and it is what a payment gateway's
+            reviewer opens this page to find.
+          */}
+          <Reveal delay={40} className="surface p-5">
+            <h2 className="stamp mb-4">Contact details</h2>
+            <p className="text-[13px] leading-relaxed text-chalk-muted">
+              This website is operated by{' '}
+              <strong className="text-chalk">{BUSINESS.legalName}</strong>, trading as{' '}
+              {BUSINESS.tradingName}.
+            </p>
+            <dl className="mt-4 space-y-2.5 text-[13px]">
+              <div>
+                <dt className="text-chalk-faint">Registered address</dt>
+                <dd className="mt-0.5 leading-relaxed text-chalk-muted">
+                  {BUSINESS.registeredAddress}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-chalk-faint">Mobile</dt>
+                <dd className="mt-0.5">
+                  <a className="text-chalk underline" href={PHONE_HREF}>{BUSINESS.phone}</a>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-chalk-faint">Email</dt>
+                <dd className="mt-0.5">
+                  <a className="break-all text-chalk underline" href={EMAIL_HREF}>
+                    {BUSINESS.email}
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </Reveal>
+
           <Reveal delay={80} className="plate p-5">
             <h2 className="stamp mb-4">{t.support.fasterTitle}</h2>
             <ul className="space-y-3 text-[13px] leading-relaxed text-chalk-muted">

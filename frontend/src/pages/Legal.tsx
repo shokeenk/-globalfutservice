@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '../components/ui'
 import { useSeo } from '../lib/seo'
 import { useCatalog } from '../state/CatalogContext'
+import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
 import type { Policy } from '../lib/types'
 
 /**
@@ -23,13 +25,28 @@ import type { Policy } from '../lib/types'
  * the jurisdiction clause, the consumer-law position under Indian law, and the AML
  * thresholds, which are regulatory rather than commercial choices.
  */
-export default function Legal({ doc }: { doc: 'terms' | 'privacy' | 'aml' }) {
+export type LegalDoc =
+  | 'terms' | 'privacy' | 'aml' | 'refund' | 'cancellation' | 'shipping'
+
+export default function Legal({ doc }: { doc: LegalDoc }) {
   const { policy } = useCatalog()
 
   const meta = {
     terms: { title: 'Terms of service', description: 'The agreement between you and Global FUT Services.' },
     privacy: { title: 'Privacy policy', description: 'What we collect, why, and how long we keep it.' },
     aml: { title: 'AML & KYC policy', description: 'Our anti-money-laundering and identity checks.' },
+    refund: {
+      title: 'Return & refund policy',
+      description: 'When a refund can be requested, how it is paid, and what the guarantee covers.',
+    },
+    cancellation: {
+      title: 'Cancellation policy',
+      description: 'When an order can be cancelled and how to ask.',
+    },
+    shipping: {
+      title: 'Shipping policy',
+      description: 'How and how quickly a digital order is delivered.',
+    },
   }[doc]
 
   useSeo(meta)
@@ -51,6 +68,9 @@ export default function Legal({ doc }: { doc: 'terms' | 'privacy' | 'aml' }) {
         {doc === 'terms' && <Terms policy={policy} />}
         {doc === 'privacy' && <Privacy policy={policy} />}
         {doc === 'aml' && <Aml />}
+        {doc === 'refund' && <Refund policy={policy} />}
+        {doc === 'cancellation' && <Cancellation policy={policy} />}
+        {doc === 'shipping' && <Shipping policy={policy} />}
       </article>
       </Section>
     </>
@@ -352,5 +372,323 @@ function Aml() {
         </p>
       </Clause>
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ refund --- */
+
+/**
+ * Return and refund policy.
+ *
+ * <p><b>This restates clauses 4 and 5 of the terms; it does not add to them.</b> Two
+ * pages describing the same refund in different words is how a customer ends up quoting
+ * one at you while the software enforces the other, so every figure here is read from
+ * the same live policy object the terms use, and the boundary is drawn in the same
+ * place: delivery.
+ *
+ * <p>There is nothing to return. What is sold is delivered into an EA account and
+ * cannot be handed back, which is why this is about refunds and the guarantee rather
+ * than returns — said at the top instead of left for a reader to infer.
+ */
+function Refund({ policy }: { policy: Policy | null }) {
+  const sla = policy?.deliverySlaHours ?? 48
+  const guaranteeDays = policy?.guaranteeDays ?? 7
+  const refundFee = (policy?.refundFeeBps ?? 500) / 100
+  const cash = (policy?.guaranteeCashBps ?? 5000) / 100
+  const credit = (policy?.guaranteeCreditBps ?? 10000) / 100
+
+  return (
+    <>
+      <p className="text-chalk-faint">Last updated {updatedOn()}</p>
+
+      <Clause n={1} title="What is being bought">
+        <p>
+          Every service on this site is digital and is delivered into your EA Sports FC
+          account — coins through the transfer market, a coaching session over a call, a
+          rank pushed on your own account. Nothing physical ships, and nothing delivered
+          can be returned in the ordinary sense.
+        </p>
+        <p>
+          This policy therefore covers two situations: an order that has not been
+          delivered yet, and one that has.
+        </p>
+      </Clause>
+
+      <Clause n={2} title={`Before delivery — refundable within ${sla} hours`}>
+        <p>
+          If we have not delivered your order within{' '}
+          <strong className="text-chalk">{sla} hours</strong> of payment clearing, you may
+          request a full refund. You do not have to give a reason, and you may ask for a
+          status update instead if you would rather wait.
+        </p>
+        <p>
+          A processing fee of <strong className="text-chalk">{refundFee}%</strong> is deducted
+          from cash refunds. That is the payment cost we are charged and cannot recover
+          when a transaction is reversed. It is not a penalty, and it is waived where the
+          delay was ours to fix.
+        </p>
+      </Clause>
+
+      <Clause n={3} title="After delivery — the order is final">
+        <p>
+          <strong className="text-chalk">
+            Once we send you an “Order Delivered” email, the work is complete and the order
+            is final.
+          </strong>{' '}
+          Coins in your club cannot be un-sent, and a coaching session that has been held
+          cannot be un-taught. From that moment the guarantee below replaces the right to a
+          refund.
+        </p>
+        <p>
+          We state this prominently because it is the term customers most often find out
+          about too late.
+        </p>
+      </Clause>
+
+      <Clause n={4} title={`The ${guaranteeDays}-day guarantee`}>
+        <p>
+          For <strong className="text-chalk">{guaranteeDays} days</strong> after delivery, your
+          order is covered against EA sanctioning your account or removing the coins
+          involved. If that happens, tell us inside the window and choose either:
+        </p>
+        <ul className="ml-5 list-disc space-y-1.5">
+          <li>
+            <strong className="text-chalk">{cash}% back in cash</strong>, to the original
+            payment method, or
+          </li>
+          <li>
+            <strong className="text-chalk">{credit}% as store credit</strong>, added to your
+            rewards balance.
+          </li>
+        </ul>
+        <p>
+          Credit is worth more than cash because it costs us capacity rather than money,
+          and we would rather keep you as a customer than win the argument. Outside the
+          window, or where the account was sanctioned for conduct unrelated to our work,
+          the guarantee does not apply.
+        </p>
+      </Clause>
+
+      <Clause n={5} title="How refunds are paid">
+        <p>
+          Cash refunds are returned to the{' '}
+          <strong className="text-chalk">original payment method</strong>, through the payment
+          gateway that took the payment. We cannot send a refund to a different card,
+          account or wallet, because we never hold your payment details — the gateway does,
+          and it reverses the original transaction.
+        </p>
+        <p>
+          Once approved, a refund is submitted the same working day. How long it then takes
+          to appear is your bank’s to decide, commonly five to seven working days for cards
+          and faster for UPI. Store credit is added to your rewards balance immediately and
+          does not expire.
+        </p>
+      </Clause>
+
+      <Clause n={6} title="How to request one">
+        <p>
+          Write to <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or call{' '}
+          <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> with your order
+          reference. There is no form to fill in and no queue to join.
+        </p>
+      </Clause>
+
+      <Operator />
+    </>
+  )
+}
+
+/* ------------------------------------------------------------ cancellation --- */
+
+/**
+ * Cancellation policy.
+ *
+ * <p>The line is drawn where the software draws it. An order that has not been started
+ * costs nothing to stop; one where a trader is already listing cards on your account has
+ * consumed the thing actually being sold, which is somebody’s time on a live market. The
+ * page says that, rather than quoting a number of minutes that could not be honoured
+ * consistently across three different services.
+ */
+function Cancellation({ policy }: { policy: Policy | null }) {
+  const refundFee = (policy?.refundFeeBps ?? 500) / 100
+
+  return (
+    <>
+      <p className="text-chalk-faint">Last updated {updatedOn()}</p>
+
+      <Clause n={1} title="Before work starts — cancel for a full refund">
+        <p>
+          An order can be cancelled at any point{' '}
+          <strong className="text-chalk">before delivery begins</strong>, for a full refund
+          with no fee deducted. In practice that means before a trader has started listing
+          on your account, before a boosting session has begun, or before a booked coaching
+          slot has started.
+        </p>
+        <p>
+          If you have paid but not yet given us what the order needs from you — an EA
+          account name, a sign-in for a comfort trade, a chosen coaching slot — the order
+          has certainly not started and can always be cancelled.
+        </p>
+      </Clause>
+
+      <Clause n={2} title="Once work has started">
+        <p>
+          After delivery begins we cannot cancel, because the cost has already been
+          incurred: coins move on a live transfer market, and a trader’s time cannot be
+          returned to stock. If something has gone wrong mid-order, contact us — an order
+          that is genuinely stuck is a support problem, and we would rather fix it than
+          argue about which policy applies.
+        </p>
+        <p>
+          Where we agree to unwind a started order as a goodwill exception, the {refundFee}%
+          processing fee applies, for the same reason it applies to refunds.
+        </p>
+      </Clause>
+
+      <Clause n={3} title="Coaching sessions">
+        <p>
+          A booked session can be moved or cancelled up to the notice period shown on the
+          booking page, and the credit returns to your account to spend on another slot.
+          Inside that notice period the coach has already held the time, and the session is
+          treated as delivered.
+        </p>
+      </Clause>
+
+      <Clause n={4} title="How to cancel">
+        <p>
+          Email <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or call{' '}
+          <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> with your order
+          reference. We confirm in writing, and tell you plainly if the order had already
+          started before your message reached us.
+        </p>
+      </Clause>
+
+      <Operator />
+    </>
+  )
+}
+
+/* ---------------------------------------------------------------- shipping --- */
+
+/**
+ * Shipping policy.
+ *
+ * <p>Kept under this name because it is the name a payment gateway’s checklist looks
+ * for, even though nothing is shipped. The first clause says so immediately rather than
+ * letting a reader work through a page of delivery language wondering when a courier
+ * appears.
+ *
+ * <p>The durations are the ones the storefront already advertises and the commitment is
+ * read from the same policy object, so this page cannot promise something the homepage
+ * does not.
+ */
+function Shipping({ policy }: { policy: Policy | null }) {
+  const sla = policy?.deliverySlaHours ?? 48
+
+  return (
+    <>
+      <p className="text-chalk-faint">Last updated {updatedOn()}</p>
+
+      <Clause n={1} title="Nothing is shipped">
+        <p>
+          <strong className="text-chalk">There is no physical delivery and no courier.</strong>{' '}
+          Every service sold here is digital and arrives inside EA Sports FC or over a video
+          call. No delivery address is collected at checkout because none is needed, and you
+          will never be charged a delivery fee.
+        </p>
+      </Clause>
+
+      <Clause n={2} title="How long it takes">
+        <p>
+          <strong className="text-chalk">Most orders are delivered within 60 minutes</strong>,
+          and the trading desk is staffed{' '}
+          <strong className="text-chalk">24 hours a day</strong> — an order placed at four in
+          the morning is worked the same as one placed at noon.
+        </p>
+        <p>
+          Our committed outside limit is <strong className="text-chalk">{sla} hours</strong>. If
+          we miss it you are entitled to a full refund under the refund policy, and you do
+          not have to argue for it.
+        </p>
+      </Clause>
+
+      <Clause n={3} title="How each service is delivered">
+        <ul className="ml-5 list-disc space-y-2">
+          <li>
+            <strong className="text-chalk">Coins — transfer market.</strong> You list a card we
+            name at a price we name, and we buy it. Nothing is sent to your account directly
+            and we never need your password for this route.
+          </li>
+          <li>
+            <strong className="text-chalk">Coins — comfort trade.</strong> Where you choose
+            this instead, we sign in and move the coins ourselves. The sign-in is asked for
+            only after payment, encrypted before it is stored, and destroyed when the order
+            completes.
+          </li>
+          <li>
+            <strong className="text-chalk">Boosting.</strong> Played on your account by a
+            trader, and delivered when the agreed number of wins or the target rank is
+            reached. Progress is visible on the order tracking page throughout.
+          </li>
+          <li>
+            <strong className="text-chalk">Coaching.</strong> Delivered live at the slot you
+            book, one to one. Delivery here means the session is held, not that a file is
+            sent.
+          </li>
+        </ul>
+      </Clause>
+
+      <Clause n={4} title="Tracking your order">
+        <p>
+          Every order has a reference beginning <code>GFS-</code>. Enter it on the{' '}
+          <Link className="underline" to="/track">track order</Link> page at any time to see
+          its current state. We also email you when the order is delivered.
+        </p>
+      </Clause>
+
+      <Operator />
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ shared --- */
+
+/** The date at the top of each policy, in one place and one format. */
+function updatedOn() {
+  return new Date().toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+}
+
+/**
+ * Who you are actually contracting with.
+ *
+ * <p>Appended to every policy document rather than living only on the contact page. A
+ * policy that never names its operator is one a reader has to take on trust, and a
+ * gateway reviewing these pages checks each of them for the entity rather than just one.
+ */
+function Operator() {
+  return (
+    <div className="hairline rounded-panel bg-paper p-6 shadow-e1">
+      <p className="stamp mb-4">Operated by</p>
+      <p className="text-chalk">
+        This website is operated by <strong>{BUSINESS.legalName}</strong>, trading as{' '}
+        {BUSINESS.tradingName}.
+      </p>
+      <dl className="mt-4 space-y-1.5 text-[14px]">
+        <div className="flex gap-2">
+          <dt className="w-[132px] shrink-0 text-chalk-faint">Registered address</dt>
+          <dd className="text-chalk-muted">{BUSINESS.registeredAddress}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="w-[132px] shrink-0 text-chalk-faint">Mobile</dt>
+          <dd><a className="text-chalk-muted underline" href={PHONE_HREF}>{BUSINESS.phone}</a></dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="w-[132px] shrink-0 text-chalk-faint">Email</dt>
+          <dd><a className="text-chalk-muted underline" href={EMAIL_HREF}>{BUSINESS.email}</a></dd>
+        </div>
+      </dl>
+    </div>
   )
 }

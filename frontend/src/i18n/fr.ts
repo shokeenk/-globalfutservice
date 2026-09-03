@@ -45,6 +45,11 @@ const fr: Dictionary = {
     terms: "Conditions d'utilisation",
     privacy: 'Politique de confidentialité',
     aml: 'LCB-FT et KYC',
+    about: 'À propos',
+    contact: 'Contact',
+    refund: 'Politique de remboursement',
+    cancellation: 'Politique d’annulation',
+    shipping: 'Politique de livraison',
     rights:
       'Les crédits, objets et cartes joueur du jeu sont la propriété d’Electronic Arts ' +
       'Inc. Nous ne sommes pas affiliés à EA.',
