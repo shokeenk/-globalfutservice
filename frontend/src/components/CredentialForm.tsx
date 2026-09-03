@@ -158,19 +158,58 @@ export function CredentialForm({
           )}
         </Field>
 
-        <Field label={t.track.credBackupCodes} hint={t.track.credBackupCodesHint}>
-          {(props) => (
-            <Textarea
-              {...props}
-              rows={3}
-              value={backupCodes}
-              onChange={(e) => setBackupCodes(e.target.value)}
-              autoComplete="off"
-              data-1p-ignore
-              spellCheck={false}
-            />
-          )}
-        </Field>
+        <div>
+          <Field label={t.track.credBackupCodes} hint={t.track.credBackupCodesHint}>
+            {(props) => (
+              <Textarea
+                {...props}
+                rows={3}
+                value={backupCodes}
+                onChange={(e) => setBackupCodes(e.target.value)}
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+              />
+            )}
+          </Field>
+
+          {/*
+            The one field on this form that asks for something most players have never
+            gone looking for, and the step orders stall on.
+
+            Deep-linked to the help centre rather than expanded inline: the answer is
+            six steps on somebody else's website, and unfolding that here would bury
+            the remaining fields under it. Opens in a new tab so a half-filled
+            credential form is not thrown away to go and read it — which is the one
+            thing this form must never cost, because everything in it was typed from
+            a password manager.
+          */}
+          <a
+            href="/help#faq-backup-codes"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-semibold
+                       text-brand-400 underline-offset-2 hover:underline
+                       focus-visible:outline focus-visible:outline-2
+                       focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="10" cy="10" r="7.5" />
+              <path d="M7.8 7.7a2.2 2.2 0 1 1 2.9 2.1c-.5.2-.8.6-.8 1.1v.4" />
+              <path d="M10 14.2h.01" />
+            </svg>
+            {t.track.credBackupCodesFind}
+          </a>
+        </div>
 
         <Field label={t.track.credHandle} hint={t.track.credHandleHint}>
           {(props) => (

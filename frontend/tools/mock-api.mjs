@@ -29,11 +29,11 @@ const CATALOG = {
       mayRequireCredentials: true,
       options: [
         { platform: 'PC', variant: null, label: 'PC', unitPriceMinor: 70000,
-          unitPriceFormatted: '₹700.00', minQuantity: '0.50', maxQuantity: '100.00', stepQuantity: '0.50' },
+          unitPriceFormatted: '₹700.00', minQuantity: '0.50', maxQuantity: '5.00', stepQuantity: '0.01' },
         { platform: 'PLAYSTATION', variant: null, label: 'PlayStation', unitPriceMinor: 60000,
-          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '100.00', stepQuantity: '0.50' },
+          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '5.00', stepQuantity: '0.01' },
         { platform: 'XBOX', variant: null, label: 'Xbox', unitPriceMinor: 60000,
-          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '100.00', stepQuantity: '0.50' },
+          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '5.00', stepQuantity: '0.01' },
       ],
     },
     {
@@ -141,7 +141,15 @@ function quote(body) {
   const rate = body.platform === 'PC' ? 70000 : 60000
   const qty = Number(body.quantity ?? 1)
   const base = rate * qty
-  const tax = base * 0.05
+  /*
+   * Zero, because `market-tax-mode` is INCLUDED in every deployed configuration:
+   * EA's 5% is inside the per-million rate, so the line exists to say so and costs
+   * nothing. The mock used to add 5% on top, which made it the one place in the
+   * project where the storefront's "EA's 5% tax is on us" banner sat directly above
+   * a bill charging for it -- and it meant the `MARKET_TAX === 0` rendering path,
+   * the one every real customer sees, was never exercised here.
+   */
+  const tax = 0
   const subtotal = base + tax
   const fee = subtotal * 0.025
   const total = Math.round(subtotal + fee)

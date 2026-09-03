@@ -4,15 +4,16 @@ import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNo
 import { PageHeader } from '../components/PageHeader'
 import { PlatformCard } from '../components/PlatformCard'
 import {
-  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, Select, SelectTile,
+  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, SelectTile,
   Skeleton, Spinner, StepCard,
 } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { coinsLabel, trimNumber } from '../lib/format'
+import { useMoney } from '../lib/money'
 import { openCheckout, isStubGateway } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
-import type { CreateOrderResponse, SignedQuote } from '../lib/types'
+import type { CreateOrderResponse, QuoteLine, SignedQuote } from '../lib/types'
 import { useReducedMotion } from '../motion'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
@@ -234,6 +235,9 @@ export default function Order() {
       <Section className="rhythm-section">
       <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr] lg:items-start">
         <div className="space-y-5">
+          {/* Trading only: boosting tiers and coaching packs have no account prerequisites. */}
+          {!isFlat && <RequirementsPanel />}
+
           {isFlat ? (
             /* Boosting tiers and coaching packs: one choice, no slider. */
             <StepCard step={1} title={t.order.stepPackage(1, labels.service(service?.sku, service?.displayName))}>
@@ -316,6 +320,26 @@ export default function Order() {
                   <span>{trimNumber(min)}M</span>
                   <span>{trimNumber(max)}M</span>
                 </div>
+
+                {/*
+                  The same amount, typed.
+
+                  A slider is the right control for browsing a range and the wrong one
+                  for arriving at a number you already know. At 10K granularity the
+                  track holds 450 positions, so "I want 1.28M" is a drag nobody wins.
+                  Both controls write the same state, so they cannot disagree.
+
+                  Committed on blur rather than on every keystroke: snapping mid-typing
+                  turns "1" into the minimum before the "2" is pressed, and the field
+                  fights the person using it.
+                */}
+                <ManualAmount
+                  quantity={quantity}
+                  min={min}
+                  max={max}
+                  stepSize={stepSize}
+                  onCommit={setQuantity}
+                />
 
                 {/*
                   The arithmetic, shown. A slider that only reports a total leaves
@@ -567,7 +591,25 @@ function QuotePanel({
   onRequote: () => void
 }) {
   const t = useT()
-  const labels = useCatalogLabels()
+  const money = useMoney()
+
+  /*
+   * A saving is a negative line, plus the zero-value market tax.
+   *
+   * The tax line is the odd one: it is 0 because GFS absorbs EA's cut, so
+   * arithmetically it is not a discount, but it is the customer's second-biggest
+   * reason the total is what it is. Grouping it with the charges would put
+   * "Included" in a column of amounts and lose the point of showing it at all.
+   */
+  const isSaving = (line: QuoteLine) =>
+    line.amountMinor < 0 || (line.code === 'MARKET_TAX' && line.amountMinor === 0)
+
+  const lines = quote?.lines ?? []
+  const charges = lines.filter((line) => !isSaving(line))
+  const savings = lines.filter(isSaving)
+  const savedMinor = savings.reduce((sum, line) => sum + Math.abs(Math.min(0, line.amountMinor)), 0)
+  const savedFormatted = money(savedMinor)
+
   return (
     /*
      * Sticky from `lg` up, offset to clear the 72px header plus a little air.
@@ -600,63 +642,54 @@ function QuotePanel({
 
           {quote && (
             <>
-              <dl className="space-y-2.5">
-                {quote.lines.map((line, index) => (
-                  <div
-                    key={line.code}
-                    /*
-                      Staggered entrance, 45ms apart. Slow enough to read as the
-                      summary assembling itself, fast enough that the last line is
-                      settled before anyone could act on it. `animate-rise` is the
-                      shared keyframe, so this matches every other reveal on the site.
-                    */
-                    className="flex animate-rise items-start justify-between gap-4 text-[13px]"
-                    style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}
-                  >
-                    <dt
-                      className={
-                        line.code === 'MARKET_TAX' && line.amountMinor === 0
-                          ? 'font-semibold text-ok'
-                          : line.amountMinor < 0
-                            ? 'text-ok'
-                            : 'text-chalk-muted'
-                      }
-                    >
-                      {labels.line(line, {
-                        sku: quote.sku,
-                        variant: quote.variant,
-                        platform: quote.platform,
-                        quantity: quote.quantity,
-                        couponCode: quote.couponCode,
-                        referralCode: quote.referralCode,
-                        pointsRedeemed: quote.pointsRedeemed,
-                      })}
-                    </dt>
-                    {/*
-                      The one line that reads as a word rather than a number.
+              {/*
+                Two groups, not one list: what you are charged, then what came off.
 
-                      A market tax at zero is not a rounding artefact, it is the thing the
-                      customer is being told: EA's cut exists and it is not on this bill.
-                      Rendering it as "₹0.00" says that in the least convincing way
-                      available, so it says "Included" and takes the positive colour the
-                      discount lines use.
-                    */}
-                    <dd
-                      className={`tnum shrink-0 font-semibold ${
-                        line.code === 'MARKET_TAX' && line.amountMinor === 0
-                          ? 'text-ok'
-                          : line.amountMinor < 0
-                            ? 'text-ok'
-                            : 'text-chalk'
-                      }`}
-                    >
-                      {line.code === 'MARKET_TAX' && line.amountMinor === 0
-                        ? t.order.taxIncludedShort
-                        : line.amountFormatted}
-                    </dd>
-                  </div>
+                The engine emits the lines in the order it applies them, and that order
+                is load-bearing arithmetic — gateway fee after discount is a real money
+                decision pinned by a test. It is not, however, a reading order. Applied
+                sequentially it buries a coupon in the middle of the column, three lines
+                above the number it changed, so the customer scrolls back up to work out
+                why the total moved.
+
+                Regrouping is display-only and cannot alter the total: the same lines
+                are rendered, and addition does not care what order they are read in.
+                Savings sit directly above the total because that is the figure they
+                explain.
+              */}
+              <dl className="space-y-2.5">
+                {charges.map((line, index) => (
+                  <QuoteLineRow key={line.code} line={line} index={index} quote={quote} />
                 ))}
               </dl>
+
+              <div className="rounded-edge border border-ok/25 bg-ok/[0.05] px-3.5 py-3">
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <p className="stamp !mb-0 text-ok">{t.order.savingsTitle}</p>
+                  {savedMinor > 0 && (
+                    <p className="tnum text-[12.5px] font-semibold text-ok">
+                      {t.order.youSave} {savedFormatted}
+                    </p>
+                  )}
+                </div>
+                {savings.length > 0 ? (
+                  <dl className="space-y-2.5">
+                    {savings.map((line, index) => (
+                      <QuoteLineRow key={line.code} line={line} index={index} quote={quote} />
+                    ))}
+                  </dl>
+                ) : (
+                  /*
+                    Shown empty rather than hidden. A discount section that only exists
+                    once a discount does is one the customer never learns is there — and
+                    "where do I put a coupon code" is the single most common question a
+                    checkout gets.
+                  */
+                  <p className="text-[12px] leading-relaxed text-chalk-faint">
+                    {t.order.savingsEmpty}
+                  </p>
+                )}
+              </div>
 
               {/*
                 The total gets a heavier rule above it than the lines get between
@@ -831,8 +864,13 @@ function CheckoutForm({
   const t = useT()
   const [email, setEmail] = useState(account?.email ?? '')
   const [phone, setPhone] = useState('')
-  const [handle, setHandle] = useState('')
-  const [deliveryMethod, setDeliveryMethod] = useState(policy?.defaultDeliveryMethod ?? 'PLAYER_AUCTION')
+  /*
+   * Fixed, not chosen — see the delivery-method plate below. `useState` rather than a
+   * plain const so that a policy arriving after first paint (the catalogue is fetched)
+   * does not silently keep the fallback: the initialiser runs once, which is the
+   * behaviour the previous picker had, and the server pins the value anyway.
+   */
+  const [deliveryMethod] = useState(policy?.defaultDeliveryMethod ?? 'PLAYER_AUCTION')
   const isCoaching = quote.sku === 'COACHING'
   const [note, setNote] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
@@ -862,7 +900,8 @@ function CheckoutForm({
         email: email.trim(),
         phone: phone.trim() || null,
         deliveryMethod,
-        eaPlatformHandle: handle.trim() || null,
+        // Asked for after the order exists, on the credential form. See note 14.
+        eaPlatformHandle: null,
         note: note.trim() || null,
         acceptedTerms: true,
       })
@@ -913,32 +952,31 @@ function CheckoutForm({
         )}
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t.order.phone} hint={t.order.phoneHint}>
-          {(props) => (
-            <Input
-              {...props}
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91"
-              autoComplete="tel"
-            />
-          )}
-        </Field>
+      {/*
+        EA account name is no longer asked for here.
 
-        <Field label={t.order.eaName} hint={t.order.eaNameHint}>
-          {(props) => (
-            <Input
-              {...props}
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder={t.order.eaNamePlaceholder}
-              autoComplete="off"
-            />
-          )}
-        </Field>
-      </div>
+        It was optional, it was collected before payment, and the same identifier is
+        asked for again after the order exists -- `credHandle` on the credential form,
+        where it is actually needed and where it arrives encrypted. Asking twice got
+        the pre-payment copy wrong more often than not, because a customer filling in
+        a checkout types the name they use rather than the one on the account.
+
+        `eaPlatformHandle` still exists on the wire and is still nullable; this posts
+        null. Nothing server-side changed, so an order placed from an older cached
+        bundle is still accepted.
+      */}
+      <Field label={t.order.phone} hint={t.order.phoneHint}>
+        {(props) => (
+          <Input
+            {...props}
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+91"
+            autoComplete="tel"
+          />
+        )}
+      </Field>
 
       {/*
         Coaching is fulfilled by a calendar, not by a trader, so there is nothing to
@@ -947,26 +985,30 @@ function CheckoutForm({
         none, and the sign-in warning below would be actively alarming on a product
         that never asks for a password.
       */}
+      {/*
+        One method, shown rather than chosen.
+
+        GFS runs a single trading method now, so the picker was offering a decision
+        that no longer exists. It is rendered as a read-only plate instead of a
+        disabled `<select>` on purpose: a greyed-out dropdown reads as "you may not
+        have this", which invites a support message asking how to unlock it, where a
+        plain statement of fact does not.
+
+        The posted value is still `deliveryMethod`, defaulted from
+        `policy.defaultDeliveryMethod`, so the server decides what the method *is* and
+        this only decides what it is called. Both trading methods set
+        `requiresCredentials`, so nothing about the credential step changes either way.
+      */}
       {!isCoaching && (
-        <Field
-          label={t.order.deliveryMethod}
-          hint={
-            deliveryMethod === 'PLAYER_AUCTION'
-              ? t.order.deliveryAuctionHint
-              : t.order.deliveryComfortHint
-          }
-        >
-          {(props) => (
-            <Select
-              {...props}
-              value={deliveryMethod}
-              onChange={(e) => setDeliveryMethod(e.target.value)}
-            >
-              <option value="PLAYER_AUCTION">{t.order.deliveryAuction}</option>
-              <option value="COMFORT_TRADE">{t.order.deliveryComfort}</option>
-            </Select>
-          )}
-        </Field>
+        <div className="plate p-4">
+          <p className="text-[12.5px] font-semibold text-chalk-faint">
+            {t.order.deliveryMethod}
+          </p>
+          <p className="mt-1 text-body-sm font-semibold text-chalk">{t.order.deliveryFixed}</p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-chalk-muted">
+            {t.order.deliveryFixedHint}
+          </p>
+        </div>
       )}
 
       {isCoaching && (
@@ -1024,6 +1066,234 @@ function CheckoutForm({
         </Button>
       </div>
       <p className="sr-only">{step}</p>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------- one quote line --- */
+
+/**
+ * One row of the price breakdown.
+ *
+ * <p>Lifted out of {@code QuotePanel} unchanged when the breakdown was split into
+ * charges and savings — both groups render the identical row, and a copy-pasted second
+ * version is how the two would drift into styling a discount differently depending on
+ * which list it landed in.
+ */
+function QuoteLineRow({
+  line, index, quote,
+}: {
+  line: QuoteLine
+  index: number
+  quote: SignedQuote
+}) {
+  const t = useT()
+  const labels = useCatalogLabels()
+  const taxIncluded = line.code === 'MARKET_TAX' && line.amountMinor === 0
+
+  return (
+    <div
+      /*
+        Staggered entrance, 45ms apart. Slow enough to read as the summary assembling
+        itself, fast enough that the last line is settled before anyone could act on
+        it. `animate-rise` is the shared keyframe, so this matches every other reveal
+        on the site.
+      */
+      className="flex animate-rise items-start justify-between gap-4 text-[13px]"
+      style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}
+    >
+      <dt className={taxIncluded ? 'font-semibold text-ok' : line.amountMinor < 0 ? 'text-ok' : 'text-chalk-muted'}>
+        {labels.line(line, {
+          sku: quote.sku,
+          variant: quote.variant,
+          platform: quote.platform,
+          quantity: quote.quantity,
+          couponCode: quote.couponCode,
+          referralCode: quote.referralCode,
+          pointsRedeemed: quote.pointsRedeemed,
+        })}
+      </dt>
+      {/*
+        The one line that reads as a word rather than a number.
+
+        A market tax at zero is not a rounding artefact, it is the thing the customer
+        is being told: EA's cut exists and it is not on this bill. Rendering it as
+        "₹0.00" says that in the least convincing way available, so it says "Included"
+        and takes the positive colour the discount lines use.
+      */}
+      <dd
+        className={`tnum shrink-0 font-semibold ${
+          taxIncluded ? 'text-ok' : line.amountMinor < 0 ? 'text-ok' : 'text-chalk'
+        }`}
+      >
+        {taxIncluded ? t.order.taxIncludedShort : line.amountFormatted}
+      </dd>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------ manual amount input --- */
+
+/**
+ * A typed coin amount, in thousands, kept in step with the slider.
+ *
+ * <p>Three separate problems, which is why it is a component rather than an input:
+ *
+ * <ul>
+ *   <li><b>Units.</b> The rate card prices per million and the slider works in
+ *       millions; customers think in thousands. The conversion lives here so the
+ *       rest of the page keeps working in the unit the pricing engine quotes in.</li>
+ *   <li><b>Snapping.</b> A typed value has to land on a real step, or the server is
+ *       asked to price a quantity the offer does not contain. It snaps on blur, not
+ *       on keystroke, because snapping while someone is still typing rewrites the
+ *       digits under their cursor.</li>
+ *   <li><b>Float error.</b> 0.01 steps in binary floating point do not land on
+ *       round numbers — 0.1 + 0.2 arithmetic applies to coin amounts too. Every
+ *       calculation is done in integer thousands and converted once at the edge, so
+ *       a snapped value is exact rather than 1.2299999999999998.</li>
+ * </ul>
+ */
+function ManualAmount({
+  quantity, min, max, stepSize, onCommit,
+}: {
+  quantity: number
+  min: number
+  max: number
+  stepSize: number
+  onCommit: (millions: number) => void
+}) {
+  const t = useT()
+
+  // Everything below is integer thousands. `Math.round` rather than a cast: these
+  // come from NUMERIC(10,2) that has been through JSON, so 0.5 can arrive as
+  // 0.49999999999999994 and truncation would quietly lose a step.
+  const stepK = Math.max(1, Math.round(stepSize * 1000))
+  const minK = Math.round(min * 1000)
+  const maxK = Math.round(max * 1000)
+  const currentK = Math.round(quantity * 1000)
+
+  const [draft, setDraft] = useState(String(currentK))
+  const [snapped, setSnapped] = useState<string | null>(null)
+
+  // The slider is the other writer. When it moves, the field follows — but only
+  // while it is not focused, or typing would be overwritten mid-word.
+  const [focused, setFocused] = useState(false)
+  useEffect(() => {
+    if (!focused) setDraft(String(currentK))
+  }, [currentK, focused])
+
+  function commit() {
+    setFocused(false)
+    const typed = Number(draft)
+    if (!Number.isFinite(typed)) {
+      setDraft(String(currentK))
+      setSnapped(null)
+      return
+    }
+    const clamped = Math.min(maxK, Math.max(minK, typed))
+    const steps = Math.round((clamped - minK) / stepK)
+    const exactK = Math.min(maxK, minK + steps * stepK)
+
+    setDraft(String(exactK))
+    setSnapped(exactK !== typed ? `${formatK(exactK)}K` : null)
+    onCommit(exactK / 1000)
+  }
+
+  return (
+    <div className="mt-5">
+      <Field
+        label={t.order.amountManualLabel}
+        hint={snapped ? t.order.amountSnapped(snapped) : t.order.amountManualHint(stepK, `${formatK(minK)}K`, `${formatK(maxK)}K`)}
+      >
+        {(props) => (
+          <div className="relative">
+            <Input
+              {...props}
+              type="number"
+              inputMode="numeric"
+              min={minK}
+              max={maxK}
+              step={stepK}
+              value={draft}
+              onFocus={() => { setFocused(true); setSnapped(null) }}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+              className="tnum pr-9"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2
+                         text-[13px] font-semibold text-chalk-faint"
+            >
+              {t.order.amountManualUnit}
+            </span>
+          </div>
+        )}
+      </Field>
+    </div>
+  )
+}
+
+/** Thousands with separators, so 1250 reads as 1,250 rather than 1250. */
+function formatK(value: number): string {
+  return value.toLocaleString('en-US')
+}
+
+/* --------------------------------------------------------------- requirements --- */
+
+/**
+ * What has to be true before an order can be worked, stated before it is configured.
+ *
+ * <p>The same four facts were already on the page as a single checkbox immediately
+ * above the pay button. That is the wrong end of the flow: by then the customer has
+ * chosen a platform, an amount and a payment method, and discovering their transfer
+ * market is locked makes all of it wasted. The checkbox stays — it is a confirmation,
+ * and confirmations belong next to the commitment — but the information now arrives
+ * before the first choice rather than after the last one.
+ */
+function RequirementsPanel() {
+  const t = useT()
+  const items = [
+    { title: t.order.reqCompanion, note: t.order.reqCompanionNote },
+    { title: t.order.reqMarket, note: t.order.reqMarketNote },
+    { title: t.order.reqMinCoins, note: t.order.reqMinCoinsNote },
+    { title: t.order.reqUnassigned, note: t.order.reqUnassignedNote },
+  ]
+
+  return (
+    <div className="hairline rounded-panel border-brand-500/30 bg-brand-500/[0.04] p-5">
+      <p className="stamp mb-1">{t.order.requirementsTitle}</p>
+      <p className="measure mb-4 text-[13px] leading-relaxed text-chalk-muted">
+        {t.order.requirementsLead}
+      </p>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {items.map((item) => (
+          <li key={item.title} className="flex gap-2.5">
+            {/*
+              A tick, not a checkbox. Nothing here is togglable — these are conditions
+              on the account, and a control that looks interactive but is not is worse
+              than a plain mark.
+            */}
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              className="mt-[3px] h-4 w-4 shrink-0 text-brand-500"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.1"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m4 10.5 4 4 8-9" />
+            </svg>
+            <div>
+              <p className="text-[13px] font-semibold text-chalk">{item.title}</p>
+              <p className="text-[12px] leading-snug text-chalk-faint">{item.note}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

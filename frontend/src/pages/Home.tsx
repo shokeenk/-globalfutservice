@@ -12,7 +12,7 @@ import { useT } from '../i18n'
 import { bpsToPercent } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { SEASON, useSeo } from '../lib/seo'
-import { CountUp, Reveal } from '../motion/Reveal'
+import { Reveal } from '../motion/Reveal'
 import { useCatalog } from '../state/CatalogContext'
 
 /**
@@ -38,13 +38,24 @@ export default function Home() {
     <>
       <Hero />
       <Rail />
+      {/*
+        Rewards sits above Operating Standards and How It Works, which is higher
+        than a loyalty pitch would normally earn.
+
+        It is deliberate and it is the brief's call, not an aesthetic one: the
+        scheme is a reason to buy here rather than from whoever is cheapest this
+        week, and a reason to buy is worthless below the point where the reader
+        decided. Everything it used to sit under -- the standards panel, the
+        process, the testimonials -- is reassurance for somebody already
+        considering, and reassurance can wait.
+      */}
+      <RewardsBand />
       <Proof />
       <Services />
       <Process />
       <CoachingBand />
       <WhyUs />
       <Testimonials />
-      <RewardsBand />
       <AskBand />
       <ClosingCta />
     </>
@@ -419,19 +430,46 @@ function Rail() {
  * to distinguish itself from, and the audience for this site has seen them all.
  */
 function Proof() {
-  const { policy } = useCatalog()
   const t = useT()
 
+  /*
+   * Value and unit are separate fields, and none of them counts up any more.
+   *
+   * The panel used to animate a bare numeral: 60, 24, `guaranteeDays`, 6. That
+   * worked while every cell was a number with an implied unit, and broke the moment
+   * the guarantee stopped being a day count -- a `CountUp` to 7 sitting above the
+   * words "100% Safety Policy" is a figure with nothing to do with its own label.
+   *
+   * Splitting the pair also fixes the thing that was wrong before the rename: a
+   * lone "60" over "Typical delivery" makes the reader supply the unit, and half of
+   * them will supply the wrong one. Delivery is now a range, because "60" was never
+   * the typical case -- it was the ceiling of the typical case.
+   */
   const stats = [
-    { to: 60, suffix: '', label: t.home.proof.deliveryLabel, note: t.home.proof.deliveryNote },
-    { to: 24, suffix: '', label: t.home.proof.shiftLabel, note: t.home.proof.shiftNote },
     {
-      to: policy?.guaranteeDays ?? 7,
-      suffix: '',
+      value: t.home.proof.deliveryValue,
+      unit: t.home.proof.deliveryUnit,
+      label: t.home.proof.deliveryLabel,
+      note: t.home.proof.deliveryNote,
+    },
+    {
+      value: t.home.proof.shiftValue,
+      unit: t.home.proof.shiftUnit,
+      label: t.home.proof.shiftLabel,
+      note: t.home.proof.shiftNote,
+    },
+    {
+      value: t.home.proof.guaranteeValue,
+      unit: t.home.proof.guaranteeUnit,
       label: t.home.proof.guaranteeLabel,
       note: t.home.proof.guaranteeNote,
     },
-    { to: 6, suffix: '', label: t.home.proof.tiersLabel, note: t.home.proof.tiersNote },
+    {
+      value: t.home.proof.tiersValue,
+      unit: t.home.proof.tiersUnit,
+      label: t.home.proof.tiersLabel,
+      note: t.home.proof.tiersNote,
+    },
   ]
 
   return (
@@ -468,8 +506,19 @@ function Proof() {
                 index % 2 === 0 ? 'bg-brand-500' : 'bg-gold-500'
               }`}
             />
-            <dd className="display text-[clamp(2.6rem,6vw,3.6rem)] leading-none text-chalk">
-              <CountUp to={stat.to} suffix={stat.suffix} />
+            {/*
+              Unit set at roughly a third of the figure and on the same baseline, so
+              the two read as one quantity rather than as a number with a word after
+              it. `items-baseline` rather than `items-end`: the descenders in "min"
+              would otherwise push the word visibly below the numeral.
+            */}
+            <dd className="flex items-baseline gap-1.5">
+              <span className="display text-[clamp(2.6rem,6vw,3.6rem)] leading-none text-chalk">
+                {stat.value}
+              </span>
+              <span className="text-[clamp(0.9rem,1.6vw,1.05rem)] font-medium leading-none text-chalk-faint">
+                {stat.unit}
+              </span>
             </dd>
             <dt className="mt-4 text-body-sm font-medium text-chalk">{stat.label}</dt>
             <p className="mt-1.5 text-[12px] leading-snug text-chalk-faint">{stat.note}</p>
@@ -936,6 +985,12 @@ function RewardsBand() {
   const money = useMoney()
   if (!policy) return null
 
+  // Server-derived from an enum, so normally present — but the empty-array guard is
+  // what stopped `tiers[tiers.length - 1]` throwing on the rewards page, and the
+  // same reasoning applies to a homepage section that must never take the site down.
+  const tiers = policy.loyaltyTiers ?? []
+  const topTier = tiers.length > 0 ? tiers[tiers.length - 1] : null
+
   const perOrder =
     `${t.home.rewards.pointsUnit(policy.earnPointsPerUnit)} / ${money(policy.earnSpendUnitMinor)}`
 
@@ -962,14 +1017,49 @@ function RewardsBand() {
                   bpsToPercent(policy.maxWalletRedemptionBps),
                 )}
               </p>
+              {/*
+                Three benefits, ahead of the mechanics.
+
+                The section used to open with how the scheme works -- earn rate, point
+                value, redemption cap -- which is the right content in the wrong order.
+                Somebody who has not yet decided the scheme is worth having does not
+                need its arithmetic; they need the reason, and the reason is that the
+                price falls the longer they stay. The worked example still carries the
+                arithmetic, one column over, for the reader who wants to check it.
+
+                Every figure is interpolated from live policy. Nothing here states a
+                rate, a percentage or a tier of its own.
+              */}
+              <ul className="mt-7 space-y-4">
+                <PitchRow
+                  title={t.home.rewards.pitchOne}
+                  body={t.home.rewards.pitchOneBody(
+                    money(policy.pointValueMinor),
+                    bpsToPercent(policy.maxWalletRedemptionBps),
+                  )}
+                />
+                {topTier && (
+                  <PitchRow
+                    title={t.home.rewards.pitchTwo}
+                    body={t.home.rewards.pitchTwoBody(topTier.displayName)}
+                  />
+                )}
+                <PitchRow
+                  title={t.home.rewards.pitchThree}
+                  body={t.home.rewards.pitchThreeBody(policy.dailyBonusPoints)}
+                />
+              </ul>
+
               <div className="mt-8 flex flex-wrap gap-3">
-                <ButtonLink to="/rewards" variant="secondary" size="md">
-                  {t.home.rewards.howItWorks}
-                </ButtonLink>
                 <ButtonLink to="/register" size="md">
                   {t.home.rewards.createAccount}
                 </ButtonLink>
+                <ButtonLink to="/rewards" variant="secondary" size="md">
+                  {t.home.rewards.howItWorks}
+                </ButtonLink>
               </div>
+
+              <p className="mt-4 text-[12px] text-chalk-faint">{t.home.rewards.guestNote}</p>
             </div>
 
             <div className="plate border-gold-500/20 bg-gold-500/[0.03] p-6">
@@ -990,7 +1080,41 @@ function RewardsBand() {
                   gold
                 />
               </dl>
-              <p className="mt-5 border-t border-gold-500/15 pt-4 text-[11.5px] leading-relaxed text-chalk-faint">
+              {/*
+                The ladder, compressed to a strip.
+
+                The rewards page draws this properly, as a rail with thresholds. Here
+                it exists only to show that the tiers are real and that the discount
+                grows -- six chips reading their names and percentages off live policy.
+                A reader who wants the thresholds has a button to the full page.
+              */}
+              {tiers.length > 0 && (
+                <div className="mt-5 border-t border-gold-500/15 pt-4">
+                  <p className="eyebrow mb-3 text-gold-400">{t.home.rewards.ladderTitle}</p>
+                  <ol className="flex flex-wrap gap-1.5">
+                    {tiers.map((tier, index) => (
+                      <li
+                        key={tier.name}
+                        className={[
+                          'tnum rounded-edge border px-2 py-1 text-[11px] font-medium',
+                          index === tiers.length - 1
+                            ? 'border-gold-500/45 bg-gold-500/10 text-gold-400'
+                            : 'border-ink-400 text-chalk-faint',
+                        ].join(' ')}
+                      >
+                        {tier.displayName}
+                        {tier.discountBps > 0 && (
+                          <span className="ml-1 text-chalk-muted">
+                            {t.home.rewards.ladderOff(bpsToPercent(tier.discountBps))}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              <p className="mt-4 border-t border-gold-500/15 pt-4 text-[11.5px] leading-relaxed text-chalk-faint">
                 {t.home.rewards.pointsLand}
               </p>
             </div>
@@ -998,6 +1122,22 @@ function RewardsBand() {
         </div>
       </Reveal>
     </Section>
+  )
+}
+
+/** One benefit: a gold marker, a claim, and the sentence that backs it. */
+function PitchRow({ title, body }: { title: string; body: string }) {
+  return (
+    <li className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-gold-500"
+      />
+      <div>
+        <p className="text-body-sm font-semibold text-chalk">{title}</p>
+        <p className="measure mt-0.5 text-[13px] leading-relaxed text-chalk-muted">{body}</p>
+      </div>
+    </li>
   )
 }
 
