@@ -150,12 +150,21 @@ management:
       enabled: false
 
 springdoc:
-  # Interactive docs are a development convenience. Disable in production: an
-  # endpoint catalogue is a gift to anyone probing the API.
+  # Interactive docs are a development convenience, and the default is OFF.
+  #
+  # It used to default to on, with a comment saying to disable it in production —
+  # which is a note, not a mechanism. The live API duly served the full catalogue of
+  # all 49 endpoints, the 20 admin ones included, to anyone who asked, because
+  # nobody set the variable that was never going to be set.
+  #
+  # Off by default and opted into for development is the same shape every other
+  # risky switch in this file already has: a provider with no secret stays off, a
+  # missing signing key refuses to boot. A deployment that forgets this one now
+  # forgets it in the safe direction.
   swagger-ui:
-    enabled: ${GFS_SWAGGER_ENABLED:true}
+    enabled: ${GFS_SWAGGER_ENABLED:false}
   api-docs:
-    enabled: ${GFS_SWAGGER_ENABLED:true}
+    enabled: ${GFS_SWAGGER_ENABLED:false}
 
 logging:
   level:
