@@ -77,6 +77,20 @@ export function Footer() {
             </ButtonLink>
 
             <div className="mt-7 flex gap-2.5">
+              {/*
+                Discord sits first, and it is not really a social link.
+
+                The terms of service name it as the route for coaching scheduling, support,
+                safety-policy claims and disputes — clauses 6, 9, 16, 19 and 20 all point at
+                it. That makes it a contractual contact channel that happens to share a row
+                with the marketing accounts, so it leads them.
+              */}
+              <SocialLink
+                href={BUSINESS.discordInvite}
+                label={`Global FUT Services on Discord (${BUSINESS.discordName})`}
+              >
+                <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
+              </SocialLink>
               <SocialLink
                 href="https://www.youtube.com/@FCvinuhunter"
                 label="Global FUT Services on YouTube"

@@ -233,6 +233,19 @@ export default function Rewards() {
                 {t.rewards.ruleDailyBody}
               </li>
             )}
+            {/*
+              Unconditional, unlike the rules above it.
+
+              Those are switched off when the feature behind them is, because a rule
+              describing something that does not happen is noise. This one describes what
+              points are *not*, and that stays true however the scheme is configured. It is
+              also stated outright in the terms of service, so a page omitting it left the
+              scheme's single most important limitation to be inferred.
+            */}
+            <li>
+              <strong className="text-chalk">{t.rewards.ruleNoCash}</strong>{' '}
+              {t.rewards.ruleNoCashBody}
+            </li>
           </ul>
         </Card>
 

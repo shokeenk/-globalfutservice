@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, endOfMonth, startOfMonth } from '../components/Calendar'
+import { BUSINESS } from '../content/business'
 import { PageHeader } from '../components/PageHeader'
 import { Testimonials } from '../components/Testimonials'
 import { Reveal } from '../motion/Reveal'
@@ -591,6 +592,25 @@ function SlotPicker({
             {t.coaching.policyLine(policy.sessionMinutes, policy.changeCutoffHours)}
           </p>
         )}
+        {/*
+          Where the session actually gets arranged.
+
+          The terms of service say scheduling and session communication happen on the
+          official Discord, so the booking screen is where that has to be said — a customer
+          who has just paid should not have to find clause 6 to learn how the coach reaches
+          them.
+        */}
+        <p className="text-[13px] text-chalk-faint">
+          {t.coaching.coachDiscord}{' '}
+          <a
+            className="text-chalk underline"
+            href={BUSINESS.discordInvite}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {BUSINESS.discordName}
+          </a>
+        </p>
       </div>
 
       {confirmed && (

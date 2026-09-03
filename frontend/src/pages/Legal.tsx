@@ -65,7 +65,7 @@ export default function Legal({ doc }: { doc: LegalDoc }) {
         better position than the alternative.
       */}
       <article className="mx-auto max-w-[46rem] space-y-10 text-[15px] leading-[1.75] text-chalk-muted">
-        {doc === 'terms' && <Terms policy={policy} />}
+        {doc === 'terms' && <Terms />}
         {doc === 'privacy' && <Privacy policy={policy} />}
         {doc === 'aml' && <Aml />}
         {doc === 'refund' && <Refund policy={policy} />}
@@ -102,144 +102,393 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
     </section>
   )
 }
-
-function Terms({ policy }: { policy: Policy | null }) {
-  const guaranteeDays = policy?.guaranteeDays ?? 7
-  const sla = policy?.deliverySlaHours ?? 48
-  const refundFee = (policy?.refundFeeBps ?? 500) / 100
-  const cash = (policy?.guaranteeCashBps ?? 5000) / 100
-  const credit = (policy?.guaranteeCreditBps ?? 10000) / 100
-
+/**
+ * Terms of service.
+ *
+ * <p><b>This is the client's finalised document, reproduced rather than authored.</b>
+ * The wording is theirs and is not paraphrased, tightened or merged with what was here
+ * before. Where a figure in it disagrees with one the software enforces, the
+ * disagreement is reported rather than quietly reconciled in either direction — a
+ * developer picking a number in a legal document is how a business ends up bound to a
+ * promise nobody in it agreed to.
+ *
+ * <p><b>It replaced the previous terms rather than being added beside them.</b> A site
+ * carrying two terms-of-service documents that disagree is worse than one that
+ * disagrees with its own configuration: in a dispute, the customer gets to pick which
+ * one they read.
+ *
+ * <p>The PDF's publication note — that this is a working draft pending review by Indian
+ * counsel — is deliberately not published. It is guidance addressed to GFS, not a term
+ * offered to a customer, and putting it on the page would tell every reader the
+ * contract they are agreeing to is provisional.
+ */
+function Terms() {
   return (
     <>
-      <p className="text-chalk-faint">Last updated {new Date().toLocaleDateString('en-GB', {
-        day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      <p className="text-chalk-faint">Last updated 3 September 2026</p>
 
-      <Clause n={1} title="What we sell">
+      <Clause n={1} title="About GFS & Our Services">
         <p>
-          Global FUT Services provides <strong className="text-chalk">trading, consultation and
-          account services</strong> for EA FC. When you place an order you are engaging us to
-          perform work — locating undervalued cards on the transfer market, transacting them, and
-          coaching or playing on your behalf where you have asked us to.
+          Global FUT Services provides independent trading (coins), boosting, consultation
+          and coaching services for EA SPORTS FC.
         </p>
         <p>
-          <strong className="text-chalk">We do not sell in-game currency, player cards or
-          accounts.</strong> All in-game assets are and remain the exclusive property of Electronic
-          Arts Inc. under the licence they grant you. We are an independent provider, not
-          affiliated with, endorsed by or sponsored by EA Sports or Electronic Arts Inc.
+          When you place an order, you are purchasing the selected service from GFS. We do
+          not sell or claim ownership of EA SPORTS FC in-game currency, player cards or
+          other EA-owned in-game assets.
+        </p>
+        <p>
+          Global FUT Services is an independent third-party service provider and is not
+          affiliated with, endorsed by, sponsored by, or officially connected with
+          Electronic Arts Inc. or EA SPORTS.
         </p>
       </Clause>
 
-      <Clause n={2} title="Placing an order">
+      <Clause n={2} title="Eligibility & Requirements">
         <p>
-          Prices are quoted before you pay and held for a short period. A quote that has expired
-          is re-priced automatically; we will never charge you an amount you have not seen. The
-          total shown at checkout includes the EA transfer market tax and payment processing —
-          nothing is added afterwards.
+          You must be legally able to enter into a contract in your country to use our
+          services.
         </p>
         <p>
-          You must be old enough to enter a contract where you live, and the payment method must
-          be yours.
-        </p>
-      </Clause>
-
-      <Clause n={3} title="Delivery">
-        <p>
-          We aim to complete most orders within one hour. Our contractual commitment is{' '}
-          <strong className="text-chalk">{sla} hours</strong> from payment, or from receipt of any
-          details we have asked you for, whichever is later.
-        </p>
-        <p>
-          Where an order requires your account to be in a particular state — signed out
-          everywhere, transfer market unlocked, fewer than five unassigned items — the commitment
-          runs from the point those conditions are met. We will tell you promptly if they are not.
+          Depending on the service, you may need access to the relevant EA account, game,
+          platform, Web/Companion App, Transfer Market and other requirements shown during
+          checkout.
         </p>
       </Clause>
 
-      <Clause n={4} title="Refunds">
+      <Clause n={3} title="Orders, Pricing & Payment">
         <p>
-          If we have not delivered within {sla} hours you may request a refund or a status update,
-          and we will provide one. A processing fee of {refundFee}% is deducted from cash refunds
-          to cover the payment costs we cannot recover.
+          All prices are shown before payment. The price displayed at checkout is the
+          amount shown before completing your purchase.
         </p>
         <p>
-          <strong className="text-chalk">
-            Once we send you an "Order Delivered" email, the work is complete and the order is
-            final.
-          </strong>{' '}
-          After that point the guarantee in clause 5 applies instead. We flag this plainly because
-          it is the term customers most often discover too late.
+          Applicable fees, taxes and discounts are displayed during checkout. We will not
+          knowingly charge an amount that was not shown before payment.
+        </p>
+        <p>Payment must be made using a payment method you are authorized to use.</p>
+      </Clause>
+
+      <Clause n={4} title="Trading Services">
+        <p>
+          GFS provides trading-related services through the applicable EA SPORTS FC market.
+        </p>
+        <p>
+          Customers must provide the information and account conditions required to
+          complete the order. The selected amount, pricing and applicable requirements are
+          shown before checkout.
         </p>
       </Clause>
 
-      <Clause n={5} title={`The ${guaranteeDays}-day guarantee`}>
+      <Clause n={5} title="Boosting Services">
         <p>
-          For {guaranteeDays} days after delivery, your order is covered against EA sanctioning
-          your account or removing the coins involved. If that happens, tell us within the window
-          and choose either:
+          A professional player may play on your account to work toward your selected rank.
         </p>
-        <ul className="ml-5 list-disc space-y-1">
-          <li><strong className="text-chalk">{cash}% back in cash</strong>, or</li>
-          <li><strong className="text-chalk">{credit}% as store credit</strong>, added to your rewards balance.</li>
+        <p>
+          Rare issues such as disconnections, server problems, maintenance or heavy delays
+          may affect the result. If we achieve a lower rank than selected, the price
+          difference will be credited back to you.
+        </p>
+        <p>
+          You may use the credit toward another order or request a refund of the credited
+          amount.
+        </p>
+      </Clause>
+
+      <Clause n={6} title="Coaching Services">
+        <p>
+          GFS coaching is provided through scheduled sessions. Package details and session
+          duration are shown before purchase.
+        </p>
+        <p>
+          After ordering, customers can connect with their coach or GFS Support through our
+          official Discord for scheduling and session-related communication.
+        </p>
+        <p>
+          Official Discord:{' '}
+          <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+            {BUSINESS.discordName}
+          </a>
+        </p>
+      </Clause>
+
+      <Clause n={7} title="Delivery & Completion">
+        <p>
+          We aim to complete orders within the estimated delivery time shown on the website.
+        </p>
+        <p>
+          Our maximum contractual delivery period is{' '}
+          <strong className="text-chalk">48 hours</strong>, starting from payment or from
+          receipt of required customer information or completion of required account
+          conditions, whichever is later.
+        </p>
+      </Clause>
+
+      <Clause n={8} title="Refunds & Cancellations">
+        <p>
+          If we cannot complete an order within the applicable delivery commitment, you may
+          request a refund or choose to use the amount toward another order.
+        </p>
+        <p>
+          Once an order has been completed and marked as delivered, it is considered
+          complete, subject to the 100% Safety Policy and any other rights available under
+          applicable law.
+        </p>
+      </Clause>
+
+      <Clause n={9} title="100% Safety Policy">
+        <p>
+          If your account is affected within{' '}
+          <strong className="text-chalk">24 hours</strong> of your order, you are covered by
+          our 100% Safety Policy.
+        </p>
+        <ul className="ml-5 list-disc space-y-1.5">
+          <li>
+            <strong className="text-chalk">Full Refund:</strong> Receive a refund for the
+            affected order.
+          </li>
+          <li>
+            <strong className="text-chalk">Replacement Account:</strong> Receive a
+            replacement account with the same amount of coins ordered, along with Ultimate
+            Team access and an open Transfer Market where applicable.
+          </li>
         </ul>
         <p>
-          The credit option is worth more because it costs us capacity rather than cash, and we
-          would rather keep you as a customer. Outside the window, or where the account was
-          sanctioned for conduct unrelated to our work, the guarantee does not apply.
+          We will make reasonable efforts to provide a playable team similar in value to
+          your existing team, but the exact same players or squad are not guaranteed.
+        </p>
+        <p>
+          The replacement account does not guarantee ownership or inclusion of the EA
+          SPORTS FC game itself. You must have access to the relevant game and platform to
+          use it.
+        </p>
+        <p>
+          Official Discord:{' '}
+          <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+            {BUSINESS.discordName}
+          </a>
         </p>
       </Clause>
 
-      <Clause n={6} title="Your account details">
+      <Clause n={10} title="Rewards & Loyalty">
         <p>
-          Some services require us to sign in to your EA account. Where they do, we ask for those
-          details only after payment, encrypt them before they are stored, open them only to
-          fulfil your order, and destroy them when it is complete. See our privacy policy for the
-          specifics.
+          Earn points as you use GFS and progress through six lifetime tiers, with discounts
+          of up to 5%.
         </p>
         <p>
-          You remain responsible for your own account security, and we ask you to change your
-          password and regenerate your backup codes once an order is finished.
-        </p>
-      </Clause>
-
-      <Clause n={7} title="Things you agree not to do">
-        <p>
-          Use the service unlawfully, submit details for an account that is not yours, attempt to
-          reverse a payment for work that has been delivered, or interfere with the operation of
-          the site.
-        </p>
-      </Clause>
-
-      <Clause n={8} title="Risk and liability">
-        <p>
-          Buying trading services carries some risk of action by the game publisher. We take it
-          seriously and manage it carefully, and we are not going to pretend it is zero. The
-          guarantee in clause 5 is our answer to that risk, and it is the limit of our liability
-          in respect of publisher action.
+          Points are added after the applicable 24-hour Safety Policy period. Up to 20% of
+          an order can be paid using points.
         </p>
         <p>
-          Beyond that, our total liability for any order is limited to what you paid for it. We
-          are not liable for indirect or consequential losses.
+          Using points does not reduce your lifetime tier. Account holders can also earn 3
+          points per day through daily check-in.
+        </p>
+        <p>
+          Guest orders cannot earn or store points. Points have no cash value and cannot be
+          withdrawn.
+        </p>
+        <p>
+          GFS may correct or restrict rewards in cases of technical errors, duplicate
+          accounts, fraud or misuse.
         </p>
       </Clause>
 
-      <Clause n={9} title="Changes">
+      <Clause n={11} title="Account Details & Security">
+        <p>Some services require access to your EA or console account.</p>
         <p>
-          We may change these terms. The version that applies to your order is the one published
-          when you placed it, and we keep a record of that with the order.
+          Where required, account credentials, backup codes and related information are
+          encrypted, accessed only when necessary to fulfil your order, and deleted after
+          use.
+        </p>
+        <p>
+          You remain responsible for your account security. We recommend changing your
+          password and regenerating backup codes after the service is completed.
         </p>
       </Clause>
 
-      <Clause n={10} title="Getting in touch">
+      <Clause n={12} title="Customer Responsibilities">
         <p>
-          Contact us through the support page. Please raise a dispute with us before your bank —
-          we can almost always resolve it faster, and a chargeback on delivered work is something
-          we will contest with the order's full history.
+          You agree to provide accurate information and only provide details for an account
+          you are authorized to use.
+        </p>
+        <p>
+          You must not use GFS services unlawfully, provide false information, misuse the
+          website, interfere with our services, or knowingly attempt to obtain duplicate
+          refunds or payment reversals for completed services.
         </p>
       </Clause>
+
+      <Clause n={13} title="EA / EA SPORTS FC Disclaimer">
+        <p>
+          EA SPORTS FC, Electronic Arts, EA and related names, trademarks and intellectual
+          property belong to their respective owners.
+        </p>
+        <p>
+          GFS is an independent third-party provider and is not affiliated with, endorsed
+          by, sponsored by, or officially connected with Electronic Arts Inc. or EA SPORTS.
+        </p>
+        <p>
+          Customers acknowledge that EA may apply its own rules, restrictions or enforcement
+          to EA accounts and services.
+        </p>
+      </Clause>
+
+      <Clause n={14} title="Privacy & Data Handling">
+        <p>
+          GFS may collect information needed to provide and manage its services, including
+          name, email address, optional phone number, GFS account details, EA account
+          details, backup codes, console login details where required, Discord username,
+          payment information, order history and rewards history.
+        </p>
+        <p>
+          Payment processing is handled by our payment providers. GFS does not store
+          sensitive card or banking details. EA account, backup-code and console-login
+          information is encrypted, accessed only when required to fulfil an order, and
+          deleted after use.
+        </p>
+        <p>For privacy questions or requests to correct or delete your information:</p>
+        <ul className="ml-5 list-disc space-y-1">
+          <li>
+            Email: <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
+          </li>
+          <li>
+            Discord:{' '}
+            <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+              {BUSINESS.discordName}
+            </a>
+          </li>
+        </ul>
+      </Clause>
+
+      <Clause n={15} title="Service Availability & Third-Party Issues">
+        <p>
+          Services may occasionally be affected by EA server outages, maintenance, game
+          updates, connection problems or platform issues.
+        </p>
+        <p>
+          If we cannot complete an order because of such an issue, you may choose a full
+          refund or use the amount toward a future order.
+        </p>
+        <p>
+          Where a service can safely continue later, we may resume it once the issue is
+          resolved.
+        </p>
+      </Clause>
+
+      <Clause n={16} title="Chargebacks & Payment Disputes">
+        <p>
+          If you have an issue with your order or payment, please contact GFS Support or our
+          official Discord first so we can review and resolve it in good faith.
+        </p>
+        <p>
+          For disputed orders, GFS may provide relevant payment, order, delivery and
+          communication records to the payment provider.
+        </p>
+        <p>
+          If a payment has already been refunded, the same transaction should not be
+          disputed again.
+        </p>
+      </Clause>
+
+      <Clause n={17} title="Suspension & Termination">
+        <p>
+          GFS may suspend or cancel an order or account where we identify fraud, payment
+          abuse, false information, misuse of our services, or other activity that puts GFS
+          or its customers at risk.
+        </p>
+      </Clause>
+
+      <Clause n={18} title="Liability & Service Risk">
+        <p>
+          EA SPORTS FC services involve risks that may arise from the game publisher,
+          platform or other third parties.
+        </p>
+        <p>
+          GFS will provide the protections specifically stated in these Terms, including the
+          100% Safety Policy where applicable.
+        </p>
+        <p>
+          To the extent permitted by applicable law, GFS will not be responsible for indirect
+          or consequential losses. Nothing in these Terms excludes or limits liability that
+          cannot lawfully be excluded or limited.
+        </p>
+      </Clause>
+
+      <Clause n={19} title="Dispute Resolution">
+        <p>Please contact GFS Support or our official Discord first.</p>
+        <p>
+          We will review the available order, payment, delivery, account and communication
+          records and work to resolve the issue fairly.
+        </p>
+        <p>
+          Where applicable, coin orders may be reviewed using opening and closing account
+          balances and other delivery evidence.
+        </p>
+        <p>
+          If the matter cannot be resolved directly, customers retain any dispute-resolution
+          or consumer remedies available under applicable law.
+        </p>
+      </Clause>
+
+      <Clause n={20} title="Grievance & Customer Support">
+        <p>
+          For concerns about your order or service, contact GFS Support or our official
+          Discord.
+        </p>
+        <ul className="ml-5 list-disc space-y-1">
+          <li>
+            Email: <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
+          </li>
+          <li>
+            Discord:{' '}
+            <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+              {BUSINESS.discordName}
+            </a>
+          </li>
+        </ul>
+        <p>
+          For formal complaints, please use the same email or official Discord so the matter
+          can be documented and reviewed.
+        </p>
+      </Clause>
+
+      <Clause n={21} title="Governing Law">
+        <p>
+          These Terms are governed by the laws of India, subject to any mandatory consumer
+          or other rights that may apply to you under applicable law.
+        </p>
+      </Clause>
+
+      <Clause n={22} title="Changes to These Terms">
+        <p>We may update these Terms from time to time.</p>
+        <p>
+          The version applicable to your order will be the version published when you placed
+          the order, unless applicable law requires otherwise.
+        </p>
+      </Clause>
+
+      <Clause n={23} title="Contact">
+        <p>Global FUT Services</p>
+        <ul className="ml-5 list-disc space-y-1">
+          <li>
+            Email: <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
+          </li>
+          <li>Official Discord: {BUSINESS.discordName}</li>
+          <li>
+            Discord:{' '}
+            <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+              {BUSINESS.discordInvite}
+            </a>
+          </li>
+        </ul>
+        <p>The current business/legal address is maintained in the website footer.</p>
+      </Clause>
+
+      <Operator />
     </>
   )
 }
+
+
 
 function Privacy({ policy }: { policy: Policy | null }) {
   return (
@@ -308,72 +557,94 @@ function Privacy({ policy }: { policy: Policy | null }) {
     </>
   )
 }
-
+/**
+ * AML &amp; KYC policy.
+ *
+ * <p><b>A full replacement, not an edit.</b> The previous version claimed more than the
+ * business actually operates, and three claims in particular were removed on the
+ * client's written instruction rather than softened:
+ *
+ * <ul>
+ *   <li>a fixed cumulative-spend verification threshold — now "unusual" transactions,
+ *       because a published threshold is a commitment to a control that has to exist;</li>
+ *   <li>automatic reporting of suspicious activity to FIU-IND — now information "may" be
+ *       provided "where legally required", because claiming a reporting relationship you
+ *       do not have is a worse position than claiming none;</li>
+ *   <li>a five-year retention promise — now "as reasonably required", because a fixed
+ *       period is a promise to delete on a schedule nothing enforces.</li>
+ * </ul>
+ *
+ * <p>None of the three may be reintroduced for sounding more thorough. Each one reads as
+ * reassurance and functions as an unbacked undertaking, which is the failure mode the
+ * replacement exists to close.
+ *
+ * <p>Only the "Final AML &amp; KYC wording for the website" block of the supplied change
+ * note is published. The rest of that document — the rationale, the numbered
+ * implementation notes and the status line — is instruction addressed to whoever makes
+ * this change, and none of it is a term offered to a customer.
+ */
 function Aml() {
   return (
     <>
-      <p className="text-chalk-faint">Last updated {new Date().toLocaleDateString('en-GB', {
-        day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      <p className="text-chalk-faint">Last updated {updatedOn()}</p>
+
+      <p className="text-chalk">
+        Anti-Money Laundering, Fraud Prevention &amp; Customer Verification
+      </p>
 
       <Clause n={1} title="Purpose">
         <p>
-          Global FUT Services takes financial crime seriously. This policy sets out how we verify
-          customers, monitor transactions and meet our obligations. It applies to everyone who
-          works here.
+          GFS takes fraud, unauthorized payments and financial misuse seriously. We may
+          carry out customer and transaction checks when required by law, our payment
+          providers, or our security procedures.
         </p>
       </Clause>
 
-      <Clause n={2} title="Identity verification">
+      <Clause n={2} title="Customer Verification">
         <p>
-          Most orders require nothing beyond a working email. We will ask for identity
-          documentation — a government-issued photo ID and, where appropriate, proof of address —
-          where:
-        </p>
-        <ul className="ml-5 list-disc space-y-1">
-          {/* No terminal punctuation. These are fragments completing the sentence above,
-              and the semicolons they used to carry are contract-drafting convention that
-              reads as a typo on a web page — especially as the other lists here do not
-              use them. The one place a connector is kept is the refund clause above,
-              where ", or" is load-bearing: it says the customer picks one, not both. */}
-          <li>cumulative spend passes our review threshold</li>
-          <li>a payout is requested rather than a payment made</li>
-          <li>the pattern of activity is unusual for the account</li>
-        </ul>
-      </Clause>
-
-      <Clause n={3} title="What we watch for">
-        <p>
-          Orders that are unusual in size for the customer, payments broken into pieces that each
-          sit below a threshold, mismatched or evidently false details, requests to pay by
-          unconventional means, and sudden changes in activity.
+          Most customers will not need additional verification. We may request identity or
+          address information where a transaction is unusual, requires additional
+          verification, or is requested by our payment provider or applicable law.
         </p>
       </Clause>
 
-      <Clause n={4} title="Restricted jurisdictions">
+      <Clause n={3} title="Transaction Monitoring">
         <p>
-          We do not accept customers in jurisdictions subject to comprehensive sanctions, and we
-          apply enhanced checks to customers in higher-risk jurisdictions and to politically
-          exposed persons.
+          We may review unusual payment patterns, false or mismatched information, repeated
+          payment disputes, suspicious activity, or other signs of fraud or misuse.
         </p>
       </Clause>
 
-      <Clause n={5} title="Records and reporting">
+      <Clause n={4} title="Restricted Transactions">
         <p>
-          Identification and transaction records are retained for at least five years. Where we
-          are required to report suspicious activity to the relevant authority, we do so, and we
-          do not tip off the customer.
+          We may decline, delay, cancel or refund an order where required information cannot
+          be verified or where completing the transaction creates a legal, payment or
+          security risk.
+        </p>
+      </Clause>
+
+      <Clause n={5} title="Records & Compliance">
+        <p>
+          We retain relevant order and transaction records as reasonably required for fraud
+          prevention, customer support, payment disputes, payment-provider requirements and
+          applicable law. Where disclosure or reporting is legally required, we may provide
+          information to the relevant authority or payment provider.
         </p>
       </Clause>
 
       <Clause n={6} title="Review">
         <p>
-          This policy is reviewed annually, and whenever our payment arrangements or the
-          regulatory position change.
+          We review this policy periodically and when our services, payment arrangements or
+          applicable requirements change.
         </p>
       </Clause>
+
+      <Operator />
     </>
   )
 }
+
+
 
 /* ------------------------------------------------------------------ refund --- */
 
@@ -416,10 +687,17 @@ function Refund({ policy }: { policy: Policy | null }) {
 
       <Clause n={2} title={`Before delivery — refundable within ${sla} hours`}>
         <p>
-          If we have not delivered your order within{' '}
-          <strong className="text-chalk">{sla} hours</strong> of payment clearing, you may
-          request a full refund. You do not have to give a reason, and you may ask for a
-          status update instead if you would rather wait.
+          Our maximum contractual delivery period is{' '}
+          <strong className="text-chalk">{sla} hours</strong>, starting from payment or from
+          receipt of required customer information or completion of required account
+          conditions, <strong className="text-chalk">whichever is later</strong>.
+        </p>
+        <p>
+          If we cannot complete an order within that commitment, you may{' '}
+          <strong className="text-chalk">request a refund</strong> or{' '}
+          <strong className="text-chalk">use the amount toward another order</strong>. You do
+          not have to give a reason, and you may ask for a status update instead if you
+          would rather wait.
         </p>
         <p>
           A processing fee of <strong className="text-chalk">{refundFee}%</strong> is deducted
@@ -469,7 +747,70 @@ function Refund({ policy }: { policy: Policy | null }) {
         </p>
       </Clause>
 
-      <Clause n={5} title="How refunds are paid">
+      {/*
+        The 100% Safety Policy, as its own named block.
+
+        It is referenced by name throughout the terms of service — clause 8 makes a
+        completed order "subject to the 100% Safety Policy", and clauses 18 and 19 treat
+        it as the protection GFS actually undertakes — so it is set apart rather than
+        folded into the surrounding refund prose. A named policy that only exists as a
+        paragraph inside another one is a policy a customer cannot find when they need it.
+
+        UNRESOLVED, AND DELIBERATELY LEFT SO: the clause above states a 7-day guarantee
+        with a 50%/100% split, which is the remedy the software actually settles and the
+        figure the homepage advertises. This block states 24 hours with a full refund or a
+        replacement account. They are different windows and different remedies, and which
+        one is correct is a business decision rather than a developer's. Both are shown so
+        the disagreement is visible rather than silently decided.
+      */}
+      <div className="hairline rounded-panel border-brand-500/40 bg-brand-500/[0.05] p-6">
+        <p className="stamp mb-4">100% Safety Policy</p>
+        <p className="text-chalk">
+          If your account is affected within{' '}
+          <strong>24 hours</strong> of your order, you are covered by our 100% Safety Policy.
+        </p>
+        <ul className="ml-5 mt-4 list-disc space-y-2">
+          <li>
+            <strong className="text-chalk">Full Refund:</strong> Receive a refund for the
+            affected order.
+          </li>
+          <li>
+            <strong className="text-chalk">Replacement Account:</strong> Receive a
+            replacement account with the same amount of coins ordered, along with Ultimate
+            Team access and an open Transfer Market where applicable.
+          </li>
+        </ul>
+        <p className="mt-4">
+          We will make reasonable efforts to provide a playable team similar in value to
+          your existing team, but the exact same players or squad are not guaranteed.
+        </p>
+        <p className="mt-3">
+          The replacement account does not guarantee ownership or inclusion of the EA SPORTS
+          FC game itself. You must have access to the relevant game and platform to use it.
+        </p>
+        <p className="mt-4 text-[14px]">
+          To make a claim, contact us on our official Discord:{' '}
+          <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+            {BUSINESS.discordName}
+          </a>
+        </p>
+      </div>
+
+      <Clause n={5} title="Boosting — a lower rank than the one ordered">
+        <p>
+          A professional player may play on your account to work toward your selected rank.
+          Rare issues such as disconnections, server problems, maintenance or heavy delays
+          may affect the result.
+        </p>
+        <p>
+          If we achieve a lower rank than selected, the{' '}
+          <strong className="text-chalk">price difference is credited back to you</strong>.
+          You may use the credit toward another order or request a refund of the credited
+          amount.
+        </p>
+      </Clause>
+
+      <Clause n={6} title="How refunds are paid">
         <p>
           Cash refunds are returned to the{' '}
           <strong className="text-chalk">original payment method</strong>, through the payment
@@ -485,7 +826,7 @@ function Refund({ policy }: { policy: Policy | null }) {
         </p>
       </Clause>
 
-      <Clause n={6} title="How to request one">
+      <Clause n={7} title="How to request one">
         <p>
           Write to <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or call{' '}
           <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> with your order
