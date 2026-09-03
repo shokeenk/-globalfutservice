@@ -49,10 +49,50 @@ class OAuthClientsConfigTest {
     private List<String> idsFor(String gid, String gsecret, String did, String dsecret) {
         return OAuthClientsConfig.buildRegistrations(
                         gid == null ? "" : gid, gsecret == null ? "" : gsecret,
-                        did == null ? "" : did, dsecret == null ? "" : dsecret)
+                        did == null ? "" : did, dsecret == null ? "" : dsecret,
+                        // Empty: these cases are about which providers get built, not
+                        // about where the callback points. The redirect URI has its own
+                        // tests below.
+                        "")
                 .stream()
                 .map(ClientRegistration::getRegistrationId)
                 .toList();
+    }
+
+    @Nested
+    @DisplayName("where the provider sends the customer back")
+    class RedirectUri {
+
+        /*
+         * This is the value that has to match the provider console exactly, and the one
+         * that silently broke a live deployment: behind a proxy that rewrites Host,
+         * `{baseUrl}` resolved to the API's own hostname, so Google returned the
+         * customer to the API origin and the refresh cookie was set somewhere the
+         * storefront could not read it. Sign-in "worked" and left the customer signed
+         * out.
+         */
+        @Test
+        @DisplayName("an explicit public URL wins over the request's own base")
+        void explicitPublicUrl() {
+            assertThat(OAuthClientsConfig.redirectUriFor("https://globalfutservices.com"))
+                    .isEqualTo("https://globalfutservices.com/login/oauth2/code/{registrationId}");
+        }
+
+        @Test
+        @DisplayName("a trailing slash does not produce a doubled one")
+        void trailingSlash() {
+            assertThat(OAuthClientsConfig.redirectUriFor("https://globalfutservices.com/"))
+                    .isEqualTo("https://globalfutservices.com/login/oauth2/code/{registrationId}");
+        }
+
+        @Test
+        @DisplayName("unset falls back to the request base, which is right in development")
+        void unsetFallsBack() {
+            assertThat(OAuthClientsConfig.redirectUriFor(""))
+                    .isEqualTo("{baseUrl}/login/oauth2/code/{registrationId}");
+            assertThat(OAuthClientsConfig.redirectUriFor(null))
+                    .isEqualTo("{baseUrl}/login/oauth2/code/{registrationId}");
+        }
     }
 
     @Nested
@@ -149,7 +189,7 @@ class OAuthClientsConfigTest {
         private ClientRegistration registration(String id) {
             // Through the bean here on purpose: this is the fully-configured path, so
             // it also proves the repository itself builds and can be looked up.
-            return config.clientRegistrationRepository(G_ID, G_SECRET, D_ID, D_SECRET)
+            return config.clientRegistrationRepository(G_ID, G_SECRET, D_ID, D_SECRET, "")
                     .findByRegistrationId(id);
         }
     }

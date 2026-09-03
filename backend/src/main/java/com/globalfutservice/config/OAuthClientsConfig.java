@@ -50,8 +50,43 @@ public class OAuthClientsConfig {
 
     private static final Logger log = LoggerFactory.getLogger(OAuthClientsConfig.class);
 
-    /** The redirect Spring Security fills in per host; must match the provider console. */
-    private static final String REDIRECT_URI = "{baseUrl}/login/oauth2/code/{registrationId}";
+    /** The callback path, appended to whichever base the deployment resolves to. */
+    private static final String CALLBACK_PATH = "/login/oauth2/code/{registrationId}";
+
+    /**
+     * Spring's own placeholder: the base URL of the request that started the flow.
+     *
+     * <p>Correct wherever the thing in front of the API forwards the original {@code
+     * Host} — the Vite dev proxy does, and so does the nginx storefront image, both
+     * deliberately. It is the right default because it needs no configuration.
+     */
+    private static final String REQUEST_BASE_URI = "{baseUrl}" + CALLBACK_PATH;
+
+    /**
+     * The base the provider must send the customer back to.
+     *
+     * <p><b>{@code {baseUrl}} is not always the storefront.</b> Behind a proxy that
+     * rewrites the Host — a Render static-site rewrite, most CDNs — Spring resolves it
+     * to the API's own hostname and announces that to Google. The provider then returns
+     * the customer directly to the API origin, skipping the storefront entirely, and the
+     * refresh cookie is set on a host the storefront cannot read. The sign-in completes,
+     * the redirect lands, and the customer is signed out, with no error anywhere.
+     *
+     * <p>Naming the public origin explicitly removes the guess. {@code GFS_PUBLIC_URL}
+     * already holds it — it is the same value the order emails build their links from,
+     * and the same origin the OAuth success handler redirects to afterwards, so a
+     * deployment cannot have one right and this one wrong.
+     *
+     * <p>Falls back to {@code {baseUrl}} when the property is left at its localhost
+     * default, which keeps development working with no configuration at all.
+     */
+    static String redirectUriFor(String publicUrl) {
+        if (publicUrl == null || publicUrl.isBlank()) return REQUEST_BASE_URI;
+        String base = publicUrl.endsWith("/")
+                ? publicUrl.substring(0, publicUrl.length() - 1)
+                : publicUrl;
+        return base + CALLBACK_PATH;
+    }
 
     static boolean isConfigured(Environment env, String provider) {
         return hasText(env.getProperty("GFS_" + provider + "_CLIENT_ID"))
@@ -117,10 +152,11 @@ public class OAuthClientsConfig {
             @Value("${GFS_GOOGLE_CLIENT_ID:}") String googleId,
             @Value("${GFS_GOOGLE_CLIENT_SECRET:}") String googleSecret,
             @Value("${GFS_DISCORD_CLIENT_ID:}") String discordId,
-            @Value("${GFS_DISCORD_CLIENT_SECRET:}") String discordSecret) {
+            @Value("${GFS_DISCORD_CLIENT_SECRET:}") String discordSecret,
+            @Value("${gfs.public-url:}") String publicUrl) {
 
         List<ClientRegistration> registrations =
-                buildRegistrations(googleId, googleSecret, discordId, discordSecret);
+                buildRegistrations(googleId, googleSecret, discordId, discordSecret, publicUrl);
 
         /*
          * Unreachable, and asserted anyway. `InMemoryClientRegistrationRepository`
@@ -136,8 +172,9 @@ public class OAuthClientsConfig {
                     + "AnyProviderConfigured and buildRegistrations have drifted apart.");
         }
 
-        log.info("Social sign-in enabled for: {}",
-                registrations.stream().map(ClientRegistration::getRegistrationId).toList());
+        log.info("Social sign-in enabled for: {} — callback {}",
+                registrations.stream().map(ClientRegistration::getRegistrationId).toList(),
+                redirectUriFor(publicUrl));
 
         return new InMemoryClientRegistrationRepository(registrations);
     }
@@ -148,9 +185,11 @@ public class OAuthClientsConfig {
      * what that means.
      */
     static List<ClientRegistration> buildRegistrations(
-            String googleId, String googleSecret, String discordId, String discordSecret) {
+            String googleId, String googleSecret, String discordId, String discordSecret,
+            String publicUrl) {
 
         List<ClientRegistration> registrations = new ArrayList<>();
+        String redirectUri = redirectUriFor(publicUrl);
 
         if (hasText(googleId) && hasText(googleSecret)) {
             /*
@@ -162,7 +201,7 @@ public class OAuthClientsConfig {
                     .getBuilder("google")
                     .clientId(googleId)
                     .clientSecret(googleSecret)
-                    .redirectUri(REDIRECT_URI)
+                    .redirectUri(redirectUri)
                     .build());
         } else if (hasText(googleId) || hasText(googleSecret)) {
             warnHalfConfigured("Google", "GFS_GOOGLE_CLIENT_ID", "GFS_GOOGLE_CLIENT_SECRET");
@@ -181,7 +220,7 @@ public class OAuthClientsConfig {
                     .clientName("Discord")
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                    .redirectUri(REDIRECT_URI)
+                    .redirectUri(redirectUri)
                     .scope("identify", "email")
                     .authorizationUri("https://discord.com/api/oauth2/authorize")
                     .tokenUri("https://discord.com/api/oauth2/token")
