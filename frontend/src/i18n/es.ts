@@ -45,6 +45,11 @@ const es: Dictionary = {
     terms: 'Términos del servicio',
     privacy: 'Política de privacidad',
     aml: 'Prevención de blanqueo y KYC',
+    about: 'Sobre nosotros',
+    contact: 'Contacto',
+    refund: 'Política de reembolso',
+    cancellation: 'Política de cancelación',
+    shipping: 'Política de envío',
     rights:
       'La moneda del juego, los objetos y las cartas de jugador son propiedad de ' +
       'Electronic Arts Inc. No estamos afiliados a EA.',
@@ -109,10 +114,10 @@ const es: Dictionary = {
       scroll: 'Desliza',
       ratesEyebrow: 'Precios en vivo',
       titleLead: 'El sitio más seguro, rápido y fiable para comprar',
-      titleAccent: () => 'monedas FC, boosting y coaching',
+      titleAccent: () => 'monedas FC, boosting & coaching',
       subLine: 'Una solución para cada problema de FC.',
       trustSpeed: 'La mayoría en menos de una hora',
-      trustGuarantee: (days) => `Garantía de ${days} días`,
+      trustGuarantee: () => '100% Safety Policy',
       trustTax: 'Impuesto de EA ya incluido',
       body:
         'Nuestros traders trabajan el mercado de traspasos por ti: encuentran cartas ' +
@@ -232,8 +237,8 @@ const es: Dictionary = {
         'las revenden. Ese es el servicio que pagas.',
       step3Title: 'El beneficio se queda contigo',
       step3Body:
-        'Las monedas acaban en tu club. Recibes un correo en cuanto está hecho y siete días ' +
-        'de cobertura desde ese momento.',
+        'Las monedas acaban en tu club. Recibes un correo en cuanto está hecho, con la ' +
+        '100% Safety Policy desde ese momento.',
     },
 
     rewards: {
@@ -260,10 +265,9 @@ const es: Dictionary = {
         'La entrega más rápida',
         'Traders de turno 24/7',
         'Tu acceso se cifra y luego se destruye',
-        'UPI · Tarjetas · Banca en línea',
-        'Garantía de siete días',
-        'Traders reales, nunca bots',
-        'Los precios incluyen la tasa del mercado EA',
+        'UPI · Tarjetas · Banca en línea · Cripto',
+        'Incluye la 100% Safety Policy',
+        'Impuesto EA del 5 % cubierto',
       ],
     },
 
@@ -373,9 +377,14 @@ const es: Dictionary = {
     timingBody:
       'Champs y Rivals funcionan con el reloj semanal de EA. Pide pronto dentro de la ' +
       'ventana y hay margen para trabajar; pide la última noche y puede que no lo haya.',
+    discordTitle: 'Habla con nosotros en Discord',
+    discordBody:
+      'Si una serie no alcanza el rango que pediste, se te abona la diferencia de precio ' +
+        'para usarla en otro pedido o solicitarla como reembolso. Las reclamaciones y dudas ' +
+        'se gestionan en nuestro Discord oficial.',
     coveredTitle: 'Estás cubierto',
-    coveredBody: (days, cash, credit) =>
-      `Se aplica la misma garantía de ${days} días. Si EA actúa contra la cuenta dentro de ` +
+    coveredBody: (cash, credit) =>
+      `Se aplica nuestra 100% Safety Policy. Si EA actúa contra la cuenta dentro de ` +
       `ese plazo, recibes el ${cash}% en efectivo o el ${credit}% en saldo: tú eliges.`,
   },
 
@@ -791,6 +800,10 @@ const es: Dictionary = {
     ruleDaily: (points) => `${points} puntos al día, solo por pasarte.`,
     ruleDailyBody:
       'Una vez al día, desde tu cuenta. Se gastan como cualquier otro punto y cuentan para tu nivel.',
+    ruleNoCash: 'Los puntos no tienen valor en efectivo.',
+    ruleNoCashBody:
+        'Son un descuento en pedidos futuros, no un saldo retirable. Los pedidos como invitado '
+        + 'no pueden ganarlos ni almacenarlos.',
     startedTitle: 'Empezar',
     startedBody:
       'Los puntos necesitan una cuenta: un pedido como invitado no tiene dónde guardarlos. ' +
@@ -830,10 +843,10 @@ const es: Dictionary = {
       'te venga bien.',
     singleBody:
       'Una sesión. Una buena forma de ver si esto es para ti antes de comprometerte con un bloque.',
-    buyBlock: 'Comprar el bloque',
+    buyBlock: 'Comprar el paquete',
     buySession: 'Comprar una sesión',
     saveBadge: (pct) => `Ahorra ${pct}%`,
-    whoTitle: 'Con quién trabajarías',
+    whoTitle: 'Conoce a tu entrenador',
     peak: 'Máximo:',
     speaks: 'Habla:',
     bookTitle: 'Reservar una sesión',
@@ -847,6 +860,9 @@ const es: Dictionary = {
     noSlotsInMonth: (month) => `No hay huecos en ${month}`,
     timesShownIn: 'Horas mostradas en',
     coachesFrom: (name, zone) => `${name} entrena desde ${zone}`,
+    coachDiscord:
+      'Tras el pedido, contacta con tu entrenador o con Soporte GFS en nuestro Discord ' +
+      'oficial para la programación y la comunicación de la sesión:',
     policyLine: (minutes, hours) =>
       `${minutes} minutos · puedes cambiarla gratis hasta ${hours} h antes`,
     bookedFor: 'Reservada para el',
@@ -950,7 +966,7 @@ const es: Dictionary = {
       DIV_2_TO_1: 'De División 2 a 1',
       DIV_1_TO_ELITE: 'De División 1 a Elite',
       SINGLE_SESSION: 'Sesión única · 1 hora',
-      MONTHLY_6_SESSIONS: '6 sesiones × 1 hora',
+      MONTHLY_6_SESSIONS: '6 sesiones × 40 minutos',
     },
     millions: (qty: string): string => `${qty} M`,
     lines: {

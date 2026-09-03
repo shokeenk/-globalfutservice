@@ -5,6 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Alert, Badge, Section, Skeleton } from '../components/ui'
 import { Testimonials } from '../components/Testimonials'
 import { RankBadge, hasBadge, tierAccent } from '../components/RankBadge'
+import { BUSINESS } from '../content/business'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { SEASON, useSeo } from '../lib/seo'
@@ -188,10 +189,28 @@ export default function Boosting() {
             </InfoBlock>
             <InfoBlock index={3} title={t.boosting.coveredTitle}>
               {t.boosting.coveredBody(
-                policy?.guaranteeDays ?? 7,
                 (policy?.guaranteeCashBps ?? 5000) / 100,
                 (policy?.guaranteeCreditBps ?? 10000) / 100,
               )}
+            </InfoBlock>
+            {/*
+              Clause 5 of the terms, where a customer will actually meet it.
+
+              A run that lands short of the rank ordered is the one boosting outcome with a
+              money consequence, and the terms route the claim through Discord. Both belong
+              on the page selling the run, not only in the document nobody opens until
+              something has already gone wrong.
+            */}
+            <InfoBlock index={4} title={t.boosting.discordTitle}>
+              {t.boosting.discordBody}{' '}
+              <a
+                className="text-chalk underline"
+                href={BUSINESS.discordInvite}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {BUSINESS.discordName}
+              </a>
             </InfoBlock>
           </div>
         </Section>

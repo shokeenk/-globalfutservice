@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandBadge, Logo } from '../brand/Logo'
 import { useT } from '../i18n'
+import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
 import { useCatalog } from '../state/CatalogContext'
 import { ButtonLink } from './ui'
 
@@ -27,18 +28,30 @@ export function Footer() {
     {
       title: t.footer.menu,
       links: [
+        { to: '/about', label: t.footer.about },
+        { to: '/contact', label: t.footer.contact },
         { to: '/rewards', label: t.footer.rewards },
         { to: '/help', label: t.footer.help },
-        { to: '/support', label: t.footer.support },
+        { to: '/track', label: t.nav.track },
       ],
     },
     {
+      /*
+       * Every policy document, on every page, without hunting.
+       *
+       * The four a payment gateway checks for by name — refund, cancellation, shipping
+       * and privacy — now sit together rather than being reachable only from inside
+       * another document. `/track` moved up to the menu column, which is where someone
+       * would look for it anyway: it was never a legal document, it was filling space.
+       */
       title: t.footer.legal,
       links: [
         { to: '/terms', label: t.footer.terms },
         { to: '/privacy', label: t.footer.privacy },
+        { to: '/refund-policy', label: t.footer.refund },
+        { to: '/cancellation-policy', label: t.footer.cancellation },
+        { to: '/shipping-policy', label: t.footer.shipping },
         { to: '/aml-kyc', label: t.footer.aml },
-        { to: '/track', label: t.nav.track },
       ],
     },
   ]
@@ -64,6 +77,20 @@ export function Footer() {
             </ButtonLink>
 
             <div className="mt-7 flex gap-2.5">
+              {/*
+                Discord sits first, and it is not really a social link.
+
+                The terms of service name it as the route for coaching scheduling, support,
+                safety-policy claims and disputes — clauses 6, 9, 16, 19 and 20 all point at
+                it. That makes it a contractual contact channel that happens to share a row
+                with the marketing accounts, so it leads them.
+              */}
+              <SocialLink
+                href={BUSINESS.discordInvite}
+                label={`Global FUT Services on Discord (${BUSINESS.discordName})`}
+              >
+                <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
+              </SocialLink>
               <SocialLink
                 href="https://www.youtube.com/@FCvinuhunter"
                 label="Global FUT Services on YouTube"
@@ -168,7 +195,23 @@ export function Footer() {
           <p className="mt-5 max-w-3xl text-[12px] leading-relaxed text-chalk-faint">
             {t.footer.legalLanguageNotice}
           </p>
-          <p className="mt-5 text-[12px] text-chalk-faint">
+          {/*
+            The line of business, in plain words, on every page.
+
+            It is the sentence that answers "what does this company actually sell" for
+            anyone who arrives without context — a payment gateway reviewing the site, or
+            a customer who followed a link straight to a policy page. Cheap to state
+            once here; expensive to be vague about.
+          */}
+          <p className="mt-5 max-w-3xl text-[12px] leading-relaxed text-chalk-faint">
+            {BUSINESS.lineOfBusiness}
+          </p>
+          <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
+            Operated by {BUSINESS.legalName} · {BUSINESS.registeredAddress} ·{' '}
+            <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> ·{' '}
+            <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
+          </p>
+          <p className="mt-3 text-[12px] text-chalk-faint">
             © {year} Global FUT Services. All rights reserved.
           </p>
         </div>
