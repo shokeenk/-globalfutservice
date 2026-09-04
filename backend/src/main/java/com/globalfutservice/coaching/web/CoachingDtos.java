@@ -77,7 +77,17 @@ public final class CoachingDtos {
      * page and the rules cannot drift apart.
      */
     public record PolicyView(
+            /** Length of a single purchased session. */
             int sessionMinutes,
+            /**
+             * Length of one session out of a multi-session block.
+             *
+             * <p>Served separately because the two products genuinely differ, and the
+             * storefront prices them side by side: a length panel showing one number for
+             * both is how the block came to be advertised at a duration it was not sold
+             * at.
+             */
+            int blockSessionMinutes,
             long changeCutoffHours,
             int maxReschedules,
             long minLeadTimeHours,

@@ -45,6 +45,16 @@ public class SessionCreditEntity {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    /**
+     * How long a session bought by this credit runs, in minutes. GRANTED rows only.
+     *
+     * <p>Stamped at grant time rather than read from configuration at booking time, so
+     * changing either length later cannot retroactively shorten a session somebody has
+     * already paid for.
+     */
+    @Column(name = "session_minutes")
+    private Integer sessionMinutes;
+
     private String description;
 
     @Column(name = "actor_id")
@@ -70,9 +80,13 @@ public class SessionCreditEntity {
     }
 
     public static SessionCreditEntity granted(Long accountId, Long orderId, int credits,
-                                              Instant expiresAt, String orderRef) {
-        return new SessionCreditEntity(accountId, orderId, null, SessionCreditType.GRANTED,
-                credits, expiresAt, credits + " session credits from order " + orderRef, null);
+                                              Instant expiresAt, String orderRef,
+                                              int sessionMinutes) {
+        SessionCreditEntity entry = new SessionCreditEntity(accountId, orderId, null,
+                SessionCreditType.GRANTED, credits, expiresAt,
+                credits + " session credits from order " + orderRef, null);
+        entry.sessionMinutes = sessionMinutes;
+        return entry;
     }
 
     public static SessionCreditEntity consumed(Long accountId, Long sessionId, String sessionRef) {
@@ -119,6 +133,11 @@ public class SessionCreditEntity {
 
     public int getAmount() {
         return amount;
+    }
+
+    /** Minutes a session bought by this credit runs, or null on non-GRANTED rows. */
+    public Integer getSessionMinutes() {
+        return sessionMinutes;
     }
 
     public Instant getExpiresAt() {

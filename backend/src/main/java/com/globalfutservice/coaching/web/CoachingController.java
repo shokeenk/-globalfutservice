@@ -93,6 +93,22 @@ public class CoachingController {
                 .body(new CoachingDtos.SlotsResponse(
                         coach.getPublicId(),
                         coach.getTimezone(),
+                        /*
+                         * The single-session length, for everyone, even though a block
+                         * customer's sessions are shorter.
+                         *
+                         * This response is public and shared-cached, so it cannot vary by
+                         * caller without one customer's grid being served to another. The
+                         * longer length is the safe one to publish: a start with room for
+                         * sixty minutes has room for forty, and the busy set it was
+                         * checked against is a superset of the forty-minute one, so every
+                         * slot offered here is bookable by either customer. A block
+                         * customer may see marginally fewer slots than they could have
+                         * taken; nobody is ever shown one that will be refused.
+                         *
+                         * Booking re-derives legality against the length actually bought,
+                         * so this number is a display hint, never the authority.
+                         */
                         (int) coaching.policy().sessionLength().toMinutes(),
                         slots));
     }
@@ -195,6 +211,7 @@ public class CoachingController {
     private static CoachingDtos.PolicyView toPolicyView(CoachingPolicy p) {
         return new CoachingDtos.PolicyView(
                 (int) p.sessionLength().toMinutes(),
+                (int) p.blockSessionLength().toMinutes(),
                 p.changeCutoff().toHours(),
                 p.maxReschedules(),
                 p.minLeadTime().toHours(),

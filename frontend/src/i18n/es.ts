@@ -927,6 +927,8 @@ const es: Dictionary = {
       'oficial para la programación y la comunicación de la sesión:',
     policyLine: (minutes, hours) =>
       `${minutes} minutos · puedes cambiarla gratis hasta ${hours} h antes`,
+    policyLineBoth: (single, block, hours) =>
+      `${single} minutos suelta, ${block} minutos en pack · puedes moverla hasta ${hours}h antes`,
     bookedFor: 'Reservada para el',
     emailedDetails: '. Te hemos enviado los detalles por correo.',
     loadSlotsFailed: 'No se ha podido cargar la disponibilidad.',

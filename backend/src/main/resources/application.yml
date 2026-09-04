@@ -229,7 +229,11 @@ gfs:
     bonus-zone: ${GFS_LOYALTY_BONUS_ZONE:Asia/Kolkata}
 
   coaching:
+    # Two lengths, because there are two products. A single session is an hour; a
+    # session out of the six-pack is forty minutes, which is why the pack is cheaper
+    # per session. Which one applies is decided by the credit being spent.
     session-length: ${GFS_COACHING_SESSION_LENGTH:60m}
+    block-session-length: ${GFS_COACHING_BLOCK_SESSION_LENGTH:40m}
     slot-step: ${GFS_COACHING_SLOT_STEP:30m}       # slots on the hour and half hour
     min-lead-time: ${GFS_COACHING_MIN_LEAD_TIME:2h}
     max-advance: ${GFS_COACHING_MAX_ADVANCE:60d}

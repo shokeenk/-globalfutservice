@@ -133,6 +133,7 @@ public class CatalogService {
                         .toList(),
                 policy.tierDiscountEnabled(),
                 props.loyalty().dailyBonusPoints(),
-                (int) props.coaching().sessionLength().toMinutes());
+                (int) props.coaching().sessionLength().toMinutes(),
+                (int) props.coaching().blockSessionLength().toMinutes());
     }
 }

@@ -58,6 +58,7 @@ public class DomainConfig {
         AppProperties.Coaching c = props.coaching();
         return new CoachingPolicy(
                 c.sessionLength(),
+                c.blockSessionLength(),
                 c.slotStep(),
                 c.minLeadTime(),
                 c.maxAdvance(),
