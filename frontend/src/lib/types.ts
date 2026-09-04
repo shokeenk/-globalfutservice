@@ -11,6 +11,19 @@ export interface CatalogOption {
   minQuantity: string | null
   maxQuantity: string | null
   stepQuantity: string | null
+
+  /**
+   * Measured success rate for this package, in basis points, or null.
+   *
+   * Null in every deployed environment today, because nothing records what rank an
+   * order actually reached — only that it finished. The storefront renders the label
+   * when this is a number and renders nothing when it is not, so the day the backend
+   * starts measuring, the UI is already there.
+   *
+   * Never defaulted. `successRateBps ?? 9500` would put an invented advertised claim
+   * beside a buy button, which is the one thing this field must not do.
+   */
+  successRateBps?: number | null
 }
 
 export interface ServiceGroup {

@@ -43,14 +43,35 @@ const CATALOG = {
       priceUnit: 'FLAT',
       marketTaxApplies: true,
       mayRequireCredentials: true,
+      /*
+       * The fourth column is `successRateBps`, and it is INVENTED.
+       *
+       * It exists so the note 17 headline and the note 18 per-card labels can be seen,
+       * reviewed and signed off before any real measurement exists. Nothing here is a
+       * measurement and none of it is an estimate of one -- the values slope the way a
+       * plausible dataset would purely so the "lowest, not mean" rule in
+       * SuccessHeadline is visibly exercised.
+       *
+       * THIS FILE IS NEVER DEPLOYED. It is not referenced by frontend/Dockerfile,
+       * render.yaml, docker-compose.yml or any npm script, and Render builds the Vite
+       * bundle against the real API. The real CatalogService sends null for every one
+       * of these, so production renders no percentage anywhere. That is the only reason
+       * it is acceptable for these numbers to exist at all: they cannot reach a
+       * customer, a payment provider or a regulator.
+       *
+       * When real rates arrive they come from the API, not from here. Delete the column
+       * rather than editing it to match -- a mock that agrees with production today is
+       * a mock that silently disagrees with it in six months.
+       */
       options: [
-        ['WINS_9', '9 wins', 120000], ['WINS_10', '10 wins', 155000],
-        ['WINS_11', '11 wins', 190000], ['WINS_12', '12 wins', 230000],
-        ['WINS_13', '13 wins', 270000], ['WINS_14', '14 wins', 310000],
-        ['WINS_15', '15 wins', 355000], ['WINS_EXTRA_8', '+8 extra wins', 170000],
-      ].map(([variant, label, minor]) => ({
+        ['WINS_9', '9 wins', 120000, null], ['WINS_10', '10 wins', 155000, null],
+        ['WINS_11', '11 wins', 190000, null], ['WINS_12', '12 wins', 230000, null],
+        ['WINS_13', '13 wins', 270000, 9180], ['WINS_14', '14 wins', 310000, 9420],
+        ['WINS_15', '15 wins', 355000, 8760], ['WINS_EXTRA_8', '+8 extra wins', 170000, null],
+      ].map(([variant, label, minor, successRateBps]) => ({
         platform: null, variant, label, unitPriceMinor: minor,
         unitPriceFormatted: inr(minor), minQuantity: null, maxQuantity: null, stepQuantity: null,
+        successRateBps,
       })),
     },
     {

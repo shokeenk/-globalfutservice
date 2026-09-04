@@ -391,6 +391,11 @@ const fr: Dictionary = {
     tabChamps: 'Victoires Champs',
     tabRivals: 'Divisions Rivals',
     bestValue: 'Meilleur rapport',
+    wins: 'victoires',
+    successRateLabel: (pct) => `${pct} de réussite`,
+    successRateNote: 'Mesuré sur les commandes éligibles terminées.',
+    successHeadline: (range, pct) =>
+    `${range} atteint dans ${pct} des commandes éligibles.`,
     choose: 'Choisir',
     tiersUpdating: 'Les paliers de ce service sont en cours de mise à jour.',
     knowEyebrow: 'Ce qu’il faut savoir',

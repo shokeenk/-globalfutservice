@@ -461,6 +461,11 @@ const en = {
     tabChamps: 'Champs wins',
     tabRivals: 'Rivals divisions',
     bestValue: 'Best value',
+    wins: 'wins',
+    successRateLabel: (pct: string) => `${pct} success rate`,
+    successRateNote: 'Measured on eligible completed orders.',
+    successHeadline: (range: string, pct: string) =>
+    `${range} reached in ${pct} of eligible orders.`,
     choose: 'Choose',
     tiersUpdating: 'Tiers for this service are being updated.',
     knowEyebrow: 'What you should know',
