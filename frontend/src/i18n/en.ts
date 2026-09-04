@@ -205,7 +205,7 @@ const en = {
 
     services: {
       eyebrow: (season: string) => `What we do for ${season}`,
-      title: 'Get yourself to the top',
+      title: 'Get your club to the top',
       lead:
         'Pick the one that fits. Everything is priced up front, and everything is covered ' +
         'by the same guarantee.',
@@ -373,8 +373,8 @@ const en = {
       shiftLabel: 'On shift, every day',
       shiftNote: 'Including the hours weekend league runs.',
       guaranteeValue: '100%',
-      guaranteeUnit: 'Safety Policy',
-      guaranteeLabel: 'Every order covered',
+      guaranteeUnit: 'cover',
+      guaranteeLabel: '100% Safety Policy',
       guaranteeNote: 'Full refund or a replacement account — your choice.',
       tiersValue: '6',
       tiersUnit: 'tiers',

@@ -154,7 +154,7 @@ const fr: Dictionary = {
 
     services: {
       eyebrow: (season) => `Ce que nous faisons en ${season}`,
-      title: 'Monte tout en haut',
+      title: 'Emmène ton club tout en haut',
       lead:
         'Choisis celle qui te convient. Tout est tarifé à l’avance et tout est couvert par ' +
         'la même garantie.',
@@ -305,8 +305,8 @@ const fr: Dictionary = {
       shiftLabel: 'En poste, tous les jours',
       shiftNote: 'Y compris pendant la weekend league.',
       guaranteeValue: '100%',
-      guaranteeUnit: 'Safety Policy',
-      guaranteeLabel: 'Chaque commande couverte',
+      guaranteeUnit: 'couvert',
+      guaranteeLabel: '100% Safety Policy',
       guaranteeNote: 'Remboursement intégral ou un compte de remplacement — à vous de choisir.',
       tiersValue: '6',
       tiersUnit: 'paliers',
