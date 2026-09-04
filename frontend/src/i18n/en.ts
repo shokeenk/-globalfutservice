@@ -241,9 +241,9 @@ const en = {
         'Straight answers, because everyone who buys coins has the same six worries and ' +
         'most sites answer none of them.',
       safeTitle: 'Safe',
-      safeBody: (days: number) =>
-        `Every order is covered for ${days} days after delivery. If anything happens to ` +
-        `your account in that window, we make it right.`,
+      safeBody: () =>
+        'Every order is covered by our 100% Safety Policy after delivery. If anything ' +
+        'happens to your account in that window, we make it right.',
       simpleTitle: 'Simple',
       simpleBody:
         'Choose an amount, pay, and tell us where to send it. Most customers are done in ' +
@@ -293,8 +293,8 @@ const en = {
         'That is the service you are paying for.',
       step3Title: 'The profit stays with you',
       step3Body:
-        'The coins end up in your club. You get an email the moment it is done, and seven ' +
-        'days of cover from that point.',
+        'The coins end up in your club. You get an email the moment it is done, and the ' +
+        '100% Safety Policy from that point.',
     },
 
     rewards: {

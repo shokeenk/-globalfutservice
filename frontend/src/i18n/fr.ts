@@ -103,7 +103,7 @@ const fr: Dictionary = {
     seoDescription: (season) =>
       `Fais grandir ton club EA ${season} sans le grind. Nos traders travaillent le marché ` +
       `des transferts sur ton compte et les crédits restent chez toi. Livraison en moins ` +
-      `d’une heure, garantie 7 jours.`,
+      `d’une heure, 100% Safety Policy.`,
 
     promo: { label: 'Offres et annonces' },
     hero: {
@@ -131,8 +131,8 @@ const fr: Dictionary = {
       statDeliveryLabel: 'Livraison habituelle',
       statShiftValue: '24 h/24',
       statShiftLabel: 'Traders de garde',
-      statGuaranteeValue: '7 jours',
-      statGuaranteeLabel: 'Garantie anti-ban',
+      statGuaranteeValue: '100% Safety Policy',
+      statGuaranteeLabel: 'Chaque commande couverte',
       cardTitle: 'Service de trading sécurisé',
       cardSubtitle: (season) => `Tarifs en direct · ${season}`,
       popular: 'Populaire',
@@ -148,7 +148,7 @@ const fr: Dictionary = {
       delivery: 'La livraison la plus rapide',
       encrypted: 'Tes identifiants sont chiffrés puis supprimés',
       payments: 'Carte, UPI et virement',
-      guarantee: 'Garantie anti-ban de 7 jours',
+      guarantee: 'Avec la 100% Safety Policy',
       humans: 'De vrais traders, pas des bots',
     },
 
@@ -189,9 +189,9 @@ const fr: Dictionary = {
         'Des réponses directes, parce que tous ceux qui achètent des crédits ont les mêmes ' +
         'six inquiétudes et que presque aucun site n’y répond.',
       safeTitle: 'Sûr',
-      safeBody: (days) =>
-        `Chaque commande est couverte pendant ${days} jours après la livraison. S’il arrive ` +
-        `quoi que ce soit à ton compte dans ce délai, on règle le problème.`,
+      safeBody: () =>
+        'Chaque commande est couverte par notre 100% Safety Policy après la livraison. '
+        + 'S’il arrive quelque chose à ton compte dans ce délai, on répare.',
       simpleTitle: 'Simple',
       simpleBody:
         'Choisis un montant, paie, et dis-nous où envoyer. La plupart des clients ont fini ' +
@@ -284,7 +284,7 @@ const fr: Dictionary = {
       deliveryNote: 'Le délai annoncé est plus long, volontairement.',
       shiftLabel: 'Heures par jour en poste',
       shiftNote: 'Y compris pendant la weekend league.',
-      guaranteeLabel: 'Jours de couverture après livraison',
+      guaranteeLabel: '100% Safety Policy',
       guaranteeNote: 'En espèces ou en crédit — à vous de choisir.',
       tiersLabel: 'Paliers de fidélité',
       tiersNote: 'Une remise de palier n’expire jamais.',

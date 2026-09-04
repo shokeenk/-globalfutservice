@@ -178,7 +178,7 @@ export function Footer() {
             by EA Sports or Electronic Arts Inc.
             {policy && (
               <>
-                {' '}Orders are covered by our {policy.guaranteeDays}-day guarantee; our published
+                {' '}Orders are covered by our 100% Safety Policy; our published
                 delivery window is {policy.deliverySlaHours} hours, and we normally beat it by a
                 wide margin.
               </>

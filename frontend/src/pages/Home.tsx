@@ -785,7 +785,7 @@ function WhyUs() {
    * what came before it. The icons say what each one is about instead.
    */
   const pillars = [
-    { icon: 'shield', title: t.home.why.safeTitle, body: t.home.why.safeBody(policy?.guaranteeDays ?? 7) },
+    { icon: 'shield', title: t.home.why.safeTitle, body: t.home.why.safeBody() },
     { icon: 'cursor', title: t.home.why.simpleTitle, body: t.home.why.simpleBody },
     { icon: 'bolt', title: t.home.why.fastTitle, body: t.home.why.fastBody },
     { icon: 'clock', title: t.home.why.alwaysTitle, body: t.home.why.alwaysBody },

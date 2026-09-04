@@ -103,7 +103,7 @@ const es: Dictionary = {
     seoDescription: (season) =>
       `Haz crecer tu club de EA ${season} sin el grindeo. Nuestros traders trabajan el ` +
       `mercado de traspasos en tu cuenta y las monedas se quedan contigo. Entrega en menos ` +
-      `de una hora y garantía de 7 días.`,
+      `de una hora y 100% Safety Policy.`,
 
     promo: { label: 'Ofertas y novedades' },
     hero: {
@@ -131,8 +131,8 @@ const es: Dictionary = {
       statDeliveryLabel: 'Entrega habitual',
       statShiftValue: '24 / 7',
       statShiftLabel: 'Traders de guardia',
-      statGuaranteeValue: '7 días',
-      statGuaranteeLabel: 'Garantía antibaneo',
+      statGuaranteeValue: '100% Safety Policy',
+      statGuaranteeLabel: 'Todos los pedidos cubiertos',
       cardTitle: 'Servicio de trading seguro',
       cardSubtitle: (season) => `Tarifas en vivo · ${season}`,
       popular: 'Popular',
@@ -148,7 +148,7 @@ const es: Dictionary = {
       delivery: 'La entrega más rápida',
       encrypted: 'Tus credenciales se cifran y se borran',
       payments: 'Tarjeta, UPI y transferencia',
-      guarantee: 'Garantía antibaneo de 7 días',
+      guarantee: 'Incluye la 100% Safety Policy',
       humans: 'Traders reales, no bots',
     },
 
@@ -189,9 +189,9 @@ const es: Dictionary = {
         'Respuestas directas, porque todo el que compra monedas tiene las mismas seis dudas ' +
         'y casi ninguna web responde a ninguna.',
       safeTitle: 'Seguro',
-      safeBody: (days) =>
-        `Cada pedido está cubierto durante ${days} días tras la entrega. Si le pasa algo a ` +
-        `tu cuenta en ese plazo, lo solucionamos.`,
+      safeBody: () =>
+        'Cada pedido está cubierto por nuestra 100% Safety Policy tras la entrega. Si le '
+        + 'pasa algo a tu cuenta en ese plazo, lo solucionamos.',
       simpleTitle: 'Sencillo',
       simpleBody:
         'Elige una cantidad, paga y dinos dónde enviarlo. La mayoría termina en dos minutos.',
@@ -281,7 +281,7 @@ const es: Dictionary = {
       deliveryNote: 'El plazo publicado es más largo a propósito.',
       shiftLabel: 'Horas al día de turno',
       shiftNote: 'Incluidas las horas de la weekend league.',
-      guaranteeLabel: 'Días de cobertura tras la entrega',
+      guaranteeLabel: '100% Safety Policy',
       guaranteeNote: 'En efectivo o en saldo — tú eliges.',
       tiersLabel: 'Niveles de fidelidad',
       tiersNote: 'El descuento de nivel nunca caduca.',
