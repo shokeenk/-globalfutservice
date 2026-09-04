@@ -589,7 +589,8 @@ function SlotPicker({
         </p>
         {policy && (
           <p className="text-[13px] text-chalk-faint">
-            {t.coaching.policyLine(policy.sessionMinutes, policy.changeCutoffHours)}
+            {t.coaching.policyLineBoth(policy.sessionMinutes, policy.blockSessionMinutes,
+                                      policy.changeCutoffHours)}
           </p>
         )}
         {/*

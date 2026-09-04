@@ -12,7 +12,17 @@ import java.time.Instant;
  * without a redeploy of booking logic — and readable from exactly one place when a
  * customer disputes it.
  *
- * @param sessionLength        how long one session runs
+ * @param sessionLength        how long a single purchased session runs
+ * @param blockSessionLength   how long one session from a multi-session block runs
+ *
+ *                             <p>A second length rather than a single one, because the
+ *                             business sells two different products: an hour bought on
+ *                             its own, and a shorter session bought six at a time at a
+ *                             lower price per session. The price difference IS the
+ *                             duration difference, so a booking system with one length
+ *                             cannot charge for the block honestly — it either gives
+ *                             away twenty minutes a session or advertises a length it
+ *                             does not deliver.
  * @param slotStep             granularity of the booking grid — 30m means slots start on
  *                             the hour and the half hour, never at 14:07
  * @param minLeadTime          how soon before a slot it may still be booked. Protects the
@@ -29,6 +39,7 @@ import java.time.Instant;
  */
 public record CoachingPolicy(
         Duration sessionLength,
+        Duration blockSessionLength,
         Duration slotStep,
         Duration minLeadTime,
         Duration maxAdvance,
@@ -39,6 +50,7 @@ public record CoachingPolicy(
 
     public CoachingPolicy {
         requirePositive(sessionLength, "sessionLength");
+        requirePositive(blockSessionLength, "blockSessionLength");
         requirePositive(slotStep, "slotStep");
         requirePositive(maxAdvance, "maxAdvance");
         requirePositive(creditValidity, "creditValidity");
@@ -76,7 +88,8 @@ public record CoachingPolicy(
      */
     public static CoachingPolicy launchDefaults() {
         return new CoachingPolicy(
-                Duration.ofMinutes(40),
+                Duration.ofMinutes(60),   // a single session
+                Duration.ofMinutes(40),   // one session out of a block
                 Duration.ofMinutes(30),
                 Duration.ofHours(2),
                 Duration.ofDays(60),

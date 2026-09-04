@@ -37,6 +37,7 @@ export type ServiceSkin = {
   cta: string
   /** A glyph in the card's corner, meant to be seen. */
   mark: string
+
   /**
    * The giant figure bled off the card's edge.
    *

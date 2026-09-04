@@ -12,6 +12,8 @@ import { useT } from '../i18n'
 import { bpsToPercent } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { SEASON, useSeo } from '../lib/seo'
+import { CoinIcon } from '../brand/CoinIcon'
+import { RankBadge } from '../components/RankBadge'
 import { Reveal } from '../motion/Reveal'
 import { useCatalog } from '../state/CatalogContext'
 
@@ -512,11 +514,24 @@ function Proof() {
               it. `items-baseline` rather than `items-end`: the descenders in "min"
               would otherwise push the word visibly below the numeral.
             */}
-            <dd className="flex items-baseline gap-1.5">
-              <span className="display text-[clamp(2.6rem,6vw,3.6rem)] leading-none text-chalk">
+            <dd className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              {/*
+                `whitespace-nowrap` on both halves, and the size stepped down.
+
+                These four cells share a width but not a content length: "6" is one
+                character and "10-60+" is six. At the old clamp the longest value did not
+                fit its column and broke mid-figure, so the panel read "10-" over "60+"
+                with the unit stranded beside the gap. A range broken across two lines is
+                not a smaller number, it is a different one.
+
+                Wrapping is allowed on the flex container instead, so a unit that cannot
+                fit drops whole to the next line rather than splitting "Safety Policy"
+                down the middle. The number itself never breaks.
+              */}
+              <span className="display whitespace-nowrap text-[clamp(2.1rem,4.7vw,3.1rem)] leading-none text-chalk">
                 {stat.value}
               </span>
-              <span className="text-[clamp(0.9rem,1.6vw,1.05rem)] font-medium leading-none text-chalk-faint">
+              <span className="whitespace-nowrap text-[clamp(0.85rem,1.3vw,0.98rem)] font-medium leading-none text-chalk-faint">
                 {stat.unit}
               </span>
             </dd>
@@ -528,6 +543,88 @@ function Proof() {
     </Section>
   )
 }
+
+/**
+ * The picture on a service card.
+ *
+ * <p><b>Each mark is rendered the way its own section renders it</b>, which is the whole
+ * point of reusing artwork rather than commissioning a card-sized set. The coin shows its
+ * wordmark exactly as it does beside a coin total on the order page; the shield is drawn
+ * through {@code RankBadge}, so this card and the boosting tiers resolve "Rank 1" from one
+ * mapping instead of two; the portrait is the same circular crop the coaching page uses.
+ *
+ * <p><b>No plate behind them.</b> An earlier version framed each mark in a tinted disc to
+ * guarantee contrast on three different grounds, and on the trading card that backfired:
+ * the coin's own dark stacked edges disappeared into the dark plate and what survived was
+ * a bright rim, so a coin read as a ring. The artwork already solves this itself — the face
+ * carries a {@code #9A6B00} stroke precisely because a gold disc on a light ground is
+ * 1.42:1 without one, and 4.34:1 with it. A plate was solving a problem the mark had
+ * already solved, and introducing one of its own.
+ *
+ * <p>All three are decorative and marked so. Each restates the title beside it, so
+ * announcing them would read every card twice.
+ */
+/**
+ * How big a card mark is drawn.
+ *
+ * <p>One constant rather than three literals: the coin is an SVG, the shield an
+ * {@code <img>} through {@code RankBadge} and the portrait a plain {@code <img>}, so
+ * three different props carry it and there is no CSS rule that would keep them in step.
+ */
+const MARK_SIZE = 138
+
+function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
+  /*
+   * `ml-auto` keeps the mark on the right in both states. The row is
+   * `justify-between`, which handles the common case, but a line holding only the mark
+   * -- what happens once the tag is too long to share one, which "Réservations
+   * ouvertes" is on a phone -- would otherwise start it at the left edge under the tag.
+   *
+   * `shrink-0` because the tag is the half that should give way. Squeezing the mark
+   * would scale the artwork; wrapping the row costs one line of card height.
+   */
+  const lift = 'ml-auto shrink-0 transition-transform duration-500 ease-out-expo group-hover:scale-[1.06]'
+
+  if (mark.kind === 'coin') {
+    return (
+      <span aria-hidden="true" className={lift}>
+        <CoinIcon size={MARK_SIZE} />
+      </span>
+    )
+  }
+
+  if (mark.kind === 'rank') {
+    return (
+      <span aria-hidden="true" className={lift}>
+        <RankBadge variant={mark.variant} size={MARK_SIZE} />
+      </span>
+    )
+  }
+
+  return (
+    <img
+      src={mark.src}
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      decoding="async"
+      /*
+        Declared even though the box is fixed: the attributes give the element its ratio
+        before the file arrives, which is what stops the circle collapsing and reflowing
+        the chip row on a slow connection.
+      */
+      width={MARK_SIZE}
+      height={MARK_SIZE}
+      style={{ width: MARK_SIZE, height: MARK_SIZE }}
+      className={`rounded-full object-cover ${lift}`}
+    />
+  )
+}
+
+type ServiceMarkSpec =
+  | { kind: 'coin' }
+  | { kind: 'rank'; variant: string }
+  | { kind: 'avatar'; src: string }
 
 /* ---------------------------------------------------------------- services --- */
 
@@ -549,6 +646,7 @@ function Services() {
       skin: 'sun' as const,
       body: t.home.services.tradingBody,
       cta: t.home.services.tradingCta,
+      mark: { kind: 'coin' } as const,
     },
     {
       to: '/boosting',
@@ -557,6 +655,9 @@ function Services() {
       skin: 'deep' as const,
       body: t.home.services.boostBody,
       cta: t.home.services.boostCta,
+      // Rank 1 — the Elite I shield, resolved through RankBadge so this and the tier
+      // cards on the boosting page read from one mapping rather than two.
+      mark: { kind: 'rank', variant: 'WINS_15' } as const,
     },
     {
       to: '/coaching',
@@ -565,6 +666,9 @@ function Services() {
       skin: 'red' as const,
       body: t.home.services.coachBody,
       cta: t.home.services.coachCta,
+      // The actual coach, not a stock avatar. "One to one with a coach who plays at the
+      // level you are chasing" is a claim about a person, and the person exists.
+      mark: { kind: 'avatar', src: '/brand/coaches/vinay-256.jpg' } as const,
     },
   ]
 
@@ -607,12 +711,24 @@ function Services() {
                 The tones are built for the page ground — a red-tinted chip on a red
                 card is invisible, and a lilac one on yellow belongs to another design.
               */}
-              <span className={`relative self-start rounded-pill px-2.5 py-1 text-[10.5px]
-                               font-semibold uppercase tracking-[0.12em] ${skin.chip}`}>
-                {card.tag}
-              </span>
+              {/*
+                Chip and mark share a row, one at each end.
 
-              <h3 className={`display relative mt-6 text-display-md ${skin.title}`}>{card.title}</h3>
+                The mark sits up here rather than in the corner because the corner is
+                taken: the bled numeral lives there, and two things competing for the
+                same corner is how a poster becomes a collage. Top-right also puts the
+                artwork level with the tag, so the eye meets "what this is" and "what it
+                looks like" together rather than finding the picture on the way out.
+              */}
+              <div className="relative flex flex-wrap items-start justify-between gap-x-3 gap-y-4">
+                <span className={`self-start rounded-pill px-2.5 py-1 text-[10.5px]
+                                 font-semibold uppercase tracking-[0.12em] ${skin.chip}`}>
+                  {card.tag}
+                </span>
+                <ServiceMark mark={card.mark} />
+              </div>
+
+              <h3 className={`display relative mt-5 text-display-md ${skin.title}`}>{card.title}</h3>
 
               <div aria-hidden="true" className={`relative mt-5 h-px w-10 ${skin.rule}`} />
 
@@ -778,6 +894,16 @@ function CoachingBand() {
               */}
               <SpecRow
                 label={t.home.coach.durationLabel}
+                /*
+                  The single-session length alone, because that is what this row is
+                  about — the note under the label says "Single session, live". It
+                  briefly showed both lengths, which was the right instinct in the wrong
+                  place: a row scoped to one product does not need the other product's
+                  number, and carrying it made the plate read as though an hour and
+                  forty minutes were alternatives for the same purchase. The block's
+                  length is stated where the block is actually sold: on its price card
+                  ("6 sessions × 40 minutes") and on the booking screen.
+                */
                 value={t.home.coach.durationValue(policy?.coachingSessionMinutes ?? 60)}
                 note={t.home.coach.durationNote}
               />

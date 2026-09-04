@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -163,8 +164,13 @@ public class CoachingService {
                 policy.earliestBookableStart(now), policy.latestBookableStart(now));
 
         // Re-derived, never trusted. The list the browser was shown is a suggestion.
+        // The length the customer actually bought, not the configured default. It decides
+        // both whether the slot fits and when the session ends, and those two must be the
+        // same number or a booking can be accepted into a window it does not fit.
+        Duration length = sessionLengthFor(accountId);
+
         boolean legal = SlotPlanner.isBookable(startsAt, coach.zone(), rulesFor(coach.getId()),
-                busyFor(coach.getId(), window), window, policy);
+                busyFor(coach.getId(), window), window, policy, length);
         if (!legal) {
             throw new ApiExceptions.ConflictException("slot_unavailable",
                     "That time is no longer available. Please pick another slot.");
@@ -172,7 +178,7 @@ public class CoachingService {
 
         CoachingSessionEntity session = new CoachingSessionEntity(
                 SecureIds.sessionRef(), accountId, coach.getId(), null,
-                startsAt, startsAt.plus(policy.sessionLength()), customerTimezone);
+                startsAt, startsAt.plus(length), customerTimezone);
         session.setCustomerNote(note);
 
         try {
@@ -236,7 +242,12 @@ public class CoachingService {
         }
 
         Instant was = session.getStartsAt();
-        session.applyReschedule(newStart, newStart.plus(policy.sessionLength()),
+        // The length the session already has, not today's configuration and not the
+        // customer's current credit batch. Moving a session must not silently change how
+        // long it runs -- and by now the credit that paid for it has been consumed, so
+        // re-deriving it from the pool would read the wrong batch entirely.
+        Duration booked = Duration.between(session.getStartsAt(), session.getEndsAt());
+        session.applyReschedule(newStart, newStart.plus(booked),
                 customerTimezone, now);
         try {
             sessions.saveAndFlush(session);
@@ -336,6 +347,45 @@ public class CoachingService {
     }
 
     /**
+     * How long the customer's next booked session runs.
+     *
+     * <p>Length is a property of what was bought, and the credit is the only thing that
+     * still knows: a single session is an hour, a session from the six-pack is forty
+     * minutes, and the price difference between the two products <em>is</em> that
+     * difference. Reading it back from configuration at booking time would give every
+     * session the same length again, which is the bug this exists to close.
+     *
+     * <p>Credits are spent oldest first, so the batch being drawn on is found by walking
+     * the grants in purchase order and stopping at the one that covers the next unit.
+     * Cheap enough to do inline: a customer holds a handful of grants, not thousands, and
+     * the alternative -- a remaining-count column per batch -- is a second source of
+     * truth for a ledger whose whole design is that the sum is right by construction.
+     *
+     * <p>Falls back to the single-session length when there is nothing to go on: an
+     * account with no grants (an operator booking, a manual adjustment) or a grant
+     * predating the column. The fallback is the longer of the two on purpose. Guessing
+     * short would quietly sell someone forty minutes of an hour they paid for; guessing
+     * long costs the coach twenty minutes and shows up in a calendar rather than in a
+     * complaint.
+     */
+    @Transactional(readOnly = true)
+    public Duration sessionLengthFor(Long accountId) {
+        if (accountId == null) {
+            return policy.sessionLength();
+        }
+        int alreadySpent = credits.netConsumedBy(accountId);
+        int seen = 0;
+        for (SessionCreditEntity grant : credits.grantsOldestFirst(accountId)) {
+            seen += grant.getAmount();
+            if (seen > alreadySpent) {
+                Integer minutes = grant.getSessionMinutes();
+                return minutes == null ? policy.sessionLength() : Duration.ofMinutes(minutes);
+            }
+        }
+        return policy.sessionLength();
+    }
+
+    /**
      * Grant the credits a paid coaching order bought.
      *
      * <p>Called when the order reaches PAID rather than COMPLETED — unlike loyalty points,
@@ -348,7 +398,8 @@ public class CoachingService {
      * the entry type is GRANTED, so a retried webhook cannot mint a second pack.
      */
     @Transactional
-    public void grantCredits(Long accountId, Long orderId, int sessionCount, String orderRef) {
+    public void grantCredits(Long accountId, Long orderId, int sessionCount, String orderRef,
+                             Duration sessionLength) {
         if (accountId == null || orderId == null || sessionCount <= 0) {
             return;
         }
@@ -358,7 +409,8 @@ public class CoachingService {
         }
         try {
             credits.saveAndFlush(SessionCreditEntity.granted(accountId, orderId, sessionCount,
-                    policy.creditsExpireAt(clock.instant()), orderRef));
+                    policy.creditsExpireAt(clock.instant()), orderRef,
+                    (int) sessionLength.toMinutes()));
             log.info("Granted {} session credits to account {} from order {}",
                     sessionCount, accountId, orderRef);
         } catch (DataIntegrityViolationException duplicate) {

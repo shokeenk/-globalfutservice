@@ -125,6 +125,10 @@ const POLICY = {
   ],
   tierDiscountEnabled: true,
   dailyBonusPoints: 3,
+  // Two lengths, matching CatalogService. A single session is an hour; a session out
+  // of the six-pack is forty minutes, which is why the pack costs less per session.
+  coachingSessionMinutes: 60,
+  coachingBlockSessionMinutes: 40,
 }
 
 const COACHES = [
@@ -251,13 +255,16 @@ createServer(async (req, res) => {
   if (/^\/api\/v1\/coaching\/coaches\/[^/]+\/slots$/.test(url.pathname)) {
     return json(res, 200, {
       coachId: COACHES[0].id, coachTimezone: 'Asia/Kolkata',
-      sessionMinutes: 40, slots: mockSlots(),
+      // The single-session length, as the real endpoint publishes: it is shared-cached
+      // and cannot vary by caller, and a start with room for an hour has room for forty
+      // minutes, so every slot offered is bookable by either customer.
+      sessionMinutes: 60, slots: mockSlots(),
     }, origin)
   }
 
   if (url.pathname === '/api/v1/coaching/policy') {
     return json(res, 200, {
-      sessionMinutes: 40, changeCutoffHours: 12, maxReschedules: 2,
+      sessionMinutes: 60, blockSessionMinutes: 40, changeCutoffHours: 12, maxReschedules: 2,
       minLeadTimeHours: 2, creditValidityDays: 90,
     }, origin)
   }

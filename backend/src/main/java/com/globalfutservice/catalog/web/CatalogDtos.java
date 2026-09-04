@@ -116,7 +116,9 @@ public final class CatalogDtos {
              * all followed, and the one number a visitor actually reads did not. Served
              * from the same property the planner uses, it cannot disagree.
              */
-            int coachingSessionMinutes) {
+            int coachingSessionMinutes,
+            /** Length of one session from a multi-session block. */
+            int coachingBlockSessionMinutes) {
     }
 
     public record TierView(

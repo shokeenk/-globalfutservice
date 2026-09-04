@@ -703,14 +703,32 @@ public final class DomainVerification {
                 policy.creditsExpireAt(now).equals(now.plus(Duration.ofDays(30))));
 
         checkThrows("a zero-length session is rejected", IllegalArgumentException.class,
-                () -> new CoachingPolicy(Duration.ZERO, Duration.ofMinutes(30),
+                () -> new CoachingPolicy(Duration.ZERO, Duration.ofMinutes(40),
+                        Duration.ofMinutes(30),
+                        Duration.ofHours(2), Duration.ofDays(60), Duration.ofHours(12), 2,
+                        Duration.ofMinutes(15), Duration.ofDays(90)));
+        checkThrows("a zero-length block session is rejected", IllegalArgumentException.class,
+                () -> new CoachingPolicy(Duration.ofMinutes(60), Duration.ZERO,
+                        Duration.ofMinutes(30),
                         Duration.ofHours(2), Duration.ofDays(60), Duration.ofHours(12), 2,
                         Duration.ofMinutes(15), Duration.ofDays(90)));
         checkThrows("a calendar that closes before it opens is rejected",
                 IllegalArgumentException.class,
-                () -> new CoachingPolicy(Duration.ofMinutes(40), Duration.ofMinutes(30),
+                () -> new CoachingPolicy(Duration.ofMinutes(60), Duration.ofMinutes(40),
+                        Duration.ofMinutes(30),
                         Duration.ofHours(2), Duration.ofMinutes(30), Duration.ofHours(12), 2,
                         Duration.ofMinutes(15), Duration.ofDays(90)));
+
+        // The two products are different lengths, and the defaults say so.
+        check("a single session is an hour",
+                CoachingPolicy.launchDefaults().sessionLength()
+                        .equals(Duration.ofMinutes(60)));
+        check("a block session is forty minutes",
+                CoachingPolicy.launchDefaults().blockSessionLength()
+                        .equals(Duration.ofMinutes(40)));
+        check("a block session is shorter than a single one",
+                CoachingPolicy.launchDefaults().blockSessionLength()
+                        .compareTo(CoachingPolicy.launchDefaults().sessionLength()) < 0);
     }
 
     private static void coachingStateMachine() {
@@ -771,8 +789,8 @@ public final class DomainVerification {
         CoachingPolicy policy = CoachingPolicy.launchDefaults();
         ZoneId kolkata = ZoneId.of("Asia/Kolkata");
 
-        // Tuesday 18:00-22:00 IST. 40-minute sessions on a 30-minute grid: the last one
-        // that fits starts at 21:20, so 21:30 must not be offered.
+        // Tuesday 18:00-22:00 IST. Single sessions are an hour on a 30-minute grid: the
+        // last one that fits starts at 21:00, so 21:30 must not be offered.
         List<AvailabilityRule> evening = List.of(
                 new AvailabilityRule(DayOfWeek.TUESDAY, LocalTime.of(18, 0), LocalTime.of(22, 0)));
 
@@ -782,7 +800,7 @@ public final class DomainVerification {
                 kolkata, evening, List.of(), new TimeRange(from, to), policy);
 
         // 18:00 through 21:00 on the half hour = 7 slots; 21:30 would end at 22:10.
-        check("a four-hour window yields seven 40-minute slots", slots.size() == 7);
+        check("a four-hour window yields seven hour-long slots", slots.size() == 7);
         check("the window opens on time", slots.get(0)
                 .equals(ZonedDateTime.of(2026, 9, 1, 18, 0, 0, 0, kolkata).toInstant()));
         check("the last slot finishes inside the window", slots.get(6)
@@ -808,6 +826,49 @@ public final class DomainVerification {
         List<Instant> tight = SlotPlanner.bookableStarts(kolkata, evening, List.of(),
                 new TimeRange(from, tightTo), policy);
         check("a session that would run past the window is not offered", tight.isEmpty());
+
+        /*
+         * The invariant the public slots endpoint depends on.
+         *
+         * That endpoint is shared-cached, so it cannot vary by caller and publishes the
+         * single-session grid to everyone -- including block customers, whose sessions
+         * are shorter. That is only safe if every start offered for a long session is
+         * also legal for a short one. Asserted here rather than reasoned about in a
+         * comment, because the day someone makes block sessions the longer product this
+         * check is what fails.
+         */
+        List<Instant> longSlots = SlotPlanner.bookableStarts(
+                kolkata, evening, List.of(), new TimeRange(from, to), policy,
+                policy.sessionLength());
+        List<Instant> shortSlots = SlotPlanner.bookableStarts(
+                kolkata, evening, List.of(), new TimeRange(from, to), policy,
+                policy.blockSessionLength());
+        check("a shorter session is offered at least as many starts",
+                shortSlots.size() >= longSlots.size());
+        check("every start legal for a long session is legal for a short one",
+                shortSlots.containsAll(longSlots));
+        check("a start offered for the long session is bookable at the short length",
+                longSlots.stream().allMatch(start -> SlotPlanner.isBookable(
+                        start, kolkata, evening, List.of(), new TimeRange(from, to),
+                        policy, policy.blockSessionLength())));
+
+        /*
+         * A shorter session never costs the coach more of the calendar.
+         *
+         * Stated as "no worse" rather than "strictly better", because at the current
+         * 30-minute grid it is exactly equal, and that is worth knowing: a 40-minute
+         * session on a 30-minute step occupies the same two grid positions a 60-minute
+         * one does, so shortening the block sessions buys the coach no extra capacity at
+         * all. Getting that capacity would need `slot-step` reduced to 20m or 10m, which
+         * is a separate decision about how ragged the coach's day is allowed to look.
+         */
+        List<Instant> shortAfterBooking = SlotPlanner.bookableStarts(kolkata, evening,
+                List.of(TimeRange.of(booked, policy.blockSessionLength())),
+                new TimeRange(from, to), policy, policy.blockSessionLength());
+        check("a 40-minute booking never blocks more starts than a 60-minute one",
+                shortAfterBooking.size() >= afterBooking.size());
+        check("at a 30-minute grid the two block identically",
+                shortAfterBooking.size() == afterBooking.size());
 
         // Availability on a day the window does not reach yields nothing.
         List<AvailabilityRule> sundayOnly = List.of(

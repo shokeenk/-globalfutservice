@@ -127,19 +127,34 @@ public record AppProperties(
 
     public record Coaching(
             /**
-             * How long one session runs.
+             * How long a single purchased session runs.
              *
-             * <p>This is the single source of the number. It drives the slot planner,
-             * the length written onto every booked session, the reschedule window and
-             * the {@code sessionMinutes} the storefront reads back — so the booking
-             * grid and the price list cannot describe different sessions.
-             *
-             * <p>Raised from 40m at the client's instruction. Sessions already booked
-             * keep the length they were booked at: the value is copied onto the row at
-             * creation rather than read back from config, so changing it moves future
-             * bookings only.
+             * <p>Sessions already booked keep the length they were booked at: the value
+             * is copied onto the row at creation rather than read back from config, so
+             * changing it moves future bookings only.
              */
             @DefaultValue("60m") Duration sessionLength,
+
+            /**
+             * How long one session from a multi-session block runs.
+             *
+             * <p><b>There are two lengths because there are two products.</b> A single
+             * session is an hour at Rs.1,000. The six-session block is Rs.4,050, which is
+             * Rs.675 a session, and it is cheaper because each session is shorter — the
+             * duration difference is the reason for the price difference, not a detail
+             * beside it.
+             *
+             * <p>The application could not express that until now: one global
+             * {@code sessionLength} drove every booking, so a block customer and a
+             * single-session customer picking the same slot got sessions of identical
+             * length. That is not a labelling problem. It gave away twenty minutes a
+             * session against what the block was sold as, and it over-allocated the
+             * coach's calendar by half an hour for every block booking.
+             *
+             * <p>Which of the two applies is decided by the credit being spent, not by
+             * configuration — see {@code CoachingService.sessionLengthFor}.
+             */
+            @DefaultValue("40m") Duration blockSessionLength,
             @DefaultValue("30m") Duration slotStep,
             @DefaultValue("2h") Duration minLeadTime,
             @DefaultValue("60d") Duration maxAdvance,
@@ -162,6 +177,18 @@ public record AppProperties(
              */
             @DefaultValue({"SINGLE_SESSION:1", "MONTHLY_6_SESSIONS:6"})
             List<String> creditsPerVariant) {
+
+        /**
+         * How long a session bought under this variant runs.
+         *
+         * <p>Any variant granting more than one session is a block, which is what makes
+         * this derive from {@code creditsFor} rather than carry a second mapping to be
+         * kept in step with it. A future "10 sessions" pack is a block on the day it is
+         * priced, with nothing here to remember to update.
+         */
+        public Duration sessionLengthFor(String variant) {
+            return creditsFor(variant) > 1 ? blockSessionLength : sessionLength;
+        }
 
         /** Sessions granted by a variant, or 0 when the variant grants none. */
         public int creditsFor(String variant) {

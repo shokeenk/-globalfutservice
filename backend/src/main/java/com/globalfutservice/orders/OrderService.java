@@ -411,8 +411,11 @@ public class OrderService {
         // grant is idempotent at the database level, so a retried webhook cannot double it.
         if (paid.getSku() == Sku.COACHING) {
             int sessions = props.coaching().creditsFor(paid.getVariant());
+            // The length is stamped on the credit here, at purchase, because this is the
+            // last point at which the variant is known -- booking happens later and sees
+            // only a pool of credits.
             coachingService.grantCredits(paid.getAccountId(), paid.getId(), sessions,
-                    paid.getPublicRef());
+                    paid.getPublicRef(), props.coaching().sessionLengthFor(paid.getVariant()));
         }
 
         OrderStatus next = paid.requiresCredentials()

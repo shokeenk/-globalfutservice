@@ -154,7 +154,7 @@ const es: Dictionary = {
 
     services: {
       eyebrow: (season) => `Lo que hacemos en ${season}`,
-      title: 'Llégate a lo más alto',
+      title: 'Lleva tu club a lo más alto',
       lead:
         'Elige la que encaje. Todo tiene el precio por adelantado y todo está cubierto por ' +
         'la misma garantía.',
@@ -302,8 +302,8 @@ const es: Dictionary = {
       shiftLabel: 'De turno, todos los días',
       shiftNote: 'Incluidas las horas de la weekend league.',
       guaranteeValue: '100%',
-      guaranteeUnit: 'Safety Policy',
-      guaranteeLabel: 'Todos los pedidos cubiertos',
+      guaranteeUnit: 'cubierto',
+      guaranteeLabel: '100% Safety Policy',
       guaranteeNote: 'Reembolso completo o una cuenta de reemplazo — tú eliges.',
       tiersValue: '6',
       tiersUnit: 'niveles',
@@ -944,6 +944,8 @@ const es: Dictionary = {
       'oficial para la programación y la comunicación de la sesión:',
     policyLine: (minutes, hours) =>
       `${minutes} minutos · puedes cambiarla gratis hasta ${hours} h antes`,
+    policyLineBoth: (single, block, hours) =>
+      `${single} minutos suelta, ${block} minutos en pack · puedes moverla hasta ${hours}h antes`,
     bookedFor: 'Reservada para el',
     emailedDetails: '. Te hemos enviado los detalles por correo.',
     loadSlotsFailed: 'No se ha podido cargar la disponibilidad.',
