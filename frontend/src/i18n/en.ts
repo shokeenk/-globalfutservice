@@ -398,12 +398,6 @@ const en = {
       durationLabel: 'Length',
       durationValue: (m: number) =>
         m % 60 === 0 ? `${m / 60} hour${m === 60 ? '' : 's'}` : `${m} min`,
-      /*
-       * Both lengths, because there are two products and the plate sits beside a price
-       * list showing both. One number here is how the block came to be described at a
-       * duration it was not sold at.
-       */
-      durationValueBoth: (single: string, block: string) => `${single} · ${block} in a block`,
       durationNote: 'Single session, live',
       formatLabel: 'Format',
       formatValue: 'One to one',

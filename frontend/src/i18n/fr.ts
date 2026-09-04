@@ -329,7 +329,6 @@ const fr: Dictionary = {
       secondary: 'Comment ça marche',
       durationLabel: 'Durée',
       durationValue: (m) => (m % 60 === 0 ? `${m / 60} heure${m === 60 ? '' : 's'}` : `${m} min`),
-      durationValueBoth: (single, block) => `${single} · ${block} en pack`,
       durationNote: 'Par séance, en direct',
       formatLabel: 'Format',
       formatValue: 'Tête-à-tête',

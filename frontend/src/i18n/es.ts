@@ -326,7 +326,6 @@ const es: Dictionary = {
       secondary: 'Cómo funciona',
       durationLabel: 'Duración',
       durationValue: (m) => (m % 60 === 0 ? `${m / 60} hora${m === 60 ? '' : 's'}` : `${m} min`),
-      durationValueBoth: (single, block) => `${single} · ${block} en pack`,
       durationNote: 'Por sesión, en directo',
       formatLabel: 'Formato',
       formatValue: 'Uno a uno',

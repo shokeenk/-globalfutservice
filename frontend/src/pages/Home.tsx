@@ -778,10 +778,17 @@ function CoachingBand() {
               */}
               <SpecRow
                 label={t.home.coach.durationLabel}
-                value={t.home.coach.durationValueBoth(
-                  t.home.coach.durationValue(policy?.coachingSessionMinutes ?? 60),
-                  t.home.coach.durationValue(policy?.coachingBlockSessionMinutes ?? 40),
-                )}
+                /*
+                  The single-session length alone, because that is what this row is
+                  about — the note under the label says "Single session, live". It
+                  briefly showed both lengths, which was the right instinct in the wrong
+                  place: a row scoped to one product does not need the other product's
+                  number, and carrying it made the plate read as though an hour and
+                  forty minutes were alternatives for the same purchase. The block's
+                  length is stated where the block is actually sold: on its price card
+                  ("6 sessions × 40 minutes") and on the booking screen.
+                */
+                value={t.home.coach.durationValue(policy?.coachingSessionMinutes ?? 60)}
                 note={t.home.coach.durationNote}
               />
               <SpecRow
