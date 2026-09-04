@@ -422,34 +422,6 @@ export default function Order() {
           {step === 'configure' && (
           <StepCard step={isFlat ? 2 : 3} title={t.order.stepDiscounts(isFlat ? 2 : 3)}>
             <div className="grid gap-5 sm:grid-cols-2">
-              {/*
-                The hint carries whatever the server said about the code — "already
-                used", "expired", "needs a larger order". A coupon that silently does
-                nothing produces a support ticket every single time, so the reason is
-                always shown, and it comes from the same check that decides whether to
-                apply it rather than from a guess made here.
-              */}
-              <Field
-                label={t.order.couponLabel}
-                hint={
-                  quote?.couponMessage
-                    ? quote.couponMessage
-                    : quote?.couponCode
-                      ? t.order.couponApplied(quote.couponCode)
-                      : t.order.couponHint
-                }
-              >
-                {(props) => (
-                  <Input
-                    {...props}
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    placeholder="SAVE10"
-                    maxLength={32}
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
 
               {/*
                 The points field is only offered when points actually work here. The
@@ -506,6 +478,8 @@ export default function Order() {
         </div>
 
         <QuotePanel
+          couponCode={couponCode}
+          onApplyCoupon={setCouponCode}
           quote={quote}
           quoting={quoting}
           error={quoteError}
@@ -618,7 +592,7 @@ function AmountReadout({ quantity }: { quantity: number }) {
 /* ------------------------------------------------------------- quote panel --- */
 
 function QuotePanel({
-  quote, quoting, error, step, setStep, onRequote,
+  quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -626,6 +600,8 @@ function QuotePanel({
   step: Step
   setStep: (step: Step) => void
   onRequote: () => void
+  couponCode: string
+  onApplyCoupon: (code: string) => void
 }) {
   const t = useT()
   const money = useMoney()
@@ -668,6 +644,27 @@ function QuotePanel({
         </div>
 
         <div className="space-y-4 p-5">
+          {/*
+            The code goes in beside the total it changes.
+
+            It used to sit in the configurator, which meant that once a customer moved on
+            to paying there was no way to enter one at all -- they had to go back, past
+            the amount they had already settled, to reach the field. A discount belongs
+            next to the figure it reduces.
+
+            Applied on a button rather than on every keystroke. The quote is re-signed
+            server-side each time it changes, so typing "SAVE10" into a live-applied field
+            fires six re-quotes and shows five failures on the way to one success.
+          */}
+          <CouponRow
+            key={quote?.couponCode ?? 'none'}
+            initial={couponCode}
+            applied={quote?.couponCode ?? null}
+            message={quote?.couponMessage ?? null}
+            busy={quoting}
+            onApply={onApplyCoupon}
+          />
+
           {quoting && !quote && (
             <>
               <Skeleton className="h-5 w-full" />
@@ -1268,6 +1265,83 @@ const DIAL_CODES = [
   { code: '+971', flag: '🇦🇪' },
 ] as const
 
+/* ----------------------------------------------------------------- coupon --- */
+
+/**
+ * The discount code field, in the order panel.
+ *
+ * <p>Holds its own draft so typing does not re-quote. The parent's `couponCode` is what
+ * the pricing engine is asked about, and it only changes when Apply is pressed -- the
+ * quote is re-signed server-side on every change, so a live-applied field turns one code
+ * into six requests and five "no such coupon" messages before the sixth succeeds.
+ *
+ * <p>Remounted by the parent whenever the applied code changes (`key`), so the draft
+ * cannot drift out of step with what is actually priced.
+ *
+ * <p>The message under the field is the server's, never a guess: "already used",
+ * "expired", "needs a larger order". A coupon that silently does nothing produces a
+ * support ticket every single time.
+ */
+function CouponRow({
+  initial, applied, message, busy, onApply,
+}: {
+  initial: string
+  applied: string | null
+  message: string | null
+  busy: boolean
+  onApply: (code: string) => void
+}) {
+  const t = useT()
+  const [draft, setDraft] = useState(initial)
+
+  const trimmed = draft.trim()
+  const isApplied = applied != null && trimmed.toUpperCase() === applied.toUpperCase()
+  const canApply = trimmed !== '' && !isApplied && !busy
+
+  return (
+    <div>
+      <label htmlFor="coupon-code" className="stamp mb-2 block">
+        {t.order.couponLabel}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="coupon-code"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.toUpperCase())}
+          onKeyDown={(e) => { if (e.key === 'Enter' && canApply) { e.preventDefault(); onApply(trimmed) } }}
+          placeholder="SAVE10"
+          maxLength={32}
+          autoComplete="off"
+          spellCheck={false}
+          className="h-11 min-w-0 flex-1 rounded-edge border border-ink-400 bg-paper px-3
+                     text-[13px] uppercase tracking-[0.06em] text-chalk
+                     placeholder:normal-case placeholder:tracking-normal placeholder:text-chalk-faint
+                     focus-visible:outline focus-visible:outline-2
+                     focus-visible:outline-offset-1 focus-visible:outline-brand-400"
+        />
+        <Button
+          variant="secondary"
+          onClick={() => canApply && onApply(trimmed)}
+          disabled={!canApply}
+        >
+          {t.order.couponApply}
+        </Button>
+      </div>
+
+      {/*
+        One line, and only one. The server's reason wins over the generic hint, and the
+        applied confirmation wins over both -- three stacked messages about a five
+        character field is more explanation than the field is worth.
+      */}
+      <p className={`mt-1.5 text-[12px] leading-snug ${
+        message ? 'text-brand-400' : isApplied ? 'text-ok' : 'text-chalk-faint'
+      }`}>
+        {message ?? (applied ? t.order.couponApplied(applied) : t.order.couponHint)}
+      </p>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------- cart --- */
 
 /**
@@ -1296,8 +1370,13 @@ function CartCard({ quote, onEdit }: { quote: SignedQuote; onEdit: () => void })
 
       <div className="min-w-0 flex-1">
         <p className="stamp mb-1">{t.order.cartTitle}</p>
+        {/*
+          Season first, because a cart line has to say which game it is for. "Safe
+          Trading Service" is true of FC 25 and FC 26 alike, and a receipt that does not
+          name the season is one a customer cannot check against what they bought.
+        */}
         <p className="text-body-sm font-semibold text-chalk">
-          {labels.service(quote.sku, null)}
+          {`${SEASON} · ${labels.service(quote.sku, null)}`}
         </p>
         <p className="tnum mt-0.5 text-[13px] text-chalk-muted">
           {quote.quantity ? t.catalog.millions(quote.quantity) : labels.variant(quote.variant, null)}

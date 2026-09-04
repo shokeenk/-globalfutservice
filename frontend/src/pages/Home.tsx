@@ -12,8 +12,6 @@ import { useT } from '../i18n'
 import { bpsToPercent } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { SEASON, useSeo } from '../lib/seo'
-import { CoinIcon } from '../brand/CoinIcon'
-import { RankBadge } from '../components/RankBadge'
 import { Reveal } from '../motion/Reveal'
 import { useCatalog } from '../state/CatalogContext'
 
@@ -547,19 +545,17 @@ function Proof() {
 /**
  * The picture on a service card.
  *
- * <p><b>Each mark is rendered the way its own section renders it</b>, which is the whole
- * point of reusing artwork rather than commissioning a card-sized set. The coin shows its
- * wordmark exactly as it does beside a coin total on the order page; the shield is drawn
- * through {@code RankBadge}, so this card and the boosting tiers resolve "Rank 1" from one
- * mapping instead of two; the portrait is the same circular crop the coaching page uses.
+ * <p><b>Supplied artwork, resized rather than shipped as delivered.</b> The three
+ * originals are 1.1MB, 2.3MB and 1.5MB -- 4.9MB between them, for pictures drawn at
+ * 138px. They are converted once to 320px WebP (2.3x the display size, which covers a
+ * retina panel) and land at 68KB together, in line with every other brand asset here.
+ * The originals stay in the repository root as the masters to re-cut from.
  *
  * <p><b>No plate behind them.</b> An earlier version framed each mark in a tinted disc to
  * guarantee contrast on three different grounds, and on the trading card that backfired:
- * the coin's own dark stacked edges disappeared into the dark plate and what survived was
- * a bright rim, so a coin read as a ring. The artwork already solves this itself — the face
- * carries a {@code #9A6B00} stroke precisely because a gold disc on a light ground is
- * 1.42:1 without one, and 4.34:1 with it. A plate was solving a problem the mark had
- * already solved, and introducing one of its own.
+ * the artwork's own dark edges disappeared into the dark plate and what survived was a
+ * bright rim, so a coin read as a ring. These three carry their own dark outlines and
+ * need no help.
  *
  * <p>All three are decorative and marked so. Each restates the title beside it, so
  * announcing them would read every card twice.
@@ -585,19 +581,34 @@ function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
    */
   const lift = 'ml-auto shrink-0 transition-transform duration-500 ease-out-expo group-hover:scale-[1.06]'
 
-  if (mark.kind === 'coin') {
-    return (
-      <span aria-hidden="true" className={lift}>
-        <CoinIcon size={MARK_SIZE} />
-      </span>
-    )
-  }
+  /*
+    Width and height are declared even though the box is fixed. The attributes give the
+    element its ratio before the file arrives, which is what stops the mark collapsing and
+    reflowing the tag row on a slow connection.
+  */
+  const box = { width: MARK_SIZE, height: MARK_SIZE }
 
-  if (mark.kind === 'rank') {
+  /*
+    Two fits, because two kinds of picture.
+
+    A crest and a coin stack are shapes with their own silhouette and empty space around
+    it -- `contain` keeps that, and cropping either to a circle would cut the laurels off
+    the crest. The coaching photograph is a scene, and a scene has no silhouette to
+    protect, so it fills a circle the way the coach's portrait did before it.
+  */
+  if (mark.kind === 'avatar') {
     return (
-      <span aria-hidden="true" className={lift}>
-        <RankBadge variant={mark.variant} size={MARK_SIZE} />
-      </span>
+      <img
+        src={mark.src}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        width={MARK_SIZE}
+        height={MARK_SIZE}
+        style={box}
+        className={`rounded-full object-cover ${lift}`}
+      />
     )
   }
 
@@ -608,22 +619,18 @@ function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
       aria-hidden="true"
       loading="lazy"
       decoding="async"
-      /*
-        Declared even though the box is fixed: the attributes give the element its ratio
-        before the file arrives, which is what stops the circle collapsing and reflowing
-        the chip row on a slow connection.
-      */
       width={MARK_SIZE}
       height={MARK_SIZE}
-      style={{ width: MARK_SIZE, height: MARK_SIZE }}
-      className={`rounded-full object-cover ${lift}`}
+      style={box}
+      className={`object-contain ${lift}`}
     />
   )
 }
 
 type ServiceMarkSpec =
-  | { kind: 'coin' }
-  | { kind: 'rank'; variant: string }
+  /** A shape with its own silhouette -- fitted, never cropped. */
+  | { kind: 'image'; src: string }
+  /** A photograph -- filled into a circle. */
   | { kind: 'avatar'; src: string }
 
 /* ---------------------------------------------------------------- services --- */
@@ -646,7 +653,9 @@ function Services() {
       skin: 'sun' as const,
       body: t.home.services.tradingBody,
       cta: t.home.services.tradingCta,
-      mark: { kind: 'coin' } as const,
+      // The UT coin stack, supplied artwork. Replaces the drawn `CoinIcon`, which was
+      // right when there was no photograph and reads as a flat token beside one.
+      mark: { kind: 'image', src: '/brand/services/coins.webp' } as const,
     },
     {
       to: '/boosting',
@@ -655,9 +664,10 @@ function Services() {
       skin: 'deep' as const,
       body: t.home.services.boostBody,
       cta: t.home.services.boostCta,
-      // Rank 1 — the Elite I shield, resolved through RankBadge so this and the tier
-      // cards on the boosting page read from one mapping rather than two.
-      mark: { kind: 'rank', variant: 'WINS_15' } as const,
+      // The FUT Champions crest, which is what this card actually sells -- the Elite I
+      // shield it replaces is one rank inside that competition rather than the thing
+      // itself, and the boosting page still uses the shields where ranks are chosen.
+      mark: { kind: 'image', src: '/brand/services/fut-champs.webp' } as const,
     },
     {
       to: '/coaching',
@@ -668,7 +678,7 @@ function Services() {
       cta: t.home.services.coachCta,
       // The actual coach, not a stock avatar. "One to one with a coach who plays at the
       // level you are chasing" is a claim about a person, and the person exists.
-      mark: { kind: 'avatar', src: '/brand/coaches/vinay-256.jpg' } as const,
+      mark: { kind: 'avatar', src: '/brand/services/coaching.webp' } as const,
     },
   ]
 
