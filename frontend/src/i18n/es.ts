@@ -473,6 +473,10 @@ const es: Dictionary = {
     credPasswordHint: 'Cámbiala en cuanto recibas el pedido — te lo recordaremos.',
     credShow: 'Mostrar contraseña',
     credHide: 'Ocultar contraseña',
+    credBackupCodeN: (n) => `Código de respaldo ${n}`,
+    credReassureLead: 'Tus datos de cuenta se cifran, solo se abren cuando hacen falta para completar tu pedido y se borran justo después — consulta nuestros',
+    credReassureLink: 'Términos del servicio',
+    credReassureTail: 'para más detalles.',
     credBackupCodes: 'Códigos de respaldo',
     credBackupCodesFind: 'Cómo encontrar los códigos de respaldo',
     credBackupCodesHint: 'Uno por línea. Necesarios si tu cuenta pide un código al entrar.',
@@ -659,7 +663,9 @@ const es: Dictionary = {
     summaryTitle: 'Tu pedido',
     total: 'Total',
     earnsPoints: (points) =>
-      `Ganas ${points} puntos cuando se cierre tu ventana de garantía.`,
+      `Ganarás unos ${points} puntos, cuando se cierre tu ventana de garantía.`,
+    earnsPointsGuest: (points) =>
+      `Inicia sesión para ganar ${points} puntos en este pedido — los pedidos como invitado no acumulan.`,
     continue: 'Continuar',
     priceNote:
       'Los precios se mantienen unos minutos y se vuelven a comprobar al pagar, así que lo ' +
@@ -667,6 +673,17 @@ const es: Dictionary = {
     refreshingPrice: 'Actualizando el precio…',
     priceHeld: (time) => `Precio reservado ${time}`,
 
+    cartTitle: 'Tu carrito',
+    cartRemove: 'Quitar del carrito',
+    continueShopping: 'Seguir comprando',
+    userInfoTitle: 'Tus datos',
+    fullName: 'Nombre completo',
+    fullNameHint: 'El nombre que aparecerá en tu recibo.',
+    countryCode: 'Prefijo país',
+    phoneHelper: 'Solo para incidencias urgentes del pedido — nunca te enviaremos spam.',
+    discordLabel: 'Discord (opcional)',
+    discordHelper: 'Podemos escribirte por Discord para resolver el pedido más rápido.',
+    discordPlaceholder: 'tunombre',
     whereTitle: '¿Dónde lo enviamos?',
     email: 'Correo electrónico',
     emailHint: 'Aquí llegan tu recibo y el aviso de entrega.',

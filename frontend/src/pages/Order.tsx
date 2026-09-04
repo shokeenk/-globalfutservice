@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { PageHeader } from '../components/PageHeader'
 import { PlatformCard } from '../components/PlatformCard'
+import { PlatformIcon } from '../components/PlatformIcon'
 import {
   Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, SelectTile,
   Skeleton, Spinner, StepCard,
@@ -235,10 +236,33 @@ export default function Order() {
       <Section className="rhythm-section">
       <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr] lg:items-start">
         <div className="space-y-5">
-          {/* Trading only: boosting tiers and coaching packs have no account prerequisites. */}
-          {!isFlat && <RequirementsPanel />}
+          {/*
+            Past the configure step the left column becomes the cart and the forms, and
+            the configurator is replaced rather than left above them. Keeping the slider
+            on screen while somebody types their EA password invites them back into
+            pricing mid-checkout, which re-quotes and moves the total they were about to
+            pay.
+          */}
+          {step !== 'configure' && quote && (
+            <>
+              <CartCard quote={quote} onEdit={() => setStep('configure')} />
+              <button
+                type="button"
+                onClick={() => setStep('configure')}
+                className="inline-flex items-center gap-2 text-body-sm font-semibold text-brand-400
+                           hover:underline focus-visible:outline focus-visible:outline-2
+                           focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+              >
+                <span aria-hidden="true">&larr;</span>
+                {t.order.continueShopping}
+              </button>
+            </>
+          )}
 
-          {isFlat ? (
+          {/* Trading only: boosting tiers and coaching packs have no account prerequisites. */}
+          {step === 'configure' && !isFlat && <RequirementsPanel />}
+
+          {step === 'configure' && (isFlat ? (
             /* Boosting tiers and coaching packs: one choice, no slider. */
             <StepCard step={1} title={t.order.stepPackage(1, labels.service(service?.sku, service?.displayName))}>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -393,8 +417,9 @@ export default function Order() {
                 </div>
               </StepCard>
             </>
-          )}
+          ))}
 
+          {step === 'configure' && (
           <StepCard step={isFlat ? 2 : 3} title={t.order.stepDiscounts(isFlat ? 2 : 3)}>
             <div className="grid gap-5 sm:grid-cols-2">
               {/*
@@ -466,6 +491,18 @@ export default function Order() {
               ) : null}
             </div>
           </StepCard>
+          )}
+
+          {/*
+            The form itself, in the left column beside the summary rather than inside it.
+
+            It used to render within `QuotePanel`, which meant the sticky order panel grew
+            to hold an entire checkout and stopped being a summary. Fields belong with the
+            cart they describe; the panel keeps the total, the points and the payment.
+          */}
+          {step !== 'configure' && quote && (
+            <CheckoutForm quote={quote} step={step} setStep={setStep} onRequote={() => void fetchQuote()} />
+          )}
         </div>
 
         <QuotePanel
@@ -592,6 +629,7 @@ function QuotePanel({
 }) {
   const t = useT()
   const money = useMoney()
+  const { account } = useAuth()
 
   /*
    * A saving is a negative line, plus the zero-value market tax.
@@ -752,10 +790,32 @@ function QuotePanel({
                 </div>
               )}
 
+              {/*
+                What this order is worth in points -- and to whom.
+
+                The quote's `pointsEarned` is computed from the total and the currency
+                alone; `pointsEarnedOn` never sees an account, so it returns the same
+                number for a guest as for a signed-in customer. Rendering it unqualified
+                promised a guest points the terms of service say a guest order cannot
+                earn.
+
+                Shown rather than hidden for guests, because hiding it loses the reason
+                to sign in at the one moment it is worth something. The number is the
+                same; the sentence says whose it is.
+              */}
               {quote.pointsEarned > 0 && (
-                <p className="flex items-center gap-2 text-[12px] text-gold-400">
-                  <span aria-hidden="true" className="h-1 w-1 rotate-45 bg-gold-400" />
-                  {t.order.earnsPoints(quote.pointsEarned)}
+                <p className={`flex items-start gap-2 text-[12px] ${
+                  account ? 'text-gold-400' : 'text-chalk-muted'
+                }`}>
+                  <span
+                    aria-hidden="true"
+                    className={`mt-1.5 h-1 w-1 shrink-0 rotate-45 ${
+                      account ? 'bg-gold-400' : 'bg-chalk-faint'
+                    }`}
+                  />
+                  {account
+                    ? t.order.earnsPoints(quote.pointsEarned)
+                    : t.order.earnsPointsGuest(quote.pointsEarned)}
                 </p>
               )}
 
@@ -769,9 +829,6 @@ function QuotePanel({
             </>
           )}
 
-          {step !== 'configure' && quote && (
-            <CheckoutForm quote={quote} step={step} setStep={setStep} onRequote={onRequote} />
-          )}
         </div>
       </div>
 
@@ -863,7 +920,19 @@ function CheckoutForm({
 
   const t = useT()
   const [email, setEmail] = useState(account?.email ?? '')
+  const [fullName, setFullName] = useState(account?.displayName ?? '')
+  /*
+   * Dial code and number are separate fields but one value on the wire.
+   *
+   * Split because a customer typing a local number should not have to remember the
+   * prefix, and joined before sending because the API takes one string and the operator
+   * dials one number. Defaulted to India: that is where the business is and where nearly
+   * every order comes from, and a default that is right most of the time beats an empty
+   * select every customer has to touch.
+   */
+  const [dialCode, setDialCode] = useState('+91')
   const [phone, setPhone] = useState('')
+  const [discord, setDiscord] = useState('')
   /*
    * Fixed, not chosen — see the delivery-method plate below. `useState` rather than a
    * plain const so that a policy arriving after first paint (the catalogue is fetched)
@@ -898,8 +967,15 @@ function CheckoutForm({
       const response = await api.post<CreateOrderResponse>('/api/v1/orders', {
         quote,
         email: email.trim(),
-        phone: phone.trim() || null,
+        phone: phone.trim() ? `${dialCode} ${phone.trim()}` : null,
         deliveryMethod,
+        fullName: fullName.trim() || null,
+        /*
+         * Dial code and number rejoined. The API takes one string and the column is 20
+         * characters, which "+91 98765 43210" fits; a longer international number is
+         * caught by the same @Size the operator console relies on.
+         */
+        discordUsername: discord.trim().replace(/^@/, '') || null,
         // Asked for after the order exists, on the credential form. See note 14.
         eaPlatformHandle: null,
         note: note.trim() || null,
@@ -936,7 +1012,7 @@ function CheckoutForm({
    */
   return (
     <div className="animate-rise space-y-5 border-t border-ink-400 pt-5">
-      <h3 className="display text-[15px] text-chalk">{t.order.whereTitle}</h3>
+      <h3 className="display text-[15px] text-chalk">{t.order.userInfoTitle}</h3>
 
       <Field label={t.order.email} required hint={t.order.emailHint}>
         {(props) => (
@@ -965,15 +1041,55 @@ function CheckoutForm({
         null. Nothing server-side changed, so an order placed from an older cached
         bundle is still accepted.
       */}
-      <Field label={t.order.phone} hint={t.order.phoneHint}>
+      <Field label={t.order.fullName} hint={t.order.fullNameHint}>
         {(props) => (
           <Input
             {...props}
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+91"
-            autoComplete="tel"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            autoComplete="name"
+            maxLength={120}
+          />
+        )}
+      </Field>
+
+      <Field label={t.order.phone} hint={t.order.phoneHelper}>
+        {(props) => (
+          <div className="flex gap-2">
+            <select
+              value={dialCode}
+              onChange={(e) => setDialCode(e.target.value)}
+              aria-label={t.order.countryCode}
+              className="tnum h-11 shrink-0 rounded-edge border border-ink-400 bg-paper px-2
+                         text-[13px] text-chalk focus-visible:outline focus-visible:outline-2
+                         focus-visible:outline-offset-1 focus-visible:outline-brand-400"
+            >
+              {DIAL_CODES.map((c) => (
+                <option key={c.code} value={c.code}>{`${c.flag} ${c.code}`}</option>
+              ))}
+            </select>
+            <Input
+              {...props}
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="tel-national"
+              inputMode="tel"
+              maxLength={20}
+            />
+          </div>
+        )}
+      </Field>
+
+      <Field label={t.order.discordLabel} hint={t.order.discordHelper}>
+        {(props) => (
+          <Input
+            {...props}
+            value={discord}
+            onChange={(e) => setDiscord(e.target.value)}
+            placeholder={t.order.discordPlaceholder}
+            autoComplete="off"
+            maxLength={64}
           />
         )}
       </Field>
@@ -1128,6 +1244,92 @@ function QuoteLineRow({
       >
         {taxIncluded ? t.order.taxIncludedShort : line.amountFormatted}
       </dd>
+    </div>
+  )
+}
+
+/**
+ * The dial codes offered at checkout.
+ *
+ * <p>Short on purpose. This is the set the business actually sells into -- India first,
+ * then the four currencies the catalogue is priced in -- rather than a full ISO list,
+ * which would be two hundred options a customer scrolls past to reach the one at the top
+ * anyway. Adding a market means adding a line here and a rate card, in that order.
+ */
+const DIAL_CODES = [
+  { code: '+91', flag: '🇮🇳' },
+  { code: '+1', flag: '🇺🇸' },
+  { code: '+44', flag: '🇬🇧' },
+  { code: '+353', flag: '🇮🇪' },
+  { code: '+61', flag: '🇦🇺' },
+  { code: '+49', flag: '🇩🇪' },
+  { code: '+33', flag: '🇫🇷' },
+  { code: '+34', flag: '🇪🇸' },
+  { code: '+971', flag: '🇦🇪' },
+] as const
+
+/* ------------------------------------------------------------------- cart --- */
+
+/**
+ * What is being bought, restated once configuring is done.
+ *
+ * <p>Not a shopping cart in the usual sense -- an order here is exactly one line, and
+ * always will be, because the three services are configured separately and priced by
+ * different engines. So this is a receipt of the choice rather than a list to manage:
+ * platform, amount, price, and a way back.
+ *
+ * <p>The amount is read off the quote rather than the slider. Those agree while the page
+ * is idle and disagree for the moment between a drag and the re-quote landing, and the
+ * number that matters here is the one the server priced.
+ */
+function CartCard({ quote, onEdit }: { quote: SignedQuote; onEdit: () => void }) {
+  const t = useT()
+  const labels = useCatalogLabels()
+
+  return (
+    <div className="plate flex items-start gap-4 p-5">
+      {quote.platform ? (
+        <PlatformIcon platform={quote.platform} className="mt-0.5 h-9 w-9 shrink-0 text-chalk-muted" />
+      ) : (
+        <CoinIcon size={36} className="mt-0.5" />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <p className="stamp mb-1">{t.order.cartTitle}</p>
+        <p className="text-body-sm font-semibold text-chalk">
+          {labels.service(quote.sku, null)}
+        </p>
+        <p className="tnum mt-0.5 text-[13px] text-chalk-muted">
+          {quote.quantity ? t.catalog.millions(quote.quantity) : labels.variant(quote.variant, null)}
+          {quote.platform && ` · ${quote.platform}`}
+        </p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-3">
+        <span className="tnum display text-display-sm text-chalk">{quote.totalFormatted}</span>
+        {/*
+          "Remove" on a one-line order would empty a cart that cannot be empty -- the page
+          has nothing to show without a selection. It goes back to the configurator
+          instead, which is the same gesture with an outcome that exists.
+        */}
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={t.order.cartRemove}
+          className="grid h-9 w-9 place-items-center rounded-edge text-chalk-faint
+                     transition-colors hover:bg-ink-700 hover:text-brand-400
+                     focus-visible:outline focus-visible:outline-2
+                     focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+        >
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6M14 11v6" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }
