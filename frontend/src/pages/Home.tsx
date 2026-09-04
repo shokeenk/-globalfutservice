@@ -512,11 +512,24 @@ function Proof() {
               it. `items-baseline` rather than `items-end`: the descenders in "min"
               would otherwise push the word visibly below the numeral.
             */}
-            <dd className="flex items-baseline gap-1.5">
-              <span className="display text-[clamp(2.6rem,6vw,3.6rem)] leading-none text-chalk">
+            <dd className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              {/*
+                `whitespace-nowrap` on both halves, and the size stepped down.
+
+                These four cells share a width but not a content length: "6" is one
+                character and "10-60+" is six. At the old clamp the longest value did not
+                fit its column and broke mid-figure, so the panel read "10-" over "60+"
+                with the unit stranded beside the gap. A range broken across two lines is
+                not a smaller number, it is a different one.
+
+                Wrapping is allowed on the flex container instead, so a unit that cannot
+                fit drops whole to the next line rather than splitting "Safety Policy"
+                down the middle. The number itself never breaks.
+              */}
+              <span className="display whitespace-nowrap text-[clamp(2.1rem,4.7vw,3.1rem)] leading-none text-chalk">
                 {stat.value}
               </span>
-              <span className="text-[clamp(0.9rem,1.6vw,1.05rem)] font-medium leading-none text-chalk-faint">
+              <span className="whitespace-nowrap text-[clamp(0.85rem,1.3vw,0.98rem)] font-medium leading-none text-chalk-faint">
                 {stat.unit}
               </span>
             </dd>
