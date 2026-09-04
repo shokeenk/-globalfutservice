@@ -154,7 +154,7 @@ const fr: Dictionary = {
 
     services: {
       eyebrow: (season) => `Ce que nous faisons en ${season}`,
-      title: 'Monte tout en haut',
+      title: 'Emmène ton club tout en haut',
       lead:
         'Choisis celle qui te convient. Tout est tarifé à l’avance et tout est couvert par ' +
         'la même garantie.',

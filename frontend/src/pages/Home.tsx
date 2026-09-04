@@ -13,6 +13,7 @@ import { bpsToPercent } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { SEASON, useSeo } from '../lib/seo'
 import { CoinIcon } from '../brand/CoinIcon'
+import { RankBadge } from '../components/RankBadge'
 import { Reveal } from '../motion/Reveal'
 import { useCatalog } from '../state/CatalogContext'
 
@@ -546,58 +547,65 @@ function Proof() {
 /**
  * The picture on a service card.
  *
- * <p>Decorative, and marked so. Each one restates what the title beside it already says —
- * a coin for the coin service, the Rivals badge for boosting, the coach for coaching — so
- * announcing it to a screen reader would read the card twice. The rule this follows is the
- * same one the feature pillars use: artwork that duplicates adjacent text is hidden.
+ * <p><b>Each mark is rendered the way its own section renders it</b>, which is the whole
+ * point of reusing artwork rather than commissioning a card-sized set. The coin shows its
+ * wordmark exactly as it does beside a coin total on the order page; the shield is drawn
+ * through {@code RankBadge}, so this card and the boosting tiers resolve "Rank 1" from one
+ * mapping instead of two; the portrait is the same circular crop the coaching page uses.
  *
- * <p><b>Two shapes, one frame.</b> A logo needs air around it and a face does not; a
- * portrait inset the way the badge is would be a head floating in a ring. So the photo
- * fills its circle and the badge sits inside one, and both end up the same size on the
- * card, which is the only part the layout cares about.
+ * <p><b>No plate behind them.</b> An earlier version framed each mark in a tinted disc to
+ * guarantee contrast on three different grounds, and on the trading card that backfired:
+ * the coin's own dark stacked edges disappeared into the dark plate and what survived was
+ * a bright rim, so a coin read as a ring. The artwork already solves this itself — the face
+ * carries a {@code #9A6B00} stroke precisely because a gold disc on a light ground is
+ * 1.42:1 without one, and 4.34:1 with it. A plate was solving a problem the mark had
+ * already solved, and introducing one of its own.
  *
- * <p>The coin is drawn rather than fetched. {@code CoinIcon} already exists for the order
- * page and is about a kilobyte of inline SVG, so using it here costs no request and stays
- * crisp at any size — and it cannot drift from the coin the rest of the site shows.
+ * <p>All three are decorative and marked so. Each restates the title beside it, so
+ * announcing them would read every card twice.
  */
-function ServiceMark({
-  mark, plate,
-}: {
-  mark: { kind: 'coin' } | { kind: 'image'; src: string; inset: boolean }
-  plate: string
-}) {
-  const frame = `grid h-[3.25rem] w-[3.25rem] shrink-0 place-items-center overflow-hidden
-                 rounded-full transition-transform duration-500 ease-out-expo
-                 group-hover:scale-[1.06] ${plate}`
+function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
+  const lift = 'shrink-0 transition-transform duration-500 ease-out-expo group-hover:scale-[1.06]'
 
   if (mark.kind === 'coin') {
     return (
-      <span aria-hidden="true" className={frame}>
-        <CoinIcon size={30} bare />
+      <span aria-hidden="true" className={lift}>
+        <CoinIcon size={46} />
+      </span>
+    )
+  }
+
+  if (mark.kind === 'rank') {
+    return (
+      <span aria-hidden="true" className={lift}>
+        <RankBadge variant={mark.variant} size={46} />
       </span>
     )
   }
 
   return (
-    <span aria-hidden="true" className={frame}>
-      <img
-        src={mark.src}
-        alt=""
-        aria-hidden="true"
-        loading="lazy"
-        decoding="async"
-        /*
-          Width and height are declared even though the box is fixed. The attributes give
-          the element an intrinsic ratio before the file arrives, which is what stops the
-          circle collapsing and reflowing the chip row on a slow connection.
-        */
-        width={52}
-        height={52}
-        className={mark.inset ? 'h-8 w-8 object-contain' : 'h-full w-full object-cover'}
-      />
-    </span>
+    <img
+      src={mark.src}
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      decoding="async"
+      /*
+        Declared even though the box is fixed: the attributes give the element its ratio
+        before the file arrives, which is what stops the circle collapsing and reflowing
+        the chip row on a slow connection.
+      */
+      width={46}
+      height={46}
+      className={`h-[46px] w-[46px] rounded-full object-cover ${lift}`}
+    />
   )
 }
+
+type ServiceMarkSpec =
+  | { kind: 'coin' }
+  | { kind: 'rank'; variant: string }
+  | { kind: 'avatar'; src: string }
 
 /* ---------------------------------------------------------------- services --- */
 
@@ -628,9 +636,9 @@ function Services() {
       skin: 'deep' as const,
       body: t.home.services.boostBody,
       cta: t.home.services.boostCta,
-      // The Rivals mark the boosting page already uses on its tier cards, so a reader
-      // who recognises it here meets the same badge when they arrive.
-      mark: { kind: 'image', src: '/brand/divisions/rivals.png', inset: true } as const,
+      // Rank 1 — the Elite I shield, resolved through RankBadge so this and the tier
+      // cards on the boosting page read from one mapping rather than two.
+      mark: { kind: 'rank', variant: 'WINS_15' } as const,
     },
     {
       to: '/coaching',
@@ -641,7 +649,7 @@ function Services() {
       cta: t.home.services.coachCta,
       // The actual coach, not a stock avatar. "One to one with a coach who plays at the
       // level you are chasing" is a claim about a person, and the person exists.
-      mark: { kind: 'image', src: '/brand/coaches/vinay-256.jpg', inset: false } as const,
+      mark: { kind: 'avatar', src: '/brand/coaches/vinay-256.jpg' } as const,
     },
   ]
 
@@ -698,7 +706,7 @@ function Services() {
                                  font-semibold uppercase tracking-[0.12em] ${skin.chip}`}>
                   {card.tag}
                 </span>
-                <ServiceMark mark={card.mark} plate={skin.medallion} />
+                <ServiceMark mark={card.mark} />
               </div>
 
               <h3 className={`display relative mt-5 text-display-md ${skin.title}`}>{card.title}</h3>
