@@ -51,6 +51,23 @@ export default function Boosting() {
       <Section className="rhythm-section" wide>
         {error && <Alert tone="warn">{error}</Alert>}
 
+        {/*
+          Note 17. The headline statement about the top packages.
+
+          Derived from the same per-package rates the cards use rather than stated
+          separately, so the prominent claim and the small print cannot disagree —
+          which is the failure the brief was written to prevent. It renders only when
+          every package it names has been measured: quoting a range as "13-15 wins"
+          while one of the three has no data would be a claim about something nobody
+          counted, dressed up as an aggregate.
+
+          The percentage shown is the lowest of them, not the mean. A customer reading
+          "13-15 wins reached in 92% of orders" and buying the 13-win package should
+          get at least what they were told; an average lets the strongest package carry
+          a claim the weakest cannot meet.
+        */}
+        <SuccessHeadline tiers={tiers} />
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {loading &&
             Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-44 w-full" />)}
@@ -137,7 +154,24 @@ export default function Boosting() {
 
                     <p className="display relative text-display-sm text-chalk">{labels.option(tier)}</p>
 
-                    <p className="tnum display relative mt-auto pt-6 text-display-md text-brand-400">
+                    {/*
+                      Note 18. Absent, not zero, not "—", when nothing was measured.
+
+                      The whole block is behind a null check rather than rendering a
+                      placeholder, because there is no honest placeholder for this: a
+                      percentage next to a price is read as a measurement whatever
+                      caveat sits beside it, and a customer cannot tell an invented one
+                      from a counted one. Today the API sends null for every package,
+                      so nothing here renders anywhere.
+
+                      Visually secondary on purpose, as the brief asked — it sits under
+                      the price in muted type rather than competing with it.
+                    */}
+                    <SuccessRate bps={tier.successRateBps} className="relative mt-auto pt-6" />
+
+                    <p className={`tnum display relative text-display-md text-brand-400 ${
+                      tier.successRateBps == null ? 'mt-auto pt-6' : 'mt-1'
+                    }`}>
                       {tier.unitPriceFormatted}
                     </p>
 
@@ -232,6 +266,99 @@ export default function Boosting() {
  * for a binary choice, and a segmented control with five options is a tab bar
  * wearing the wrong clothes.
  */
+/**
+ * The aggregate success-rate statement for the top win packages.
+ *
+ * <p>Renders nothing unless <em>every</em> package it would name carries a measured
+ * rate. That is stricter than it needs to be for a headline and it is deliberate: an
+ * aggregate covering a package with no data is not an aggregate, it is an extrapolation
+ * with a range on it, and it reads to a customer as though all three were counted.
+ *
+ * <p>Today it renders nowhere, because the API sends null for every package. It is
+ * written now so the claim has one implementation rather than being retyped as prose
+ * on the day the numbers arrive.
+ */
+function SuccessHeadline({ tiers }: { tiers: CatalogOption[] }) {
+  const t = useT()
+
+  // The top packages are the ones the brief asks about, identified by variant rather
+  // than by position: the catalogue's last three rows are whatever sorts last, which
+  // is not a promise that they are the 13, 14 and 15 win tiers.
+  // Looked up in the order the statement names them, rather than filtered out of the
+  // catalogue in whatever order it happens to return — the sentence says "13 to 15",
+  // so the first and last must be the 13 and the 15, not the first and last rows.
+  const headline = TOP_WIN_VARIANTS.map(
+    (variant) => tiers.find((tier) => tier.variant === variant),
+  )
+
+  const measured = headline.filter(
+    (tier): tier is CatalogOption & { successRateBps: number } =>
+      tier != null && typeof tier.successRateBps === 'number',
+  )
+  if (measured.length !== TOP_WIN_VARIANTS.length) return null
+
+  const first = measured[0]
+  const last = measured[measured.length - 1]
+  if (!first || !last) return null
+
+  // The floor, not the mean. See the call site.
+  const lowest = Math.min(...measured.map((tier) => tier.successRateBps))
+  const pct = `${Number((lowest / 100).toFixed(1))}%`
+
+  /*
+   * "13-15 wins", not the two full option labels.
+   *
+   * `labels.option` returns the decorated card title -- "13 wins · Elite III · Rank 3"
+   * -- which is right on a card and unreadable in a sentence: joining two of them
+   * produced "13 wins · Elite III · Rank 3 - 15 wins · Elite I · Rank 1 reached in
+   * 87.6% of eligible orders". The win count is the part the claim is about, and it is
+   * taken from the variant rather than parsed back out of a translated label.
+   */
+  const range = `${winCount(first.variant)}–${winCount(last.variant)} ${t.boosting.wins}`
+
+  return (
+    <div className="hairline mb-5 rounded-panel border-ok/30 bg-ok/[0.05] p-5">
+      <p className="text-body-sm font-semibold text-chalk">
+        {t.boosting.successHeadline(range, pct)}
+      </p>
+      <p className="mt-1 text-[12px] text-chalk-faint">{t.boosting.successRateNote}</p>
+    </div>
+  )
+}
+
+/** The packages note 17's statement covers. */
+const TOP_WIN_VARIANTS = ['WINS_13', 'WINS_14', 'WINS_15']
+
+/** `WINS_13` -> `13`. Returns the variant unchanged if it is not of that shape. */
+function winCount(variant: string | null): string {
+  return variant?.startsWith('WINS_') ? variant.slice('WINS_'.length) : (variant ?? '')
+}
+
+/**
+ * A measured success rate, or nothing at all.
+ *
+ * <p>The null check is the component's entire reason for existing, and it is why this
+ * is not two lines inlined at each call site. Rendering "—" or a default would put a
+ * number that nobody counted next to a buy button; leaving the caller to remember the
+ * guard is how one of three call sites eventually forgets.
+ *
+ * <p>Basis points in, percent out, so a rate of 9500 shows as 95% and 9250 as 92.5%
+ * rather than as 92.50%. The precision follows the data instead of being fixed, because
+ * a measured rate that lands on a round number should look like one.
+ */
+function SuccessRate({ bps, className = '' }: { bps?: number | null; className?: string }) {
+  const t = useT()
+  if (bps == null) return null
+
+  const pct = `${Number((bps / 100).toFixed(1))}%`
+
+  return (
+    <p className={`relative text-[12.5px] font-semibold text-ok ${className}`}>
+      {t.boosting.successRateLabel(pct)}
+    </p>
+  )
+}
+
 function Segmented<T extends string>({
   value, onChange, options,
 }: {

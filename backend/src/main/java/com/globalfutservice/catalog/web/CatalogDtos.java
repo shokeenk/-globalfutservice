@@ -34,7 +34,29 @@ public final class CatalogDtos {
             String unitPriceFormatted,
             BigDecimal minQuantity,
             BigDecimal maxQuantity,
-            BigDecimal stepQuantity) {
+            BigDecimal stepQuantity,
+            /**
+             * Measured success rate for this package, in basis points, or {@code null}.
+             *
+             * <p><b>Null today, and null is the honest answer.</b> A success rate for a
+             * boosting package means "of the orders that asked for 15 wins, what share
+             * reached 15 wins" — and nothing in this application records the second half
+             * of that. {@code OrderStatus} runs to DELIVERED and COMPLETED, which say an
+             * order finished, never what rank it finished at. There is no
+             * {@code achievedWins} column to aggregate.
+             *
+             * <p>The field exists so the storefront can be built against the real shape
+             * and so turning this on later is a service change rather than a UI project.
+             * It is deliberately not defaulted to a plausible number: a percentage beside
+             * a buy button is a claim that induces the purchase, and one invented to fill
+             * the slot is indistinguishable to a customer, a regulator or a payment
+             * provider from one that was measured.
+             *
+             * <p>To make it real: record the achieved outcome on the order at delivery,
+             * then aggregate achieved-versus-ordered over a window long enough to be
+             * meaningful and large enough not to identify individual orders.
+             */
+            Integer successRateBps) {
     }
 
     /**

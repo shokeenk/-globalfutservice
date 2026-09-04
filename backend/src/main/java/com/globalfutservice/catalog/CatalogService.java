@@ -60,7 +60,12 @@ public class CatalogService {
                             Money.ofMinor(row.getUnitPriceMinor(), row.getCurrency()).format(),
                             row.getMinQuantity(),
                             row.getMaxQuantity(),
-                            row.getStepQuantity()));
+                            row.getStepQuantity(),
+                            // Null until achieved-versus-ordered outcomes are recorded.
+                            // See CatalogOption.successRateBps for what turning this on
+                            // requires; there is no data to aggregate today, and a
+                            // placeholder here would ship as a advertised claim.
+                            null));
         }
 
         List<CatalogDtos.ServiceGroup> services = new ArrayList<>();

@@ -253,6 +253,22 @@ const fr: Dictionary = {
         `paliers, et une remise de palier n’expire jamais.`,
       howItWorks: 'Comment ça marche',
       createAccount: 'Créer un compte',
+      pitchTitle: 'Plus tu achètes ici, moins tu paies',
+      pitchOne: 'Des points de remise sur chaque commande',
+      pitchOneBody: (value, cap) =>
+        `Chaque point vaut ${value} au paiement, et jusqu’à ${cap} d’une commande peut être ` +
+        `réglé avec eux. Aucun code à retenir : la remise est déjà appliquée.`,
+      pitchTwo: 'Une remise de palier qui n’expire jamais',
+      pitchTwoBody: (top) =>
+        `Le total dépensé te fait monter et rien ne te fait redescendre. Dépenser tes points ` +
+        `ne te coûte pas un palier. Le palier le plus haut est ${top}.`,
+      pitchThree: 'Gratuit, et tu gagnes dès la première commande',
+      pitchThreeBody: (daily) =>
+        `Un compte suffit, et il gagne dès la première commande plutôt qu’après un montant ` +
+        `minimum. Se connecter chaque jour ajoute ${daily} points.`,
+      ladderTitle: 'Six paliers',
+      ladderOff: (pct) => `${pct} de remise`,
+      guestNote: 'Les commandes en invité ne peuvent ni gagner ni conserver de points.',
       exampleTitle: 'Exemple chiffré',
       youSpend: 'Tu dépenses',
       youEarn: 'Tu gagnes',
@@ -280,12 +296,20 @@ const fr: Dictionary = {
       lead:
         'Ce ne sont pas des chiffres marketing. Ce sont les engagements sur lesquels la ' +
         'garantie est rédigée, et c’est pour cela qu’ils sont prudents.',
-      deliveryLabel: 'Minutes, livraison habituelle',
+      deliveryValue: '10–60+',
+      deliveryUnit: 'min',
+      deliveryLabel: 'Livraison habituelle',
       deliveryNote: 'Le délai annoncé est plus long, volontairement.',
-      shiftLabel: 'Heures par jour en poste',
+      shiftValue: '24',
+      shiftUnit: 'heures par jour',
+      shiftLabel: 'En poste, tous les jours',
       shiftNote: 'Y compris pendant la weekend league.',
-      guaranteeLabel: '100% Safety Policy',
-      guaranteeNote: 'En espèces ou en crédit — à vous de choisir.',
+      guaranteeValue: '100%',
+      guaranteeUnit: 'Safety Policy',
+      guaranteeLabel: 'Chaque commande couverte',
+      guaranteeNote: 'Remboursement intégral ou un compte de remplacement — à vous de choisir.',
+      tiersValue: '6',
+      tiersUnit: 'paliers',
       tiersLabel: 'Paliers de fidélité',
       tiersNote: 'Une remise de palier n’expire jamais.',
     },
@@ -367,6 +391,11 @@ const fr: Dictionary = {
     tabChamps: 'Victoires Champs',
     tabRivals: 'Divisions Rivals',
     bestValue: 'Meilleur rapport',
+    wins: 'victoires',
+    successRateLabel: (pct) => `${pct} de réussite`,
+    successRateNote: 'Mesuré sur les commandes éligibles terminées.',
+    successHeadline: (range, pct) =>
+    `${range} atteint dans ${pct} des commandes éligibles.`,
     choose: 'Choisir',
     tiersUpdating: 'Les paliers de ce service sont en cours de mise à jour.',
     knowEyebrow: 'Ce qu’il faut savoir',
@@ -448,6 +477,7 @@ const fr: Dictionary = {
     credShow: 'Afficher le mot de passe',
     credHide: 'Masquer le mot de passe',
     credBackupCodes: 'Codes de secours',
+    credBackupCodesFind: 'Où trouver les codes de secours',
     credBackupCodesHint: 'Un par ligne. Utiles si ton compte demande un code à la connexion.',
     credHandle: 'Gamertag ou identifiant PSN',
     credHandleHint: "Facultatif — aide le trader à confirmer qu'il est sur le bon compte.",
@@ -588,6 +618,29 @@ const fr: Dictionary = {
       'EA prélève 5 % sur chaque transfert. La plupart te les ajoutent au ' +
       'paiement. Pas nous : le prix au million que tu vois est celui que tu paies.',
     amountAria: 'Montant de crédits en millions',
+    savingsTitle: 'Remises et récompenses',
+    savingsEmpty: 'Aucune remise pour l’instant — un code ou des points s’afficheraient ici.',
+    youSave: 'Tu économises',
+    amountManualLabel: 'Ou saisis un montant exact',
+    amountManualHint: (stepK, minK, maxK) =>
+      `En milliers, par tranches de ${stepK}K. Entre ${minK} et ${maxK}.`,
+    amountManualUnit: 'K',
+    amountSnapped: (shown) => `Arrondi au palier le plus proche — ${shown}.`,
+    requirementsTitle: 'Conditions pour commander',
+    requirementsLead:
+      'Quatre choses doivent être vraies avant que nous puissions transférer des crédits. ' +
+      'Autant vérifier maintenant : chacune est une commande qui bloque après paiement.',
+    reqCompanion: 'Accès à la Web ou Companion App',
+    reqCompanionNote: 'C’est par là que passe l’échange. Sans accès, pas de transfert.',
+    reqMarket: 'Marché des transferts débloqué',
+    reqMarketNote: 'Un compte neuf ou récemment réinitialisé est souvent encore bloqué.',
+    reqMinCoins: 'Au moins 5 000 crédits dans le club',
+    reqMinCoinsNote: 'Mettre une carte en vente demande un solde de départ.',
+    reqUnassigned: 'Moins de 5 objets non assignés',
+    reqUnassignedNote: 'Une pile pleine bloque totalement les transferts.',
+    deliveryFixed: 'GFS Trading Method 3.0 (Latest)',
+    deliveryFixedHint:
+      'Notre méthode actuelle, utilisée pour chaque commande de crédits. Rien à choisir.',
 
     /* « Md » pour milliard, et la virgule decimale francaise. */
     volumeLabel: 'Crédits transférés',
@@ -645,8 +698,8 @@ const fr: Dictionary = {
     notePlaceholder: 'Facultatif',
     beforeYouPay: 'Avant de payer',
     readyCheck:
-      'Mon marché des transferts est déverrouillé, j’ai moins de cinq objets non attribués, ' +
-      'et je suis déconnecté sur console, web app et companion app.',
+      'Mon marché des transferts est déverrouillé, j’ai au moins 5 000 crédits et moins de ' +
+      'cinq objets non attribués, et je suis déconnecté sur console, web app et companion app.',
     termsPrefix: 'J’ai lu les',
     termsLink: 'conditions d’utilisation',
     termsCoaching: 'et je comprends que j’achète un service de coaching.',
@@ -742,6 +795,15 @@ const fr: Dictionary = {
       'de crédit et le virement en ligne, le tout via Razorpay. PayPal est possible sur ' +
       'demande avec des frais supplémentaires. Skrill et Bitcoin ne sont pas encore actifs.',
 
+    qBackupCodes: 'Où trouver mes codes de secours ?',
+    aBackupCodes:
+      'Les codes de secours viennent de ton compte EA, pas de nous. Connecte-toi aux '
+      + 'paramètres de ton compte EA, ouvre la section Sécurité et cherche la '
+      + 'vérification de connexion : les codes de secours sont là, et tu peux en générer '
+      + 'de nouveaux à tout moment. Copie toute la liste et colle-la ; nous en utilisons '
+      + 'un et les autres restent à toi. Génère-en de nouveaux une fois ta commande '
+      + 'terminée, les anciens cesseront de fonctionner. Si la section n’est pas là où '
+      + 'c’est décrit, EA l’a déplacée : écris-nous sur Discord et on te guidera.',
     qRefund: 'Quelle est votre politique de remboursement ?',
     aRefund:
       'Une fois le travail commencé, une commande ne peut pas simplement être annulée : ' +

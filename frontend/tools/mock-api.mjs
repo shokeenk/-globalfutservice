@@ -29,11 +29,11 @@ const CATALOG = {
       mayRequireCredentials: true,
       options: [
         { platform: 'PC', variant: null, label: 'PC', unitPriceMinor: 70000,
-          unitPriceFormatted: '₹700.00', minQuantity: '0.50', maxQuantity: '100.00', stepQuantity: '0.50' },
+          unitPriceFormatted: '₹700.00', minQuantity: '0.50', maxQuantity: '5.00', stepQuantity: '0.01' },
         { platform: 'PLAYSTATION', variant: null, label: 'PlayStation', unitPriceMinor: 60000,
-          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '100.00', stepQuantity: '0.50' },
+          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '5.00', stepQuantity: '0.01' },
         { platform: 'XBOX', variant: null, label: 'Xbox', unitPriceMinor: 60000,
-          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '100.00', stepQuantity: '0.50' },
+          unitPriceFormatted: '₹600.00', minQuantity: '0.50', maxQuantity: '5.00', stepQuantity: '0.01' },
       ],
     },
     {
@@ -43,14 +43,35 @@ const CATALOG = {
       priceUnit: 'FLAT',
       marketTaxApplies: true,
       mayRequireCredentials: true,
+      /*
+       * The fourth column is `successRateBps`, and it is INVENTED.
+       *
+       * It exists so the note 17 headline and the note 18 per-card labels can be seen,
+       * reviewed and signed off before any real measurement exists. Nothing here is a
+       * measurement and none of it is an estimate of one -- the values slope the way a
+       * plausible dataset would purely so the "lowest, not mean" rule in
+       * SuccessHeadline is visibly exercised.
+       *
+       * THIS FILE IS NEVER DEPLOYED. It is not referenced by frontend/Dockerfile,
+       * render.yaml, docker-compose.yml or any npm script, and Render builds the Vite
+       * bundle against the real API. The real CatalogService sends null for every one
+       * of these, so production renders no percentage anywhere. That is the only reason
+       * it is acceptable for these numbers to exist at all: they cannot reach a
+       * customer, a payment provider or a regulator.
+       *
+       * When real rates arrive they come from the API, not from here. Delete the column
+       * rather than editing it to match -- a mock that agrees with production today is
+       * a mock that silently disagrees with it in six months.
+       */
       options: [
-        ['WINS_9', '9 wins', 120000], ['WINS_10', '10 wins', 155000],
-        ['WINS_11', '11 wins', 190000], ['WINS_12', '12 wins', 230000],
-        ['WINS_13', '13 wins', 270000], ['WINS_14', '14 wins', 310000],
-        ['WINS_15', '15 wins', 355000], ['WINS_EXTRA_8', '+8 extra wins', 170000],
-      ].map(([variant, label, minor]) => ({
+        ['WINS_9', '9 wins', 120000, null], ['WINS_10', '10 wins', 155000, null],
+        ['WINS_11', '11 wins', 190000, null], ['WINS_12', '12 wins', 230000, null],
+        ['WINS_13', '13 wins', 270000, 9180], ['WINS_14', '14 wins', 310000, 9420],
+        ['WINS_15', '15 wins', 355000, 8760], ['WINS_EXTRA_8', '+8 extra wins', 170000, null],
+      ].map(([variant, label, minor, successRateBps]) => ({
         platform: null, variant, label, unitPriceMinor: minor,
         unitPriceFormatted: inr(minor), minQuantity: null, maxQuantity: null, stepQuantity: null,
+        successRateBps,
       })),
     },
     {
@@ -141,7 +162,15 @@ function quote(body) {
   const rate = body.platform === 'PC' ? 70000 : 60000
   const qty = Number(body.quantity ?? 1)
   const base = rate * qty
-  const tax = base * 0.05
+  /*
+   * Zero, because `market-tax-mode` is INCLUDED in every deployed configuration:
+   * EA's 5% is inside the per-million rate, so the line exists to say so and costs
+   * nothing. The mock used to add 5% on top, which made it the one place in the
+   * project where the storefront's "EA's 5% tax is on us" banner sat directly above
+   * a bill charging for it -- and it meant the `MARKET_TAX === 0` rendering path,
+   * the one every real customer sees, was never exercised here.
+   */
+  const tax = 0
   const subtotal = base + tax
   const fee = subtotal * 0.025
   const total = Math.round(subtotal + fee)

@@ -49,6 +49,9 @@ export function useFaq(): FaqGroup[] {
       items: [
         { key: 'ordering', question: t.help.qOrdering, answer: t.help.aOrdering },
         { key: 'credentials', question: t.help.qCredentials, answer: t.help.aCredentials },
+        // Deep-linked from the credential form's "How to find backup codes" button, so
+        // the key is load-bearing: it is the `#faq-backup-codes` anchor, not a slug.
+        { key: 'backup-codes', question: t.help.qBackupCodes, answer: t.help.aBackupCodes },
         { key: 'tax', question: t.help.qTax, answer: t.help.aTax },
       ],
     },

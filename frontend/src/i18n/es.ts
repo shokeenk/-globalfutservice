@@ -250,6 +250,22 @@ const es: Dictionary = {
         `descuento de nivel no caduca.`,
       howItWorks: 'Cómo funcionan',
       createAccount: 'Crear una cuenta',
+      pitchTitle: 'Cuanto más compras aquí, menos pagas',
+      pitchOne: 'Puntos de descuento en cada pedido',
+      pitchOneBody: (value, cap) =>
+        `Cada punto vale ${value} al pagar, y hasta un ${cap} de un pedido puede pagarse ` +
+        `con ellos. Sin códigos que recordar: el descuento ya está aplicado.`,
+      pitchTwo: 'Un descuento de nivel que nunca caduca',
+      pitchTwoBody: (top) =>
+        `El gasto acumulado te sube por la escalera y nada te baja. Gastar tus puntos no ` +
+        `te cuesta el nivel. El nivel más alto es ${top}.`,
+      pitchThree: 'Gratis, y ganas desde el primer pedido',
+      pitchThreeBody: (daily) =>
+        `Solo hace falta una cuenta, y gana desde el primer pedido en lugar de tras un ` +
+        `gasto mínimo. Entrar cada día suma ${daily} puntos.`,
+      ladderTitle: 'Seis niveles',
+      ladderOff: (pct) => `${pct} dto.`,
+      guestNote: 'Los pedidos como invitado no acumulan ni guardan puntos.',
       exampleTitle: 'Ejemplo',
       youSpend: 'Gastas',
       youEarn: 'Ganas',
@@ -277,12 +293,20 @@ const es: Dictionary = {
       lead:
         'No son cifras de marketing. Son los compromisos sobre los que está escrita la ' +
         'garantía, y por eso son conservadores.',
-      deliveryLabel: 'Minutos, entrega habitual',
+      deliveryValue: '10–60+',
+      deliveryUnit: 'min',
+      deliveryLabel: 'Entrega habitual',
       deliveryNote: 'El plazo publicado es más largo a propósito.',
-      shiftLabel: 'Horas al día de turno',
+      shiftValue: '24',
+      shiftUnit: 'horas al día',
+      shiftLabel: 'De turno, todos los días',
       shiftNote: 'Incluidas las horas de la weekend league.',
-      guaranteeLabel: '100% Safety Policy',
-      guaranteeNote: 'En efectivo o en saldo — tú eliges.',
+      guaranteeValue: '100%',
+      guaranteeUnit: 'Safety Policy',
+      guaranteeLabel: 'Todos los pedidos cubiertos',
+      guaranteeNote: 'Reembolso completo o una cuenta de reemplazo — tú eliges.',
+      tiersValue: '6',
+      tiersUnit: 'niveles',
       tiersLabel: 'Niveles de fidelidad',
       tiersNote: 'El descuento de nivel nunca caduca.',
     },
@@ -364,6 +388,11 @@ const es: Dictionary = {
     tabChamps: 'Victorias de Champs',
     tabRivals: 'Divisiones de Rivals',
     bestValue: 'Mejor valor',
+    wins: 'victorias',
+    successRateLabel: (pct) => `${pct} de acierto`,
+    successRateNote: 'Medido sobre pedidos completados elegibles.',
+    successHeadline: (range, pct) =>
+    `${range} alcanzado en el ${pct} de los pedidos elegibles.`,
     choose: 'Elegir',
     tiersUpdating: 'Estamos actualizando los niveles de este servicio.',
     knowEyebrow: 'Lo que deberías saber',
@@ -445,6 +474,7 @@ const es: Dictionary = {
     credShow: 'Mostrar contraseña',
     credHide: 'Ocultar contraseña',
     credBackupCodes: 'Códigos de respaldo',
+    credBackupCodesFind: 'Cómo encontrar los códigos de respaldo',
     credBackupCodesHint: 'Uno por línea. Necesarios si tu cuenta pide un código al entrar.',
     credHandle: 'Gamertag o ID de PSN',
     credHandleHint: 'Opcional — ayuda al trader a confirmar que es la cuenta correcta.',
@@ -584,6 +614,29 @@ const es: Dictionary = {
       'EA se lleva el 5% de cada traspaso. La mayoría te lo suma en el checkout. ' +
       'Nosotros no: el precio por millón que ves es el que pagas.',
     amountAria: 'Cantidad de monedas en millones',
+    savingsTitle: 'Descuentos y recompensas',
+    savingsEmpty: 'Aún sin descuento — un cupón o puntos aparecerían aquí.',
+    youSave: 'Ahorras',
+    amountManualLabel: 'O escribe una cantidad exacta',
+    amountManualHint: (stepK, minK, maxK) =>
+      `En miles, de ${stepK}K en ${stepK}K. Entre ${minK} y ${maxK}.`,
+    amountManualUnit: 'K',
+    amountSnapped: (shown) => `Ajustado al paso más cercano — ${shown}.`,
+    requirementsTitle: 'Requisitos para pedir',
+    requirementsLead:
+      'Cuatro cosas deben cumplirse antes de poder mover monedas. Conviene comprobarlas ' +
+      'ahora: cada una es un pedido que si no se queda parado después de pagar.',
+    reqCompanion: 'Acceso a la Web o Companion App',
+    reqCompanionNote: 'Así se hace el intercambio. Sin acceso, no hay traspaso.',
+    reqMarket: 'Mercado de traspasos desbloqueado',
+    reqMarketNote: 'Una cuenta nueva o reciente suele seguir bloqueada.',
+    reqMinCoins: 'Al menos 5.000 monedas en el club',
+    reqMinCoinsNote: 'Para poner una carta en venta hace falta saldo inicial.',
+    reqUnassigned: 'Menos de 5 objetos sin asignar',
+    reqUnassignedNote: 'Una pila llena bloquea los traspasos por completo.',
+    deliveryFixed: 'GFS Trading Method 3.0 (Latest)',
+    deliveryFixedHint:
+      'Nuestro método actual, usado en todos los pedidos de monedas. No hay nada que elegir.',
 
     /*
      * Aqui «B» seria un error de mil veces: en espanol un billon es 10^12, asi que
@@ -645,8 +698,8 @@ const es: Dictionary = {
     notePlaceholder: 'Opcional',
     beforeYouPay: 'Antes de pagar',
     readyCheck:
-      'Mi mercado de traspasos está desbloqueado, tengo menos de cinco objetos sin asignar y ' +
-      'he cerrado sesión en consola, web app y companion app.',
+      'Mi mercado de traspasos está desbloqueado, tengo al menos 5.000 monedas y menos de ' +
+      'cinco objetos sin asignar, y he cerrado sesión en consola, web app y companion app.',
     termsPrefix: 'He leído los',
     termsLink: 'términos del servicio',
     termsCoaching: 'y entiendo que estoy comprando un servicio de clases.',
@@ -738,6 +791,15 @@ const es: Dictionary = {
       'crédito y banca online, todo gestionado por Razorpay. PayPal está disponible bajo ' +
       'petición y tiene una comisión adicional. Skrill y Bitcoin aún no están activos.',
 
+    qBackupCodes: '¿Cómo encuentro mis códigos de respaldo?',
+    aBackupCodes:
+      'Los códigos de respaldo vienen de tu cuenta de EA, no de nosotros. Inicia sesión '
+      + 'en los ajustes de tu cuenta de EA, abre la sección de Seguridad y busca la '
+      + 'verificación de inicio de sesión: ahí están los códigos de respaldo y puedes '
+      + 'generar un juego nuevo cuando quieras. Copia la lista entera y pégala; usamos '
+      + 'uno y el resto siguen siendo tuyos. Genera unos nuevos al terminar tu pedido y '
+      + 'los antiguos dejarán de funcionar. Si la sección no está donde se describe, EA '
+      + 'la ha movido: escríbenos por Discord y te guiamos por las pantallas actuales.',
     qRefund: '¿Cuál es vuestra política de reembolsos?',
     aRefund:
       'Una vez que hemos empezado, un pedido no se puede cancelar sin más, porque las ' +

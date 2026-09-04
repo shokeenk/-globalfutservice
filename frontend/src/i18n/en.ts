@@ -306,6 +306,30 @@ const en = {
         `discount never expires.`,
       howItWorks: 'How rewards work',
       createAccount: 'Create an account',
+
+      /*
+       * The value proposition, said in the reader's terms rather than the scheme's.
+       *
+       * Three claims, and every figure behind them is read from live policy rather
+       * than written here: what you get back, that it never expires, and that it
+       * costs nothing to start. Nothing in this block asserts a number of its own.
+       */
+      pitchTitle: 'The longer you buy here, the less you pay',
+      pitchOne: 'Points off every order',
+      pitchOneBody: (value: string, cap: string) =>
+        `Each point is ${value} at checkout, and up to ${cap} of an order can be paid ` +
+        `with them. No code to remember — the discount is already applied.`,
+      pitchTwo: 'A tier discount that never expires',
+      pitchTwoBody: (top: string) =>
+        `Lifetime spend moves you up the ladder and nothing moves you back down. ` +
+        `Spending your points does not cost you a tier. The top tier is ${top}.`,
+      pitchThree: 'Free to join, earning from order one',
+      pitchThreeBody: (daily: number) =>
+        `An account is all it takes, and it earns from the first order rather than ` +
+        `after some qualifying spend. Checking in adds ${daily} points a day.`,
+      ladderTitle: 'Six tiers',
+      ladderOff: (pct: string) => `${pct} off`,
+      guestNote: 'Guest orders cannot earn or store points.',
       exampleTitle: 'Worked example',
       youSpend: 'You spend',
       youEarn: 'You earn',
@@ -340,12 +364,20 @@ const en = {
       lead:
         'Not marketing figures. These are the commitments the guarantee is actually written ' +
         'against, which is why they are conservative.',
+      deliveryValue: '10–60+',
+      deliveryUnit: 'min',
       deliveryLabel: 'Typical delivery',
       deliveryNote: 'The published window is longer on purpose.',
+      shiftValue: '24',
+      shiftUnit: 'hours a day',
       shiftLabel: 'On shift, every day',
       shiftNote: 'Including the hours weekend league runs.',
-      guaranteeLabel: '100% Safety Policy',
+      guaranteeValue: '100%',
+      guaranteeUnit: 'Safety Policy',
+      guaranteeLabel: 'Every order covered',
       guaranteeNote: 'Full refund or a replacement account — your choice.',
+      tiersValue: '6',
+      tiersUnit: 'tiers',
       tiersLabel: 'Loyalty tiers to climb',
       tiersNote: 'A tier discount never expires.',
     },
@@ -429,6 +461,11 @@ const en = {
     tabChamps: 'Champs wins',
     tabRivals: 'Rivals divisions',
     bestValue: 'Best value',
+    wins: 'wins',
+    successRateLabel: (pct: string) => `${pct} success rate`,
+    successRateNote: 'Measured on eligible completed orders.',
+    successHeadline: (range: string, pct: string) =>
+    `${range} reached in ${pct} of eligible orders.`,
     choose: 'Choose',
     tiersUpdating: 'Tiers for this service are being updated.',
     knowEyebrow: 'What you should know',
@@ -516,6 +553,7 @@ const en = {
     credShow: 'Show password',
     credHide: 'Hide password',
     credBackupCodes: 'Backup codes',
+    credBackupCodesFind: 'How to find backup codes',
     credBackupCodesHint: 'One per line. Needed if your account asks for a code at sign-in.',
     credHandle: 'Console gamertag or PSN ID',
     credHandleHint: 'Optional — helps the trader confirm they are on the right account.',
@@ -666,6 +704,41 @@ const en = {
     amountAria: 'Coin amount in millions',
 
     /*
+     * The typed amount, expressed in thousands.
+     *
+     * The slider works in millions because that is the unit the rate card prices in,
+     * but nobody buying coins thinks "0.11M" -- they think 110K. The field converts,
+     * so the customer types the number they already had in their head.
+     */
+    savingsTitle: 'Discounts and rewards',
+    savingsEmpty: 'No discount applied yet — a coupon or points would show here.',
+    youSave: 'You save',
+    amountManualLabel: 'Or type an exact amount',
+    amountManualHint: (stepK: number, minK: string, maxK: string) =>
+      `In thousands, ${stepK}K at a time. Anything between ${minK} and ${maxK}.`,
+    amountManualUnit: 'K',
+    amountSnapped: (shown: string) => `Rounded to the nearest step — ${shown}.`,
+
+    /* -------------------------------------------------- requirements (note 12) --- */
+    requirementsTitle: 'Requirements to order',
+    requirementsLead:
+      'Four things have to be true before we can move coins. Worth checking now — each ' +
+      'one is an order that otherwise stalls after you have paid.',
+    reqCompanion: 'Web or Companion App access',
+    reqCompanionNote: 'This is how the trade is done. No access, no transfer.',
+    reqMarket: 'Transfer Market unlocked',
+    reqMarketNote: 'A new or recently reset account is often still locked.',
+    reqMinCoins: 'At least 5,000 coins in the club',
+    reqMinCoinsNote: 'Listing a card needs a starting balance.',
+    reqUnassigned: 'Fewer than 5 unassigned items',
+    reqUnassignedNote: 'A full unassigned pile blocks transfers outright.',
+
+    /* ----------------------------------------------- delivery method (note 13) --- */
+    deliveryFixed: 'GFS Trading Method 3.0 (Latest)',
+    deliveryFixedHint:
+      'Our current method, used for every coin order. There is nothing to choose.',
+
+    /*
      * The season's volume, as a reading rather than a sentence.
      *
      * Shown only on the trading SKU. `/order` is the same page for boosting and
@@ -735,8 +808,8 @@ const en = {
     notePlaceholder: 'Optional',
     beforeYouPay: 'Before you pay',
     readyCheck:
-      'My transfer market is unlocked, I have fewer than five unassigned items, and I am ' +
-      'signed out on console, web app and companion app.',
+      'My transfer market is unlocked, I have at least 5,000 coins and fewer than five ' +
+      'unassigned items, and I am signed out on console, web app and companion app.',
     termsPrefix: 'I have read the',
     termsLink: 'terms of service',
     termsCoaching: 'and understand I am buying a coaching service.',
@@ -825,6 +898,29 @@ const en = {
       'UPI — including GPay, PhonePe, Paytm and CRED — plus debit and credit cards ' +
       'and net banking, all handled by Razorpay. PayPal is available on request and ' +
       'carries an extra fee. Skrill and Bitcoin are not live yet.',
+
+    /*
+     * Backup codes, as a walkthrough rather than a definition.
+     *
+     * This is the step of the credential form people abandon. The field asks for
+     * something most players have never looked at, and the previous copy assumed they
+     * knew where it lived. Written as numbered steps because that is what somebody
+     * reads with the EA site open in the next tab.
+     *
+     * INCOMPLETE ON PURPOSE: the brief asks for screenshots at each step, and no
+     * screenshot assets were supplied. Words-only is the honest version — inventing a
+     * described sequence of screens that may not match EA's current UI would be worse
+     * than none, and EA moves this page.
+     */
+    qBackupCodes: 'How do I find my backup codes?',
+    aBackupCodes:
+      'Backup codes come from your EA account, not from us. Sign in at your EA account '
+      + 'settings, open the Security section, and look for login verification — the '
+      + 'backup or recovery codes sit there, and you can generate a fresh set at any '
+      + 'time. Copy the whole list and paste it in; we use one and the rest stay yours. '
+      + 'Generate new ones after your order is finished and the old set stops working. '
+      + 'If the section is not where this describes, EA has moved it — message us on '
+      + 'Discord and we will walk you through the current screens.',
 
     qRefund: 'What is your refund policy?',
     aRefund:

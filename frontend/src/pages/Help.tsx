@@ -24,11 +24,31 @@ export default function Help() {
   useEffect(() => {
     if (!hash) return
     const id = decodeURIComponent(hash.slice(1))
-    // A timeout rather than requestAnimationFrame: rAF does not fire while the
-    // document is hidden, so a link opened into a background tab would never scroll
-    // and would still not scroll when the tab was finally brought forward. The delay
-    // is for the reveal wrappers to settle, not for the frame.
-    const timer = window.setTimeout(() => {
+
+    /*
+     * Scroll to the answer, and keep re-scrolling for as long as the page is still
+     * changing height underneath it.
+     *
+     * A single delayed scroll cannot work here, and the reason is circular: the
+     * answers sit inside reveal wrappers that lay out when they enter the viewport,
+     * so scrolling towards the target is itself what changes the height of everything
+     * above it. Measured in a real 1280x900 viewport, one shot landed 1184px past the
+     * anchor -- scroll clamped to the bottom of a document that then shrank.
+     *
+     * Retrying on a timer does not fix it either, and that was the first attempt at
+     * this: while the scroll sits clamped at the bottom the position reads identical
+     * on consecutive ticks, so any "has it stopped moving" test declares victory
+     * early. What is actually being waited for is not time and not stillness, it is
+     * the layout, so a ResizeObserver is the thing that knows.
+     *
+     * The window is bounded. An observer left running for the life of the route would
+     * yank a reader back to the anchor every time something below them resized, which
+     * is a page that fights anyone who tries to scroll away from where they landed.
+     */
+    let stop = false
+
+    const scrollToTarget = () => {
+      if (stop) return
       document.getElementById(id)?.scrollIntoView({
         block: 'center',
         // Explicit, because the page sets `scroll-behavior: smooth` globally and this
@@ -37,8 +57,29 @@ export default function Help() {
         // is a journey they did not ask to watch.
         behavior: 'instant' as ScrollBehavior,
       })
-    }, 60)
-    return () => window.clearTimeout(timer)
+    }
+
+    // A timeout rather than requestAnimationFrame: rAF does not fire while the
+    // document is hidden, so a link opened into a background tab would never scroll
+    // and would still not scroll when the tab was finally brought forward.
+    const first = window.setTimeout(scrollToTarget, 60)
+
+    const observer = new ResizeObserver(scrollToTarget)
+    observer.observe(document.body)
+
+    // Long enough to cover the reveal cascade, short enough that a reader who has
+    // started scrolling away is not pulled back.
+    const release = window.setTimeout(() => {
+      stop = true
+      observer.disconnect()
+    }, 1500)
+
+    return () => {
+      stop = true
+      observer.disconnect()
+      window.clearTimeout(first)
+      window.clearTimeout(release)
+    }
   }, [hash])
 
   useSeo({
