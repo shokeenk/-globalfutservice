@@ -564,13 +564,31 @@ function Proof() {
  * <p>All three are decorative and marked so. Each restates the title beside it, so
  * announcing them would read every card twice.
  */
+/**
+ * How big a card mark is drawn.
+ *
+ * <p>One constant rather than three literals: the coin is an SVG, the shield an
+ * {@code <img>} through {@code RankBadge} and the portrait a plain {@code <img>}, so
+ * three different props carry it and there is no CSS rule that would keep them in step.
+ */
+const MARK_SIZE = 138
+
 function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
-  const lift = 'shrink-0 transition-transform duration-500 ease-out-expo group-hover:scale-[1.06]'
+  /*
+   * `ml-auto` keeps the mark on the right in both states. The row is
+   * `justify-between`, which handles the common case, but a line holding only the mark
+   * -- what happens once the tag is too long to share one, which "Réservations
+   * ouvertes" is on a phone -- would otherwise start it at the left edge under the tag.
+   *
+   * `shrink-0` because the tag is the half that should give way. Squeezing the mark
+   * would scale the artwork; wrapping the row costs one line of card height.
+   */
+  const lift = 'ml-auto shrink-0 transition-transform duration-500 ease-out-expo group-hover:scale-[1.06]'
 
   if (mark.kind === 'coin') {
     return (
       <span aria-hidden="true" className={lift}>
-        <CoinIcon size={46} />
+        <CoinIcon size={MARK_SIZE} />
       </span>
     )
   }
@@ -578,7 +596,7 @@ function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
   if (mark.kind === 'rank') {
     return (
       <span aria-hidden="true" className={lift}>
-        <RankBadge variant={mark.variant} size={46} />
+        <RankBadge variant={mark.variant} size={MARK_SIZE} />
       </span>
     )
   }
@@ -595,9 +613,10 @@ function ServiceMark({ mark }: { mark: ServiceMarkSpec }) {
         before the file arrives, which is what stops the circle collapsing and reflowing
         the chip row on a slow connection.
       */
-      width={46}
-      height={46}
-      className={`h-[46px] w-[46px] rounded-full object-cover ${lift}`}
+      width={MARK_SIZE}
+      height={MARK_SIZE}
+      style={{ width: MARK_SIZE, height: MARK_SIZE }}
+      className={`rounded-full object-cover ${lift}`}
     />
   )
 }
@@ -701,7 +720,7 @@ function Services() {
                 artwork level with the tag, so the eye meets "what this is" and "what it
                 looks like" together rather than finding the picture on the way out.
               */}
-              <div className="relative flex items-start justify-between gap-3">
+              <div className="relative flex flex-wrap items-start justify-between gap-x-3 gap-y-4">
                 <span className={`self-start rounded-pill px-2.5 py-1 text-[10.5px]
                                  font-semibold uppercase tracking-[0.12em] ${skin.chip}`}>
                   {card.tag}
