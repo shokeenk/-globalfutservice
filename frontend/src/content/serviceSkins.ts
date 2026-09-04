@@ -38,6 +38,21 @@ export type ServiceSkin = {
   /** A glyph in the card's corner, meant to be seen. */
   mark: string
   /**
+   * The plate the card's artwork sits on.
+   *
+   * <p><b>Matched to the artwork, not to the ground.</b> That is the opposite of every
+   * other field here and it is not an oversight: the grounds vary but so does what sits
+   * on them, and the two do not vary together. The FUT coin is struck in {@code #FFC93C}
+   * on a card that is also {@code #FFC93C} — measured at 1.30:1 against a lightly tinted
+   * plate, which is to say invisible — so it needs a dark disc. The Rivals badge is a
+   * black triangle and needs a pale one. A single plate colour cannot serve both.
+   *
+   * <p>The coaching photo carries its own white ground and covers the plate entirely, so
+   * it takes the pale disc for consistency with the badge rather than for any effect.
+   */
+  medallion: string
+
+  /**
    * The giant figure bled off the card's edge.
    *
    * <p>Far fainter than {@code mark} because it is texture rather than a mark — it is
@@ -64,6 +79,7 @@ export const SERVICE_SKINS: Record<ServiceSkinName, ServiceSkin> = {
     rule: 'bg-chalk/35',
     cta: 'text-chalk',
     mark: 'text-chalk/[0.55]',
+    medallion: 'bg-chalk/90 ring-1 ring-chalk/20',
     numeral: 'text-chalk/[0.09] group-hover:text-chalk/[0.14]',
   },
   deep: {
@@ -74,6 +90,7 @@ export const SERVICE_SKINS: Record<ServiceSkinName, ServiceSkin> = {
     rule: 'bg-white/45',
     cta: 'text-white',
     mark: 'text-white/[0.55]',
+    medallion: 'bg-white/[0.92] ring-1 ring-white/30',
     numeral: 'text-white/[0.10] group-hover:text-white/[0.16]',
   },
   red: {
@@ -89,6 +106,7 @@ export const SERVICE_SKINS: Record<ServiceSkinName, ServiceSkin> = {
      * and the blue, and does not here.
      */
     mark: 'text-white/[0.62]',
+    medallion: 'bg-white/[0.92] ring-1 ring-white/30',
     numeral: 'text-white/[0.10] group-hover:text-white/[0.16]',
   },
 }

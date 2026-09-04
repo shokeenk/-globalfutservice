@@ -12,6 +12,7 @@ import { useT } from '../i18n'
 import { bpsToPercent } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { SEASON, useSeo } from '../lib/seo'
+import { CoinIcon } from '../brand/CoinIcon'
 import { Reveal } from '../motion/Reveal'
 import { useCatalog } from '../state/CatalogContext'
 
@@ -542,6 +543,62 @@ function Proof() {
   )
 }
 
+/**
+ * The picture on a service card.
+ *
+ * <p>Decorative, and marked so. Each one restates what the title beside it already says —
+ * a coin for the coin service, the Rivals badge for boosting, the coach for coaching — so
+ * announcing it to a screen reader would read the card twice. The rule this follows is the
+ * same one the feature pillars use: artwork that duplicates adjacent text is hidden.
+ *
+ * <p><b>Two shapes, one frame.</b> A logo needs air around it and a face does not; a
+ * portrait inset the way the badge is would be a head floating in a ring. So the photo
+ * fills its circle and the badge sits inside one, and both end up the same size on the
+ * card, which is the only part the layout cares about.
+ *
+ * <p>The coin is drawn rather than fetched. {@code CoinIcon} already exists for the order
+ * page and is about a kilobyte of inline SVG, so using it here costs no request and stays
+ * crisp at any size — and it cannot drift from the coin the rest of the site shows.
+ */
+function ServiceMark({
+  mark, plate,
+}: {
+  mark: { kind: 'coin' } | { kind: 'image'; src: string; inset: boolean }
+  plate: string
+}) {
+  const frame = `grid h-[3.25rem] w-[3.25rem] shrink-0 place-items-center overflow-hidden
+                 rounded-full transition-transform duration-500 ease-out-expo
+                 group-hover:scale-[1.06] ${plate}`
+
+  if (mark.kind === 'coin') {
+    return (
+      <span aria-hidden="true" className={frame}>
+        <CoinIcon size={30} bare />
+      </span>
+    )
+  }
+
+  return (
+    <span aria-hidden="true" className={frame}>
+      <img
+        src={mark.src}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        /*
+          Width and height are declared even though the box is fixed. The attributes give
+          the element an intrinsic ratio before the file arrives, which is what stops the
+          circle collapsing and reflowing the chip row on a slow connection.
+        */
+        width={52}
+        height={52}
+        className={mark.inset ? 'h-8 w-8 object-contain' : 'h-full w-full object-cover'}
+      />
+    </span>
+  )
+}
+
 /* ---------------------------------------------------------------- services --- */
 
 /**
@@ -562,6 +619,7 @@ function Services() {
       skin: 'sun' as const,
       body: t.home.services.tradingBody,
       cta: t.home.services.tradingCta,
+      mark: { kind: 'coin' } as const,
     },
     {
       to: '/boosting',
@@ -570,6 +628,9 @@ function Services() {
       skin: 'deep' as const,
       body: t.home.services.boostBody,
       cta: t.home.services.boostCta,
+      // The Rivals mark the boosting page already uses on its tier cards, so a reader
+      // who recognises it here meets the same badge when they arrive.
+      mark: { kind: 'image', src: '/brand/divisions/rivals.png', inset: true } as const,
     },
     {
       to: '/coaching',
@@ -578,6 +639,9 @@ function Services() {
       skin: 'red' as const,
       body: t.home.services.coachBody,
       cta: t.home.services.coachCta,
+      // The actual coach, not a stock avatar. "One to one with a coach who plays at the
+      // level you are chasing" is a claim about a person, and the person exists.
+      mark: { kind: 'image', src: '/brand/coaches/vinay-256.jpg', inset: false } as const,
     },
   ]
 
@@ -620,12 +684,24 @@ function Services() {
                 The tones are built for the page ground — a red-tinted chip on a red
                 card is invisible, and a lilac one on yellow belongs to another design.
               */}
-              <span className={`relative self-start rounded-pill px-2.5 py-1 text-[10.5px]
-                               font-semibold uppercase tracking-[0.12em] ${skin.chip}`}>
-                {card.tag}
-              </span>
+              {/*
+                Chip and mark share a row, one at each end.
 
-              <h3 className={`display relative mt-6 text-display-md ${skin.title}`}>{card.title}</h3>
+                The mark sits up here rather than in the corner because the corner is
+                taken: the bled numeral lives there, and two things competing for the
+                same corner is how a poster becomes a collage. Top-right also puts the
+                artwork level with the tag, so the eye meets "what this is" and "what it
+                looks like" together rather than finding the picture on the way out.
+              */}
+              <div className="relative flex items-start justify-between gap-3">
+                <span className={`self-start rounded-pill px-2.5 py-1 text-[10.5px]
+                                 font-semibold uppercase tracking-[0.12em] ${skin.chip}`}>
+                  {card.tag}
+                </span>
+                <ServiceMark mark={card.mark} plate={skin.medallion} />
+              </div>
+
+              <h3 className={`display relative mt-5 text-display-md ${skin.title}`}>{card.title}</h3>
 
               <div aria-hidden="true" className={`relative mt-5 h-px w-10 ${skin.rule}`} />
 
