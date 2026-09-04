@@ -398,7 +398,13 @@ const en = {
       durationLabel: 'Length',
       durationValue: (m: number) =>
         m % 60 === 0 ? `${m / 60} hour${m === 60 ? '' : 's'}` : `${m} min`,
-      durationNote: 'Per session, live',
+      /*
+       * Both lengths, because there are two products and the plate sits beside a price
+       * list showing both. One number here is how the block came to be described at a
+       * duration it was not sold at.
+       */
+      durationValueBoth: (single: string, block: string) => `${single} · ${block} in a block`,
+      durationNote: 'Single session, live',
       formatLabel: 'Format',
       formatValue: 'One to one',
       formatNote: 'Never a group call',
@@ -1053,6 +1059,9 @@ const en = {
       'and session communication:',
     policyLine: (minutes: number, hours: number) =>
       `${minutes} minutes · free to move up to ${hours}h before`,
+    /* Both lengths on the booking screen, where a customer is about to spend a credit. */
+    policyLineBoth: (single: number, block: number, hours: number) =>
+      `${single} minutes single, ${block} minutes in a block · free to move up to ${hours}h before`,
     bookedFor: 'Booked for',
     emailedDetails: '. We have emailed you the details.',
     loadSlotsFailed: 'Could not load availability.',

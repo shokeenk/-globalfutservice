@@ -326,6 +326,7 @@ const es: Dictionary = {
       secondary: 'Cómo funciona',
       durationLabel: 'Duración',
       durationValue: (m) => (m % 60 === 0 ? `${m / 60} hora${m === 60 ? '' : 's'}` : `${m} min`),
+      durationValueBoth: (single, block) => `${single} · ${block} en pack`,
       durationNote: 'Por sesión, en directo',
       formatLabel: 'Formato',
       formatValue: 'Uno a uno',
@@ -927,6 +928,8 @@ const es: Dictionary = {
       'oficial para la programación y la comunicación de la sesión:',
     policyLine: (minutes, hours) =>
       `${minutes} minutos · puedes cambiarla gratis hasta ${hours} h antes`,
+    policyLineBoth: (single, block, hours) =>
+      `${single} minutos suelta, ${block} minutos en pack · puedes moverla hasta ${hours}h antes`,
     bookedFor: 'Reservada para el',
     emailedDetails: '. Te hemos enviado los detalles por correo.',
     loadSlotsFailed: 'No se ha podido cargar la disponibilidad.',

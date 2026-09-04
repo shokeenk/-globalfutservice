@@ -778,7 +778,10 @@ function CoachingBand() {
               */}
               <SpecRow
                 label={t.home.coach.durationLabel}
-                value={t.home.coach.durationValue(policy?.coachingSessionMinutes ?? 60)}
+                value={t.home.coach.durationValueBoth(
+                  t.home.coach.durationValue(policy?.coachingSessionMinutes ?? 60),
+                  t.home.coach.durationValue(policy?.coachingBlockSessionMinutes ?? 40),
+                )}
                 note={t.home.coach.durationNote}
               />
               <SpecRow

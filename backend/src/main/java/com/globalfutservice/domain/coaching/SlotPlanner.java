@@ -68,14 +68,41 @@ public final class SlotPlanner {
             TimeRange window,
             CoachingPolicy policy) {
 
-        if (coachZone == null || rules == null || busy == null || window == null || policy == null) {
+        return bookableStarts(coachZone, rules, busy, window, policy,
+                policy == null ? null : policy.sessionLength());
+    }
+
+    /**
+     * As above, for a session of an explicitly given length.
+     *
+     * <p>Exists because session length is a property of what the customer bought, not of
+     * the coach: a block session runs shorter than a single one. Passing the length in
+     * rather than reading it off the policy is what lets one coach's calendar be laid out
+     * correctly for both products, and it keeps the two callers provably identical -- the
+     * offered list and the server-side legality check go through the same code, which is
+     * the invariant that stops a slot becoming offerable but unbookable.
+     *
+     * @param length how long the session being booked runs; must be positive
+     */
+    public static List<Instant> bookableStarts(
+            ZoneId coachZone,
+            Collection<AvailabilityRule> rules,
+            Collection<TimeRange> busy,
+            TimeRange window,
+            CoachingPolicy policy,
+            Duration length) {
+
+        if (coachZone == null || rules == null || busy == null || window == null
+                || policy == null || length == null) {
             throw new IllegalArgumentException("all arguments are required");
+        }
+        if (length.isZero() || length.isNegative()) {
+            throw new IllegalArgumentException("length must be positive");
         }
         if (rules.isEmpty()) {
             return List.of();
         }
 
-        Duration length = policy.sessionLength();
         Duration step = policy.slotStep();
 
         // Widen by a day on each side so a window whose local date differs from its UTC
@@ -167,12 +194,27 @@ public final class SlotPlanner {
             TimeRange window,
             CoachingPolicy policy) {
 
+        return isBookable(requestedStart, coachZone, rules, busy, window, policy,
+                policy == null ? null : policy.sessionLength());
+    }
+
+    /** As above, for a session of an explicitly given length. */
+    public static boolean isBookable(
+            Instant requestedStart,
+            ZoneId coachZone,
+            Collection<AvailabilityRule> rules,
+            Collection<TimeRange> busy,
+            TimeRange window,
+            CoachingPolicy policy,
+            Duration length) {
+
         if (requestedStart == null) {
             return false;
         }
         // Generating the full list and searching it guarantees this answer and the offered
         // list are produced by identical logic. Re-implementing the check separately is how
         // the two drift and a slot becomes offerable but unbookable.
-        return bookableStarts(coachZone, rules, busy, window, policy).contains(requestedStart);
+        return bookableStarts(coachZone, rules, busy, window, policy, length)
+                .contains(requestedStart);
     }
 }

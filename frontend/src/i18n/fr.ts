@@ -329,6 +329,7 @@ const fr: Dictionary = {
       secondary: 'Comment ça marche',
       durationLabel: 'Durée',
       durationValue: (m) => (m % 60 === 0 ? `${m / 60} heure${m === 60 ? '' : 's'}` : `${m} min`),
+      durationValueBoth: (single, block) => `${single} · ${block} en pack`,
       durationNote: 'Par séance, en direct',
       formatLabel: 'Format',
       formatValue: 'Tête-à-tête',
@@ -934,6 +935,8 @@ const fr: Dictionary = {
       'pour la planification et les échanges liés à la séance :',
     policyLine: (minutes, hours) =>
       `${minutes} minutes · déplaçable gratuitement jusqu’à ${hours} h avant`,
+    policyLineBoth: (single, block, hours) =>
+      `${single} minutes à l’unité, ${block} minutes en pack · déplaçable jusqu’à ${hours}h avant`,
     bookedFor: 'Réservée le',
     emailedDetails: '. Nous t’avons envoyé les détails par e-mail.',
     loadSlotsFailed: 'Impossible de charger les disponibilités.',

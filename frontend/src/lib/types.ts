@@ -72,7 +72,16 @@ export interface Policy {
   tierDiscountEnabled: boolean
   dailyBonusPoints: number
   /** Coaching session length, served so the storefront never states its own. */
+  /** Length of a single purchased session. */
   coachingSessionMinutes: number
+  /**
+   * Length of one session from a multi-session block.
+   *
+   * Separate because the two products differ: the block is cheaper per session
+   * because each session is shorter, so a page that shows one number for both
+   * advertises one of them at a duration it is not sold at.
+   */
+  coachingBlockSessionMinutes: number
 }
 
 export interface LoyaltyTierView {
@@ -304,6 +313,7 @@ export interface CoachSlots {
 
 export interface CoachingPolicy {
   sessionMinutes: number
+  blockSessionMinutes: number
   changeCutoffHours: number
   maxReschedules: number
   minLeadTimeHours: number
