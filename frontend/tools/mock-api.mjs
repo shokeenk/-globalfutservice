@@ -166,6 +166,19 @@ function quote(body) {
   const rate = body.platform === 'PC' ? 70000 : 60000
   const qty = Number(body.quantity ?? 1)
   const base = rate * qty
+
+  /*
+   * One coupon, so the discount path can actually be exercised.
+   *
+   * The mock used to ignore `couponCode` entirely, which meant the storefront's coupon
+   * field, its applied/rejected messages and the discount line in the savings group had
+   * no way to be seen without a database. SAVE10 takes 10% off the base; anything else
+   * is rejected with the same shape the real engine uses, so both outcomes are
+   * reachable. The percentage is the mock's own and is not a real offer.
+   */
+  const code = (body.couponCode ?? '').trim().toUpperCase()
+  const couponOk = code === 'SAVE10'
+  const couponMinor = couponOk ? -Math.round(base * 0.10) : 0
   /*
    * Zero, because `market-tax-mode` is INCLUDED in every deployed configuration:
    * EA's 5% is inside the per-million rate, so the line exists to say so and costs
@@ -175,7 +188,7 @@ function quote(body) {
    * the one every real customer sees, was never exercised here.
    */
   const tax = 0
-  const subtotal = base + tax
+  const subtotal = base + tax + couponMinor
   const fee = subtotal * 0.025
   const total = Math.round(subtotal + fee)
 
@@ -187,6 +200,12 @@ function quote(body) {
     { code: 'GATEWAY_FEE', label: 'Payment processing (2.5%)',
       amountMinor: Math.round(fee), amountFormatted: inr(Math.round(fee)) },
   ]
+  if (couponMinor !== 0) {
+    lines.splice(2, 0, {
+      code: 'COUPON_DISCOUNT', label: `Coupon ${code} (10% off)`,
+      amountMinor: couponMinor, amountFormatted: inr(couponMinor),
+    })
+  }
   const residual = total - lines.reduce((sum, l) => sum + l.amountMinor, 0)
   lines[0].amountMinor += residual
   lines[0].amountFormatted = inr(lines[0].amountMinor)
@@ -196,6 +215,8 @@ function quote(body) {
     quoteId: 'q_mock', season: 'FC26', sku: 'TRADING_SERVICE',
     platform: body.platform, variant: null, quantity: String(qty), currency: 'INR',
     lines, subtotalMinor: Math.round(subtotal), totalMinor: total,
+    couponCode: couponOk ? code : null,
+    couponMessage: code && !couponOk ? 'That code is not valid.' : null,
     totalFormatted: inr(total), pointsRedeemed: 0,
     pointsEarned: Math.floor(total / 200000) * 20, referralCode: null,
     issuedAt: new Date(now).toISOString(),
@@ -205,12 +226,21 @@ function quote(body) {
 }
 
 function inr(minor) {
-  const major = (minor / 100).toFixed(2)
+  /*
+   * The sign is taken off before grouping and put back after.
+   *
+   * Lakh grouping slices the last three digits off the string, and on a negative the
+   * minus sign travels with the leading digits -- so -21000 grouped as text produced
+   * "-,210.00". Nothing needed a negative amount until the mock learned about coupons,
+   * and a discount line is exactly where it shows.
+   */
+  const negative = minor < 0
+  const major = (Math.abs(minor) / 100).toFixed(2)
   const [whole, fraction] = major.split('.')
   const last3 = whole.slice(-3)
   const rest = whole.slice(0, -3)
   const grouped = rest ? `${rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')},${last3}` : last3
-  return `₹${grouped}.${fraction}`
+  return `${negative ? '-' : ''}₹${grouped}.${fraction}`
 }
 
 const MIME = {

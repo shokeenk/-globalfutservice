@@ -651,6 +651,7 @@ const es: Dictionary = {
     volumeValue: '5.500 M+',
     volumeNote: (season: string) => `En pedidos de clientes en ${season}.`,
     couponLabel: 'Código de descuento',
+    couponApply: 'Aplicar',
     couponHint: '¿Tienes un código? Introdúcelo aquí.',
     couponApplied: (code) => `${code} aplicado.`,
     pointsLabel: 'Puntos de recompensa',

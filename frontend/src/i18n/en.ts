@@ -761,6 +761,7 @@ const en = {
     volumeValue: '5.5B+',
     volumeNote: (season: string) => `Across client orders in ${season}.`,
     couponLabel: 'Coupon code',
+    couponApply: 'Apply',
     couponHint: 'Have a discount code? Enter it here.',
     couponApplied: (code: string) => `${code} applied.`,
     pointsLabel: 'Reward points',
