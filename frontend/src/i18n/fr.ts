@@ -476,6 +476,10 @@ const fr: Dictionary = {
     credPasswordHint: 'Change-le dès la livraison — nous te le rappellerons.',
     credShow: 'Afficher le mot de passe',
     credHide: 'Masquer le mot de passe',
+    credBackupCodeN: (n) => `Code de secours ${n}`,
+    credReassureLead: 'Tes identifiants sont chiffrés, ouverts uniquement lorsque c’est nécessaire pour traiter ta commande, puis supprimés aussitôt — voir nos',
+    credReassureLink: 'Conditions d’utilisation',
+    credReassureTail: 'pour le détail.',
     credBackupCodes: 'Codes de secours',
     credBackupCodesFind: 'Où trouver les codes de secours',
     credBackupCodesHint: 'Un par ligne. Utiles si ton compte demande un code à la connexion.',
@@ -659,7 +663,9 @@ const fr: Dictionary = {
     summaryTitle: 'Ta commande',
     total: 'Total',
     earnsPoints: (points) =>
-      `Rapporte ${points} points une fois ta période de garantie close.`,
+      `Tu gagneras environ ${points} points, une fois ta fenêtre de garantie fermée.`,
+    earnsPointsGuest: (points) =>
+      `Connecte-toi pour gagner ${points} points sur cette commande — les commandes en invité n’en gagnent pas.`,
     continue: 'Continuer',
     priceNote:
       'Les prix sont bloqués quelques minutes et revérifiés au paiement : ce que tu vois ici ' +
@@ -667,6 +673,17 @@ const fr: Dictionary = {
     refreshingPrice: 'Actualisation du prix…',
     priceHeld: (time) => `Prix bloqué ${time}`,
 
+    cartTitle: 'Ton panier',
+    cartRemove: 'Retirer du panier',
+    continueShopping: 'Continuer les achats',
+    userInfoTitle: 'Tes informations',
+    fullName: 'Nom complet',
+    fullNameHint: 'Le nom qui figurera sur ton reçu.',
+    countryCode: 'Indicatif pays',
+    phoneHelper: 'Utilisé uniquement en cas de problème urgent — jamais de spam.',
+    discordHelper: 'Nous pouvons te contacter sur Discord pour un suivi plus rapide.',
+    discordLabel: 'Discord (facultatif)',
+    discordPlaceholder: 'tonpseudo',
     whereTitle: 'Où faut-il livrer ?',
     email: 'E-mail',
     emailHint: 'Ton reçu et l’avis de livraison arrivent ici.',

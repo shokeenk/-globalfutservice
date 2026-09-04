@@ -56,6 +56,12 @@ public class OrderEntity {
     @Column(name = "guest_phone")
     private String guestPhone;
 
+    @Column(name = "guest_name")
+    private String guestName;
+
+    @Column(name = "discord_username")
+    private String discordUsername;
+
     @Column(nullable = false)
     private String season;
 
@@ -487,5 +493,21 @@ public class OrderEntity {
         this.supplierAmountOrdered = amountOrdered;
         this.supplierAmountDelivered = amountDelivered;
         this.supplierPolledAt = at;
+    }
+
+    public String getGuestName() {
+        return guestName;
+    }
+
+    public void setGuestName(String guestName) {
+        this.guestName = guestName;
+    }
+
+    public String getDiscordUsername() {
+        return discordUsername;
+    }
+
+    public void setDiscordUsername(String discordUsername) {
+        this.discordUsername = discordUsername;
     }
 }

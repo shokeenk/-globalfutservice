@@ -27,9 +27,16 @@ public final class OrderDtos {
             @Size(max = 255)
             String email,
 
+            @Size(max = 120, message = "That name is too long")
+            String fullName,
+
             @Size(max = 20)
             @Pattern(regexp = "^[+0-9 ()-]*$", message = "That does not look like a phone number")
             String phone,
+
+            /** Optional. A contact channel, not a social handle -- see V17. */
+            @Size(max = 64, message = "That Discord username is too long")
+            String discordUsername,
 
             /** PLAYER_AUCTION or COMFORT_TRADE. Defaults to the safer of the two. */
             String deliveryMethod,

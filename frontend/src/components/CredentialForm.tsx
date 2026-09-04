@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Alert, Button, Checkbox, Field, Input, Textarea } from './ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
@@ -37,7 +38,18 @@ export function CredentialForm({
   const [eaEmail, setEaEmail] = useState('')
   const [eaPassword, setEaPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [backupCodes, setBackupCodes] = useState('')
+  /*
+   * Three inputs, not one textarea.
+   *
+   * EA issues codes in a block and customers paste the block, which is why this used to
+   * be a textarea splitting on newlines. Three labelled boxes ask for exactly what the
+   * order needs and make a short paste visibly incomplete, where a textarea with two
+   * codes in it looks as finished as one with three.
+   *
+   * Still assembled into the same `backupCodes` array the API already takes, so the
+   * wire format and the vault are untouched.
+   */
+  const [backupCodes, setBackupCodes] = useState(['', '', ''])
   const [platformHandle, setPlatformHandle] = useState('')
   const [note, setNote] = useState('')
 
@@ -62,14 +74,9 @@ export function CredentialForm({
       const order = await api.post<Order>(`/api/v1/orders/${publicRef}/credentials`, {
         eaEmail: eaEmail.trim(),
         eaPassword,
-        /*
-         * One code per line, blanks dropped. Customers paste these straight out of the
-         * text file EA gives them, which arrives with ragged whitespace.
-         */
-        backupCodes: backupCodes
-          .split('\n')
-          .map((code) => code.trim())
-          .filter(Boolean),
+        // Trimmed and blanks dropped: the boxes are optional individually, and a
+        // customer with only two codes should not send an empty third.
+        backupCodes: backupCodes.map((code) => code.trim()).filter(Boolean),
         platformHandle: platformHandle.trim() || null,
         note: note.trim() || null,
         acknowledgedSignedOut: signedOut,
@@ -84,7 +91,7 @@ export function CredentialForm({
        * kind of thing that survives a refactor and ends up in a devtools screenshot.
        */
       setEaPassword('')
-      setBackupCodes('')
+      setBackupCodes(['', '', ''])
       onSubmitted(order)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t.track.credError)
@@ -161,15 +168,36 @@ export function CredentialForm({
         <div>
           <Field label={t.track.credBackupCodes} hint={t.track.credBackupCodesHint}>
             {(props) => (
-              <Textarea
-                {...props}
-                rows={3}
-                value={backupCodes}
-                onChange={(e) => setBackupCodes(e.target.value)}
-                autoComplete="off"
-                data-1p-ignore
-                spellCheck={false}
-              />
+              <div className="grid grid-cols-3 gap-2" role="group" aria-describedby={props['aria-describedby']}>
+                {backupCodes.map((code, index) => (
+                  <input
+                    key={index}
+                    id={index === 0 ? props.id : undefined}
+                    value={code}
+                    onChange={(e) => setBackupCodes((prev) => {
+                      const next = [...prev]
+                      next[index] = e.target.value
+                      return next
+                    })}
+                    aria-label={t.track.credBackupCodeN(index + 1)}
+                    placeholder={`${index + 1}`}
+                    maxLength={32}
+                    /*
+                      `off` plus `data-1p-ignore`: a password manager offering to save a
+                      one-time backup code would store a value that is worthless by the
+                      time it is offered back, and would keep it long after the vault has
+                      purged its own copy.
+                    */
+                    autoComplete="off"
+                    data-1p-ignore
+                    spellCheck={false}
+                    className="tnum h-11 w-full rounded-edge border border-ink-400 bg-paper px-3
+                               text-center text-[13px] text-chalk placeholder:text-chalk-faint
+                               focus-visible:outline focus-visible:outline-2
+                               focus-visible:outline-offset-1 focus-visible:outline-brand-400"
+                  />
+                ))}
+              </div>
             )}
           </Field>
 
@@ -210,6 +238,25 @@ export function CredentialForm({
             {t.track.credBackupCodesFind}
           </a>
         </div>
+
+        {/*
+          The promise the terms of service already make, repeated where it is being
+          relied on.
+
+          Clause 11 says these are encrypted, opened only to fulfil the order and
+          deleted after use. A customer meets that clause once, if ever, and meets this
+          form at the moment they are deciding whether to trust it — so the undertaking
+          is restated here and linked, rather than left somewhere they would have to go
+          and find. The wording tracks the clause deliberately: a reassurance that
+          promises more than the contract is worse than none.
+        */}
+        <p className="hairline rounded-panel bg-paper p-4 text-[12.5px] leading-relaxed text-chalk-muted">
+          {t.track.credReassureLead}{' '}
+          <Link to="/terms" className="font-semibold text-brand-400 hover:underline">
+            {t.track.credReassureLink}
+          </Link>{' '}
+          {t.track.credReassureTail}
+        </p>
 
         <Field label={t.track.credHandle} hint={t.track.credHandleHint}>
           {(props) => (

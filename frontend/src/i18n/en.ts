@@ -552,6 +552,10 @@ const en = {
     credPasswordHint: 'Change it as soon as the order is delivered — we will remind you.',
     credShow: 'Show password',
     credHide: 'Hide password',
+    credBackupCodeN: (n: number) => `Backup code ${n}`,
+    credReassureLead: 'Your account details are encrypted, opened only when needed to complete your order, and deleted immediately after — see our',
+    credReassureLink: 'Terms of Service',
+    credReassureTail: 'for details.',
     credBackupCodes: 'Backup codes',
     credBackupCodesFind: 'How to find backup codes',
     credBackupCodesHint: 'One per line. Needed if your account asks for a code at sign-in.',
@@ -768,8 +772,24 @@ const en = {
 
     summaryTitle: 'Your order',
     total: 'Total',
+    /*
+     * Two lines, because a guest earns nothing.
+     *
+     * `pointsEarnedOn` is computed from the total and the currency alone -- it has no
+     * idea whether an account is attached -- so the quote returns a real number for a
+     * guest too. Showing it unqualified told a guest they were earning points on an
+     * order the terms of service say cannot earn any. The number is right; who it
+     * belongs to is the part the quote cannot know.
+     *
+     * "About" and "once your guarantee window closes" are both load-bearing: points are
+     * granted when the order completes and the safety window has passed, not at
+     * checkout, and a customer who reads this as an instant balance will ask where they
+     * went.
+     */
     earnsPoints: (points: number) =>
-      `Earns ${points} reward points once your guarantee window closes.`,
+      `You'll earn about ${points} reward points, once your guarantee window closes.`,
+    earnsPointsGuest: (points: number) =>
+      `Sign in to earn ${points} reward points on this order — guest orders cannot earn them.`,
     continue: 'Continue',
     priceNote:
       'Prices are held for a few minutes and re-checked when you pay, so what you see here ' +
@@ -777,6 +797,17 @@ const en = {
     refreshingPrice: 'Refreshing price…',
     priceHeld: (time: string) => `Price held for ${time}`,
 
+    cartTitle: 'Your cart',
+    cartRemove: 'Remove from cart',
+    continueShopping: 'Continue shopping',
+    userInfoTitle: 'Your details',
+    fullName: 'Full name',
+    fullNameHint: 'The name we put on your receipt.',
+    countryCode: 'Country code',
+    phoneHelper: 'Only used for urgent order issues — we will never spam you.',
+    discordLabel: 'Discord (optional)',
+    discordHelper: 'We may reach out on Discord for faster order support.',
+    discordPlaceholder: 'yourname',
     whereTitle: 'Where should it go?',
     email: 'Email',
     emailHint: 'Your receipt and delivery notice go here.',

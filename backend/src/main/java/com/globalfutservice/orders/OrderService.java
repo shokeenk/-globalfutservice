@@ -150,6 +150,10 @@ public class OrderService {
 
         order.setGuestEmail(request.email().trim().toLowerCase(Locale.ROOT));
         order.setGuestPhone(request.phone());
+        // Trimmed to null rather than stored empty: "no name given" and "gave an empty
+        // name" are different facts and only one of them is true.
+        order.setGuestName(blankToNull(request.fullName()));
+        order.setDiscordUsername(blankToNull(request.discordUsername()));
         order.setEaPlatformHandle(request.eaPlatformHandle());
         order.setCustomerNote(request.note());
         order.setPointsRedeemed(quote.pointsRedeemed());
@@ -562,5 +566,14 @@ public class OrderService {
 
     public static Money totalOf(OrderEntity order) {
         return order.total();
+    }
+
+    /** Empty and whitespace-only both mean "not supplied". */
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
