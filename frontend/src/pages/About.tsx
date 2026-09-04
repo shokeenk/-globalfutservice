@@ -115,10 +115,10 @@ export default function About() {
                 choose cash back or a larger amount as store credit.
               </li>
               <li>
-                <strong className="text-chalk">Sign-in details, where a service needs them,
-                are asked for only after payment</strong>, encrypted before they are stored,
-                opened only by the trader working your order, and destroyed when it
-                completes. That is enforced by a scheduled job, not by a promise.
+                <strong className="text-chalk">Sign-in details, where a service needs
+                them, are encrypted before they are stored</strong>, opened only by the
+                trader working your order, and destroyed within 24 hours whether the order
+                completes or not. That is enforced by a scheduled job, not by a promise.
               </li>
             </ul>
             <p>

@@ -511,7 +511,13 @@ function Privacy({ policy }: { policy: Policy | null }) {
       <Clause n={2} title="Your EA sign-in">
         <p>These are the rules we hold ourselves to, and they are enforced in the software rather than by policy alone:</p>
         <ul className="ml-5 list-disc space-y-1.5">
-          <li>We ask for them only after payment, never before.</li>
+          {/*
+            The timing promise is gone rather than reworded, on the client's instruction:
+            sign-in details are now collected at checkout, before payment. What replaces
+            it is the protection that does not depend on when they arrive -- everything
+            below this line is still true and still enforced in software.
+          */}
+          <li>We ask for them only when the service you bought cannot be delivered without them.</li>
           <li>They are encrypted with a key unique to your order before they reach our database.</li>
           <li>Only the trader working your order can open them, and every access is recorded.</li>
           <li>
@@ -962,9 +968,9 @@ function Shipping({ policy }: { policy: Policy | null }) {
           </li>
           <li>
             <strong className="text-chalk">Coins — comfort trade.</strong> Where you choose
-            this instead, we sign in and move the coins ourselves. The sign-in is asked for
-            only after payment, encrypted before it is stored, and destroyed when the order
-            completes.
+            this instead, we sign in and move the coins ourselves. The sign-in is
+            encrypted before it is stored, opened only to work your order, and destroyed
+            when the order completes.
           </li>
           <li>
             <strong className="text-chalk">Boosting.</strong> Played on your account by a

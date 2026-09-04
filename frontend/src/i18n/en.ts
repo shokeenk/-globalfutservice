@@ -819,11 +819,11 @@ const en = {
     eaNamePlaceholder: 'Gamertag or EA ID',
     deliveryMethod: 'Delivery method',
     deliveryAuctionHint:
-      'You list a card and we buy it off the market. We ask for your sign-in after '
-      + 'payment; it is encrypted and destroyed when the order is done.',
+      'You list a card and we buy it off the market. Where a sign-in is needed it is '
+      + 'encrypted and destroyed when the order is done.',
     deliveryComfortHint:
-      'We sign in and trade directly. Faster for large amounts, and we will ask for your ' +
-      'sign-in after payment.',
+      'We sign in and trade directly. Faster for large amounts, and we ask for your ' +
+      'sign-in at checkout.',
     deliveryAuction: 'Transfer market — you list, we buy',
     deliveryComfort: 'Comfort trade — we sign in for you',
     coachingNextTitle: 'What happens next',
@@ -833,9 +833,9 @@ const en = {
       'you play your own account while your coach watches.',
     signInTitle: 'About your sign-in',
     signInBody:
-      'We will ask for it after payment, never before. It is encrypted the moment it reaches ' +
-      'us, only ever opened by the trader working your order, and destroyed when the order ' +
-      'is done. We will remind you to change your password afterwards.',
+      'It is encrypted the moment it reaches us, only ever opened by the trader working ' +
+      'your order, and destroyed within 24 hours whether the order completes or not. We ' +
+      'will remind you to change your password afterwards.',
     noteLabel: 'Anything we should know?',
     notePlaceholder: 'Optional',
     beforeYouPay: 'Before you pay',

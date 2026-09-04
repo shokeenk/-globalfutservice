@@ -696,10 +696,10 @@ const es: Dictionary = {
     deliveryMethod: 'Método de entrega',
     deliveryAuctionHint:
       'Tú listas una carta y nosotros la compramos en el mercado. Te pedimos tus '
-      + 'credenciales después del pago; se cifran y se destruyen al terminar el pedido.',
+      + 'credenciales, se cifran y se destruyen al terminar el pedido.',
     deliveryComfortHint:
       'Iniciamos sesión y comerciamos directamente. Más rápido para cantidades grandes; te ' +
-      'pediremos tus credenciales después del pago.',
+      'pediremos tus credenciales al finalizar la compra.',
     deliveryAuction: 'Mercado de traspasos: tú listas, nosotros compramos',
     deliveryComfort: 'Comfort trade: entramos por ti',
     coachingNextTitle: 'Qué pasa ahora',
@@ -709,7 +709,7 @@ const es: Dictionary = {
       'credenciales de EA: juegas en tu propia cuenta mientras tu entrenador observa.',
     signInTitle: 'Sobre tus credenciales',
     signInBody:
-      'Te las pediremos después del pago, nunca antes. Se cifran en cuanto nos llegan, solo ' +
+      'Se cifran en cuanto nos llegan, solo ' +
       'las abre el trader que lleva tu pedido y se destruyen al terminar. Te recordaremos ' +
       'que cambies la contraseña después.',
     noteLabel: '¿Algo que debamos saber?',
