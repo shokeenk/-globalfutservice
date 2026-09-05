@@ -305,6 +305,44 @@ createServer(async (req, res) => {
     return json(res, 200, quote(JSON.parse(Buffer.concat(chunks).toString() || '{}')), origin)
   }
 
+  /*
+   * Order creation and the credential vault.
+   *
+   * Added so the checkout's two-call submission can actually be exercised: the order is
+   * created first, then the sign-in is posted separately to the encrypted endpoint. With
+   * neither of these the whole flow fell through to the 401 below and nothing past the
+   * pay button could be seen without a database.
+   *
+   * The credentials handler deliberately echoes back only field NAMES and lengths, never
+   * values. A mock that logged a password to a terminal would be the one place in this
+   * project where a plaintext credential is written down.
+   */
+  if (url.pathname === '/api/v1/orders' && req.method === 'POST') {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+    const q = body.quote ?? {}
+    console.log('[mock] order created for', body.email, '- fields:', Object.keys(body).join(', '))
+    return json(res, 201, {
+      publicRef: 'GFS-MOCK-0001',
+      status: 'AWAITING_PAYMENT',
+      totalMinor: q.totalMinor ?? 0,
+      totalFormatted: q.totalFormatted ?? inr(q.totalMinor ?? 0),
+      currency: q.currency ?? 'INR',
+      payment: { provider: 'STUB', providerOrderId: 'stub_1', publicKey: '', amountMinor: q.totalMinor ?? 0, currency: q.currency ?? 'INR' },
+    }, origin)
+  }
+
+  if (/^\/api\/v1\/orders\/[^/]+\/credentials$/.test(url.pathname) && req.method === 'POST') {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+    console.log('[mock] credentials received - keys:', Object.keys(body).join(', '),
+      '| backupCodes:', (body.backupCodes ?? []).length,
+      '| passwordLength:', (body.eaPassword ?? '').length)
+    return json(res, 200, { publicRef: 'GFS-MOCK-0001', status: 'AWAITING_PAYMENT' }, origin)
+  }
+
   if (url.pathname.startsWith('/api/')) {
     return json(res, 401, { error: 'unauthenticated', message: 'Mock API' }, origin)
   }

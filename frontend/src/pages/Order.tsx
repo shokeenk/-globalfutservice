@@ -939,8 +939,31 @@ function CheckoutForm({
   const [deliveryMethod] = useState(policy?.defaultDeliveryMethod ?? 'PLAYER_AUCTION')
   const isCoaching = quote.sku === 'COACHING'
   const [note, setNote] = useState('')
+  /*
+   * The sign-in, held in component state and nowhere else.
+   *
+   * Never written to local or session storage. It exists for the life of this form and
+   * is cleared the moment the vault has it, so a refresh loses it -- which is the
+   * correct trade for a password that is about to be sealed server-side anyway.
+   */
+  const [eaEmail, setEaEmail] = useState('')
+  const [eaPassword, setEaPassword] = useState('')
+  const [backupCodes, setBackupCodes] = useState(['', '', ''])
+  const [credErrors, setCredErrors] = useState<Record<string, string>>({})
+
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [readyChecks, setReadyChecks] = useState(false)
+
+  /*
+   * Every trading order needs a sign-in; coaching never does.
+   *
+   * Keyed off the service rather than the delivery method, because the backend is: both
+   * PLAYER_AUCTION and COMFORT_TRADE carry `requiresCredentials = true`, and only
+   * SCHEDULED_SESSION does not. Testing for COMFORT_TRADE here would have hidden the
+   * whole section, since the storefront now pins the method to the policy default -- and
+   * the order would then reach the vault with nothing in it.
+   */
+  const needsCredentials = !isCoaching
 
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -957,6 +980,22 @@ function CheckoutForm({
     if (!isCoaching && !readyChecks) {
       setFormError(t.order.readyChecksError)
       return
+    }
+
+    /*
+     * Validated before the order is created, not after.
+     *
+     * An order created and then rejected at the credential step leaves a real row in
+     * AWAITING_PAYMENT that the customer has to be talked out of paying for. Checking
+     * first costs nothing and means a malformed backup code never becomes an order.
+     */
+    if (needsCredentials) {
+      const found = validateCredentials(t, eaEmail, eaPassword, backupCodes)
+      setCredErrors(found)
+      if (Object.keys(found).length > 0) {
+        setFormError(t.order.fixFieldsError)
+        return
+      }
     }
 
     setSubmitting(true)
@@ -978,6 +1017,36 @@ function CheckoutForm({
         note: note.trim() || null,
         acceptedTerms: true,
       })
+      /*
+       * The sign-in goes to the vault, never to the order-creation call.
+       *
+       * `/orders` takes plain JSON columns; the encryption lives behind
+       * `/orders/{ref}/credentials`, which seals with a per-order key before anything
+       * reaches the database. Bundling the password into the first call would have put
+       * it in a plaintext column, so this is two requests on purpose.
+       *
+       * It runs before payment now, which the backend was taught to accept -- an unpaid
+       * order stores its sign-in and stays AWAITING_PAYMENT, and `markPaid` queues it for
+       * delivery once the money lands.
+       */
+      if (needsCredentials) {
+        await api.post(`/api/v1/orders/${response.publicRef}/credentials`, {
+          eaEmail: eaEmail.trim(),
+          eaPassword,
+          backupCodes: backupCodes.map((code) => code.trim()).filter(Boolean),
+          platformHandle: null,
+          note: null,
+          acknowledgedSignedOut: true,
+          acknowledgedMarketUnlocked: true,
+          acknowledgedItemsClear: true,
+          acceptedTerms: true,
+        })
+        // Cleared as soon as the vault has them, so the password is not sitting in a
+        // React tree while the payment sheet is open.
+        setEaPassword('')
+        setBackupCodes(['', '', ''])
+      }
+
       setPlaced(response)
       setStep('paying')
     } catch (e) {
@@ -1132,6 +1201,18 @@ function CheckoutForm({
 
       {!isCoaching && deliveryMethod === 'COMFORT_TRADE' && (
         <Alert tone="neutral" title={t.order.signInTitle}>{t.order.signInBody}</Alert>
+      )}
+
+      {needsCredentials && (
+        <DeliveryInformation
+          eaEmail={eaEmail}
+          setEaEmail={setEaEmail}
+          eaPassword={eaPassword}
+          setEaPassword={setEaPassword}
+          backupCodes={backupCodes}
+          setBackupCodes={setBackupCodes}
+          errors={credErrors}
+        />
       )}
 
       <Field label={t.order.noteLabel}>
@@ -1577,6 +1658,200 @@ function RequirementsPanel() {
       </ul>
     </div>
   )
+}
+
+/* ---------------------------------------------------- delivery information --- */
+
+/**
+ * How a comfort trade actually works, and the sign-in it needs.
+ *
+ * <p><b>This is a second checklist, deliberately.</b> "Requirements to order" at the top of
+ * the configurator is about whether an order can be placed at all; this is about what
+ * happens once it has been. They overlap and are still not the same list — and they
+ * currently disagree on one number, which is flagged rather than reconciled here: the
+ * configurator says 5,000 coins and this says 3,000, because those are the two figures the
+ * two briefs gave. Picking one silently would settle a question about the actual service by
+ * choosing whichever brief was read last.
+ *
+ * <p>The sign-in fields validate individually and say what is wrong by name. "This field is
+ * required" under six inputs tells a customer that something is missing but not which of
+ * them, and a backup code that is seven digits fails for a different reason than one that
+ * is empty — so they are different messages. The red border comes from `aria-invalid`,
+ * which `Field` already sets from `error` and the shared control style already paints, so
+ * these fields signal failure the same way every other field on the site does.
+ */
+function DeliveryInformation({
+  eaEmail, setEaEmail,
+  eaPassword, setEaPassword,
+  backupCodes, setBackupCodes,
+  errors,
+}: {
+  eaEmail: string
+  setEaEmail: (v: string) => void
+  eaPassword: string
+  setEaPassword: (v: string) => void
+  backupCodes: string[]
+  setBackupCodes: (codes: string[]) => void
+  errors: Record<string, string>
+}) {
+  const t = useT()
+  const [showPassword, setShowPassword] = useState(false)
+
+  const checks = [
+    { text: t.order.deliveryCheck1, help: 'credentials' },
+    { text: t.order.deliveryCheck2, warn: true },
+    { text: t.order.deliveryCheck3 },
+    { text: t.order.deliveryCheck4, help: 'backup-codes' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <h3 className="display text-[15px] text-chalk">{t.order.deliveryInfoTitle}</h3>
+
+      <p className="text-[13px] leading-relaxed text-chalk-muted">{t.order.deliveryInfoLead}</p>
+
+      {/*
+        The packs note is a box rather than another sentence because it corrects an
+        expectation rather than adding to one: somebody buying "packs" is not being sold
+        packs, and finding that out in the middle of a paragraph is finding it out too late.
+      */}
+      <div className="hairline rounded-panel border-gold-500/40 bg-gold-500/[0.07] p-4">
+        <p className="text-[13px] leading-relaxed text-chalk">{t.order.deliveryInfoPacks}</p>
+      </div>
+
+      <p className="text-[13px] leading-relaxed text-chalk-muted">{t.order.deliveryInfoWait}</p>
+
+      <ol className="space-y-2.5">
+        {checks.map((check, index) => (
+          <li key={check.text} className="flex gap-3">
+            <span className="tnum mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full
+                             bg-ink-700 text-[11px] font-semibold text-chalk-muted">
+              {index + 1}
+            </span>
+            <p className={`text-[13px] leading-relaxed ${
+              check.warn ? 'font-semibold text-brand-400' : 'text-chalk-muted'
+            }`}>
+              {check.text}
+              {check.help && (
+                <>
+                  {' '}
+                  <a
+                    href={`/help#faq-${check.help}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-brand-400 underline-offset-2 hover:underline"
+                  >
+                    {t.order.clickHere}
+                  </a>
+                </>
+              )}
+            </p>
+          </li>
+        ))}
+      </ol>
+
+      <Field label={t.track.credEmail} required hint={t.track.credEmailHint} error={errors.eaEmail}>
+        {(props) => (
+          <Input
+            {...props}
+            type="email"
+            value={eaEmail}
+            onChange={(e) => setEaEmail(e.target.value)}
+            placeholder={t.order.eaEmailPlaceholder}
+            autoComplete="off"
+          />
+        )}
+      </Field>
+
+      <Field label={t.track.credPassword} required hint={t.track.credPasswordHint} error={errors.eaPassword}>
+        {(props) => (
+          <div className="relative">
+            <Input
+              {...props}
+              type={showPassword ? 'text' : 'password'}
+              value={eaPassword}
+              onChange={(e) => setEaPassword(e.target.value)}
+              autoComplete="off"
+              data-1p-ignore
+              className="pr-16"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((on) => !on)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-edge px-2 py-1
+                         text-[11.5px] font-semibold text-chalk-muted hover:text-chalk
+                         focus-visible:outline focus-visible:outline-2
+                         focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+            >
+              {showPassword ? t.track.credHide : t.track.credShow}
+            </button>
+          </div>
+        )}
+      </Field>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {backupCodes.map((code, index) => (
+          <Field
+            key={index}
+            label={t.track.credBackupCodeN(index + 1)}
+            required
+            error={errors[`backup${index}`]}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                value={code}
+                onChange={(e) => setBackupCodes(
+                  backupCodes.map((c, i) => (i === index ? e.target.value : c)),
+                )}
+                placeholder={t.order.backupCodePlaceholder}
+                inputMode="numeric"
+                maxLength={8}
+                /*
+                  `off` plus `data-1p-ignore`: a password manager offering to save a
+                  one-time code would keep a value that is worthless by the time it is
+                  offered back, and long after the vault has purged its own copy.
+                */
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+                className="tnum"
+              />
+            )}
+          </Field>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What is wrong with the sign-in, field by field.
+ *
+ * <p>Empty and malformed are different failures and get different messages: a customer who
+ * typed seven digits has done something, and telling them the field is required says the
+ * opposite of what happened. Backup codes are exactly eight digits — that is EA's format,
+ * not a house rule — so anything else is rejected before it can be sealed into the vault
+ * and found to be useless by a trader at three in the morning.
+ */
+function validateCredentials(
+  t: ReturnType<typeof useT>,
+  eaEmail: string,
+  eaPassword: string,
+  backupCodes: string[],
+): Record<string, string> {
+  const errors: Record<string, string> = {}
+  if (!eaEmail.trim()) errors.eaEmail = t.order.errEaEmail
+  if (!eaPassword) errors.eaPassword = t.order.errEaPassword
+  backupCodes.forEach((code, index) => {
+    const value = code.trim()
+    if (!value) {
+      errors[`backup${index}`] = t.order.errBackupCode(index + 1)
+    } else if (!/^\d{8}$/.test(value)) {
+      errors[`backup${index}`] = t.order.errBackupCodeFormat(index + 1)
+    }
+  })
+  return errors
 }
 
 /* ------------------------------------------------------------ payment step --- */

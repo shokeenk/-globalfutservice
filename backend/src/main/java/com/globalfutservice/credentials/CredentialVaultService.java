@@ -187,4 +187,10 @@ public class CredentialVaultService {
             return "StoredCredentials[redacted]";
         }
     }
+
+    /** Whether this order already has a sealed, un-purged sign-in. */
+    @Transactional(readOnly = true)
+    public boolean hasCredentials(Long orderId) {
+        return orderId != null && repository.existsByOrderIdAndPurgedAtIsNull(orderId);
+    }
 }
