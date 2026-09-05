@@ -449,7 +449,7 @@ const es: Dictionary = {
       SIGN_OUT_CONSOLE: 'Cierra sesión de EA en la consola, la web app y la companion app. Lo reintentaremos solos.',
       CLEAR_UNASSIGNED_ITEMS: 'Tienes demasiados objetos sin asignar. Déjalos por debajo de 50 y lo reintentaremos.',
       FREE_TRANSFER_SLOTS: 'Tu lista de transferencias está llena. Libera al menos tres huecos en la lista y en los objetivos.',
-      ADD_COINS: 'Tu club necesita más de 1.500 monedas antes de que podamos empezar.',
+      ADD_COINS: 'Tu club necesita al menos 5.000 monedas antes de que podamos empezar.',
       SOLVE_CAPTCHA: 'EA te pide resolver un captcha. Entra una vez en la web app, complétalo y cierra sesión.',
       FIX_PERSONA: 'La persona de EA seleccionada no es la correcta. Cambia a la que tiene tu club.',
       ACCOUNT_UNUSABLE: 'Esta cuenta no se puede usar: no tiene acceso al mercado o no tiene club. Escríbenos y te devolvemos el dinero.',
@@ -691,30 +691,29 @@ const es: Dictionary = {
     cartTitle: 'Tu carrito',
     cartRemove: 'Quitar del carrito',
     continueShopping: 'Seguir comprando',
-    deliveryInfoTitle: 'Delivery information',
+    deliveryInfoTitle: 'Información de entrega',
     deliveryInfoLead:
-      'For this type of delivery, the trader signs in to your account and hands over the '
-      + 'FC 26 coins, players, packs or SBCs.',
+      'En este tipo de entrega, el trader inicia sesión en tu cuenta y te entrega las '
+      + 'monedas, jugadores, sobres o SBC de FC 26.',
     deliveryInfoPacks:
-      'If you buy packs, we transfer the matching number of coins to your account and you '
-      + 'open the packs yourself.',
+      'Si compras sobres, te transferimos las monedas equivalentes y los abres tú.',
     deliveryInfoWait:
-      'There is nothing else for you to do but wait until the transfer lands.',
+      'No tienes que hacer nada más que esperar a que llegue la transferencia.',
     deliveryCheck1:
-      'Transfer market access must already be unlocked on the FUT Web or Companion App.',
+      'El acceso al mercado de traspasos ya debe estar desbloqueado en la Web o Companion App.',
     deliveryCheck2:
-      'Do not sign in to the account while the service is running.',
+      'No inicies sesión en la cuenta mientras el servicio está en marcha.',
     deliveryCheck3:
-      'The transfer list must be empty, and the account needs at least 3,000 coins.',
-    deliveryCheck4: 'Have your backup codes to hand.',
-    clickHere: 'Click here',
-    backupCodePlaceholder: 'Each code is 8 digits',
+      'La lista de traspasos debe estar vacía y la cuenta necesita al menos 5.000 monedas.',
+    deliveryCheck4: 'Ten a mano tus códigos de respaldo.',
+    clickHere: 'Haz clic aquí',
+    backupCodePlaceholder: 'Cada código tiene 8 dígitos',
     eaEmailPlaceholder: 'EA Web/Companion App',
     fixFieldsError: 'Revisa los campos marcados.',
-    errEaEmail: 'Please enter Origin (Web App) Email!',
-    errEaPassword: 'Please enter Origin (Web App) Password!',
-    errBackupCode: (n) => `Please enter Backup Code ${n}!`,
-    errBackupCodeFormat: (n) => `Backup Code ${n} must be exactly 8 digits.`,
+    errEaEmail: '¡Introduce el correo de Origin (Web App)!',
+    errEaPassword: '¡Introduce la contraseña de Origin (Web App)!',
+    errBackupCode: (n) => `¡Introduce el código de respaldo ${n}!`,
+    errBackupCodeFormat: (n) => `El código de respaldo ${n} debe tener exactamente 8 dígitos.`,
     userInfoTitle: 'Tus datos',
     fullName: 'Nombre completo',
     fullNameHint: 'El nombre que aparecerá en tu recibo.',

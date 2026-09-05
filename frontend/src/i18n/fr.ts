@@ -452,7 +452,7 @@ const fr: Dictionary = {
       SIGN_OUT_CONSOLE: "Déconnecte-toi d'EA sur la console, la web app et la companion app. Nous réessaierons seuls.",
       CLEAR_UNASSIGNED_ITEMS: "Tu as trop d'objets non attribués. Descends sous 50 et nous réessaierons.",
       FREE_TRANSFER_SLOTS: "Ta liste de transferts est pleine. Libère au moins trois places dans la liste et les cibles.",
-      ADD_COINS: "Ton club doit avoir plus de 1 500 coins avant que nous puissions commencer.",
+      ADD_COINS: 'Ton club doit avoir au moins 5 000 crédits avant que nous puissions commencer.',
       SOLVE_CAPTCHA: "EA demande un captcha. Connecte-toi une fois sur la web app, résous-le, puis déconnecte-toi.",
       FIX_PERSONA: "La mauvaise persona EA est sélectionnée. Passe sur celle qui a ton club.",
       ACCOUNT_UNUSABLE: "Ce compte est inutilisable : pas d'accès au marché ou pas de club. Écris-nous, nous te remboursons.",
@@ -691,30 +691,29 @@ const fr: Dictionary = {
     cartTitle: 'Ton panier',
     cartRemove: 'Retirer du panier',
     continueShopping: 'Continuer les achats',
-    deliveryInfoTitle: 'Delivery information',
+    deliveryInfoTitle: 'Informations de livraison',
     deliveryInfoLead:
-      'For this type of delivery, the trader signs in to your account and hands over the '
-      + 'FC 26 coins, players, packs or SBCs.',
+      'Pour ce type de livraison, le trader se connecte à ton compte et te remet les '
+      + 'crédits, joueurs, packs ou DCE de FC 26.',
     deliveryInfoPacks:
-      'If you buy packs, we transfer the matching number of coins to your account and you '
-      + 'open the packs yourself.',
+      'Si tu achètes des packs, nous transférons les crédits correspondants et tu les ouvres toi-même.',
     deliveryInfoWait:
-      'There is nothing else for you to do but wait until the transfer lands.',
+      'Tu n’as rien d’autre à faire qu’attendre l’arrivée du transfert.',
     deliveryCheck1:
-      'Transfer market access must already be unlocked on the FUT Web or Companion App.',
+      'L’accès au marché des transferts doit déjà être débloqué sur la Web ou Companion App.',
     deliveryCheck2:
-      'Do not sign in to the account while the service is running.',
+      'Ne te connecte pas au compte pendant le service.',
     deliveryCheck3:
-      'The transfer list must be empty, and the account needs at least 3,000 coins.',
-    deliveryCheck4: 'Have your backup codes to hand.',
-    clickHere: 'Click here',
-    backupCodePlaceholder: 'Each code is 8 digits',
+      'La liste des transferts doit être vide et le compte doit avoir au moins 5 000 crédits.',
+    deliveryCheck4: 'Garde tes codes de secours à portée de main.',
+    clickHere: 'Clique ici',
+    backupCodePlaceholder: 'Chaque code fait 8 chiffres',
     eaEmailPlaceholder: 'EA Web/Companion App',
     fixFieldsError: 'Vérifie les champs signalés.',
-    errEaEmail: 'Please enter Origin (Web App) Email!',
-    errEaPassword: 'Please enter Origin (Web App) Password!',
-    errBackupCode: (n) => `Please enter Backup Code ${n}!`,
-    errBackupCodeFormat: (n) => `Backup Code ${n} must be exactly 8 digits.`,
+    errEaEmail: 'Saisis l’e-mail Origin (Web App) !',
+    errEaPassword: 'Saisis le mot de passe Origin (Web App) !',
+    errBackupCode: (n) => `Saisis le code de secours ${n} !`,
+    errBackupCodeFormat: (n) => `Le code de secours ${n} doit faire exactement 8 chiffres.`,
     userInfoTitle: 'Tes informations',
     fullName: 'Nom complet',
     fullNameHint: 'Le nom qui figurera sur ton reçu.',

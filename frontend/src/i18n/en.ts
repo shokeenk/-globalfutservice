@@ -524,7 +524,7 @@ const en = {
       SIGN_OUT_CONSOLE: 'Sign out of EA on your console, the web app and the companion app. We will retry automatically.',
       CLEAR_UNASSIGNED_ITEMS: 'You have too many unassigned items. Clear them below 50 and we will retry automatically.',
       FREE_TRANSFER_SLOTS: 'Your transfer list is full. Free at least three slots in both the list and your targets.',
-      ADD_COINS: 'Your club needs more than 1,500 coins on it before we can start.',
+      ADD_COINS: 'Your club needs at least 5,000 coins on it before we can start.',
       SOLVE_CAPTCHA: 'EA is asking you to solve a captcha. Sign in on the web app once, complete it, then sign out.',
       FIX_PERSONA: 'The wrong EA persona is selected. Switch to the one holding your club.',
       ACCOUNT_UNUSABLE: 'This account cannot be used — it has no transfer market access or no club. Get in touch and we will refund you.',
@@ -829,7 +829,7 @@ const en = {
     deliveryCheck2:
       'Do not sign in to the account while the service is running.',
     deliveryCheck3:
-      'The transfer list must be empty, and the account needs at least 3,000 coins.',
+      'The transfer list must be empty, and the account needs at least 5,000 coins.',
     deliveryCheck4: 'Have your backup codes to hand.',
     clickHere: 'Click here',
     backupCodePlaceholder: 'Each code is 8 digits',
