@@ -66,8 +66,8 @@ const CATALOG = {
       options: [
         ['WINS_9', '9 wins', 120000, null], ['WINS_10', '10 wins', 155000, null],
         ['WINS_11', '11 wins', 190000, null], ['WINS_12', '12 wins', 230000, null],
-        ['WINS_13', '13 wins', 270000, 9180], ['WINS_14', '14 wins', 310000, 9420],
-        ['WINS_15', '15 wins', 355000, 8760], ['WINS_EXTRA_8', '+8 extra wins', 170000, null],
+        ['WINS_13', '13 wins', 270000, 9200], ['WINS_14', '14 wins', 310000, 9400],
+        ['WINS_15', '15 wins', 355000, 9500], ['WINS_EXTRA_8', '+8 extra wins', 170000, null],
       ].map(([variant, label, minor, successRateBps]) => ({
         platform: null, variant, label, unitPriceMinor: minor,
         unitPriceFormatted: inr(minor), minQuantity: null, maxQuantity: null, stepQuantity: null,

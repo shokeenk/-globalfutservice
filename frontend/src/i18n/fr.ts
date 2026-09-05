@@ -393,7 +393,8 @@ const fr: Dictionary = {
     bestValue: 'Meilleur rapport',
     wins: 'victoires',
     successRateLabel: (pct) => `${pct} de réussite`,
-    successRateNote: 'Mesuré sur les commandes éligibles terminées.',
+    successRateNote:
+      'Chiffres publiés par GFS, portant sur les commandes où le compte remplissait les conditions.',
     successHeadline: (range, pct) =>
     `${range} atteint dans ${pct} des commandes éligibles.`,
     choose: 'Choisir',

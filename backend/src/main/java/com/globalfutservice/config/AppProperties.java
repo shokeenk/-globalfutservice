@@ -40,6 +40,7 @@ public record AppProperties(
         @Valid @NotNull Security security,
         @Valid @NotNull Pricing pricing,
         @Valid @NotNull Fulfilment fulfilment,
+        @Valid @NotNull Boosting boosting,
         @Valid @NotNull Razorpay razorpay,
         @Valid @NotNull Notifications notifications,
         @Valid @NotNull RateLimit rateLimit,
@@ -206,6 +207,43 @@ public record AppProperties(
                 }
             }
             return 0;
+        }
+    }
+
+    /**
+     * What the boosting page is allowed to claim about outcomes.
+     *
+     * <p><b>These are supplied by the business, not measured by this application.</b>
+     * Nothing here records what rank an order actually reached -- {@code OrderStatus} runs
+     * to DELIVERED and COMPLETED, which say an order finished, never what it finished at --
+     * so there is no achieved-versus-ordered figure to aggregate and this cannot be
+     * computed. It is configuration precisely because of that: a number the owner stands
+     * behind, changeable or withdrawable without a deploy, and obviously an input rather
+     * than a result to anyone reading the code.
+     */
+    public record Boosting(
+            /** {@code VARIANT:basisPoints}, e.g. {@code WINS_15:9500} for 95%. */
+            @DefaultValue({}) List<String> successRatePerVariant) {
+
+        /** Published rate for a variant in basis points, or null when none is set. */
+        public Integer successRateBpsFor(String variant) {
+            if (variant == null) {
+                return null;
+            }
+            for (String mapping : successRatePerVariant) {
+                int sep = mapping.lastIndexOf(':');
+                if (sep > 0 && mapping.substring(0, sep).trim().equalsIgnoreCase(variant.trim())) {
+                    try {
+                        int bps = Integer.parseInt(mapping.substring(sep + 1).trim());
+                        // Out of range is dropped rather than clamped: a typo turning 95%
+                        // into 950% should publish nothing, not something.
+                        return (bps > 0 && bps <= 10_000) ? bps : null;
+                    } catch (NumberFormatException malformed) {
+                        return null;
+                    }
+                }
+            }
+            return null;
         }
     }
 

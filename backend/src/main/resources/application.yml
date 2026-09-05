@@ -221,6 +221,21 @@ gfs:
     # margin decision the owner may need to reverse on a bad month.
     tier-discount-enabled: ${GFS_PRICING_TIER_DISCOUNT_ENABLED:true}
 
+  # ---- boosting ------------------------------------------------------------
+  # What the boosting page may claim about outcomes, as VARIANT:basisPoints.
+  #
+  # SUPPLIED BY THE BUSINESS, NOT MEASURED HERE. Nothing in this application
+  # records what rank an order actually reached -- order status runs to DELIVERED
+  # and COMPLETED, which say an order finished, never what it finished at -- so
+  # there is no achieved-versus-ordered figure to compute. These are numbers the
+  # owner stands behind, and they live in configuration so they can be corrected
+  # or withdrawn without a deploy.
+  #
+  # Set empty to publish no success rates at all; the storefront then renders
+  # nothing rather than a placeholder.
+  boosting:
+    success-rate-per-variant: ${GFS_BOOSTING_SUCCESS_RATES:WINS_13:9200,WINS_14:9400,WINS_15:9500}
+
   loyalty:
     daily-bonus-points: ${GFS_LOYALTY_DAILY_BONUS_POINTS:3}
     # Deliberately not UTC. With a UTC boundary an Indian customer's day rolls

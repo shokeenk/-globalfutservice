@@ -61,11 +61,15 @@ public class CatalogService {
                             row.getMinQuantity(),
                             row.getMaxQuantity(),
                             row.getStepQuantity(),
-                            // Null until achieved-versus-ordered outcomes are recorded.
-                            // See CatalogOption.successRateBps for what turning this on
-                            // requires; there is no data to aggregate today, and a
-                            // placeholder here would ship as a advertised claim.
-                            null));
+                            /*
+                             * Published from configuration, not computed.
+                             *
+                             * Nothing in this application records what rank an order
+                             * actually reached, so this is not a measurement -- it is a
+                             * figure the business stands behind. Null for every variant
+                             * nobody has set one for, which is most of them.
+                             */
+                            props.boosting().successRateBpsFor(row.getVariant())));
         }
 
         List<CatalogDtos.ServiceGroup> services = new ArrayList<>();
