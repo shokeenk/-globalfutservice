@@ -418,11 +418,23 @@ public class OrderService {
                     paid.getPublicRef(), props.coaching().sessionLengthFor(paid.getVariant()));
         }
 
-        OrderStatus next = paid.requiresCredentials()
+        /*
+         * Three ways out of PAID, not two.
+         *
+         * An order needing a sign-in used to always wait for one. Now the sign-in may
+         * already be sealed -- collected at checkout, before the money -- and asking a
+         * customer for something they have already given is the kind of thing that makes
+         * people think their details went nowhere. The vault is the authority on whether
+         * it arrived.
+         */
+        boolean needsSignIn = paid.requiresCredentials()
+                && !vaultService.hasCredentials(paid.getId());
+
+        OrderStatus next = needsSignIn
                 ? OrderStatus.CREDENTIALS_PENDING
                 : OrderStatus.READY_FOR_DELIVERY;
         transition(paid, next, Actor.SYSTEM, null, "gateway",
-                paid.requiresCredentials()
+                needsSignIn
                         ? "Waiting for the customer's sign-in"
                         : "Queued for delivery");
     }
@@ -468,7 +480,12 @@ public class OrderService {
             throw new ApiExceptions.BadRequestException(
                     "This order is fulfilled through the transfer market and needs no sign-in.");
         }
-        if (order.getStatus() != OrderStatus.CREDENTIALS_PENDING
+        /*
+         * AWAITING_PAYMENT is accepted because the sign-in is now collected at checkout,
+         * alongside the rest of the form, rather than after the money arrives.
+         */
+        if (order.getStatus() != OrderStatus.AWAITING_PAYMENT
+                && order.getStatus() != OrderStatus.CREDENTIALS_PENDING
                 && order.getStatus() != OrderStatus.ON_HOLD) {
             throw new ApiExceptions.ConflictException("not_awaiting_credentials",
                     "This order is not waiting for sign-in details.");
@@ -478,6 +495,23 @@ public class OrderService {
         if (request.platformHandle() != null && !request.platformHandle().isBlank()) {
             order.setEaPlatformHandle(request.platformHandle());
         }
+
+        /*
+         * An unpaid order is stored and left exactly where it was.
+         *
+         * This is the whole safety of collecting early. Transitioning here would put an
+         * order a trader can pick up in the fulfilment queue before any money had
+         * arrived; the state machine would refuse the jump anyway -- AWAITING_PAYMENT
+         * goes only to PAID or ABANDONED -- so attempting it would throw rather than
+         * quietly succeed, but not attempting it is the honest version. `markPaid` reads
+         * the vault and queues the order the moment payment lands.
+         */
+        if (order.getStatus() == OrderStatus.AWAITING_PAYMENT) {
+            log.info("Sign-in stored for unpaid order {}; queued once payment lands",
+                    order.getPublicRef());
+            return order;
+        }
+
         return transition(order, OrderStatus.READY_FOR_DELIVERY, Actor.CUSTOMER, actorId,
                 order.getGuestEmail(), "Sign-in details received");
     }

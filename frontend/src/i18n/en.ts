@@ -801,6 +801,30 @@ const en = {
     cartTitle: 'Your cart',
     cartRemove: 'Remove from cart',
     continueShopping: 'Continue shopping',
+    deliveryInfoTitle: 'Delivery information',
+    deliveryInfoLead:
+      'For this type of delivery, the trader signs in to your account and hands over the '
+      + 'FC 26 coins, players, packs or SBCs.',
+    deliveryInfoPacks:
+      'If you buy packs, we transfer the matching number of coins to your account and you '
+      + 'open the packs yourself.',
+    deliveryInfoWait:
+      'There is nothing else for you to do but wait until the transfer lands.',
+    deliveryCheck1:
+      'Transfer market access must already be unlocked on the FUT Web or Companion App.',
+    deliveryCheck2:
+      'Do not sign in to the account while the service is running.',
+    deliveryCheck3:
+      'The transfer list must be empty, and the account needs at least 3,000 coins.',
+    deliveryCheck4: 'Have your backup codes to hand.',
+    clickHere: 'Click here',
+    backupCodePlaceholder: 'Each code is 8 digits',
+    eaEmailPlaceholder: 'EA Web/Companion App',
+    fixFieldsError: 'Please check the highlighted fields.',
+    errEaEmail: 'Please enter Origin (Web App) Email!',
+    errEaPassword: 'Please enter Origin (Web App) Password!',
+    errBackupCode: (n: number) => `Please enter Backup Code ${n}!`,
+    errBackupCodeFormat: (n: number) => `Backup Code ${n} must be exactly 8 digits.`,
     userInfoTitle: 'Your details',
     fullName: 'Full name',
     fullNameHint: 'The name we put on your receipt.',
