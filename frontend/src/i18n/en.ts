@@ -463,7 +463,8 @@ const en = {
     bestValue: 'Best value',
     wins: 'wins',
     successRateLabel: (pct: string) => `${pct} success rate`,
-    successRateNote: 'Measured on eligible completed orders.',
+    successRateNote:
+      'Figures published by GFS, covering orders where the account met the requirements.',
     successHeadline: (range: string, pct: string) =>
     `${range} reached in ${pct} of eligible orders.`,
     choose: 'Choose',

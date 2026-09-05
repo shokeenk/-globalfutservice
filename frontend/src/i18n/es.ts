@@ -390,7 +390,8 @@ const es: Dictionary = {
     bestValue: 'Mejor valor',
     wins: 'victorias',
     successRateLabel: (pct) => `${pct} de acierto`,
-    successRateNote: 'Medido sobre pedidos completados elegibles.',
+    successRateNote:
+      'Cifras publicadas por GFS, sobre pedidos en los que la cuenta cumplía los requisitos.',
     successHeadline: (range, pct) =>
     `${range} alcanzado en el ${pct} de los pedidos elegibles.`,
     choose: 'Elegir',
