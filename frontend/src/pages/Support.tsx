@@ -148,7 +148,7 @@ export default function Support() {
           */}
           <Reveal delay={20}>
             <a
-              href={BUSINESS.discordInvite}
+              href={BUSINESS.discordDm}
               target="_blank"
               rel="noreferrer"
               className="group/btn relative flex min-h-[52px] w-full items-center justify-center
@@ -207,7 +207,7 @@ export default function Support() {
                 <dd className="mt-0.5">
                   <a
                     className="text-chalk underline"
-                    href={BUSINESS.discordInvite}
+                    href={BUSINESS.discordDm}
                     target="_blank"
                     rel="noreferrer"
                   >

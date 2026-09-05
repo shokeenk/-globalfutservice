@@ -239,7 +239,7 @@ export default function Boosting() {
               {t.boosting.discordBody}{' '}
               <a
                 className="text-chalk underline"
-                href={BUSINESS.discordInvite}
+                href={BUSINESS.discordDm}
                 target="_blank"
                 rel="noreferrer"
               >

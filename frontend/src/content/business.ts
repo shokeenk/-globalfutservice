@@ -27,8 +27,27 @@ export const BUSINESS = {
    * safety-policy claims and disputes — which makes it a contractual contact channel
    * rather than a social link, and it is why it sits here with the address and the
    * phone number rather than beside the Instagram icon.
+   *
+   * <p><b>Every link on the site now opens a direct message rather than the server</b>,
+   * at the owner's instruction, so a customer reaches a person instead of a channel.
+   *
+   * <p>Discord has no link that opens a DM from a username, which is why this needs the
+   * numeric account id: {@code discord.com/users/<id>} is the only form that works, and
+   * {@code globalfutservices} on its own cannot be linked to at all.
+   *
+   * <p><b>This depends on a setting outside the codebase.</b> The profile shows a Message
+   * button only to people allowed to DM the account. With "direct messages from server
+   * members" disabled, or friend-only messaging, a customer following any of these links
+   * arrives at a profile they cannot write to — and the whole point of the change is lost
+   * silently, with nothing on the site able to detect it.
+   *
+   * <p>The invite is kept, unused by the storefront, because the terms name a Discord as
+   * a contractual channel and a server outlives one person's inbox. Restoring it anywhere
+   * is a one-word change.
    */
   discordName: 'globalfutservices',
+  discordUserId: '1300551868174569595',
+  discordDm: 'https://discord.com/users/1300551868174569595',
   discordInvite: 'https://discord.com/invite/8FeP7C6tXt',
 
   /**
