@@ -1811,11 +1811,9 @@ function RequirementsPanel() {
  *
  * <p><b>This is a second checklist, deliberately.</b> "Requirements to order" at the top of
  * the configurator is about whether an order can be placed at all; this is about what
- * happens once it has been. They overlap and are still not the same list — and they
- * currently disagree on one number, which is flagged rather than reconciled here: the
- * configurator says 5,000 coins and this says 3,000, because those are the two figures the
- * two briefs gave. Picking one silently would settle a question about the actual service by
- * choosing whichever brief was read last.
+ * happens once it has been. They overlap and are still not the same list, but they now
+ * agree on every number they share: the coin minimum was 3,000 here against 5,000 there,
+ * and the client settled it at 5,000.
  *
  * <p>The sign-in fields validate individually and say what is wrong by name. "This field is
  * required" under six inputs tells a customer that something is missing but not which of
