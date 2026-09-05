@@ -696,10 +696,10 @@ const fr: Dictionary = {
     deliveryMethod: 'Mode de livraison',
     deliveryAuctionHint:
       'Tu mets une carte en vente et nous l’achetons sur le marché. Nous demandons tes '
-      + 'identifiants après le paiement ; ils sont chiffrés puis supprimés à la fin.',
+      + 'identifiants ; ils sont chiffrés puis supprimés à la fin.',
     deliveryComfortHint:
       'Nous nous connectons et tradons directement. Plus rapide pour les gros montants ; ' +
-      'nous te demanderons tes identifiants après le paiement.',
+      'nous te demanderons tes identifiants au moment de la commande.',
     deliveryAuction: 'Marché des transferts — tu listes, nous achetons',
     deliveryComfort: 'Comfort trade — nous nous connectons pour toi',
     coachingNextTitle: 'La suite',
@@ -709,7 +709,7 @@ const fr: Dictionary = {
       'identifiants EA : tu joues sur ton propre compte pendant que ton coach observe.',
     signInTitle: 'À propos de tes identifiants',
     signInBody:
-      'Nous te les demanderons après le paiement, jamais avant. Ils sont chiffrés dès ' +
+      'Ils sont chiffrés dès ' +
       'réception, ouverts uniquement par le trader qui traite ta commande, et détruits une ' +
       'fois terminée. Nous te rappellerons de changer ton mot de passe ensuite.',
     noteLabel: 'Quelque chose à signaler ?',
