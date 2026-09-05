@@ -112,6 +112,16 @@ export function CredentialForm({
       )}
 
       <div className="mt-5 space-y-4">
+        {/*
+          Both credential fields carry a help link, pointed at the existing "what do you
+          need from me" answer. There is no separate entry for the EA email or the
+          password on their own, and inventing two thin ones to satisfy a label would
+          scatter the same explanation across three places.
+        */}
+        <div className="flex items-center justify-end">
+          <HowToFind anchor="credentials" />
+        </div>
+
         <Field label={t.track.credEmail} hint={t.track.credEmailHint} required>
           {(props) => (
             <Input
@@ -302,5 +312,30 @@ export function CredentialForm({
         {submitting ? t.track.credSubmitting : t.track.credSubmit}
       </Button>
     </form>
+  )
+}
+
+/**
+ * A "how to find?" link beside a field label.
+ *
+ * <p>Points at the help centre rather than explaining inline: the answer is several steps
+ * on somebody else's website, and unfolding that next to a label would bury the field it
+ * belongs to. Opens in a new tab so a half-filled credential form is never thrown away to
+ * go and read it -- which matters more here than anywhere else on the site, because
+ * everything in this form was typed out of a password manager.
+ */
+function HowToFind({ anchor }: { anchor: string }) {
+  const t = useT()
+  return (
+    <a
+      href={`/help#faq-${anchor}`}
+      target="_blank"
+      rel="noreferrer"
+      className="text-[12px] font-semibold text-brand-400 underline-offset-2 hover:underline
+                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                 focus-visible:outline-brand-400"
+    >
+      {t.track.howToFind}
+    </a>
   )
 }

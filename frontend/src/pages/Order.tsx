@@ -10,7 +10,7 @@ import {
 } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
-import { coinsLabel, trimNumber } from '../lib/format'
+import { bpsToPercent, coinsLabel, trimNumber } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { openCheckout, isStubGateway } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
@@ -39,7 +39,6 @@ export default function Order() {
   const { catalog, policy, loading, error } = useCatalog()
   const labels = useCatalogLabels()
   const { account } = useAuth()
-  const loyaltyActive = useLoyaltyActive()
   const [params] = useSearchParams()
 
   /*
@@ -419,51 +418,13 @@ export default function Order() {
             </>
           ))}
 
-          {step === 'configure' && (
-          <StepCard step={isFlat ? 2 : 3} title={t.order.stepDiscounts(isFlat ? 2 : 3)}>
-            <div className="grid gap-5 sm:grid-cols-2">
+          {/*
+            The discounts step is gone from the configurator, not merely moved.
 
-              {/*
-                The points field is only offered when points actually work here. The
-                engine returns zero redemption for a non-loyalty currency, so leaving
-                the input on screen would let someone type 400 into it and watch the
-                total not move.
-              */}
-              {account && !loyaltyActive && <LoyaltyCurrencyNotice className="sm:col-span-2" />}
-
-              {account && loyaltyActive ? (
-                <Field
-                  label={t.order.pointsLabel}
-                  hint={
-                    maxRedeemable > 0
-                      ? t.order.pointsHintUsable(account.pointsBalance, maxRedeemable)
-                      : t.order.pointsHintPlain(account.pointsBalance)
-                  }
-                >
-                  {(props) => (
-                    <Input
-                      {...props}
-                      type="number"
-                      min={0}
-                      max={Math.min(account.pointsBalance, maxRedeemable)}
-                      value={pointsToRedeem}
-                      onChange={(e) => setPointsToRedeem(Math.max(0, Number(e.target.value) || 0))}
-                    />
-                  )}
-                </Field>
-              ) : !account ? (
-                <div className="plate p-4">
-                  <p className="text-[13px] leading-relaxed text-chalk-muted">
-                    <Link to="/register" className="font-semibold text-brand-400 hover:underline">
-                      {t.order.createAccount}
-                    </Link>{' '}
-                    {t.order.createAccountRest}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </StepCard>
-          )}
+            Coupon and points are now two tabs in the order panel, beside the total they
+            reduce. Leaving a second copy here would give a customer two places to type a
+            code into and one of them would win silently.
+          */}
 
           {/*
             The form itself, in the left column beside the summary rather than inside it.
@@ -480,6 +441,9 @@ export default function Order() {
         <QuotePanel
           couponCode={couponCode}
           onApplyCoupon={setCouponCode}
+          pointsToRedeem={pointsToRedeem}
+          setPointsToRedeem={setPointsToRedeem}
+          maxRedeemable={maxRedeemable}
           quote={quote}
           quoting={quoting}
           error={quoteError}
@@ -593,6 +557,7 @@ function AmountReadout({ quantity }: { quantity: number }) {
 
 function QuotePanel({
   quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -602,6 +567,9 @@ function QuotePanel({
   onRequote: () => void
   couponCode: string
   onApplyCoupon: (code: string) => void
+  pointsToRedeem: number
+  setPointsToRedeem: (points: number) => void
+  maxRedeemable: number
 }) {
   const t = useT()
   const money = useMoney()
@@ -644,25 +612,16 @@ function QuotePanel({
         </div>
 
         <div className="space-y-4 p-5">
-          {/*
-            The code goes in beside the total it changes.
-
-            It used to sit in the configurator, which meant that once a customer moved on
-            to paying there was no way to enter one at all -- they had to go back, past
-            the amount they had already settled, to reach the field. A discount belongs
-            next to the figure it reduces.
-
-            Applied on a button rather than on every keystroke. The quote is re-signed
-            server-side each time it changes, so typing "SAVE10" into a live-applied field
-            fires six re-quotes and shows five failures on the way to one success.
-          */}
-          <CouponRow
-            key={quote?.couponCode ?? 'none'}
-            initial={couponCode}
-            applied={quote?.couponCode ?? null}
-            message={quote?.couponMessage ?? null}
+          <SavingsTabs
+            couponKey={quote?.couponCode ?? 'none'}
+            couponCode={couponCode}
+            appliedCoupon={quote?.couponCode ?? null}
+            couponMessage={quote?.couponMessage ?? null}
             busy={quoting}
-            onApply={onApplyCoupon}
+            onApplyCoupon={onApplyCoupon}
+            pointsToRedeem={pointsToRedeem}
+            setPointsToRedeem={setPointsToRedeem}
+            maxRedeemable={maxRedeemable}
           />
 
           {quoting && !quote && (
@@ -1243,10 +1202,25 @@ function CheckoutForm({
         </div>
       )}
 
+      {/*
+        All three documents, named and linked, immediately above the button that binds
+        the customer to them.
+
+        One checkbox rather than three: they are not separable -- an order is placed under
+        all three or none -- and three boxes would imply a choice that does not exist. The
+        AML link is `/aml-kyc`, which is the route that actually resolves; `/aml` is not
+        registered and would drop the reader on the 404 page at the exact moment they were
+        trying to read a policy before agreeing to it.
+      */}
       <Checkbox checked={acceptedTerms} onChange={setAcceptedTerms}>
-        {t.order.termsPrefix}{' '}
-        <Link to="/terms" className="text-brand-400 hover:underline">{t.order.termsLink}</Link>{' '}
-        {isCoaching ? t.order.termsCoaching : t.order.termsTrading}
+        {t.order.consentLead}{' '}
+        <Link to="/terms" className="text-brand-400 hover:underline">{t.order.consentTerms}</Link>
+        {', '}
+        <Link to="/privacy" className="text-brand-400 hover:underline">{t.order.consentPrivacy}</Link>
+        {', '}
+        {t.order.and}{' '}
+        <Link to="/aml-kyc" className="text-brand-400 hover:underline">{t.order.consentAml}</Link>
+        {'.'}
       </Checkbox>
 
       {formError && <Alert tone="warn">{formError}</Alert>}
@@ -1255,7 +1229,18 @@ function CheckoutForm({
         <Button variant="secondary" onClick={() => setStep('configure')} disabled={submitting}>
           {t.order.back}
         </Button>
-        <Button full size="lg" loading={submitting} onClick={() => void submit()}>
+        {/*
+          Disabled until the box is ticked, as well as checked on submit. The server-side
+          `@AssertTrue` on `acceptedTerms` is the real gate and stays; this is so the
+          customer is not invited to press a button that will refuse them.
+        */}
+        <Button
+          full
+          size="lg"
+          loading={submitting}
+          disabled={!acceptedTerms}
+          onClick={() => void submit()}
+        >
           {t.order.pay(quote.totalFormatted)}
         </Button>
       </div>
@@ -1345,6 +1330,165 @@ const DIAL_CODES = [
   { code: '+34', flag: '🇪🇸' },
   { code: '+971', flag: '🇦🇪' },
 ] as const
+
+/* ------------------------------------------------------- savings widget --- */
+
+/**
+ * Discount and Rewards, as two tabs over one job: taking money off this order.
+ *
+ * <p><b>There is no Cashback tab, and its absence is a decision rather than an
+ * oversight.</b> The brief offered one conditionally, on confirming a real mechanic
+ * behind it. There is none: "cashback" appears twice in the entire backend and both are
+ * comments warning against the idea, describing the reference site's "5% cashback"
+ * homepage copy drifting from its 5%-discount-tier rewards page. The terms of service say
+ * points "have no cash value and cannot be withdrawn", so a tab implying money back would
+ * contradict the published contract as well as the code.
+ *
+ * <p>Two tabs rather than two stacked panels because they are alternatives, not additions
+ * -- the engine applies a coupon or a tier discount, and a customer deciding between them
+ * should see one at a time. The points balance and the redemption ceiling are the
+ * server's; nothing here computes either.
+ */
+function SavingsTabs({
+  couponKey, couponCode, appliedCoupon, couponMessage, busy, onApplyCoupon,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable,
+}: {
+  couponKey: string
+  couponCode: string
+  appliedCoupon: string | null
+  couponMessage: string | null
+  busy: boolean
+  onApplyCoupon: (code: string) => void
+  pointsToRedeem: number
+  setPointsToRedeem: (points: number) => void
+  maxRedeemable: number
+}) {
+  const t = useT()
+  const { account } = useAuth()
+  const { policy } = useCatalog()
+  const [tab, setTab] = useState<'discount' | 'rewards'>('discount')
+
+  const tabs = [
+    { id: 'discount' as const, label: t.order.tabDiscount },
+    { id: 'rewards' as const, label: t.order.tabRewards },
+  ]
+
+  return (
+    <div className="hairline rounded-panel bg-paper p-4">
+      <div role="tablist" aria-label={t.order.summaryTitle} className="mb-4 flex gap-1">
+        {tabs.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.id}
+            onClick={() => setTab(entry.id)}
+            className={[
+              'h-9 flex-1 rounded-edge text-[12.5px] font-semibold transition-colors duration-200',
+              tab === entry.id
+                ? 'bg-brand-500 text-paper'
+                : 'bg-ink-700 text-chalk-muted hover:text-chalk',
+            ].join(' ')}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'discount' ? (
+        <CouponRow
+          key={couponKey}
+          initial={couponCode}
+          applied={appliedCoupon}
+          message={couponMessage}
+          busy={busy}
+          onApply={onApplyCoupon}
+        />
+      ) : (
+        <RewardsPane
+          pointsToRedeem={pointsToRedeem}
+          setPointsToRedeem={setPointsToRedeem}
+          maxRedeemable={maxRedeemable}
+          balance={account?.pointsBalance ?? null}
+          capPercent={policy ? bpsToPercent(policy.maxWalletRedemptionBps) : null}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Spending points on this order.
+ *
+ * <p>Every number here is the server's. The balance comes from the account, the ceiling
+ * from {@code maxWalletRedemptionBps} through the same clamp the pricing engine applies,
+ * and the resulting discount from the quote. Nothing is recomputed in the browser -- a
+ * rewards panel that does its own arithmetic is how a checkout total ends up disagreeing
+ * with the rewards page.
+ *
+ * <p>A guest sees why the panel is empty rather than an input that cannot work: the terms
+ * of service say guest orders cannot earn or store points, so offering the control and
+ * failing on submit would be the wrong shape of honest.
+ */
+function RewardsPane({
+  pointsToRedeem, setPointsToRedeem, maxRedeemable, balance, capPercent,
+}: {
+  pointsToRedeem: number
+  setPointsToRedeem: (points: number) => void
+  maxRedeemable: number
+  balance: number | null
+  capPercent: string | null
+}) {
+  const t = useT()
+  const loyaltyActive = useLoyaltyActive()
+
+  if (balance == null) {
+    return <p className="text-[12.5px] leading-relaxed text-chalk-muted">{t.order.rewardsNoAccount}</p>
+  }
+  /*
+    Points do not settle in every currency. The engine returns zero redemption outside the
+    loyalty currency, so an input here would let someone type 400 and watch the total not
+    move -- which is why this notice followed the field rather than being dropped with the
+    step that used to hold it.
+  */
+  if (!loyaltyActive) {
+    return <LoyaltyCurrencyNotice />
+  }
+  if (balance <= 0) {
+    return <p className="text-[12.5px] leading-relaxed text-chalk-muted">{t.order.rewardsNoneYet}</p>
+  }
+
+  const ceiling = Math.min(balance, maxRedeemable)
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        <input
+          type="number"
+          min={0}
+          max={ceiling}
+          value={pointsToRedeem}
+          onChange={(e) => setPointsToRedeem(Math.max(0, Math.min(ceiling, Number(e.target.value) || 0)))}
+          aria-label={t.order.pointsLabel}
+          className="tnum h-11 min-w-0 flex-1 rounded-edge border border-ink-400 bg-paper px-3
+                     text-[13px] text-chalk focus-visible:outline focus-visible:outline-2
+                     focus-visible:outline-offset-1 focus-visible:outline-brand-400"
+        />
+        <Button
+          variant="secondary"
+          onClick={() => setPointsToRedeem(pointsToRedeem === ceiling ? 0 : ceiling)}
+          disabled={ceiling <= 0}
+        >
+          {pointsToRedeem === ceiling ? t.order.rewardsClear : t.order.rewardsUseAll}
+        </Button>
+      </div>
+      <p className="tnum mt-1.5 text-[12px] leading-snug text-chalk-faint">
+        {t.order.pointsHintUsable(balance, ceiling)}
+        {capPercent && ` · ${t.order.rewardsCapNote(capPercent)}`}
+      </p>
+    </div>
+  )
+}
 
 /* ----------------------------------------------------------------- coupon --- */
 
