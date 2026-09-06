@@ -255,9 +255,15 @@ function Destination({
 
       <CopyRow value={option.destination} />
 
-      {option.method === 'PAYPAL' && (
+      {/*
+        Driven by `link`, not by the destination. The destination for PayPal is now the
+        account email -- which is what gets copied, and what an operator reconciles
+        against -- so pointing an anchor at it would produce a link to `mailto`-less
+        plain text. The button only exists when there is something to open.
+      */}
+      {option.link && (
         <a
-          href={option.destination}
+          href={option.link}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-press

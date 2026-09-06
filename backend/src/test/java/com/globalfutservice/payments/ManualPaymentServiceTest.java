@@ -45,7 +45,7 @@ class ManualPaymentServiceTest {
             new AppProperties.ManualPayments(
                     "coins@bank", "Coins Account",
                     "services@bank", "Services Account",
-                    "https://paypal.example/x", "TWALLET");
+                    "pay@example.com", "https://paypal.example/x", "TWALLET");
 
     @BeforeEach
     void setUp() {
@@ -132,8 +132,8 @@ class ManualPaymentServiceTest {
         @DisplayName("is refused for a method with no configured address")
         void refusedForUnconfiguredMethod() {
             AppProperties bare = mock(AppProperties.class);
-            when(bare.manualPayments()).thenReturn(
-                    new AppProperties.ManualPayments(null, null, null, null, null, null));
+            when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
+                    null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
                     new ManualPaymentService(claims, orderService, bare);
 
@@ -187,7 +187,40 @@ class ManualPaymentServiceTest {
             // Never both UPI accounts at once: a customer choosing between two indistinct
             // "UPI" panels has a 50% chance of paying the wrong one.
             assertThat(options).extracting(ManualPaymentService.PaymentOption::destination)
-                    .containsExactly("coins@bank", "https://paypal.example/x", "TWALLET");
+                    .containsExactly("coins@bank", "pay@example.com", "TWALLET");
+        }
+
+        @Test
+        @DisplayName("PayPal is offered on the account, and carries the scan link alongside it")
+        void paypalCarriesBoth() {
+            ManualPaymentService.PaymentOption paypal = service.optionsFor("COACHING").stream()
+                    .filter(o -> o.method() == ManualPaymentMethod.PAYPAL)
+                    .findFirst().orElseThrow();
+
+            // The destination is the account, because that is what an operator reconciles
+            // against and the only form somebody can pay by hand. The link is the extra.
+            assertThat(paypal.destination()).isEqualTo("pay@example.com");
+            assertThat(paypal.link()).isEqualTo("https://paypal.example/x");
+        }
+
+        @Test
+        @DisplayName("PayPal survives having no scan link")
+        void paypalWithoutLink() {
+            AppProperties emailOnly = mock(AppProperties.class);
+            when(emailOnly.manualPayments()).thenReturn(new AppProperties.ManualPayments(
+                    null, null, null, null, "pay@example.com", null, null));
+
+            // An account with no link is payable; a link with no account is not. Dropping
+            // PayPal here would take away the method over a missing convenience.
+            List<ManualPaymentService.PaymentOption> options =
+                    new ManualPaymentService(claims, orderService, emailOnly).optionsFor("COACHING");
+
+            assertThat(options).singleElement()
+                    .satisfies(option -> {
+                        assertThat(option.method()).isEqualTo(ManualPaymentMethod.PAYPAL);
+                        assertThat(option.destination()).isEqualTo("pay@example.com");
+                        assertThat(option.link()).isNull();
+                    });
         }
 
         @Test
@@ -195,7 +228,7 @@ class ManualPaymentServiceTest {
         void omitsUnconfigured() {
             AppProperties partial = mock(AppProperties.class);
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
-                    null, null, null, null, null, "TWALLET"));
+                    null, null, null, null, null, null, "TWALLET"));
 
             assertThat(new ManualPaymentService(claims, orderService, partial)
                     .optionsFor("COACHING"))

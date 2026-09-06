@@ -253,7 +253,8 @@ gfs:
     upi-coins-name: ${GFS_UPI_COINS_NAME:Sunita Yogi}
     upi-services: ${GFS_UPI_SERVICES:sharvinay088@okicici}
     upi-services-name: ${GFS_UPI_SERVICES_NAME:Vinu Hunter}
-    paypal: ${GFS_PAYPAL_LINK:https://www.paypal.com/qrcodes/managed/2241b4bb-ae71-4c69-8337-9efa9c89169a}
+    paypal-email: ${GFS_PAYPAL_EMAIL:sharvinay088@gmail.com}
+    paypal-link: ${GFS_PAYPAL_LINK:https://www.paypal.com/qrcodes/managed/2241b4bb-ae71-4c69-8337-9efa9c89169a}
     crypto-trc20: ${GFS_CRYPTO_TRC20:TEGes4sDu6f81jN5na5sR3BZaNXXSFLtoX}
 
   loyalty:

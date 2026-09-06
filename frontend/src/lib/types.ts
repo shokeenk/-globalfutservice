@@ -367,6 +367,11 @@ export interface ManualPaymentOption {
   destination: string
   /** Account holder, where there is one to show. Null for PayPal and crypto. */
   accountName: string | null
+  /**
+   * An optional way to open the payment instead of copying it — PayPal's managed-QR
+   * link. Null where the destination is the only form there is.
+   */
+  link: string | null
   /** What this method's payers call their reference, e.g. "UTR". */
   referenceName: string
 }

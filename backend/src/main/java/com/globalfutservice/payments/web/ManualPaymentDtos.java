@@ -27,6 +27,11 @@ public final class ManualPaymentDtos {
             String destination,
             /** Account holder, where the method has one to show. Null for PayPal and crypto. */
             String accountName,
+            /**
+             * An optional way to open the payment instead of copying it -- PayPal's
+             * managed-QR link. Null where the destination is the only form there is.
+             */
+            String link,
             /** What this method's payers call their reference, e.g. "UTR". */
             String referenceName) {
 
@@ -35,6 +40,7 @@ public final class ManualPaymentDtos {
                     option.method().name(),
                     option.destination(),
                     option.accountName(),
+                    option.link(),
                     option.method().referenceName());
         }
     }

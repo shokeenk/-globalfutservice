@@ -321,8 +321,24 @@ public record AppProperties(
             /** Name on the account behind {@link #upiServices}. */
             String upiServicesName,
 
-            /** PayPal link for international customers. */
-            String paypal,
+            /**
+             * The PayPal account itself, as an email address.
+             *
+             * <p>This is the destination of record for PayPal, rather than the QR link
+             * below, for two reasons. It is the identity an operator reconciles against
+             * -- a statement shows who was paid, not which QR they scanned -- and it is
+             * the only form a customer can use when they are paying from a device that
+             * cannot scan, or sending from a PayPal balance by hand.
+             */
+            String paypalEmail,
+
+            /**
+             * PayPal's own managed-QR link, which is what the printed code encodes.
+             *
+             * <p>Optional. It is a convenience for scanning and clicking; the account is
+             * {@link #paypalEmail}, and PayPal is offered on the strength of that alone.
+             */
+            String paypalLink,
 
             /** USDT wallet. TRON/TRC20 only -- see the warning the storefront shows. */
             String cryptoTrc20) {

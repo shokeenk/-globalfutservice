@@ -443,18 +443,23 @@ createServer(async (req, res) => {
         method: 'UPI',
         destination: coins ? '9166172359@ybl' : 'sharvinay088@okicici',
         accountName: coins ? 'Sunita Yogi' : 'Vinu Hunter',
+        link: null,
         referenceName: 'UTR',
       },
       {
+        // The account is the email; the managed-QR link is the scanning convenience and
+        // is what the committed QR image encodes.
         method: 'PAYPAL',
-        destination: 'https://www.paypal.com/qrcodes/managed/2241b4bb-ae71-4c69-8337-9efa9c89169a',
+        destination: 'sharvinay088@gmail.com',
         accountName: null,
+        link: 'https://www.paypal.com/qrcodes/managed/2241b4bb-ae71-4c69-8337-9efa9c89169a',
         referenceName: 'transaction id',
       },
       {
         method: 'CRYPTO',
         destination: 'TEGes4sDu6f81jN5na5sR3BZaNXXSFLtoX',
         accountName: null,
+        link: null,
         referenceName: 'transaction hash',
       },
     ], origin)

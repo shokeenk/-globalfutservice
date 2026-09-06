@@ -61,17 +61,20 @@ public class ManualPaymentService {
         String upi = props.manualPayments().upiFor(sku);
         if (upi != null) {
             offered.add(new PaymentOption(ManualPaymentMethod.UPI, upi,
-                    props.manualPayments().upiNameFor(sku)));
+                    props.manualPayments().upiNameFor(sku), null));
         }
 
-        String paypal = blankToNull(props.manualPayments().paypal());
-        if (paypal != null) {
-            offered.add(new PaymentOption(ManualPaymentMethod.PAYPAL, paypal, null));
+        // Offered on the strength of the email alone. The link is a scanning convenience
+        // and can be absent; an account with no address is what makes PayPal unpayable.
+        String paypalEmail = blankToNull(props.manualPayments().paypalEmail());
+        if (paypalEmail != null) {
+            offered.add(new PaymentOption(ManualPaymentMethod.PAYPAL, paypalEmail, null,
+                    blankToNull(props.manualPayments().paypalLink())));
         }
 
         String crypto = blankToNull(props.manualPayments().cryptoTrc20());
         if (crypto != null) {
-            offered.add(new PaymentOption(ManualPaymentMethod.CRYPTO, crypto, null));
+            offered.add(new PaymentOption(ManualPaymentMethod.CRYPTO, crypto, null, null));
         }
 
         return List.copyOf(offered);
@@ -215,7 +218,15 @@ public class ManualPaymentService {
         return value == null || value.isBlank() ? null : value;
     }
 
-    /** One payable destination offered to a customer. */
-    public record PaymentOption(ManualPaymentMethod method, String destination, String accountName) {
+    /**
+     * One payable destination offered to a customer.
+     *
+     * @param destination the account itself, and the value recorded against a claim
+     * @param accountName who holds it, where there is a name to show
+     * @param link        an optional way to open the payment rather than copy it; null
+     *                    for methods where the destination is the only form there is
+     */
+    public record PaymentOption(ManualPaymentMethod method, String destination,
+                                String accountName, String link) {
     }
 }

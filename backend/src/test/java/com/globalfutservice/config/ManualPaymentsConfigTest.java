@@ -25,7 +25,7 @@ class ManualPaymentsConfigTest {
     private static AppProperties.ManualPayments configured() {
         return new AppProperties.ManualPayments(
                 COINS, COINS_NAME, SERVICES, SERVICES_NAME,
-                "https://paypal.example/x", "TWALLETADDRESS");
+                "pay@example.com", "https://paypal.example/x", "TWALLETADDRESS");
     }
 
     @Nested
@@ -79,7 +79,7 @@ class ManualPaymentsConfigTest {
         @DisplayName("blank is treated as absent, so no half-configured address is shown")
         void blankIsAbsent() {
             AppProperties.ManualPayments partial = new AppProperties.ManualPayments(
-                    "  ", "", SERVICES, SERVICES_NAME, null, "");
+                    "  ", "", SERVICES, SERVICES_NAME, null, null, "");
 
             // A blank env var is what an unset one looks like after substitution. Returning
             // it as a destination would render an empty address under a QR code, which
@@ -92,8 +92,8 @@ class ManualPaymentsConfigTest {
         @Test
         @DisplayName("null is treated as absent")
         void nullIsAbsent() {
-            AppProperties.ManualPayments none =
-                    new AppProperties.ManualPayments(null, null, null, null, null, null);
+            AppProperties.ManualPayments none = new AppProperties.ManualPayments(
+                    null, null, null, null, null, null, null);
 
             assertThat(none.upiFor("TRADING_SERVICE")).isNull();
             assertThat(none.upiFor("COACHING")).isNull();
