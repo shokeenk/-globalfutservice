@@ -296,6 +296,51 @@ function json(res, status, payload, origin = 'http://localhost:5173') {
   res.end(body)
 }
 
+const ADMIN = process.argv.includes('--admin')
+
+/*
+ * Two rows, not one, and deliberately awkward ones.
+ *
+ * They differ in the two ways that matter to whoever is reviewing them: different
+ * destinations, so the column that says which account to open is doing visible work,
+ * and a 64-character TRON hash next to a 12-digit UTR, which is what breaks the layout
+ * if the reference column is allowed to truncate or refuse to wrap.
+ */
+const ADMIN_CLAIMS = [
+  {
+    id: 1,
+    publicRef: 'GFS-26-000123',
+    customerEmail: 'buyer@example.com',
+    sku: 'TRADING_SERVICE',
+    totalMinor: 215250,
+    totalFormatted: '₹2,152.50',
+    currency: 'INR',
+    method: 'UPI',
+    destination: '9166172359@ybl',
+    reference: '432198765012',
+    status: 'SUBMITTED',
+    submittedAt: new Date(Date.now() - 46 * 60_000).toISOString(),
+    reviewedAt: null,
+    reviewNote: null,
+  },
+  {
+    id: 2,
+    publicRef: 'GFS-26-000124',
+    customerEmail: 'someone@example.com',
+    sku: 'CHAMPS_BOOSTING',
+    totalMinor: 363875,
+    totalFormatted: '₹3,638.75',
+    currency: 'INR',
+    method: 'CRYPTO',
+    destination: 'TEGes4sDu6f81jN5na5sR3BZaNXXSFLtoX',
+    reference: '3f1a9c4e77bd2058e1c6a9f30b47d5a2e8c1097b46fa25d3e0b8c7419af62d35',
+    status: 'SUBMITTED',
+    submittedAt: new Date(Date.now() - 8 * 60_000).toISOString(),
+    reviewedAt: null,
+    reviewNote: null,
+  },
+]
+
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost')
   const origin = req.headers.origin ?? 'http://localhost:5173'
@@ -354,7 +399,16 @@ createServer(async (req, res) => {
       totalMinor: q.totalMinor ?? 0,
       totalFormatted: q.totalFormatted ?? inr(q.totalMinor ?? 0),
       currency: q.currency ?? 'INR',
-      payment: { provider: 'STUB', providerOrderId: 'stub_1', publicKey: '', amountMinor: q.totalMinor ?? 0, currency: q.currency ?? 'INR' },
+      /*
+       * These two strings have to be exactly what RazorpayGateway emits when the
+       * gateway is disabled -- "order_stub_" + receipt, and "rzp_test_stub" -- because
+       * isStubGateway() sniffs for those prefixes to decide whether to show the pay
+       * button. The mock previously answered `stub_1` with an empty key, which matches
+       * neither test, so the storefront treated a disabled gateway as a live one and
+       * rendered a button that could only fail. The mock has to lie in the same shape
+       * as the thing it stands in for or it hides the branch it is meant to exercise.
+       */
+      payment: { provider: 'STUB', providerOrderId: 'order_stub_GFS-MOCK-0001', publicKey: 'rzp_test_stub', amountMinor: q.totalMinor ?? 0, currency: q.currency ?? 'INR' },
     }, origin)
   }
 
@@ -366,6 +420,115 @@ createServer(async (req, res) => {
       '| backupCodes:', (body.backupCodes ?? []).length,
       '| passwordLength:', (body.eaPassword ?? '').length)
     return json(res, 200, { publicRef: 'GFS-MOCK-0001', status: 'AWAITING_PAYMENT' }, origin)
+  }
+
+  /*
+   * Manual payment methods.
+   *
+   * Mirrors the real endpoint's shape exactly, including the rule that decides which UPI
+   * destination a sku gets -- coins to one account, everything else to the other. Getting
+   * that wrong here would be the same class of mistake as the mock that answered every
+   * quote as TRADING_SERVICE: the branch this feature is built on would never be
+   * exercised locally, and the bug would be invisible until it was live.
+   *
+   * The addresses are the real ones, because they are printed on the checkout page and
+   * encoded in the QR images this repo serves. Fake values would make the local page
+   * disagree with the pictures next to them.
+   */
+  if (url.pathname === '/api/v1/payments/methods') {
+    const sku = url.searchParams.get('sku') ?? ''
+    const coins = sku.toUpperCase() === 'TRADING_SERVICE'
+    return json(res, 200, [
+      {
+        method: 'UPI',
+        destination: coins ? '9166172359@ybl' : 'sharvinay088@okicici',
+        accountName: coins ? 'Sunita Yogi' : 'Vinu Hunter',
+        link: null,
+        referenceName: 'UTR',
+      },
+      {
+        // The account is the email; the managed-QR link is the scanning convenience and
+        // is what the committed QR image encodes.
+        method: 'PAYPAL',
+        destination: 'sharvinay088@gmail.com',
+        accountName: null,
+        link: 'https://www.paypal.com/qrcodes/managed/2241b4bb-ae71-4c69-8337-9efa9c89169a',
+        referenceName: 'transaction id',
+      },
+      {
+        method: 'CRYPTO',
+        destination: 'TEGes4sDu6f81jN5na5sR3BZaNXXSFLtoX',
+        accountName: null,
+        link: null,
+        referenceName: 'transaction hash',
+      },
+    ], origin)
+  }
+
+  if (/^\/api\/v1\/payments\/claims\/[^/]+$/.test(url.pathname) && req.method === 'POST') {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+    console.log('[mock] payment claim:', body.method, '| reference:', body.reference,
+      '| email:', body.email)
+    // 201 and SUBMITTED, never VERIFIED. The real server cannot verify a claim without a
+    // person looking at a bank statement, and a mock that returns success would let a
+    // "payment confirmed" state be written against a flow that can never produce one.
+    return json(res, 201, {
+      id: 1,
+      method: body.method,
+      reference: body.reference,
+      status: 'SUBMITTED',
+      submittedAt: new Date().toISOString(),
+    }, origin)
+  }
+
+  /*
+   * Admin side of manual payments.
+   *
+   * Gated behind --admin because the mock otherwise signs everybody in as an operator,
+   * and a storefront that thinks the visitor is staff renders a different header, a
+   * different account menu and an admin link on every page. That is a worse default for
+   * the flow this mock is mostly used to walk.
+   *
+   *   node tools/mock-api.mjs --admin
+   */
+  if (ADMIN) {
+    const OPERATOR = {
+      id: 1, email: 'operator@example.com', displayName: 'Operator',
+      role: 'OPERATOR', emailVerified: true, points: 0,
+    }
+
+    if (url.pathname === '/api/v1/auth/me') {
+      return json(res, 200, OPERATOR, origin)
+    }
+
+    // The account has to come back on the token response itself, not only from /me:
+    // AuthContext's adopt() reads response.account, so a refresh that returns a token
+    // alone signs the browser in with no identity and every guarded route bounces.
+    if (url.pathname === '/api/v1/auth/refresh' && req.method === 'POST') {
+      return json(res, 200, {
+        accessToken: 'mock-operator-token', expiresInSeconds: 900, account: OPERATOR,
+      }, origin)
+    }
+
+    if (url.pathname === '/api/v1/admin/payment-claims') {
+      return json(res, 200, ADMIN_CLAIMS, origin)
+    }
+
+    const review = url.pathname.match(/^\/api\/v1\/admin\/payment-claims\/(\d+)\/(verify|reject)$/)
+    if (review && req.method === 'POST') {
+      const [, id, outcome] = review
+      const at = ADMIN_CLAIMS.findIndex((c) => String(c.id) === id)
+      if (at >= 0) {
+        console.log(`[mock] claim ${id} ${outcome}ed`)
+        // Removed from the queue either way: verified claims are done, and rejected ones
+        // are no longer SUBMITTED, which is what the real query filters on.
+        const [claim] = ADMIN_CLAIMS.splice(at, 1)
+        return json(res, 200, { ...claim, status: outcome === 'verify' ? 'VERIFIED' : 'REJECTED' }, origin)
+      }
+      return json(res, 404, { error: 'not_found', message: 'No such claim.' }, origin)
+    }
   }
 
   if (url.pathname.startsWith('/api/')) {

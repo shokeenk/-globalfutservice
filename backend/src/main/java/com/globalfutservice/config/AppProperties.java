@@ -46,6 +46,7 @@ public record AppProperties(
         @Valid @NotNull RateLimit rateLimit,
         @Valid @NotNull Loyalty loyalty,
         @Valid @NotNull Coaching coaching,
+        @Valid @NotNull ManualPayments manualPayments,
         @Valid @NotNull FutTransfer futTransfer) {
 
     public record Security(
@@ -293,6 +294,78 @@ public record AppProperties(
      * is being written against a supplier who has declined to back it. 2 is their default
      * and the only value consistent with what the site promises.
      */
+    /**
+     * Where customers are told to send money when they pay outside the gateway.
+     *
+     * <p>These live here, and not in the storefront bundle, for one reason: the server
+     * records on every claim which address the customer was sent to, and a value the
+     * browser supplied would be worth nothing as a record. The storefront reads them
+     * back from {@code GET /api/v1/payments/methods} so there is exactly one copy.
+     *
+     * <p>Changing one is a live change to where customers' money goes. They are
+     * deliberately environment variables rather than committed constants, so a handle
+     * can be rotated without a deploy -- and so that a wrong value is an operations
+     * incident with an audit trail rather than a merged pull request.
+     */
+    public record ManualPayments(
+
+            /** Shown on coin and trading orders. A UPI VPA, e.g. {@code name@bank}. */
+            String upiCoins,
+
+            /** Name on the account behind {@link #upiCoins}, shown under the QR. */
+            String upiCoinsName,
+
+            /** Shown on boosting and coaching orders. */
+            String upiServices,
+
+            /** Name on the account behind {@link #upiServices}. */
+            String upiServicesName,
+
+            /**
+             * The PayPal account itself, as an email address.
+             *
+             * <p>This is the destination of record for PayPal, rather than the QR link
+             * below, for two reasons. It is the identity an operator reconciles against
+             * -- a statement shows who was paid, not which QR they scanned -- and it is
+             * the only form a customer can use when they are paying from a device that
+             * cannot scan, or sending from a PayPal balance by hand.
+             */
+            String paypalEmail,
+
+            /**
+             * PayPal's own managed-QR link, which is what the printed code encodes.
+             *
+             * <p>Optional. It is a convenience for scanning and clicking; the account is
+             * {@link #paypalEmail}, and PayPal is offered on the strength of that alone.
+             */
+            String paypalLink,
+
+            /** USDT wallet. TRON/TRC20 only -- see the warning the storefront shows. */
+            String cryptoTrc20) {
+
+        /**
+         * The UPI destination for a sku, or null when UPI is not configured.
+         *
+         * <p>Coins go to one account and everything else to another, which is a fact
+         * about how this business banks rather than anything the customer chooses. The
+         * storefront shows one or the other for that reason, and this method is what
+         * makes the server agree with it instead of trusting it.
+         */
+        public String upiFor(String sku) {
+            boolean coins = "TRADING_SERVICE".equalsIgnoreCase(sku);
+            return blankToNull(coins ? upiCoins : upiServices);
+        }
+
+        public String upiNameFor(String sku) {
+            boolean coins = "TRADING_SERVICE".equalsIgnoreCase(sku);
+            return blankToNull(coins ? upiCoinsName : upiServicesName);
+        }
+
+        private static String blankToNull(String value) {
+            return value == null || value.isBlank() ? null : value;
+        }
+    }
+
     public record FutTransfer(
             @DefaultValue("false") boolean enabled,
             @DefaultValue("https://futtransfer.top") String baseUrl,

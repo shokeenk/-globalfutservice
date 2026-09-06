@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
+import { ManualPayment } from '../components/ManualPayment'
 import { PageHeader } from '../components/PageHeader'
 import { PlatformCard } from '../components/PlatformCard'
 import { PlatformIcon } from '../components/PlatformIcon'
@@ -1034,7 +1035,20 @@ function CheckoutForm({
   }
 
   if (placed) {
-    return <PaymentStage order={placed} sku={quote.sku} onDone={() => navigate('/track')} />
+    return (
+      <PaymentStage
+        order={placed}
+        sku={quote.sku}
+        /*
+         * Carried through because the payment claim is authenticated the way order
+         * tracking is -- reference plus the email on the order -- and this is the email
+         * that was just used to place it. Reading it back off the order would mean
+         * another round trip for something already in hand.
+         */
+        email={email.trim()}
+        onDone={() => navigate('/track')}
+      />
+    )
   }
 
   /*
@@ -2027,7 +2041,7 @@ function validateCredentials(
 /* ------------------------------------------------------------ payment step --- */
 
 function PaymentStage({
-  order, sku, onDone,
+  order, sku, email, onDone,
 }: {
   order: CreateOrderResponse
   /*
@@ -2036,6 +2050,8 @@ function PaymentStage({
    * launch day for something the caller already knows.
    */
   sku: string
+  /** The email on the order — guest auth for the payment claim. */
+  email: string
   onDone: () => void
 }) {
   const t = useT()
@@ -2073,18 +2089,30 @@ function PaymentStage({
         {t.order.keepReference}
       </p>
 
-      {stub ? (
-        // Local and CI environments run without gateway credentials so the whole
-        // flow can be walked end to end. Saying so plainly beats a payment window
-        // that silently does nothing.
-        <Alert tone="neutral" title={t.order.stubTitle}>{t.order.stubBody}</Alert>
-      ) : (
+      {/*
+        The gateway button appears only when a gateway is actually configured, and is no
+        longer the only way out of this screen.
+
+        What used to be here was a stub notice reading "no money will move" whenever
+        Razorpay was unset. That was true when the gateway was the only payment path and
+        became false the moment manual payment existed: money moves through UPI, PayPal
+        and USDT with no gateway involved at all. Leaving it would have told every
+        customer their payment could not go through, on the screen where they pay.
+      */}
+      {!stub && (
         <Button full size="lg" loading={opening} onClick={() => void pay()}>
           {t.order.pay(order.totalFormatted)}
         </Button>
       )}
 
       {error && <Alert tone="warn">{error}</Alert>}
+
+      <ManualPayment
+        publicRef={order.publicRef}
+        email={email}
+        sku={sku}
+        totalFormatted={order.totalFormatted}
+      />
 
       {/*
         What a coaching buyer does next.

@@ -351,6 +351,62 @@ export interface MyCoaching {
   policy: CoachingPolicy
 }
 
+/** How a customer may pay when they pay outside the gateway. */
+export type ManualPaymentMethod = 'UPI' | 'PAYPAL' | 'CRYPTO'
+
+/**
+ * One payment destination, served by the API rather than held in this bundle.
+ *
+ * The server records which address it sent a customer to, so the address shown here
+ * and the address written against the claim have to be the same string. Serving it is
+ * what makes that true; a copy in the bundle would be a second source that can drift.
+ */
+export interface ManualPaymentOption {
+  method: ManualPaymentMethod
+  /** The payable address itself: a UPI id, a PayPal link, a wallet address. */
+  destination: string
+  /** Account holder, where there is one to show. Null for PayPal and crypto. */
+  accountName: string | null
+  /**
+   * An optional way to open the payment instead of copying it — PayPal's managed-QR
+   * link. Null where the destination is the only form there is.
+   */
+  link: string | null
+  /** What this method's payers call their reference, e.g. "UTR". */
+  referenceName: string
+}
+
+/**
+ * The record of a customer saying they paid. Not a receipt — nothing is confirmed
+ * until an operator finds the money.
+ */
+export interface ManualPaymentClaim {
+  id: number
+  method: ManualPaymentMethod
+  reference: string
+  status: 'SUBMITTED' | 'VERIFIED' | 'REJECTED'
+  submittedAt: string
+}
+
+/** A claim as the operations console sees it, joined to the order it belongs to. */
+export interface AdminPaymentClaim {
+  id: number
+  publicRef: string
+  customerEmail: string | null
+  sku: string
+  totalMinor: number
+  totalFormatted: string
+  currency: string
+  method: ManualPaymentMethod
+  /** Which account the customer was told to pay — where to go looking. */
+  destination: string
+  reference: string
+  status: 'SUBMITTED' | 'VERIFIED' | 'REJECTED'
+  submittedAt: string
+  reviewedAt: string | null
+  reviewNote: string | null
+}
+
 export interface ApiErrorBody {
   error: string
   message: string

@@ -7,6 +7,7 @@ import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { AdminStats, OrderSummary } from '../../lib/types'
 import { statusTone } from '../Track'
+import { PaymentClaims } from './PaymentClaims'
 
 /**
  * Every status an order can be in, in lifecycle order.
@@ -97,6 +98,15 @@ export default function Admin() {
       */}
       <Section wide className="rhythm-section">
       {error && <Alert tone="warn">{error}</Alert>}
+
+      {/*
+        Above the queue, and above the stats.
+
+        Every row here is somebody who has already sent money and cannot be served until
+        a person checks it, and no other view in the console surfaces them -- to the
+        order queue below they are indistinguishable from customers who never paid.
+      */}
+      <PaymentClaims />
 
       {stats && (
         /*

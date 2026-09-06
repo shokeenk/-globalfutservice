@@ -534,6 +534,17 @@ public class OrderService {
                         "We could not find an order with that reference and email."));
     }
 
+    /**
+     * Staff only, by primary key. Used where the caller already holds a row that
+     * references an order -- a manual payment claim, say -- and has no public reference
+     * to look it up by.
+     */
+    @Transactional(readOnly = true)
+    public OrderEntity requireById(Long orderId) {
+        return orders.findById(orderId)
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("No such order."));
+    }
+
     /** Staff only. Never reachable from a customer-facing path. */
     @Transactional(readOnly = true)
     public OrderEntity requireAny(String publicRef) {

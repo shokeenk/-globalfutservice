@@ -777,6 +777,46 @@ const es: Dictionary = {
       'Razorpay para habilitar pagos reales.',
     payWindowFailed: 'La ventana de pago no se ha abierto. Revisa tu conexión e inténtalo de nuevo.',
     trackOrder: 'Seguir este pedido',
+
+    /* ---------------------------------------------------------- manual payment --- */
+    payTitle: 'Paga tu pedido',
+    payIntro:
+      'Paga con cualquiera de las opciones siguientes y luego introduce la referencia que te dé ' +
+      'tu aplicación de pago. La comprobamos en nuestra cuenta y empezamos tu pedido en cuanto llegue.',
+    payTabUpi: 'UPI',
+    payTabPaypal: 'PayPal',
+    payTabCrypto: 'Cripto',
+    payScanHint: 'Escanea el código con tu aplicación de pago, o copia la dirección de abajo.',
+    payAmountDue: (total: string) => `Importe a enviar: ${total}`,
+    payPayTo: 'Pagando a',
+    payCopy: 'Copiar',
+    payCopied: 'Copiado',
+    payCopyFailed: 'No se ha podido copiar: selecciona la dirección y cópiala a mano.',
+    payOpenPaypal: 'Abrir PayPal',
+    payCryptoWarning:
+      'Envía únicamente USDT por la red TRON (TRC20) a esta dirección. Enviar cualquier otro ' +
+      'activo, o usar otra red, provocará la pérdida permanente de los fondos.',
+    payReferenceLabel: 'Número de referencia UTR / de la transacción',
+    payReferenceHint:
+      'Cuando hayas completado el pago, introduce aquí el número de referencia para que podamos ' +
+      'verificarlo y procesar tu pedido.',
+    payReferencePlaceholder: (kind: string) => {
+      if (kind === 'UTR') return 'Número UTR de 12 dígitos'
+      if (kind === 'transaction hash') return 'Hash de la transacción (TXID)'
+      return 'ID de la transacción'
+    },
+    payReferenceRequired: 'Introduce el número de referencia de tu pago antes de enviar.',
+    paySubmit: 'Ya he pagado: enviar referencia',
+    payChangeMethod: 'Pagar de otra forma',
+    payClaimTitle: 'Referencia recibida: la estamos comprobando',
+    payClaimBody: (reference: string) =>
+      `Tenemos tu referencia ${reference}. Alguien la comprueba en nuestra cuenta y libera tu ` +
+      'pedido en cuanto aparezca el pago. Te enviaremos un correo cuando ocurra.',
+    payClaimResubmit: '¿La has escrito mal? Envía otra referencia',
+    payClaimFailed: 'No hemos podido registrar esa referencia. Revísala e inténtalo de nuevo.',
+    payMethodsFailed:
+      'No hemos podido cargar las opciones de pago. Actualiza la página o escribe a soporte con ' +
+      'la referencia de tu pedido.',
     coachingNextStub:
       'Las sesiones se añaden cuando se confirma un pago. En este entorno ningún pago '
       + 'puede confirmarse, así que no se ha añadido ninguna y el calendario seguirá '
