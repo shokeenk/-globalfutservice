@@ -689,6 +689,8 @@ const es: Dictionary = {
     refreshingPrice: 'Actualizando el precio…',
     priceHeld: (time) => `Precio reservado ${time}`,
 
+    seoTitleFor: (service, season) => `Pedir ${service} — EA ${season}`,
+    seoDescriptionGeneric: 'Todo con el precio por delante. Nada añadido al final.',
     cartTitle: 'Tu carrito',
     cartRemove: 'Quitar del carrito',
     continueShopping: 'Seguir comprando',

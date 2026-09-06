@@ -163,9 +163,23 @@ function mockSlots() {
 
 /** Mirrors the server's rounding: exact arithmetic, one rounding of the total. */
 function quote(body) {
+  /*
+   * Boosting and coaching are FLAT: one price for the tier, no quantity. Pricing them
+   * per-million produced a plausible-looking wrong number, which is worse than an
+   * obviously wrong one.
+   */
+  const FLAT_PRICES = {
+    WINS_9: 120000, WINS_10: 155000, WINS_11: 190000, WINS_12: 230000,
+    WINS_13: 270000, WINS_14: 310000, WINS_15: 355000, WINS_EXTRA_8: 170000,
+    DIV_8_TO_7: 75000, DIV_7_TO_6: 95000, DIV_6_TO_5: 120000, DIV_5_TO_4: 150000,
+    DIV_4_TO_3: 185000, DIV_3_TO_2: 225000, DIV_2_TO_1: 290000,
+    SINGLE_SESSION: 90000, MONTHLY_6_SESSIONS: 405000,
+  }
+  const flat = body.variant ? FLAT_PRICES[body.variant] : undefined
+
   const rate = body.platform === 'PC' ? 70000 : 60000
-  const qty = Number(body.quantity ?? 1)
-  const base = rate * qty
+  const qty = flat ? 1 : Number(body.quantity ?? 1)
+  const base = flat ?? rate * qty
 
   /*
    * One coupon, so the discount path can actually be exercised.
@@ -193,7 +207,9 @@ function quote(body) {
   const total = Math.round(subtotal + fee)
 
   const lines = [
-    { code: 'BASE', label: `Safe Trading Service — ${qty}M (${body.platform})`,
+    { code: 'BASE', label: flat
+        ? `${body.sku ?? 'Order'} — ${body.variant}`
+        : `Safe Trading Service — ${qty}M (${body.platform})`,
       amountMinor: Math.round(base), amountFormatted: inr(Math.round(base)) },
     { code: 'MARKET_TAX', label: 'EA transfer market tax (5%)',
       amountMinor: Math.round(tax), amountFormatted: inr(Math.round(tax)) },
@@ -212,8 +228,17 @@ function quote(body) {
 
   const now = Date.now()
   return {
-    quoteId: 'q_mock', season: 'FC26', sku: 'TRADING_SERVICE',
-    platform: body.platform, variant: null, quantity: String(qty), currency: 'INR',
+    /*
+     * Echoes the sku and variant it was asked about.
+     *
+     * It used to answer every quote as TRADING_SERVICE with a null variant, whatever was
+     * requested -- so a boosting tier priced as coins and the cart line said "Safe Trading
+     * Service · 1M". That looked exactly like the bug it was hiding, which is the worst
+     * thing a mock can do: it made a real defect indistinguishable from its own shortcut.
+     */
+    quoteId: 'q_mock', season: 'FC26', sku: body.sku || 'TRADING_SERVICE',
+    platform: body.platform ?? null, variant: body.variant ?? null,
+    quantity: String(qty), currency: 'INR',
     lines, subtotalMinor: Math.round(subtotal), totalMinor: total,
     couponCode: couponOk ? code : null,
     couponMessage: code && !couponOk ? 'That code is not valid.' : null,

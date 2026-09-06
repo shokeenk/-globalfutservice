@@ -19,7 +19,7 @@ import { useReducedMotion } from '../motion'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 import { CoinIcon } from '../brand/CoinIcon'
-import { RankBadge } from '../components/RankBadge'
+import { RankBadge, hasBadge } from '../components/RankBadge'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
@@ -28,14 +28,6 @@ type Step = 'configure' | 'details' | 'paying' | 'placed'
 
 export default function Order() {
   const t = useT()
-  useSeo({
-    title: t.order.seoTitle(SEASON),
-    description: t.order.seoDescription,
-    // The configurator produces an unbounded number of near-duplicate URL states
-    // and has nothing a search engine should hold. Rank the landing pages instead.
-    noindex: true,
-  })
-
   const { catalog, policy, loading, error } = useCatalog()
   const labels = useCatalogLabels()
   const { account } = useAuth()
@@ -56,6 +48,26 @@ export default function Order() {
     catalog?.services.find((s) => s.sku === 'TRADING_SERVICE')
   const options = useMemo(() => service?.options ?? [], [service])
   const isFlat = service?.priceUnit === 'FLAT'
+
+  /*
+   * Named after whatever is being bought, not after coins.
+   *
+   * This used to run above the catalogue lookup, so every order -- a boosting tier, a
+   * coaching block -- opened a tab titled "Safe Trading Service for EA FC 26" with a
+   * description telling the reader to choose a platform and an amount. The page was
+   * right and everything naming it was wrong, which reads exactly like being dumped on
+   * the trading checkout.
+   *
+   * `noindex` stays: the configurator produces an unbounded number of near-duplicate URL
+   * states and has nothing a search engine should hold. The landing pages rank instead.
+   */
+  useSeo({
+    title: service
+      ? t.order.seoTitleFor(labels.service(service.sku, service.displayName), SEASON)
+      : t.order.seoTitle(SEASON),
+    description: t.order.seoDescriptionGeneric,
+    noindex: true,
+  })
 
   const [platform, setPlatform] = useState<string>('')
   const [variant, setVariant] = useState<string>(params.get('variant') ?? '')
@@ -1587,7 +1599,14 @@ function CartCard({ quote, onEdit }: { quote: SignedQuote; onEdit: () => void })
 
   return (
     <div className="plate flex items-start gap-4 p-5">
-      {quote.platform ? (
+      {/*
+        The crest where the tier has one, the platform where it does not, and the coin
+        only for coins. A boosting order showed a stack of coins, which is the mark of
+        the one service it is not.
+      */}
+      {hasBadge(quote.variant) ? (
+        <RankBadge variant={quote.variant} size={38} className="mt-0.5 shrink-0" />
+      ) : quote.platform ? (
         <PlatformIcon platform={quote.platform} className="mt-0.5 h-9 w-9 shrink-0 text-chalk-muted" />
       ) : (
         <CoinIcon size={36} className="mt-0.5" />
@@ -1604,7 +1623,16 @@ function CartCard({ quote, onEdit }: { quote: SignedQuote; onEdit: () => void })
           {`${SEASON} · ${labels.service(quote.sku, null)}`}
         </p>
         <p className="tnum mt-0.5 text-[13px] text-chalk-muted">
-          {quote.quantity ? t.catalog.millions(quote.quantity) : labels.variant(quote.variant, null)}
+          {/*
+            Keyed off the variant, not the quantity.
+
+            The engine sends quantity 1 for a FLAT sku, and 1 is truthy -- so a 15-wins
+            boosting order rendered "1M", a coin amount, on a product sold by rank. The
+            variant is what actually distinguishes a tier, so it decides.
+          */}
+          {quote.variant
+            ? labels.variant(quote.variant, null)
+            : quote.quantity ? t.catalog.millions(quote.quantity) : null}
           {quote.platform && ` · ${quote.platform}`}
         </p>
       </div>

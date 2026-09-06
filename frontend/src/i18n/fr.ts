@@ -689,6 +689,8 @@ const fr: Dictionary = {
     refreshingPrice: 'Actualisation du prix…',
     priceHeld: (time) => `Prix bloqué ${time}`,
 
+    seoTitleFor: (service, season) => `Commander ${service} — EA ${season}`,
+    seoDescriptionGeneric: 'Tout est affiché d’avance. Rien n’est ajouté à la fin.',
     cartTitle: 'Ton panier',
     cartRemove: 'Retirer du panier',
     continueShopping: 'Continuer les achats',

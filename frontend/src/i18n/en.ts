@@ -813,6 +813,8 @@ const en = {
     refreshingPrice: 'Refreshing price…',
     priceHeld: (time: string) => `Price held for ${time}`,
 
+    seoTitleFor: (service: string, season: string) => `Order ${service} — EA ${season}`,
+    seoDescriptionGeneric: 'Everything priced up front. Nothing added at the last step.',
     cartTitle: 'Your cart',
     cartRemove: 'Remove from cart',
     continueShopping: 'Continue shopping',
