@@ -132,6 +132,34 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/v1/orders").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/orders/track").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/tickets").permitAll()
+
+                    /*
+                      Paying without a gateway, and saying you have.
+
+                      Both are open for the same reason POST /orders is: guest checkout
+                      exists, and most people paying have no account. Withholding them
+                      from guests does not protect anything -- it just means the customer
+                      cannot pay.
+
+                      What each actually exposes:
+
+                        * `methods` returns the addresses that are already printed on the
+                          checkout page and encoded in the QR images this repo serves. It
+                          is public information by construction.
+
+                        * `claims/{ref}` is authenticated inside the handler, by reference
+                          plus the email on the order -- the same pair /orders/track
+                          requires. The reference alone is not a credential, and the
+                          handler refuses anything that is not AWAITING_PAYMENT. Worst
+                          case for a guessed pair is a claim an operator then fails to
+                          find money for and rejects.
+
+                      Enumerated rather than opening /payments/**, following the rule the
+                      coaching block above sets: the same prefix already carries the
+                      Razorpay webhook, and it will carry more later.
+                    */
+                    .requestMatchers(HttpMethod.GET, "/api/v1/payments/methods").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/claims/*").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
 
                     // The OAuth redirect dance. Both legs must be reachable to a browser
