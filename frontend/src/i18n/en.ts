@@ -901,6 +901,60 @@ const en = {
       'enable real payments.',
     payWindowFailed: 'The payment window would not open. Check your connection and try again.',
     trackOrder: 'Track this order',
+
+    /* ---------------------------------------------------------- manual payment --- */
+    payTitle: 'Pay for your order',
+    payIntro:
+      'Pay with any of the options below, then enter the reference your payment app gives you. ' +
+      'We check it against our account and start your order once it lands.',
+    payTabUpi: 'UPI',
+    payTabPaypal: 'PayPal',
+    payTabCrypto: 'Crypto',
+    payScanHint: 'Scan the code with your payment app, or copy the address below.',
+    payAmountDue: (total: string) => `Amount to send: ${total}`,
+    payPayTo: 'Paying',
+    payCopy: 'Copy',
+    payCopied: 'Copied',
+    payCopyFailed: 'Could not copy — select the address and copy it by hand.',
+    payOpenPaypal: 'Open PayPal',
+    /*
+     * Deliberately blunt, and deliberately not softened.
+     *
+     * Sending the wrong asset, or the right asset on the wrong chain, destroys it. There
+     * is no support process that recovers it and no refund we can make. A warning that
+     * reads as boilerplate gets skimmed, so this one names the loss.
+     */
+    payCryptoWarning:
+      'Only send USDT on the TRON (TRC20) network to this address. Sending any other asset, ' +
+      'or using a different network, will result in permanent loss of funds.',
+    payReferenceLabel: 'UTR / Transaction reference number',
+    payReferenceHint:
+      'After completing your payment, enter the reference number here so we can verify and ' +
+      'process your order.',
+    // Return type pinned to string. Left to inference it becomes a union of these three
+    // literals, which the Spanish and French files then cannot satisfy.
+    payReferencePlaceholder: (kind: string): string => {
+      if (kind === 'UTR') return '12-digit UTR number'
+      if (kind === 'transaction hash') return 'Transaction hash (TXID)'
+      return 'Transaction ID'
+    },
+    payReferenceRequired: 'Enter the reference number from your payment before submitting.',
+    paySubmit: 'I have paid — submit reference',
+    payChangeMethod: 'Pay a different way',
+    /*
+     * The confirmation says "checking", never "paid". At this point a customer has typed a
+     * string and nothing has been verified; a green tick reading "payment received" would
+     * be telling them something we do not know.
+     */
+    payClaimTitle: 'Reference received — we are checking it',
+    payClaimBody: (reference: string) =>
+      `We have your reference ${reference}. Someone checks this against our account and ` +
+      'releases your order once the payment shows up. You will get an email when it does.',
+    payClaimResubmit: 'Entered it wrong? Submit a different reference',
+    payClaimFailed: 'We could not record that reference. Check it and try again.',
+    payMethodsFailed:
+      'We could not load the payment options. Refresh the page, or contact support with your ' +
+      'order reference.',
     coachingNextStub:
       'Session credits are added when a payment settles. No payment can settle in this '
       + 'environment, so none have been added and the booking calendar will stay hidden. '

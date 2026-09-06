@@ -236,6 +236,26 @@ gfs:
   boosting:
     success-rate-per-variant: ${GFS_BOOSTING_SUCCESS_RATES:WINS_13:9200,WINS_14:9400,WINS_15:9500}
 
+  # Where customers are told to send money when they pay outside the gateway.
+  #
+  # Committed as defaults because they are published on the checkout page -- these
+  # are not secrets, they are the addresses the QR codes already encode, and a value
+  # that appears on a public page gains nothing from being hidden here. They stay
+  # overridable so a handle can be rotated without a deploy.
+  #
+  # Each of these was read out of the QR image it belongs to rather than retyped.
+  # If you change one, change the matching image in
+  # frontend/public/brand/payment/ in the same commit: the QR is what most
+  # customers actually scan, and a page where the picture and the text disagree
+  # sends some customers' money to the old address with no way to tell which.
+  manual-payments:
+    upi-coins: ${GFS_UPI_COINS:9166172359@ybl}
+    upi-coins-name: ${GFS_UPI_COINS_NAME:Sunita Yogi}
+    upi-services: ${GFS_UPI_SERVICES:sharvinay088@okicici}
+    upi-services-name: ${GFS_UPI_SERVICES_NAME:Vinu Hunter}
+    paypal: ${GFS_PAYPAL_LINK:https://www.paypal.com/qrcodes/managed/2241b4bb-ae71-4c69-8337-9efa9c89169a}
+    crypto-trc20: ${GFS_CRYPTO_TRC20:TEGes4sDu6f81jN5na5sR3BZaNXXSFLtoX}
+
   loyalty:
     daily-bonus-points: ${GFS_LOYALTY_DAILY_BONUS_POINTS:3}
     # Deliberately not UTC. With a UTC boundary an Indian customer's day rolls

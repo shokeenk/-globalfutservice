@@ -778,6 +778,46 @@ const fr: Dictionary = {
       'clés Razorpay pour activer les paiements réels.',
     payWindowFailed: 'La fenêtre de paiement ne s’est pas ouverte. Vérifie ta connexion et réessaie.',
     trackOrder: 'Suivre cette commande',
+
+    /* ---------------------------------------------------------- manual payment --- */
+    payTitle: 'Règle ta commande',
+    payIntro:
+      'Paie avec l’une des options ci-dessous, puis saisis la référence que ton application de ' +
+      'paiement te donne. Nous la vérifions sur notre compte et lançons ta commande dès qu’elle arrive.',
+    payTabUpi: 'UPI',
+    payTabPaypal: 'PayPal',
+    payTabCrypto: 'Crypto',
+    payScanHint: 'Scanne le code avec ton application de paiement, ou copie l’adresse ci-dessous.',
+    payAmountDue: (total: string) => `Montant à envoyer : ${total}`,
+    payPayTo: 'Paiement à',
+    payCopy: 'Copier',
+    payCopied: 'Copié',
+    payCopyFailed: 'Copie impossible — sélectionne l’adresse et copie-la à la main.',
+    payOpenPaypal: 'Ouvrir PayPal',
+    payCryptoWarning:
+      'N’envoie que des USDT sur le réseau TRON (TRC20) à cette adresse. Envoyer un autre actif, ' +
+      'ou utiliser un autre réseau, entraînera la perte définitive des fonds.',
+    payReferenceLabel: 'Numéro de référence UTR / de transaction',
+    payReferenceHint:
+      'Une fois ton paiement effectué, saisis ici le numéro de référence pour que nous puissions ' +
+      'le vérifier et traiter ta commande.',
+    payReferencePlaceholder: (kind: string) => {
+      if (kind === 'UTR') return 'Numéro UTR à 12 chiffres'
+      if (kind === 'transaction hash') return 'Hash de la transaction (TXID)'
+      return 'ID de la transaction'
+    },
+    payReferenceRequired: 'Saisis le numéro de référence de ton paiement avant d’envoyer.',
+    paySubmit: 'J’ai payé — envoyer la référence',
+    payChangeMethod: 'Payer autrement',
+    payClaimTitle: 'Référence reçue — nous la vérifions',
+    payClaimBody: (reference: string) =>
+      `Nous avons ta référence ${reference}. Quelqu’un la vérifie sur notre compte et libère ta ` +
+      'commande dès que le paiement apparaît. Tu recevras un e-mail à ce moment-là.',
+    payClaimResubmit: 'Erreur de saisie ? Envoie une autre référence',
+    payClaimFailed: 'Nous n’avons pas pu enregistrer cette référence. Vérifie-la et réessaie.',
+    payMethodsFailed:
+      'Nous n’avons pas pu charger les options de paiement. Actualise la page, ou contacte le ' +
+      'support avec la référence de ta commande.',
     coachingNextStub:
       'Les séances sont créditées quand un paiement est confirmé. Aucun paiement ne peut '
       + 'aboutir dans cet environnement, donc rien n’a été crédité et le calendrier '
