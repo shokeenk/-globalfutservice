@@ -605,7 +605,7 @@ function SlotPicker({
           {t.coaching.coachDiscord}{' '}
           <a
             className="text-chalk underline"
-            href={BUSINESS.discordInvite}
+            href={BUSINESS.discordDm}
             target="_blank"
             rel="noreferrer"
           >

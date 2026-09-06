@@ -205,7 +205,7 @@ function Terms() {
         </p>
         <p>
           Official Discord:{' '}
-          <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+          <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
             {BUSINESS.discordName}
           </a>
         </p>
@@ -263,7 +263,7 @@ function Terms() {
         </p>
         <p>
           Official Discord:{' '}
-          <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+          <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
             {BUSINESS.discordName}
           </a>
         </p>
@@ -352,7 +352,7 @@ function Terms() {
           </li>
           <li>
             Discord:{' '}
-            <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+            <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
               {BUSINESS.discordName}
             </a>
           </li>
@@ -440,7 +440,7 @@ function Terms() {
           </li>
           <li>
             Discord:{' '}
-            <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+            <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
               {BUSINESS.discordName}
             </a>
           </li>
@@ -475,8 +475,8 @@ function Terms() {
           <li>Official Discord: {BUSINESS.discordName}</li>
           <li>
             Discord:{' '}
-            <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
-              {BUSINESS.discordInvite}
+            <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
+              {BUSINESS.discordDm}
             </a>
           </li>
         </ul>
@@ -796,7 +796,7 @@ function Refund({ policy }: { policy: Policy | null }) {
         </p>
         <p className="mt-4 text-[14px]">
           To make a claim, contact us on our official Discord:{' '}
-          <a className="underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+          <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
             {BUSINESS.discordName}
           </a>
         </p>
