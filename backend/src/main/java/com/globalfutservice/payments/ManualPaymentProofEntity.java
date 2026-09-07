@@ -7,7 +7,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -38,13 +37,21 @@ public class ManualPaymentProofEntity {
     private int sizeBytes;
 
     /**
-     * Lazy, and that is load-bearing rather than a micro-optimisation.
+     * The image.
      *
-     * <p>The operator queue lists claims and asks only whether a screenshot exists. Left
-     * eager, every refresh of that list would pull every attached image out of the
-     * database to display none of them.
+     * <p><b>No {@code @Lob}, deliberately.</b> On PostgreSQL that annotation does not mean
+     * "this is big" -- it selects the large-object type, so Hibernate maps the field to an
+     * {@code oid} and expects an {@code oid} column. V19 declares {@code BYTEA}, and with
+     * {@code ddl-auto: validate} the mismatch is not a slow query or a wrong result: the
+     * application refuses to start. It is the mapping every other binary column here
+     * already uses -- see {@code CredentialVaultEntity}, whose ciphertext, iv and wrapped
+     * key are all plain {@code byte[]} against {@code BYTEA} columns.
+     *
+     * <p>{@code LAZY} on a basic attribute is a hint Hibernate honours only with bytecode
+     * enhancement, which this build does not run, so treat it as documentation rather than
+     * a guarantee. What actually keeps images out of the operator queue is that the queue
+     * never loads this entity: it asks {@code claimIdsWithProof} for a list of ids.
      */
-    @Lob
     @Basic(fetch = FetchType.LAZY)
     @Column(nullable = false)
     private byte[] bytes;
