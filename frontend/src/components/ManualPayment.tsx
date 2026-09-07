@@ -55,6 +55,10 @@ export function ManualPayment({
   const [touched, setTouched] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [claim, setClaim] = useState<ManualPaymentClaim | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  // Kept apart from `error`: the reference was recorded and only the screenshot failed,
+  // which is a different thing to tell somebody who has already sent money.
+  const [proofError, setProofError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -89,6 +93,29 @@ export function ManualPayment({
         `/api/v1/payments/claims/${encodeURIComponent(publicRef)}`,
         { email, method: active.method, reference: reference.trim() },
       )
+
+      /*
+       * The screenshot goes second, and its failure is not the claim's failure.
+       *
+       * The reference is what an operator needs; the image only makes checking it
+       * faster. Having recorded the reference successfully, throwing the whole
+       * submission away because a 4 MB upload timed out would lose the part that
+       * matters to save the part that does not -- and the customer, who has already
+       * sent money, would be told their payment was not recorded.
+       */
+      if (file) {
+        try {
+          const form = new FormData()
+          form.append('email', email)
+          form.append('file', file)
+          await api.upload(
+            `/api/v1/payments/claims/${encodeURIComponent(publicRef)}/proof`, form)
+        } catch (uploadFailed) {
+          setProofError(uploadFailed instanceof ApiError
+            ? uploadFailed.message : t.order.payProofFailed)
+        }
+      }
+
       setClaim(recorded)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t.order.payClaimFailed)
@@ -108,6 +135,9 @@ export function ManualPayment({
         <p className="mt-2 text-[13px] leading-relaxed text-chalk-muted">
           {t.order.payClaimBody(claim.reference)}
         </p>
+        {proofError && (
+          <p className="mt-2 text-[12.5px] leading-snug text-warn">{proofError}</p>
+        )}
         {/*
           A way back, because the most common thing to go wrong here is a mistyped
           reference and the customer notices immediately after sending it. The API
@@ -115,7 +145,7 @@ export function ManualPayment({
         */}
         <button
           type="button"
-          onClick={() => { setClaim(null); setReference(''); setTouched(false) }}
+          onClick={() => { setClaim(null); setReference(''); setTouched(false); setProofError(null) }}
           className="mt-4 text-[13px] font-semibold text-brand-400 hover:underline
                      focus-visible:outline focus-visible:outline-2
                      focus-visible:outline-offset-2 focus-visible:outline-brand-400"
@@ -198,6 +228,8 @@ export function ManualPayment({
         )}
       </Field>
 
+      <ProofPicker file={file} onPick={setFile} />
+
       {error && <Alert tone="warn">{error}</Alert>}
 
       <Button
@@ -209,6 +241,109 @@ export function ManualPayment({
       >
         {t.order.paySubmit}
       </Button>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------------- the proof --- */
+
+/** What the server will accept. Kept in step with ImageType on the backend. */
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_PROOF_BYTES = 5 * 1024 * 1024
+
+/**
+ * Optional screenshot of the payment.
+ *
+ * <p>Optional is the whole design. It is evidence that saves an operator a lookup, not
+ * authorisation — a claim without one is verified exactly the same way. Requiring it
+ * would block somebody whose phone will not share an image, on the screen where they have
+ * already sent money and cannot undo it.
+ */
+function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | null) => void }) {
+  const t = useT()
+  const [preview, setPreview] = useState<string | null>(null)
+  const [rejected, setRejected] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!file) {
+      setPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    // Revoked on replacement and unmount. Without this, a customer trying three
+    // screenshots leaks all three for the life of the tab.
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  function choose(picked: File | null) {
+    setRejected(null)
+    if (!picked) {
+      onPick(null)
+      return
+    }
+    /*
+     * Checked here as a courtesy, not as a control. The server sniffs the bytes and is
+     * the only thing that decides -- this just means a customer learns their PDF will
+     * not do before they wait for it to upload, rather than after.
+     */
+    if (!ACCEPTED.includes(picked.type)) {
+      setRejected(t.order.payProofWrongType)
+      onPick(null)
+      return
+    }
+    if (picked.size > MAX_PROOF_BYTES) {
+      setRejected(t.order.payProofTooBig)
+      onPick(null)
+      return
+    }
+    onPick(picked)
+  }
+
+  return (
+    <div className="rounded-edge border border-dashed border-ink-400 p-3">
+      <label className="block text-[13px] font-medium text-chalk-muted" htmlFor="payment-proof">
+        {t.order.payProofLabel}
+      </label>
+      <p className="mt-1 text-[12px] leading-snug text-chalk-faint">{t.order.payProofHint}</p>
+
+      <input
+        id="payment-proof"
+        type="file"
+        accept={ACCEPTED.join(',')}
+        onChange={(e) => choose(e.target.files?.[0] ?? null)}
+        className="mt-2 block w-full text-[12.5px] text-chalk-muted
+                   file:mr-3 file:h-9 file:cursor-pointer file:rounded-edge file:border-0
+                   file:bg-ink-700 file:px-3 file:text-[12.5px] file:font-semibold
+                   file:text-chalk hover:file:bg-ink-600"
+      />
+
+      {rejected && <p className="mt-2 text-[12px] leading-snug text-warn">{rejected}</p>}
+
+      {preview && file && (
+        <div className="mt-3 flex items-start gap-3">
+          <img
+            src={preview}
+            alt={t.order.payProofPreviewAlt}
+            className="h-20 w-20 rounded-edge object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12.5px] text-chalk">{file.name}</p>
+            <p className="text-[12px] text-chalk-faint">
+              {(file.size / 1024).toFixed(0)} KB
+            </p>
+            <button
+              type="button"
+              onClick={() => choose(null)}
+              className="mt-1 text-[12px] font-semibold text-brand-400 hover:underline
+                         focus-visible:outline focus-visible:outline-2
+                         focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+            >
+              {t.order.payProofRemove}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

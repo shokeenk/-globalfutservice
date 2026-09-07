@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 class ManualPaymentServiceTest {
 
     private ManualPaymentClaimRepository claims;
+    private ManualPaymentProofRepository proofs;
     private OrderService orderService;
     private com.globalfutservice.credentials.CredentialVaultService vault;
     private com.globalfutservice.notify.NotificationService notifications;
@@ -60,10 +61,14 @@ class ManualPaymentServiceTest {
         when(claims.findByOrderIdAndStatus(anyLong(), any())).thenReturn(Optional.empty());
         when(claims.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
 
+        proofs = mock(ManualPaymentProofRepository.class);
+        when(proofs.findByClaimId(anyLong())).thenReturn(Optional.empty());
+        when(proofs.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
+
         vault = mock(com.globalfutservice.credentials.CredentialVaultService.class);
         notifications = mock(com.globalfutservice.notify.NotificationService.class);
 
-        service = new ManualPaymentService(claims, orderService, vault, notifications, props);
+        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, props);
     }
 
     private static OrderEntity order(OrderStatus status, Sku sku) {
@@ -147,7 +152,7 @@ class ManualPaymentServiceTest {
             when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
-                    new ManualPaymentService(claims, orderService, vault, notifications, bare);
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, bare);
 
             assertThatThrownBy(() -> noDestinations.submit(
                     order(OrderStatus.AWAITING_PAYMENT, Sku.COACHING),
@@ -225,7 +230,7 @@ class ManualPaymentServiceTest {
             // An account with no link is payable; a link with no account is not. Dropping
             // PayPal here would take away the method over a missing convenience.
             List<ManualPaymentService.PaymentOption> options =
-                    new ManualPaymentService(claims, orderService, vault, notifications, emailOnly)
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, emailOnly)
                             .optionsFor("COACHING");
 
             assertThat(options).singleElement()
@@ -243,7 +248,7 @@ class ManualPaymentServiceTest {
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, "TWALLET"));
 
-            assertThat(new ManualPaymentService(claims, orderService, vault, notifications, partial)
+            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, partial)
                     .optionsFor("COACHING"))
                     .extracting(ManualPaymentService.PaymentOption::method)
                     .containsExactly(ManualPaymentMethod.CRYPTO);

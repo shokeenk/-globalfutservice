@@ -88,6 +88,18 @@ public final class ManualPaymentDtos {
         }
     }
 
+    /**
+     * What the customer is told after attaching a screenshot.
+     *
+     * <p>Says what was stored, not where it is. The image is served only to operators,
+     * so handing the customer a URL for it would be offering a link nothing can open.
+     */
+    public record ProofResponse(
+            String contentType,
+            int sizeBytes,
+            Instant uploadedAt) {
+    }
+
     /** The operator's review queue row. Carries the order it belongs to. */
     public record AdminClaimResponse(
             Long id,
@@ -101,6 +113,8 @@ public final class ManualPaymentDtos {
             /** Which account the customer was told to pay. Where to go looking. */
             String destination,
             String reference,
+            /** Whether a screenshot is attached. Not the image -- the queue only flags it. */
+            boolean hasProof,
             String status,
             Instant submittedAt,
             Instant reviewedAt,

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -45,6 +46,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> badRequest(ApiExceptions.BadRequestException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(e.code(), e.getMessage(), traceId()));
+    }
+
+    /**
+     * An upload larger than the servlet's own ceiling.
+     *
+     * <p>Thrown while the request is being parsed, before any controller sees it, so the
+     * service's own 5 MB check never gets the chance to produce its message. Without this
+     * the customer gets a bare 500 on the screen where they are trying to show us they
+     * have paid — and a 500 reads as "we broke", which invites them to send money again.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> uploadTooLarge(MaxUploadSizeExceededException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of("file_too_large",
+                        "That image is larger than 5 MB. A screenshot is usually well under it.",
+                        traceId()));
     }
 
     @ExceptionHandler(ApiExceptions.ConflictException.class)

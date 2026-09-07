@@ -4,6 +4,7 @@ import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
 import com.globalfutservice.payments.ManualPaymentClaimEntity;
+import com.globalfutservice.payments.ManualPaymentProofEntity;
 import com.globalfutservice.payments.ManualPaymentService;
 import com.globalfutservice.web.ApiExceptions;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 import java.util.List;
 import java.util.Locale;
@@ -89,6 +93,35 @@ public class ManualPaymentController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(ManualPaymentDtos.ClaimResponse.of(claim));
+    }
+
+    @PostMapping(value = "/claims/{publicRef}/proof", consumes = "multipart/form-data")
+    @Operation(summary = "Attach a screenshot of the payment",
+            description = """
+                    Optional. A reference alone cannot be told apart from a typo until an
+                    operator checks the account; the screenshot usually settles it in
+                    seconds because it carries the amount, the time and the destination as
+                    the customer's own app rendered them.
+
+                    Accepts JPG, PNG or WebP up to 5 MB. The type is decided from the
+                    file's own bytes, not from the Content-Type the browser sent.
+                    Uploading again replaces the previous image.
+                    """)
+    public ResponseEntity<ManualPaymentDtos.ProofResponse> attachProof(
+            @PathVariable String publicRef,
+            @RequestParam("email") String email,
+            @RequestParam("file") MultipartFile file) throws IOException {
+
+        // Same guest auth as the claim itself: the reference is not a credential, the
+        // pair is. Sent as a form field because this is a multipart request.
+        OrderEntity order = orderService.requireGuest(publicRef, email);
+
+        ManualPaymentProofEntity proof = manualPayments.attachProof(order, file.getBytes());
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(new ManualPaymentDtos.ProofResponse(
+                        proof.getContentType(), proof.getSizeBytes(), proof.getUploadedAt()));
     }
 
     private static ManualPaymentMethod parseMethod(String raw) {

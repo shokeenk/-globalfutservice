@@ -185,6 +185,19 @@ public class SecurityConfig {
                     */
                     .requestMatchers(HttpMethod.GET, "/api/v1/payments/methods").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/payments/claims/*").permitAll()
+                    /*
+                      The screenshot, which needs its own line: `claims/*` matches one
+                      path segment and this is two, so without this it would fall to
+                      anyRequest().authenticated() and 401 every upload. That is exactly
+                      how the two endpoints above shipped broken -- worth a second line
+                      rather than a wildcard, since the wildcard is what would also cover
+                      whatever gets added under /claims next.
+
+                      Reading a screenshot back is /admin/payment-claims/{id}/proof and
+                      stays operator-only: these images carry a customer's bank balance
+                      and transaction history.
+                    */
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/claims/*/proof").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
 
                     // The OAuth redirect dance. Both legs must be reachable to a browser
