@@ -401,6 +401,8 @@ export interface AdminPaymentClaim {
   /** Which account the customer was told to pay — where to go looking. */
   destination: string
   reference: string
+  /** Whether a screenshot is attached. Not the image — the queue only flags it. */
+  hasProof: boolean
   status: 'SUBMITTED' | 'VERIFIED' | 'REJECTED'
   submittedAt: string
   reviewedAt: string | null

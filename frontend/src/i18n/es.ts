@@ -798,6 +798,13 @@ const es: Dictionary = {
     payCryptoWarning:
       'Envía únicamente USDT por la red TRON (TRC20) a esta dirección. Enviar cualquier otro ' +
       'activo, o usar otra red, provocará la pérdida permanente de los fondos.',
+    payProofLabel: 'Captura del pago (opcional)',
+    payProofHint: 'Acelera la comprobación. Un JPG, PNG o WebP de menos de 5 MB: lo que muestre tu aplicación de pago al enviarlo.',
+    payProofRemove: 'Quitar',
+    payProofPreviewAlt: 'La captura que has seleccionado',
+    payProofWrongType: 'Ese archivo no es una imagen. Adjunta una captura en JPG, PNG o WebP.',
+    payProofTooBig: 'Esa imagen supera los 5 MB. Una captura suele pesar mucho menos.',
+    payProofFailed: 'Hemos registrado tu referencia, pero la captura no se ha subido. Puedes enviarla más tarde si te la pedimos.',
     payReferenceLabel: 'Número de referencia UTR / de la transacción',
     payReferenceHint:
       'Cuando hayas completado el pago, introduce aquí el número de referencia para que podamos ' +

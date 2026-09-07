@@ -17,6 +17,62 @@ import type { AdminPaymentClaim } from '../../lib/types'
  * sent money and is waiting on us, which makes it the most time-sensitive list in the
  * console -- and unlike the queue below, nothing else will surface it.
  */
+/**
+ * The customer's screenshot, fetched only when an operator asks for it.
+ *
+ * <p>Two reasons it is not simply an `<img src>` pointed at the endpoint. The route needs
+ * an operator's bearer token, which an `img` tag cannot send — it would fetch
+ * unauthenticated and render a broken image. And these files are a customer's bank
+ * screenshot: loading every one of them into a queue that refreshes every twenty seconds
+ * would put personal financial data on screen continuously, for rows nobody is looking
+ * at, and pull megabytes out of the database to do it.
+ */
+function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean }) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  // Object URLs are revoked on unmount; without this each queue refresh that had an
+  // image open would strand one.
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
+
+  if (!hasProof) {
+    return <p className="mt-1 text-[11.5px] text-chalk-faint">No screenshot</p>
+  }
+
+  if (url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="mt-1.5 block">
+        <img
+          src={url}
+          alt={`Payment screenshot for claim ${claimId}`}
+          className="max-h-28 rounded-edge border border-ink-400"
+        />
+      </a>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={() => {
+        setLoading(true)
+        setFailed(false)
+        api.blobUrl(`/api/v1/admin/payment-claims/${claimId}/proof`)
+          .then(setUrl)
+          .catch(() => setFailed(true))
+          .finally(() => setLoading(false))
+      }}
+      className="mt-1 text-[11.5px] font-semibold text-brand-400 hover:underline
+                 focus-visible:outline focus-visible:outline-2
+                 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+    >
+      {loading ? 'Loading…' : failed ? 'Could not load — retry' : 'Show screenshot'}
+    </button>
+  )
+}
+
 export function PaymentClaims() {
   const [claims, setClaims] = useState<AdminPaymentClaim[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -141,6 +197,7 @@ export function PaymentClaims() {
                     <code className="tnum text-[12.5px] text-chalk" style={{ overflowWrap: 'anywhere' }}>
                       {claim.reference}
                     </code>
+                    <ProofThumb claimId={claim.id} hasProof={claim.hasProof} />
                   </td>
 
                   <td className="tnum py-3 pr-3 font-semibold text-chalk">{claim.totalFormatted}</td>

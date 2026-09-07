@@ -9,6 +9,15 @@
 # =============================================================================
 
 spring:
+  # Payment screenshots. Spring's default cap is 1 MB, which a modern phone screenshot
+  # clears without trying -- so the limit has to be stated or the feature refuses most
+  # real uploads. The service enforces 5 MB itself and V19 has the same number as a check
+  # constraint; this is the outermost of the three, sized so the request is rejected
+  # before the bytes are buffered rather than after.
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 7MB
   application:
     name: gfs-backend
 
@@ -130,7 +139,12 @@ server:
     min-response-size: 1024
   tomcat:
     max-http-form-post-size: 256KB
-    max-swallow-size: 256KB
+    # Above the multipart ceiling on purpose. This is how much of an ABORTED upload
+    # Tomcat will read and discard so it can still send a response on that connection.
+    # At 256KB an over-sized screenshot was rejected correctly and then had its
+    # connection reset before the 400 could be written, so the customer saw a network
+    # error instead of "that image is too large".
+    max-swallow-size: 8MB
 
 management:
   endpoints:

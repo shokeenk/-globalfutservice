@@ -318,6 +318,7 @@ const ADMIN_CLAIMS = [
     method: 'UPI',
     destination: '9166172359@ybl',
     reference: '432198765012',
+    hasProof: true,
     status: 'SUBMITTED',
     submittedAt: new Date(Date.now() - 46 * 60_000).toISOString(),
     reviewedAt: null,
@@ -334,6 +335,7 @@ const ADMIN_CLAIMS = [
     method: 'CRYPTO',
     destination: 'TEGes4sDu6f81jN5na5sR3BZaNXXSFLtoX',
     reference: '3f1a9c4e77bd2058e1c6a9f30b47d5a2e8c1097b46fa25d3e0b8c7419af62d35',
+    hasProof: false,
     status: 'SUBMITTED',
     submittedAt: new Date(Date.now() - 8 * 60_000).toISOString(),
     reviewedAt: null,
@@ -529,6 +531,40 @@ createServer(async (req, res) => {
       }
       return json(res, 404, { error: 'not_found', message: 'No such claim.' }, origin)
     }
+  }
+
+  if (/^\/api\/v1\/payments\/claims\/[^/]+\/proof$/.test(url.pathname) && req.method === 'POST') {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const body = Buffer.concat(chunks)
+
+    /*
+     * Crude multipart handling on purpose -- enough to find the file part and sniff it.
+     * What matters is that the mock applies the SAME allow-list as the server: JPEG, PNG
+     * and WebP by magic bytes, never by the declared Content-Type. A mock that accepts
+     * anything would let the one security property of this endpoint go untested locally.
+     */
+    const looksLike = (buf) => {
+      for (let i = 0; i < buf.length - 12; i++) {
+        if (buf[i] === 0xFF && buf[i + 1] === 0xD8 && buf[i + 2] === 0xFF) return 'image/jpeg'
+        if (buf[i] === 0x89 && buf[i + 1] === 0x50 && buf[i + 2] === 0x4E && buf[i + 3] === 0x47) return 'image/png'
+        if (buf.slice(i, i + 4).toString() === 'RIFF' && buf.slice(i + 8, i + 12).toString() === 'WEBP') return 'image/webp'
+      }
+      return null
+    }
+
+    const type = looksLike(body)
+    if (!type) {
+      console.log('[mock] payment proof REJECTED — not a JPEG, PNG or WebP')
+      return json(res, 400, {
+        error: 'unsupported_image', message: 'Attach a JPG, PNG or WebP screenshot.',
+      }, origin)
+    }
+
+    console.log(`[mock] payment proof accepted: ${type}, ${body.length} bytes`)
+    return json(res, 201, {
+      contentType: type, sizeBytes: body.length, uploadedAt: new Date().toISOString(),
+    }, origin)
   }
 
   if (url.pathname.startsWith('/api/')) {

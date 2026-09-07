@@ -6,6 +6,7 @@ import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.notify.PaymentClaimNotification;
 import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.domain.payments.ClaimStatus;
+import com.globalfutservice.domain.payments.ImageType;
 import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
@@ -35,17 +36,20 @@ public class ManualPaymentService {
     private static final Logger log = LoggerFactory.getLogger(ManualPaymentService.class);
 
     private final ManualPaymentClaimRepository claims;
+    private final ManualPaymentProofRepository proofs;
     private final OrderService orderService;
     private final CredentialVaultService vaultService;
     private final NotificationService notifications;
     private final AppProperties props;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
+                                ManualPaymentProofRepository proofs,
                                 OrderService orderService,
                                 CredentialVaultService vaultService,
                                 NotificationService notifications,
                                 AppProperties props) {
         this.claims = claims;
+        this.proofs = proofs;
         this.orderService = orderService;
         this.vaultService = vaultService;
         this.notifications = notifications;
@@ -171,6 +175,72 @@ public class ManualPaymentService {
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef()));
 
         return claim;
+    }
+
+    /* ------------------------------------------------------------------ proof --- */
+
+    /** The largest screenshot accepted, matching the check constraint in V19. */
+    public static final int MAX_PROOF_BYTES = 5 * 1024 * 1024;
+
+    /**
+     * Attaches, or replaces, the screenshot for an order's pending claim.
+     *
+     * <p>The type is decided here from the file's own bytes. What the browser announced
+     * is discarded before it can influence anything, because the stored type is what an
+     * operator's browser is later told to render the file as.
+     *
+     * @throws ApiExceptions.BadRequestException if the bytes are not a JPEG, PNG or WebP
+     */
+    @Transactional
+    public ManualPaymentProofEntity attachProof(OrderEntity order, byte[] data) {
+        ManualPaymentClaimEntity claim = claims
+                .findByOrderIdAndStatus(order.getId(), ClaimStatus.SUBMITTED)
+                .orElseThrow(() -> new ApiExceptions.ConflictException(
+                        "no_pending_claim",
+                        "Submit your payment reference first, then attach the screenshot."));
+
+        if (data == null || data.length == 0) {
+            throw new ApiExceptions.BadRequestException("empty_file", "That file was empty.");
+        }
+        if (data.length > MAX_PROOF_BYTES) {
+            throw new ApiExceptions.BadRequestException("file_too_large",
+                    "That image is larger than 5 MB. A screenshot is usually well under it.");
+        }
+
+        ImageType type = ImageType.sniff(data);
+        if (type == null) {
+            // Named formats rather than "invalid file": somebody who exported a PDF
+            // receipt needs to know what to send instead, not that they were wrong.
+            throw new ApiExceptions.BadRequestException("unsupported_image",
+                    "Attach a JPG, PNG or WebP screenshot.");
+        }
+
+        ManualPaymentProofEntity proof = proofs.findByClaimId(claim.getId())
+                .map(existing -> {
+                    existing.replaceWith(type.mediaType(), data);
+                    return existing;
+                })
+                .orElseGet(() -> new ManualPaymentProofEntity(claim.getId(), type.mediaType(), data));
+
+        // Size and type only. The bytes are a customer's bank screenshot and have no
+        // business in a log line.
+        log.info("Payment proof attached to claim {} for order {} ({}, {} bytes)",
+                claim.getId(), order.getPublicRef(), type.mediaType(), data.length);
+
+        return proofs.saveAndFlush(proof);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ManualPaymentProofEntity> proofForClaim(Long claimId) {
+        return proofs.findByClaimId(claimId);
+    }
+
+    /** Which of these claims carry a screenshot. Used to flag rows in the queue. */
+    @Transactional(readOnly = true)
+    public java.util.Set<Long> claimsWithProof(List<Long> claimIds) {
+        return claimIds.isEmpty()
+                ? java.util.Set.of()
+                : java.util.Set.copyOf(proofs.claimIdsWithProof(claimIds));
     }
 
     /* ----------------------------------------------------------------- review --- */

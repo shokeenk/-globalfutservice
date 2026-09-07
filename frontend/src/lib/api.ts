@@ -87,6 +87,11 @@ export class ApiError extends Error {
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
+  /**
+   * A multipart body, for file uploads. Mutually exclusive with `body`: the Content-Type
+   * is deliberately left unset for this one so the browser writes it with a boundary.
+   */
+  form?: FormData
   /** Skip the automatic refresh-and-retry. Used by the refresh call itself. */
   noRetry?: boolean
   signal?: AbortSignal
@@ -109,7 +114,7 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
       // this is not the blanket "allow any origin with credentials" that would make
       // it meaningless.
       credentials: 'include',
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.form ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
       signal: options.signal,
     })
   } catch (cause) {
@@ -204,9 +209,51 @@ function safeParse(text: string): unknown {
   }
 }
 
+/**
+ * Uploads a file, as multipart rather than JSON.
+ *
+ * <p>Separate from `post` because the body must not be JSON-encoded and, more easily
+ * missed, because the Content-Type header must be left unset: the browser has to write it
+ * itself so it can append the multipart boundary. Setting `multipart/form-data` by hand
+ * produces a header with no boundary and a request the server cannot parse.
+ */
+async function upload<T>(path: string, form: FormData): Promise<T> {
+  return request<T>(path, { method: 'POST', form })
+}
+
+/**
+ * Fetches a protected file as an object URL.
+ *
+ * <p>For images behind an operator role. A plain `<img src>` cannot carry the
+ * Authorization header, so pointing one at an admin endpoint fetches it without
+ * credentials and renders a broken image — the request has to go through the same
+ * authenticated path everything else uses, and the bytes become a blob URL.
+ *
+ * <p>Callers own the returned URL and must revoke it, or every refresh of a queue leaks
+ * one image's worth of memory.
+ */
+async function blobUrl(path: string): Promise<string> {
+  const response = await raw(path, {})
+  if (response.status === 401) {
+    const refreshed = await refresh()
+    if (refreshed) {
+      return blobUrl(path)
+    }
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, {
+      error: 'not_found',
+      message: 'That file could not be loaded.',
+    })
+  }
+  return URL.createObjectURL(await response.blob())
+}
+
 export const api = {
   get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
+  upload,
+  blobUrl,
   del: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
   baseUrl: BASE_URL,
 }
