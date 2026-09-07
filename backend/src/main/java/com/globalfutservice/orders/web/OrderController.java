@@ -141,16 +141,19 @@ public class OrderController {
         OrderEntity updated = orderService.submitCredentials(order, request, principal.id());
 
         /*
-          Handed to the supplier here rather than inside `submitCredentials`, because the
-          supplier's poller has to call OrderService to move orders through the state
-          machine — wiring dispatch the other way would close a dependency cycle between
-          the two. Orchestrating at the edge keeps each direction one-way.
+          The order is NOT handed to the supplier here any more.
 
-          It never throws into this response. The customer has paid and given us
-          everything asked of them; a supplier outage is our problem to fix by hand, not a
-          red error on a form they cannot retry.
+          It used to be: submitting a sign-in dispatched it automatically, which meant a
+          customer's EA email, password and backup codes left our infrastructure for a
+          third party the moment they pressed a button on the checkout, with nobody having
+          looked at the order. That is the wrong shape for the most sensitive thing this
+          system does. Sharing a customer's account credentials externally should be a
+          decision somebody makes, not a side effect of them completing a form.
+
+          It now waits at READY_FOR_DELIVERY -- the queue an operator already works -- and
+          goes out only when one of them approves it. See
+          AdminOrderController#approveFulfilment.
         */
-        supplierFulfilment.dispatch(updated);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")

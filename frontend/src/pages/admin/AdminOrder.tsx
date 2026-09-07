@@ -80,6 +80,37 @@ export default function AdminOrder() {
     }
   }
 
+  /**
+   * Releases the order to the fulfilment partner.
+   *
+   * The only action in this console that sends a customer's EA sign-in outside our
+   * infrastructure, which is why it confirms first. It is not undoable: once the partner
+   * has the credentials, no click here takes them back.
+   */
+  async function approveFulfilment() {
+    const confirmed = window.confirm(
+      `Release ${publicRef} to the fulfilment partner?\n\n`
+      + `This sends the customer's EA sign-in — email, password and backup codes — to `
+      + `FUT Transfer so they can work the order.\n\n`
+      + `It cannot be undone. Once sent, the credentials are with a third party.`,
+    )
+    if (!confirmed) return
+
+    setBusy('approve')
+    setError(null)
+    try {
+      await api.post(`/api/v1/admin/orders/${publicRef}/approve-fulfilment`)
+      setRevealed(null)
+      await load()
+    } catch (e) {
+      // The partner's own reason, surfaced rather than swallowed: the order has not moved
+      // and the operator needs to know why before deciding what to do instead.
+      setError(e instanceof ApiError ? e.message : 'Could not release the order.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function reveal() {
     setBusy('reveal')
     setError(null)
@@ -212,6 +243,34 @@ export default function AdminOrder() {
             </div>
 
             <div className="mt-4 space-y-2">
+              {/*
+                Release to the partner, above the plain transitions and visually apart
+                from them.
+
+                Only on an order that is paid, holds a sign-in and has not been released.
+                It is not one of the state-machine transitions because it is not only a
+                status change: it sends the customer's EA credentials to a third party,
+                and the status change is the consequence of that succeeding. Putting it in
+                the same list as "Mark on hold" would make the most consequential button
+                on this screen look like the least.
+              */}
+              {order.status === 'READY_FOR_DELIVERY' && order.credentialsSubmitted && (
+                <div className="mb-3 rounded-edge border border-brand-500/40 bg-brand-500/[0.06] p-3">
+                  <p className="text-[12.5px] leading-snug text-chalk-muted">
+                    Sends this customer’s EA sign-in to FUT Transfer so they can work the
+                    order. This cannot be undone.
+                  </p>
+                  <Button
+                    full
+                    className="mt-2"
+                    loading={busy === 'approve'}
+                    onClick={() => void approveFulfilment()}
+                  >
+                    Approve &amp; fulfil
+                  </Button>
+                </div>
+              )}
+
               {transitions.length === 0 && (
                 <p className="text-[13px] text-chalk-faint">
                   No actions available — this order is finished.

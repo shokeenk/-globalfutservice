@@ -360,6 +360,19 @@ function Terms() {
       </Clause>
 
       <Clause n={15} title="Service Availability & Third-Party Issues">
+        {/*
+          The Terms have to carry this too, not only the Privacy Policy. The policy governs
+          what happens to the data; the Terms are what the customer agrees to when they buy,
+          and subcontracting the work itself is a term of the sale rather than a data
+          practice. Stated first because it is the part a reader would not otherwise expect.
+        */}
+        <p>
+          <strong>Who performs your order.</strong> We may complete a coin order ourselves or
+          pass it to a specialist fulfilment partner, which involves sharing your EA account
+          details with them as described in section 3 of our Privacy Policy. We remain
+          responsible to you for the order either way. If you would prefer your order was not
+          subcontracted, tell us when you order.
+        </p>
         <p>
           Services may occasionally be affected by EA server outages, maintenance, game
           updates, connection problems or platform issues.
@@ -519,7 +532,16 @@ function Privacy({ policy }: { policy: Policy | null }) {
           */}
           <li>We ask for them only when the service you bought cannot be delivered without them.</li>
           <li>They are encrypted with a key unique to your order before they reach our database.</li>
-          <li>Only the trader working your order can open them, and every access is recorded.</li>
+          {/*
+            "Only the trader working your order" stopped being true when fulfilment could
+            be passed to a partner. The access-is-recorded half is still exactly true and
+            still enforced, so the fix is to name the second reader rather than delete the
+            promise.
+          */}
+          <li>
+            Only the person working your order can open them — one of our traders, or our
+            fulfilment partner where section 3 applies — and every access is recorded.
+          </li>
           <li>
             They are destroyed when your order completes, and in any case within{' '}
             {policy ? '24 hours' : 'a day'} of delivery — enforced by a scheduled job that runs
@@ -534,7 +556,37 @@ function Privacy({ policy }: { policy: Policy | null }) {
         <p>
           Our payment provider processes your payment and sees what it needs to for that purpose;
           we never see or store your full card details. Our email provider delivers your receipts.
-          That is the extent of it — we do not sell data, and we do not share it for advertising.
+          We do not sell data, and we do not share it for advertising.
+        </p>
+        {/*
+          Added because the software now does this and the policy did not say so.
+
+          This clause previously ended "that is the extent of it", which was true while
+          every order was worked by our own traders. Coin orders can now be passed to a
+          fulfilment partner, and doing that means sending them the sign-in — so the
+          sentence had to go rather than be argued around. A privacy policy that describes
+          a narrower sharing than the code performs is worse than no clause at all.
+
+          It is written plainly and without softening: naming the partner, naming exactly
+          what reaches them, and saying the customer can refuse. "Trusted partners" and
+          "service providers" are the phrasings that make this sort of disclosure
+          worthless.
+        */}
+        <p>
+          <strong>Coin orders and our fulfilment partner.</strong> Some coin orders are
+          completed for us by a specialist fulfilment partner, FUT Transfer
+          (futtransfer.top), rather than by our own traders. When that happens we send them
+          the details they need to move the coins — <strong>your EA account email, password
+          and backup codes</strong>, along with the platform, the amount and a reference for
+          the order. Nothing is sent automatically: a member of our team reviews the order
+          and releases it, and the details are decrypted only for that single transfer.
+        </p>
+        <p>
+          Once your details reach the partner, their own handling and retention apply to
+          their copy, and we cannot delete it for you. Everything in section 2 still governs
+          our copy. If you would rather your account details were not shared this way, tell
+          us when you order and we will work it in-house instead, or refund you if we cannot
+          — contact us through the support page.
         </p>
       </Clause>
 

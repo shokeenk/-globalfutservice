@@ -7,6 +7,7 @@ import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.fulfilment.SupplierFulfilmentService;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
@@ -59,9 +60,12 @@ public class AdminOrderController {
     private final OrderService orderService;
     private final OrderMapper mapper;
     private final CredentialVaultService vaultService;
+    private final SupplierFulfilmentService supplierFulfilment;
 
     public AdminOrderController(OrderRepository orders, OrderService orderService,
-                                OrderMapper mapper, CredentialVaultService vaultService) {
+                                OrderMapper mapper, CredentialVaultService vaultService,
+                                SupplierFulfilmentService supplierFulfilment) {
+        this.supplierFulfilment = supplierFulfilment;
         this.orders = orders;
         this.orderService = orderService;
         this.mapper = mapper;
@@ -165,6 +169,61 @@ public class AdminOrderController {
      * it must never be prefetched by a browser, cached, or land in an access log as a URL
      * somebody can click again.
      */
+    @PostMapping("/{publicRef}/approve-fulfilment")
+    @Operation(summary = "Release an order to the fulfilment partner (audited)",
+            description = """
+                    Submits the customer's EA sign-in to the fulfilment partner and moves
+                    the order to IN_PROGRESS.
+
+                    This is the only path that shares a customer's account credentials
+                    outside our infrastructure. It is deliberately a human decision: the
+                    checkout no longer dispatches automatically.
+
+                    The sign-in is decrypted in memory for the duration of one outbound
+                    call and is never logged, never persisted in plaintext and never
+                    returned in this response. On failure the order does not move and the
+                    partner's reason is surfaced.
+                    """)
+    public ResponseEntity<OrderDtos.OrderResponse> approveFulfilment(
+            @PathVariable String publicRef,
+            @CurrentAccount AccountPrincipal operator) {
+
+        OrderEntity order = orderService.requireAny(publicRef);
+
+        /*
+         * READY_FOR_DELIVERY is the approval state, and it already existed.
+         *
+         * It means exactly what an "awaiting admin approval" status would: paid, sign-in
+         * held, nothing started. Adding a second status with that meaning would have made
+         * every order already sitting in this state ambiguous and bought no behaviour, so
+         * the existing one is used and the state machine's READY_FOR_DELIVERY ->
+         * IN_PROGRESS edge carries the approval.
+         */
+        if (order.getStatus() != OrderStatus.READY_FOR_DELIVERY) {
+            throw new ApiExceptions.ConflictException("not_awaiting_approval",
+                    "Only an order that is paid and holding a sign-in can be released. "
+                            + "This one is " + order.getStatus().name() + ".");
+        }
+        if (!vaultService.status(order.getId()).present()) {
+            // The partner requires the sign-in; releasing without one would be a
+            // guaranteed 400 from them and a wasted dispatch attempt against the order.
+            throw new ApiExceptions.ConflictException("no_credentials",
+                    "This order has no sign-in on file, so there is nothing to send.");
+        }
+
+        // Throws with the partner's reason if refused. The order stays put in that case:
+        // the transition below is only reached on a supplier order id.
+        String supplierOrderId = supplierFulfilment.approveAndDispatch(order, operator.id());
+
+        OrderEntity moved = orderService.transition(order, OrderStatus.IN_PROGRESS,
+                Actor.OPERATOR, operator.id(), operator.email(),
+                "Released to fulfilment partner as " + supplierOrderId);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(mapper.toResponse(moved, orderService.timeline(moved.getId()), true));
+    }
+
     @PostMapping("/{publicRef}/credentials/reveal")
     @Operation(summary = "Reveal the customer's sign-in for fulfilment (audited)")
     public ResponseEntity<CredentialDtos.RevealedCredentials> reveal(
