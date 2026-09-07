@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { ManualPayment } from '../components/ManualPayment'
 import { PageHeader } from '../components/PageHeader'
@@ -587,6 +587,9 @@ function QuotePanel({
   const t = useT()
   const money = useMoney()
   const { account } = useAuth()
+  // Where to return to after signing in. The configuration is in the URL, so this is
+  // enough to rebuild the order exactly as the customer left it.
+  const location = useLocation()
 
   /*
    * A saving is a negative line, plus the zero-value market tax.
@@ -790,10 +793,40 @@ function QuotePanel({
 
               <QuoteTimer expiresAt={quote.expiresAt} onExpire={onRequote} />
 
+              {/*
+                The account gate.
+
+                Placed here, at the end of the configurator, rather than on the order
+                page itself: everything above this point -- the platform, the amount, the
+                price, the savings -- is what a customer needs to see before they care
+                whether an account is involved. Asking on arrival costs the sale of
+                somebody who was still deciding.
+
+                It is also the last screen whose state survives the trip. The
+                configuration lives in the URL, so signing in and coming back rebuilds
+                exactly this page; the details step below holds typed form fields that a
+                round trip would throw away.
+              */}
               {step === 'configure' && (
-                <Button full size="lg" onClick={() => setStep('details')}>
-                  {t.order.continue}
-                </Button>
+                account ? (
+                  <Button full size="lg" onClick={() => setStep('details')}>
+                    {t.order.continue}
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <ButtonLink
+                      to="/login"
+                      full
+                      size="lg"
+                      state={{ from: `${location.pathname}${location.search}` }}
+                    >
+                      {t.order.signInToContinue}
+                    </ButtonLink>
+                    <p className="text-center text-[12.5px] leading-snug text-chalk-faint">
+                      {t.order.signInWhy}
+                    </p>
+                  </div>
+                )
               )}
             </>
           )}

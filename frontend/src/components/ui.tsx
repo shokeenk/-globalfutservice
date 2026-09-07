@@ -224,18 +224,24 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 })
 
 export function ButtonLink({
-  to, variant = 'primary', size = 'md', full = false, className = '', children,
+  to, variant = 'primary', size = 'md', full = false, className = '', state, children,
 }: {
   to: string
   variant?: ButtonVariant
   size?: ButtonSize
   full?: boolean
   className?: string
+  /**
+   * Router state to carry along, for links that need somewhere to come back to.
+   * Sign-in uses `{ from }` to return the customer to the page they left.
+   */
+  state?: unknown
   children: ReactNode
 }) {
   return (
     <Link
       to={to}
+      state={state}
       className={[
         BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size],
         full ? 'w-full' : '', className,

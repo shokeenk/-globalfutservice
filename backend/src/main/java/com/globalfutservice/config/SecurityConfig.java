@@ -129,7 +129,32 @@ public class SecurityConfig {
                     // --- public storefront -------------------------------------------
                     .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/quotes").permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/v1/orders").permitAll()
+                    /*
+                      Placing an order needs an account. Browsing and pricing do not --
+                      /quotes above stays open, so the whole storefront is still usable
+                      by a stranger right up to the point of buying.
+
+                      This is a business decision before a technical one: every order
+                      earns reward points, and points can only be credited to an account.
+                      A guest order showed the customer "you will earn 20 points" and then
+                      awarded nothing, because settleRewards has always been gated on
+                      accountId. Requiring the account makes the promise true rather than
+                      quietly dropping it.
+
+                      It also closes a failure that was neither endpoint's fault. When
+                      this line was permitAll, an expired access token did not make order
+                      creation fail and so did not trigger the client's refresh -- the
+                      server simply saw no caller and stored the order with a null
+                      account_id. The follow-up call to submit an EA sign-in DID require
+                      auth, so it 401'd, refreshed, retried, and arrived authenticated at
+                      an order its account did not own: "No such order.", about an order
+                      the customer had just placed. Requiring auth here means the 401
+                      happens on the first call instead, where the client's
+                      refresh-and-retry handles it invisibly.
+
+                      /orders/track stays open. Guest orders already exist in the
+                      database and their customers still have to be able to find them.
+                    */
                     .requestMatchers(HttpMethod.POST, "/api/v1/orders/track").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/tickets").permitAll()
 

@@ -54,14 +54,23 @@ public class OrderController {
 
     @PostMapping
     @Operation(summary = "Place an order from a signed quote",
-            description = "Open to guests. The quote's signature and expiry are re-checked "
-                    + "server-side; a tampered or stale quote is refused with 409.")
+            description = "Requires an account: every order earns reward points and points "
+                    + "can only be credited to one. The quote's signature and expiry are "
+                    + "re-checked server-side; a tampered or stale quote is refused with 409.")
     public ResponseEntity<OrderDtos.CreateOrderResponse> create(
             @Valid @RequestBody OrderDtos.CreateOrderRequest request,
             @CurrentAccount AccountPrincipal principal) {
 
-        AccountEntity account = principal == null
-                ? null : accounts.findById(principal.id()).orElse(null);
+        requireSignedIn(principal);
+
+        /*
+          A token whose account has since been deleted authenticates fine and then owns
+          nothing. Left to fall through as null it would place a guest order under a
+          signed-in customer -- exactly the state that produced "No such order." when the
+          sign-in step went looking for it afterwards. Refused instead.
+        */
+        AccountEntity account = accounts.findById(principal.id())
+                .orElseThrow(() -> new ApiExceptions.ForbiddenException("Please sign in again."));
 
         OrderDtos.CreateOrderResponse response = orderService.create(request, account);
         return ResponseEntity.status(HttpStatus.CREATED)
