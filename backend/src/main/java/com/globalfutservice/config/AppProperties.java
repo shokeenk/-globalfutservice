@@ -411,6 +411,29 @@ public record AppProperties(
             String telegramChatId,
             @DefaultValue("https://api.telegram.org") String telegramApiBaseUrl,
 
+            /**
+             * Discord, the channel that pings a person rather than a mailbox.
+             *
+             * <p>A webhook URL and a user id, and nothing else: no bot, no gateway
+             * connection, no OAuth. The webhook is created in the target channel's own
+             * settings (Server Settings, Integrations, Webhooks) and carries its own
+             * authentication in the URL, which is why it is a secret despite being a link.
+             */
+            @DefaultValue("false") boolean discordEnabled,
+
+            /**
+             * Where messages are posted. Treat as a credential -- anyone holding it can
+             * post into that channel as this integration.
+             */
+            String discordWebhookUrl,
+
+            /**
+             * The operator's Discord user id -- the numeric snowflake from Developer Mode,
+             * not a username. Used to mention them, so an alert cuts through a channel
+             * they have muted. Optional: a missing id costs the ping, not the message.
+             */
+            String discordAdminId,
+
             @DefaultValue("false") boolean emailEnabled,
             /**
              * Who gets the order alerts. Comma-separated; blank disables the channel.

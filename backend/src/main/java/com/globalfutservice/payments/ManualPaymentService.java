@@ -1,6 +1,9 @@
 package com.globalfutservice.payments;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.credentials.CredentialVaultService;
+import com.globalfutservice.notify.NotificationService;
+import com.globalfutservice.notify.PaymentClaimNotification;
 import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.domain.payments.ClaimStatus;
 import com.globalfutservice.domain.payments.ManualPaymentMethod;
@@ -33,13 +36,19 @@ public class ManualPaymentService {
 
     private final ManualPaymentClaimRepository claims;
     private final OrderService orderService;
+    private final CredentialVaultService vaultService;
+    private final NotificationService notifications;
     private final AppProperties props;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
                                 OrderService orderService,
+                                CredentialVaultService vaultService,
+                                NotificationService notifications,
                                 AppProperties props) {
         this.claims = claims;
         this.orderService = orderService;
+        this.vaultService = vaultService;
+        this.notifications = notifications;
         this.props = props;
     }
 
@@ -134,6 +143,32 @@ public class ManualPaymentService {
         // that a log dump never carries a list of transaction ids alongside order refs.
         log.info("Manual payment claim {} recorded for order {} via {}",
                 claim.getId(), order.getPublicRef(), method);
+
+        /*
+         * Tell somebody. This is the only event in the system with nothing behind it --
+         * no gateway callback, no scheduled sweep -- so an unannounced claim is a
+         * customer who has paid and will wait until a person happens to open the console.
+         *
+         * Fires after the claim is flushed, so an alert never describes a row that then
+         * fails to save. It cannot throw into this transaction: NotificationService is
+         * @Async and catches per channel. A webhook outage must not fail a submission the
+         * customer has no way to retry meaningfully.
+         *
+         * The notification carries no EA sign-in. `hasCredentials` is a boolean by
+         * design -- an operator needs to know the sign-in arrived, never what it is.
+         */
+        notifications.paymentClaimed(new PaymentClaimNotification(
+                order.getPublicRef(),
+                OrderService.describe(order),
+                order.total().format(),
+                method.name(),
+                destination,
+                cleaned,
+                order.getGuestEmail(),
+                order.getDiscordUsername(),
+                vaultService.hasCredentials(order.getId()),
+                claim.getSubmittedAt(),
+                props.publicUrl() + "/admin/orders/" + order.getPublicRef()));
 
         return claim;
     }

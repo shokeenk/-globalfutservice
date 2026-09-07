@@ -331,6 +331,13 @@ gfs:
     telegram-bot-token: ${GFS_TELEGRAM_TOKEN:}
     telegram-chat-id: ${GFS_TELEGRAM_CHAT_ID:}
     telegram-api-base-url: https://api.telegram.org
+    # Discord. The webhook URL is a secret despite being a link -- it authenticates by
+    # itself, so anyone holding it can post into that channel. Never commit a real one.
+    discord-enabled: ${GFS_DISCORD_ENABLED:false}
+    discord-webhook-url: ${GFS_DISCORD_WEBHOOK_URL:}
+    # Numeric user id from Developer Mode, not a username. Optional: without it the
+    # alerts still arrive, they just do not ping anybody.
+    discord-admin-id: ${GFS_DISCORD_ADMIN_ID:}
     email-enabled: ${GFS_EMAIL_ENABLED:false}
     # Who is on shift. Comma-separated. Blank means nobody gets order alerts.
     operator-emails: ${GFS_OPERATOR_EMAILS:}
