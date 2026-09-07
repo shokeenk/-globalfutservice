@@ -134,6 +134,22 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/tickets").permitAll()
 
                     /*
+                      The EA sign-in for an order, which guests must be able to submit.
+
+                      Open because the checkout collects it in the same submit that
+                      creates the order, and POST /orders above is open for the same
+                      reason -- guest checkout exists, and refusing the second half of a
+                      flow whose first half is open just means the order can never be
+                      completed.
+
+                      Authenticated inside the handler on reference plus the order's
+                      email. This route only ever writes a sealed sign-in; reading one
+                      back is /admin/orders/{ref}/credentials/reveal and still needs an
+                      operator.
+                    */
+                    .requestMatchers(HttpMethod.POST, "/api/v1/orders/*/credentials").permitAll()
+
+                    /*
                       Paying without a gateway, and saying you have.
 
                       Both are open for the same reason POST /orders is: guest checkout

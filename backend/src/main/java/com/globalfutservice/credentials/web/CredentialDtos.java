@@ -27,6 +27,20 @@ public final class CredentialDtos {
      * afterwards.
      */
     public record SubmitCredentialsRequest(
+            /**
+             * The email on the order, which is how a guest proves the order is theirs.
+             *
+             * <p>Optional only so that a signed-in caller, who is identified by their
+             * token, need not send it. Every order carries a guest_email regardless of
+             * whether an account placed it, so this is the one lookup that works for
+             * both kinds of customer.
+             *
+             * <p>Not the EA email. This is the address the order was placed with.
+             */
+            @Email(message = "That does not look like an email address")
+            @Size(max = 255)
+            String email,
+
             @NotBlank(message = "EA email is required")
             @Email(message = "That does not look like an email address")
             @Size(max = 255)

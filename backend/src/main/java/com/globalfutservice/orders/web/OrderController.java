@@ -127,9 +127,41 @@ public class OrderController {
             @Valid @RequestBody CredentialDtos.SubmitCredentialsRequest request,
             @CurrentAccount AccountPrincipal principal) {
 
-        requireSignedIn(principal);
-        OrderEntity order = orderService.requireOwned(publicRef, principal.id());
-        OrderEntity updated = orderService.submitCredentials(order, request, principal.id());
+        /*
+          Guests reach this too, and have to.
+
+          It used to require a signed-in owner, which was survivable while sign-ins were
+          collected from the account area after payment. Now the checkout asks for them
+          before payment, in the same submit that creates the order, and two things broke:
+
+            * a genuine guest -- the common case, since guest checkout exists -- created
+              an order and was then refused by the filter chain, so no boosting or
+              trading order could be completed without an account at all;
+
+            * a signed-in customer whose access token had expired got something worse.
+              POST /orders is permitAll, so that call did not 401 and did not trigger the
+              client's refresh; the server saw no principal and stored the order with a
+              null account_id. The credentials call then did 401, the client refreshed and
+              retried, and requireOwned went looking for an order owned by an account that
+              did not own it. The customer saw "No such order." on an order they had just
+              placed, with no way forward.
+
+          So ownership is established the way /orders/track establishes it: the reference
+          plus the email the order was placed with. That pair works for both kinds of
+          customer, because every order carries a guest_email whether or not an account
+          placed it.
+
+          The bar is deliberately no higher than /orders/track's. This endpoint only ever
+          writes a sealed sign-in; nothing here reads one back, and revealing them stays
+          behind an operator role. Someone who guessed a reference and its email could
+          write a sign-in nobody can use, which an operator sees and rejects.
+        */
+        OrderEntity order = principal != null
+                ? orderService.requireOwnedOrGuest(publicRef, principal.id(), request.email())
+                : orderService.requireGuest(publicRef, requireEmail(request.email()));
+
+        OrderEntity updated = orderService.submitCredentials(order, request,
+                principal == null ? null : principal.id());
 
         /*
           Handed to the supplier here rather than inside `submitCredentials`, because the
@@ -152,5 +184,21 @@ public class OrderController {
         if (principal == null) {
             throw new ApiExceptions.ForbiddenException("Please sign in.");
         }
+    }
+
+    /**
+     * The email a guest must present to act on their own order.
+     *
+     * <p>Its own message rather than a bean-validation one: the field is optional on the
+     * request because a signed-in caller does not need it, so its absence is only an
+     * error on this path, and "Email is required" alone would send somebody looking at
+     * the EA email field beside it.
+     */
+    private static String requireEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new ApiExceptions.BadRequestException("email_required",
+                    "Enter the email address you placed the order with.");
+        }
+        return email;
     }
 }

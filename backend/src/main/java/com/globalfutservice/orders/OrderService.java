@@ -525,6 +525,30 @@ public class OrderService {
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("No such order."));
     }
 
+    /**
+     * A signed-in customer's own order, falling back to the email it was placed with.
+     *
+     * <p>The fallback is not belt-and-braces, it is the whole point. An order placed
+     * while the caller's access token had quietly expired is stored with a null
+     * account_id -- {@code POST /orders} is open to guests, so nothing rejects it and
+     * nothing prompts the client to refresh -- and from that moment the customer owns an
+     * order that {@link #requireOwned} will never return to them. They are signed in,
+     * looking at their own order, and told it does not exist.
+     *
+     * <p>Ownership by account is still tried first, so a signed-in customer needs no
+     * email at all. Only the mismatch falls through, and it falls through to the same
+     * pair {@link #requireGuest} accepts.
+     */
+    @Transactional(readOnly = true)
+    public OrderEntity requireOwnedOrGuest(String publicRef, Long accountId, String email) {
+        return orders.findByPublicRefAndAccountId(publicRef, accountId)
+                .orElseGet(() -> requireGuest(publicRef,
+                        email == null || email.isBlank()
+                                // Nothing left to check them against: no account match and
+                                // no email. Same answer requireOwned would have given.
+                                ? "" : email));
+    }
+
     /** Guest lookup: the reference alone is not a credential. */
     @Transactional(readOnly = true)
     public OrderEntity requireGuest(String publicRef, String email) {

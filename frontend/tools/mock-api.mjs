@@ -419,6 +419,21 @@ createServer(async (req, res) => {
     console.log('[mock] credentials received - keys:', Object.keys(body).join(', '),
       '| backupCodes:', (body.backupCodes ?? []).length,
       '| passwordLength:', (body.eaPassword ?? '').length)
+
+    /*
+     * The order's email is how the server matches this submission to the order, for a
+     * guest and for a signed-in customer whose order was stored without an account.
+     * Enforced here so that dropping the field is a local failure rather than a live
+     * one -- omitting it produced "No such order." in production, on the screen where
+     * customers hand over their EA sign-in, and the mock accepted it happily.
+     */
+    if (!body.email) {
+      return json(res, 400, {
+        error: 'email_required',
+        message: 'Enter the email address you placed the order with.',
+      }, origin)
+    }
+
     return json(res, 200, { publicRef: 'GFS-MOCK-0001', status: 'AWAITING_PAYMENT' }, origin)
   }
 

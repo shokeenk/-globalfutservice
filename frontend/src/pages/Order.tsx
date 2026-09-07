@@ -1003,6 +1003,14 @@ function CheckoutForm({
        */
       if (needsCredentials) {
         await api.post(`/api/v1/orders/${response.publicRef}/credentials`, {
+          /*
+           * The order's own email, not the EA one. It is how the server matches this
+           * submission to the order for a guest -- and for a signed-in customer whose
+           * token expired somewhere in this submit, whose order was therefore stored
+           * without an account and who would otherwise be told their own order does
+           * not exist.
+           */
+          email: email.trim(),
           eaEmail: eaEmail.trim(),
           eaPassword,
           backupCodes: backupCodes.map((code) => code.trim()).filter(Boolean),
