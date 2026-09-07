@@ -779,6 +779,8 @@ const es: Dictionary = {
     trackOrder: 'Seguir este pedido',
 
     /* ---------------------------------------------------------- manual payment --- */
+    signInToContinue: 'Inicia sesión para continuar',
+    signInWhy: 'Los pedidos se hacen desde una cuenta para que tus puntos de recompensa lleguen a ella. Es cuestión de un momento.',
     payTitle: 'Paga tu pedido',
     payIntro:
       'Paga con cualquiera de las opciones siguientes y luego introduce la referencia que te dé ' +

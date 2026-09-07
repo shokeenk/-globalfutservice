@@ -903,6 +903,8 @@ const en = {
     trackOrder: 'Track this order',
 
     /* ---------------------------------------------------------- manual payment --- */
+    signInToContinue: 'Sign in to continue',
+    signInWhy: 'Orders are placed from an account so your reward points land in it. It takes a moment.',
     payTitle: 'Pay for your order',
     payIntro:
       'Pay with any of the options below, then enter the reference your payment app gives you. ' +

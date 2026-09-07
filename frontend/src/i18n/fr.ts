@@ -780,6 +780,8 @@ const fr: Dictionary = {
     trackOrder: 'Suivre cette commande',
 
     /* ---------------------------------------------------------- manual payment --- */
+    signInToContinue: 'Connecte-toi pour continuer',
+    signInWhy: 'Les commandes se passent depuis un compte pour que tes points de fidélité y soient crédités. C’est l’affaire d’un instant.',
     payTitle: 'Règle ta commande',
     payIntro:
       'Paie avec l’une des options ci-dessous, puis saisis la référence que ton application de ' +
