@@ -39,6 +39,8 @@ class ManualPaymentServiceTest {
 
     private ManualPaymentClaimRepository claims;
     private OrderService orderService;
+    private com.globalfutservice.credentials.CredentialVaultService vault;
+    private com.globalfutservice.notify.NotificationService notifications;
     private ManualPaymentService service;
 
     private static final AppProperties.ManualPayments DESTINATIONS =
@@ -58,7 +60,10 @@ class ManualPaymentServiceTest {
         when(claims.findByOrderIdAndStatus(anyLong(), any())).thenReturn(Optional.empty());
         when(claims.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
 
-        service = new ManualPaymentService(claims, orderService, props);
+        vault = mock(com.globalfutservice.credentials.CredentialVaultService.class);
+        notifications = mock(com.globalfutservice.notify.NotificationService.class);
+
+        service = new ManualPaymentService(claims, orderService, vault, notifications, props);
     }
 
     private static OrderEntity order(OrderStatus status, Sku sku) {
@@ -67,6 +72,13 @@ class ManualPaymentServiceTest {
         when(order.getStatus()).thenReturn(status);
         when(order.getSku()).thenReturn(sku);
         when(order.getPublicRef()).thenReturn("GFS-26-TEST");
+        // Read by the operator notification rather than by the claim itself. Stubbed so
+        // these tests exercise the real notification build instead of stepping around it
+        // -- the alert is the point of submitting a claim, not a side dish.
+        when(order.getServiceLabel()).thenReturn("Champs Boosting — 15 wins");
+        when(order.total()).thenReturn(
+                com.globalfutservice.domain.money.Money.ofMinor(
+                        355000L, com.globalfutservice.domain.money.Currency.INR));
         return order;
     }
 
@@ -135,7 +147,7 @@ class ManualPaymentServiceTest {
             when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
-                    new ManualPaymentService(claims, orderService, bare);
+                    new ManualPaymentService(claims, orderService, vault, notifications, bare);
 
             assertThatThrownBy(() -> noDestinations.submit(
                     order(OrderStatus.AWAITING_PAYMENT, Sku.COACHING),
@@ -213,7 +225,8 @@ class ManualPaymentServiceTest {
             // An account with no link is payable; a link with no account is not. Dropping
             // PayPal here would take away the method over a missing convenience.
             List<ManualPaymentService.PaymentOption> options =
-                    new ManualPaymentService(claims, orderService, emailOnly).optionsFor("COACHING");
+                    new ManualPaymentService(claims, orderService, vault, notifications, emailOnly)
+                            .optionsFor("COACHING");
 
             assertThat(options).singleElement()
                     .satisfies(option -> {
@@ -230,7 +243,7 @@ class ManualPaymentServiceTest {
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, "TWALLET"));
 
-            assertThat(new ManualPaymentService(claims, orderService, partial)
+            assertThat(new ManualPaymentService(claims, orderService, vault, notifications, partial)
                     .optionsFor("COACHING"))
                     .extracting(ManualPaymentService.PaymentOption::method)
                     .containsExactly(ManualPaymentMethod.CRYPTO);

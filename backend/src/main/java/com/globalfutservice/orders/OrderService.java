@@ -571,6 +571,7 @@ public class OrderService {
                 describe(order),
                 order.total().format(),
                 order.getGuestEmail(),
+                order.getDiscordUsername(),
                 order.getDeliveryMethod().name(),
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef());
     }

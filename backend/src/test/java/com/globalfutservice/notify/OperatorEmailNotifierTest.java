@@ -33,6 +33,7 @@ class OperatorEmailNotifierTest {
             "Safe Trading Service — 3M (PC)",
             "₹2,205.00",
             "customer@example.test",
+            null,
             "PLAYER_AUCTION",
             "https://globalfutservices.com/admin/orders/GFS-26-BWG6NGG3");
 
@@ -41,6 +42,7 @@ class OperatorEmailNotifierTest {
         return new AppProperties.Notifications(
                 false, null, null, null, "gfs_new_order", "https://graph.facebook.com/v20.0",
                 false, null, null, "https://api.telegram.org",
+                false, null, null,
                 emailEnabled, recipients, "orders@globalfutservices.com", "Global FUT Services");
     }
 

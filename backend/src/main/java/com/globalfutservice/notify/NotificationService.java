@@ -62,6 +62,11 @@ public class NotificationService {
         each(notifier -> notifier.readyToFulfil(n));
     }
 
+    @Async
+    public void paymentClaimed(PaymentClaimNotification n) {
+        each(notifier -> notifier.paymentClaimed(n));
+    }
+
     public void orderDelivered(OrderNotification n) {
         each(notifier -> notifier.orderDelivered(n));
     }

@@ -14,6 +14,13 @@ public record OrderNotification(
         String serviceLabel,
         String amountFormatted,
         String customerEmail,
+        /**
+         * The Discord handle the customer gave at checkout, if they gave one. Nullable.
+         *
+         * <p>Here because the operator's own alerts now land in Discord, where a handle is
+         * something you can act on rather than a string to copy into another app.
+         */
+        String customerDiscord,
         String deliveryMethod,
         String adminDeepLink) {
 }

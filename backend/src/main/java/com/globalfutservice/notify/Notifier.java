@@ -32,6 +32,23 @@ public interface Notifier {
     }
 
     /**
+     * A customer has reported paying outside the gateway.
+     *
+     * <p>The most time-critical alert here, and the only one with nothing behind it. Every
+     * other event in this interface follows something the system observed for itself -- a
+     * gateway callback, a state transition. This one follows a customer typing a reference
+     * into a box, and until a person checks it against an account the order does not move.
+     * No timer picks it up and no queue drains on its own; if nobody is told, the customer
+     * waits indefinitely having already paid.
+     *
+     * <p>Defaulted to a no-op like the others, so a channel that has nowhere sensible to
+     * put it stays quiet rather than failing.
+     */
+    default void paymentClaimed(PaymentClaimNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    /**
      * A coaching session starting tomorrow.
      *
      * <p>Defaulted to a no-op rather than added to the interface proper, because not every
