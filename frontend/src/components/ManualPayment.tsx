@@ -229,7 +229,24 @@ function Destination({
       <p className="text-[13px] font-semibold text-chalk">{t.order.payAmountDue(totalFormatted)}</p>
       <p className="mt-1 text-[12.5px] leading-snug text-chalk-faint">{t.order.payScanHint}</p>
 
+      {/*
+        The white frame is the QR's quiet zone, and it is functional rather than styling.
+
+        A QR needs a clear margin around it for a scanner to lock onto the finder
+        patterns -- ISO/IEC 18004 asks for four modules. These images are cropped by hand
+        and that margin is the first thing a tidy crop takes: the PayPal code arrived
+        trimmed to roughly one module. Guaranteeing the margin here rather than in each
+        file means every code has one, including the next one somebody crops close.
+
+        Sizing is left alone deliberately. A downscale-and-decode test appeared to show
+        the tighter crop failing at this width, which would have argued for rendering
+        bigger -- but the same test failed the *old* image at 300px while passing it at
+        240px, and no real resolution limit behaves like that. It was measuring
+        resampling aliasing between the module grid and the target pixel grid, not
+        scannability, so nothing here is built on it.
+      */}
       <div className="mt-4 flex justify-center">
+        <div className="rounded-edge bg-white p-3">
         <img
           src={qrFor(option.method, sku)}
           /*
@@ -243,8 +260,11 @@ function Destination({
             : `${t.order.payPayTo} ${option.method}`}
           width={240}
           height={240}
-          className="h-auto w-[240px] max-w-full rounded-edge"
+          // `block` removes the inline-element baseline gap, which would otherwise show
+          // as a few pixels of extra white below the code and make the frame look wonky.
+          className="block h-auto w-[240px] max-w-full"
         />
+        </div>
       </div>
 
       {option.accountName && (
