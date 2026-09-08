@@ -149,6 +149,29 @@ services:
       - key: GFS_SMTP_TLS
         value: "true"
 
+      # ---- Discord ----------------------------------------------------------
+      # The channel that pings a person rather than filling a mailbox, and the only
+      # one that carries the alert nothing else can raise: a customer reporting a
+      # payment made outside the gateway. Nothing else in the system knows that
+      # happened, so with this off, somebody who has already sent money waits until
+      # an operator happens to open the console.
+      #
+      # The webhook URL is created in the target channel: Server Settings →
+      # Integrations → Webhooks → New Webhook → Copy Webhook URL.
+      #
+      # It is `sync: false` because it is a SECRET, despite looking like a link: it
+      # carries its own authentication, so anyone holding it can post into that
+      # channel as this integration. Never commit one.
+      - key: GFS_DISCORD_ENABLED
+        value: "true"
+      - key: GFS_DISCORD_WEBHOOK_URL
+        sync: false
+      # The operator's numeric user id, so an alert cuts through a muted channel.
+      # Enable Developer Mode in Discord, right-click the user, Copy User ID.
+      # Optional: without it the alerts still arrive, they just do not ping anybody.
+      - key: GFS_DISCORD_ADMIN_ID
+        value: "1300551868174569595"
+
   # ---------------------------------------------------------------------------
   #  Storefront. The public entry point.
   # ---------------------------------------------------------------------------
