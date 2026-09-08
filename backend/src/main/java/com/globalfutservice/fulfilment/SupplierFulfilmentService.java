@@ -125,6 +125,71 @@ public class SupplierFulfilmentService {
         }
     }
 
+    // --------------------------------------------------------------- approval ---
+
+    /**
+     * An operator has reviewed the order and released it to the supplier.
+     *
+     * <p><b>Why this exists next to {@link #dispatch} rather than replacing it.</b> They
+     * differ in one way that matters: dispatch swallows failure because it used to run
+     * inside a customer's checkout, where a supplier outage must not become a red error
+     * on a form they cannot retry. This runs inside an operator's click, where the
+     * opposite is true -- somebody is looking at the screen, waiting to be told whether it
+     * worked, and a silent failure would leave them believing an order was released when
+     * it was not.
+     *
+     * <p>The order is <b>not</b> moved by this method. It returns what happened and lets
+     * the caller decide, so the status change and the audit entry are written in the same
+     * place, attributed to the operator who made them.
+     *
+     * <p>Credentials: read inside {@link #dispatch}, used for one HTTP call, and dropped.
+     * Nothing here ever sees the plaintext, and nothing writes it anywhere.
+     *
+     * @throws FutTransferException with the supplier's own reason when the submission is
+     *                              refused -- safe to show an operator, and never
+     *                              containing the sign-in
+     */
+    @Transactional
+    public String approveAndDispatch(OrderEntity order, Long operatorAccountId) {
+        if (!isEnabled()) {
+            throw new FutTransferClient.FutTransferException(
+                    "The fulfilment partner is not configured, so this order cannot be "
+                            + "released automatically. Work it by hand and mark it in progress.");
+        }
+        if (order.getSupplierOrderId() != null) {
+            // Not an error worth failing on -- the operator's intent is already satisfied,
+            // and re-submitting the same sign-in is the one thing to avoid.
+            log.info("Order {} was already with the supplier as {}; approval is a no-op",
+                    order.getPublicRef(), order.getSupplierOrderId());
+            return order.getSupplierOrderId();
+        }
+
+        /*
+         * The audit line, written before the call rather than after.
+         *
+         * If the process dies mid-request there has still been an outbound submission of
+         * this customer's sign-in, and the record of who authorised it must not depend on
+         * that request coming back. Order reference, operator id, outcome -- never a
+         * credential value; see the class note and FutTransferClient.
+         */
+        log.info("FULFILMENT APPROVAL: operator {} is releasing order {} to the supplier",
+                operatorAccountId, order.getPublicRef());
+
+        String supplierId = dispatch(order);
+        if (supplierId == null) {
+            // dispatch() logged the cause and swallowed it. The operator gets told plainly
+            // rather than being left to infer failure from an unchanged screen.
+            throw new FutTransferClient.FutTransferException(
+                    "The fulfilment partner did not accept order " + order.getPublicRef()
+                            + ". The order has not moved and no further attempt was made. "
+                            + "Check the application log for the partner's reason.");
+        }
+
+        log.info("FULFILMENT APPROVED: order {} released by operator {} as supplier order {}",
+                order.getPublicRef(), operatorAccountId, supplierId);
+        return supplierId;
+    }
+
     private static String customerNameFor(OrderEntity order) {
         if (order.getEaPlatformHandle() != null && !order.getEaPlatformHandle().isBlank()) {
             return order.getEaPlatformHandle();
