@@ -94,9 +94,22 @@ export const SERVICE_SKINS: Record<ServiceSkinName, ServiceSkin> = {
   },
 }
 
-/** Which skin a service key wears. Keyed on the same names the picker already uses. */
+/**
+ * Which skin a service key wears. Keyed on the same names the picker already uses.
+ *
+ * <p><b>This is the only place the pairing is decided.</b> It used to be decided here for
+ * the picker and the testimonials, and again by hand on the homepage, which meant a change
+ * of mind about a colour had to be made twice and was applied once. Swapping Champs and
+ * Classes was exactly that change, so the homepage now reads this map rather than naming
+ * its own skins.
+ *
+ * <p>Champs wears red and Classes wears blue, which is the reverse of how they started.
+ * The skins themselves are untouched — swapping the pairing rather than editing two
+ * palettes keeps each skin's internal contrast work intact, including the heavier mark
+ * opacity the red ground needs and would have lost if the colours had been moved instead.
+ */
 export const SKIN_FOR_SERVICE: Record<string, ServiceSkinName> = {
   trading: 'sun',
-  boosting: 'deep',
-  coaching: 'red',
+  boosting: 'red',
+  coaching: 'deep',
 }

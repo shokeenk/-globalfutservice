@@ -127,7 +127,7 @@ const en = {
    * and the compiler still checks the arguments.
    */
   home: {
-    seoTitle: (season: string) => `Safe Trading Service for EA ${season}`,
+    seoTitle: (season: string) => `Buy Coins for EA ${season}`,
     seoDescription: (season: string) =>
       `Grow your EA ${season} club without the grind. Our traders work the transfer ` +
       `market on your account — you keep the coins. Delivery in under an hour, 100% Safety Policy.`,
@@ -185,7 +185,7 @@ const en = {
       statShiftLabel: 'Traders on shift',
       statGuaranteeValue: '100% Safety Policy',
       statGuaranteeLabel: 'Every order covered',
-      cardTitle: 'Safe Trading Service',
+      cardTitle: 'Buy Coins',
       cardSubtitle: (season: string) => `Live rates · ${season}`,
       popular: 'Popular',
       perMillion: '/ million',
@@ -210,7 +210,7 @@ const en = {
         'Pick the one that fits. Everything is priced up front, and everything is covered ' +
         'by the same guarantee.',
       tradingTag: 'Most ordered',
-      tradingTitle: 'Safe Trading Service',
+      tradingTitle: 'Buy Coins',
       tradingBody:
         'We trade the market on your account and the profit stays in your club. Priced per ' +
         'million, delivered in under an hour.',
@@ -1296,7 +1296,7 @@ const en = {
    */
   catalog: {
     services: {
-      TRADING_SERVICE: 'Safe Trading Service',
+      TRADING_SERVICE: 'Buy Coins',
       BOOST_CHAMPS: 'Champs Boosting',
       BOOST_RIVALS: 'Rivals Boosting',
       COACHING: 'FUT Classes',

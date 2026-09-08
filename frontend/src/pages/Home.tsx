@@ -6,7 +6,7 @@ import { PromoCarousel } from '../components/PromoCarousel'
 import { LoyaltyCurrencyNotice } from '../components/LoyaltyNotice'
 import { Testimonials } from '../components/Testimonials'
 import { Badge, ButtonLink, Section } from '../components/ui'
-import { SERVICE_SKINS } from '../content/serviceSkins'
+import { SERVICE_SKINS, SKIN_FOR_SERVICE } from '../content/serviceSkins'
 import { StartOrderButton } from '../components/ServicePicker'
 import { useT } from '../i18n'
 import { bpsToPercent } from '../lib/format'
@@ -648,9 +648,9 @@ function Services() {
   const cards = [
     {
       to: '/order',
+      service: 'trading',
       title: t.home.services.tradingTitle,
       tag: t.home.services.tradingTag,
-      skin: 'sun' as const,
       body: t.home.services.tradingBody,
       cta: t.home.services.tradingCta,
       // The UT coin stack, supplied artwork. Replaces the drawn `CoinIcon`, which was
@@ -659,9 +659,9 @@ function Services() {
     },
     {
       to: '/boosting',
+      service: 'boosting',
       title: t.home.services.boostTitle,
       tag: t.home.services.boostTag,
-      skin: 'deep' as const,
       body: t.home.services.boostBody,
       cta: t.home.services.boostCta,
       // The FUT Champions crest, which is what this card actually sells -- the Elite I
@@ -671,9 +671,9 @@ function Services() {
     },
     {
       to: '/coaching',
+      service: 'coaching',
       title: t.home.services.coachTitle,
       tag: t.home.services.coachTag,
-      skin: 'red' as const,
       body: t.home.services.coachBody,
       cta: t.home.services.coachCta,
       // The actual coach, not a stock avatar. "One to one with a coach who plays at the
@@ -691,7 +691,10 @@ function Services() {
     >
       <div className="grid gap-4 md:grid-cols-3">
         {cards.map((card, index) => {
-          const skin = SERVICE_SKINS[card.skin]
+          // Read from the shared map rather than named here. Naming it twice is how a
+          // colour swap gets applied to the picker and the testimonials but not the
+          // homepage, which is the state this row was in.
+          const skin = SERVICE_SKINS[SKIN_FOR_SERVICE[card.service] ?? 'sun']
           return (
           <Reveal key={card.title} delay={index * 90}>
             <Link
