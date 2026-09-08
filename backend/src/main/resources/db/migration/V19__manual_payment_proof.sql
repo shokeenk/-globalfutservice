@@ -65,15 +65,21 @@ CREATE TABLE manual_payment_proof (
     -- after the claim" is the shape of a customer who paid late or paid twice.
     uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    /*
-      Three image types, and no SVG.
-
-      SVG is a document, not a picture: it executes script when a browser renders
-      it. Serving one back from our own origin to an operator who is signed in
-      would be stored cross-site scripting against the admin console, uploaded by
-      the customer. The three raster formats below cannot carry script, which is
-      the entire reason the list is a list and not "image/*".
-    */
+    -- Three image types, and no SVG.
+    --
+    -- SVG is a document, not a picture: it executes script when a browser renders
+    -- it. Serving one back from our own origin to an operator who is signed in
+    -- would be stored cross-site scripting against the admin console, uploaded by
+    -- the customer. The three raster formats below cannot carry script, which is
+    -- the entire reason this is an explicit list rather than a wildcard on the
+    -- image media type.
+    --
+    -- Line comments, not a block, and that is not a style preference. This comment
+    -- previously spelled out that wildcard literally, and the slash-star inside it
+    -- opened a NESTED block comment -- Postgres nests them, unlike C -- so the
+    -- closing delimiter shut the inner one and left the outer comment unterminated.
+    -- The whole migration failed to parse, the application could not boot, and the
+    -- platform kept serving the previous build. Prose is safe in a line comment.
     CONSTRAINT manual_payment_proof_type_ck
         CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
 
