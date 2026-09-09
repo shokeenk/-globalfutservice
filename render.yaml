@@ -75,6 +75,19 @@ services:
       - key: GFS_REQUIRE_HTTPS
         value: "true"
 
+      # ---- currencies -------------------------------------------------------
+      # What the storefront may be priced in. The switcher in the header has always
+      # been there; it only ever offered one option because this defaulted to INR.
+      #
+      # These are FIXED prices per currency in the rate card, not a live conversion
+      # — there is no FX feed wired in, and a rate card row is what the pricing
+      # engine signs a quote against. So the cross-currency margins differ: coins
+      # are a few per cent dearer in USD and GBP than in INR and slightly cheaper
+      # in EUR. That spread is accepted rather than accidental; changing it means
+      # editing rate_card, not this line.
+      - key: GFS_CURRENCIES
+        value: INR,USD,EUR,GBP
+
       # ---- first sign-in ----------------------------------------------------
       # Without these there is no way into the admin console at all. Change the
       # password from inside the app after the first login.
