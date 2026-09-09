@@ -196,12 +196,16 @@ services:
       #
       # Miss the last two and the ticket opens but stays empty, or opens with the
       # text and never gets the image -- a 403 in the log and nothing on screen.
+      # Only the token is prompted for. The two ids are not secrets -- they are
+      # public identifiers inside the server and useless without the token -- so
+      # they are set here, the same way the admin id is, rather than retyped into
+      # the dashboard on every environment.
       - key: GFS_DISCORD_BOT_TOKEN
         sync: false
       - key: GFS_DISCORD_GUILD_ID
-        sync: false
+        value: "1287647266944974909"
       - key: GFS_DISCORD_ORDER_CATEGORY_ID
-        sync: false
+        value: "1547158509509148702"
 
   # ---------------------------------------------------------------------------
   #  Storefront. The public entry point.

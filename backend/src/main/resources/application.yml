@@ -359,8 +359,10 @@ gfs:
     # falls back to the webhook instead.
     #
     # TREAT THE TOKEN AS A PASSWORD. It authenticates as the bot everywhere it has been
-    # invited. The bot also needs Manage Channels and Send Messages on that category,
-    # granted in Discord's own permission settings -- no code here can grant it.
+    # invited. The bot also needs four permissions on that category, granted in Discord's
+    # own permission settings -- no code here can grant them: Manage Channels to create
+    # the ticket, View Channel to find it again when the screenshot arrives, Send Messages
+    # to post the submission, Attach Files to post the screenshot.
     discord-bot-token: ${GFS_DISCORD_BOT_TOKEN:}
     discord-guild-id: ${GFS_DISCORD_GUILD_ID:}
     discord-order-category-id: ${GFS_DISCORD_ORDER_CATEGORY_ID:}
