@@ -146,7 +146,7 @@ class OrderTicketServiceTest {
         @Test
         @DisplayName("a refused channel creation reports empty rather than throwing")
         void refusedCreationFallsBack() {
-            // 403 here is almost always the bot missing Manage Channels. The caller has to
+            // 403 here is the bot missing Manage Channels. The caller has to
             // be able to fall through to the webhook, so this must not propagate.
             when(bot.createTicketChannel(anyString()))
                     .thenThrow(new DiscordBotClient.DiscordException("HTTP 403"));

@@ -184,9 +184,18 @@ services:
       # channels.
       #
       # The token is a SECRET -- it authenticates as the bot everywhere the bot has
-      # been invited. The bot ALSO needs Manage Channels and Send Messages on that
-      # category, granted in Discord's own permission settings; nothing here can
-      # grant it, and without it every ticket falls back with a 403 in the log.
+      # been invited.
+      #
+      # The bot ALSO needs four permissions on that category, granted in Discord's
+      # own settings; nothing here can grant them:
+      #
+      #   Manage Channels  create the ticket
+      #   View Channel     find it again when the screenshot arrives
+      #   Send Messages    post the submission into it
+      #   Attach Files     post the screenshot
+      #
+      # Miss the last two and the ticket opens but stays empty, or opens with the
+      # text and never gets the image -- a 403 in the log and nothing on screen.
       - key: GFS_DISCORD_BOT_TOKEN
         sync: false
       - key: GFS_DISCORD_GUILD_ID

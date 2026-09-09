@@ -246,8 +246,13 @@ public class DiscordBotClient {
             /*
              * Status only, never the body. Discord echoes the offending request back in
              * some errors, and this request carries a customer's name, email and payment
-             * reference. 403 here almost always means the bot lacks Manage Channels in
-             * that category, which is granted in Discord and not in this repository.
+             * reference.
+             *
+             * A 403 says which permission is missing by which call failed: creating the
+             * channel wants Manage Channels, posting wants Send Messages, the screenshot
+             * wants Attach Files, and finding the channel again wants View Channel. All
+             * four are granted in Discord and none of them in this repository, so `what`
+             * is worth reading before anyone goes looking at the code.
              */
             throw new DiscordException("Discord refused to " + what
                     + ": HTTP " + response.statusCode());
