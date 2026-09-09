@@ -69,13 +69,16 @@ class DiscordNotifierTest {
                 false, null, null, null, "gfs_new_order", "https://graph.facebook.com/v20.0",
                 false, null, null, "https://api.telegram.org",
                 enabled, url, adminId,
+                null, null, null,
                 false, null, "orders@globalfutservices.com", "Global FUT Services");
     }
 
     private DiscordNotifier notifier(AppProperties.Notifications n) {
         AppProperties props = mock(AppProperties.class);
         when(props.notifications()).thenReturn(n);
-        return new DiscordNotifier(props, MAPPER);
+        // Null tickets: these tests cover the webhook path, which is what runs when no
+        // bot is configured -- and is the fallback when one is configured and fails.
+        return new DiscordNotifier(props, MAPPER, null);
     }
 
     private DiscordNotifier enabled() {
@@ -100,7 +103,9 @@ class DiscordNotifierTest {
                 "432198765012",
                 "buyer@example.com",
                 "buyer#1234",
+                "Buyer Name",
                 credentialsHeld,
+                false,
                 Instant.parse("2026-09-07T10:15:30Z"),
                 "https://globalfutservices.com/admin/orders/GFS-26-000123");
     }
@@ -172,7 +177,7 @@ class DiscordNotifierTest {
         void mentionsAreAllowListed() throws Exception {
             PaymentClaimNotification hostile = new PaymentClaimNotification(
                     "GFS-26-000125", "@everyone @here", "₹1.00", "UPI", "x@y",
-                    "999999999999", "a@b.com", "@everyone", false,
+                    "999999999999", "a@b.com", "@everyone", "@everyone", false, false,
                     Instant.now(), "https://example.test/admin");
 
             enabled().paymentClaimed(hostile);

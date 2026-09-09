@@ -40,7 +40,19 @@ public record PaymentClaimNotification(
         String reference,
         String customerEmail,
         String customerDiscord,
+        /** The name on the order, if one was given. Nullable -- it is an optional field. */
+        String customerName,
         boolean credentialsHeld,
+        /**
+         * Whether a payment screenshot is attached at the moment this fires.
+         *
+         * <p>Usually false, and that is not a bug. The storefront records the reference
+         * first and uploads the image immediately afterwards as a second request, so at
+         * claim time there is genuinely nothing attached yet. The ticket says so honestly
+         * and the image is posted into the same channel when it lands, rather than the
+         * alert claiming an attachment that does not exist.
+         */
+        boolean hasProof,
         Instant submittedAt,
         String adminDeepLink) {
 }

@@ -57,10 +57,15 @@ public class DiscordNotifier implements Notifier {
     private final AppProperties props;
     private final ObjectMapper mapper;
     private final HttpClient http;
+    /** Null when no bot is configured; the webhook then carries everything. */
+    private final OrderTicketService tickets;
 
-    public DiscordNotifier(AppProperties props, ObjectMapper mapper) {
+    public DiscordNotifier(AppProperties props, ObjectMapper mapper,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false)
+                           OrderTicketService tickets) {
         this.props = props;
         this.mapper = mapper;
+        this.tickets = tickets;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -92,6 +97,19 @@ public class DiscordNotifier implements Notifier {
      */
     @Override
     public void paymentClaimed(PaymentClaimNotification n) {
+        /*
+         * The ticket is the primary destination and the webhook is the fallback, not the
+         * other way round. A webhook can only ever reach one fixed channel; a ticket gives
+         * the verification conversation somewhere to live attached to its order.
+         *
+         * If a ticket was opened, this channel has already said everything below and
+         * repeating it in the alerts channel would train an operator to ignore one of the
+         * two. So the webhook fires only when the ticket did not.
+         */
+        if (tickets != null && tickets.openTicket(n).isPresent()) {
+            return;
+        }
+
         List<Map<String, Object>> fields = new ArrayList<>();
         fields.add(field("Order", "`" + n.publicRef() + "`", true));
         fields.add(field("Amount", "**" + n.amountFormatted() + "**", true));
