@@ -99,7 +99,7 @@ const fr: Dictionary = {
   },
 
   home: {
-    seoTitle: (season) => `Service de trading sécurisé pour EA ${season}`,
+    seoTitle: (season) => `Acheter des crédits pour EA ${season}`,
     seoDescription: (season) =>
       `Fais grandir ton club EA ${season} sans le grind. Nos traders travaillent le marché ` +
       `des transferts sur ton compte et les crédits restent chez toi. Livraison en moins ` +
@@ -133,7 +133,7 @@ const fr: Dictionary = {
       statShiftLabel: 'Traders de garde',
       statGuaranteeValue: '100% Safety Policy',
       statGuaranteeLabel: 'Chaque commande couverte',
-      cardTitle: 'Service de trading sécurisé',
+      cardTitle: 'Acheter des crédits',
       cardSubtitle: (season) => `Tarifs en direct · ${season}`,
       popular: 'Populaire',
       perMillion: '/ million',
@@ -159,7 +159,7 @@ const fr: Dictionary = {
         'Choisis celle qui te convient. Tout est tarifé à l’avance et tout est couvert par ' +
         'la même garantie.',
       tradingTag: 'Le plus commandé',
-      tradingTitle: 'Service de trading sécurisé',
+      tradingTitle: 'Acheter des crédits',
       tradingBody:
         'Nous travaillons le marché sur ton compte et le bénéfice reste dans ton club. ' +
         'Tarif au million, livré en moins d’une heure.',
@@ -1123,7 +1123,7 @@ const fr: Dictionary = {
   },
   catalog: {
     services: {
-      TRADING_SERVICE: 'Service de trading sécurisé',
+      TRADING_SERVICE: 'Acheter des crédits',
       BOOST_CHAMPS: 'Boosting Champs',
       BOOST_RIVALS: 'Boosting Rivals',
       COACHING: 'Cours FUT',

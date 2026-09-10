@@ -99,7 +99,7 @@ const es: Dictionary = {
   },
 
   home: {
-    seoTitle: (season) => `Servicio de trading seguro para EA ${season}`,
+    seoTitle: (season) => `Comprar monedas para EA ${season}`,
     seoDescription: (season) =>
       `Haz crecer tu club de EA ${season} sin el grindeo. Nuestros traders trabajan el ` +
       `mercado de traspasos en tu cuenta y las monedas se quedan contigo. Entrega en menos ` +
@@ -133,7 +133,7 @@ const es: Dictionary = {
       statShiftLabel: 'Traders de guardia',
       statGuaranteeValue: '100% Safety Policy',
       statGuaranteeLabel: 'Todos los pedidos cubiertos',
-      cardTitle: 'Servicio de trading seguro',
+      cardTitle: 'Comprar monedas',
       cardSubtitle: (season) => `Tarifas en vivo · ${season}`,
       popular: 'Popular',
       perMillion: '/ millón',
@@ -159,7 +159,7 @@ const es: Dictionary = {
         'Elige la que encaje. Todo tiene el precio por adelantado y todo está cubierto por ' +
         'la misma garantía.',
       tradingTag: 'Lo más pedido',
-      tradingTitle: 'Servicio de trading seguro',
+      tradingTitle: 'Comprar monedas',
       tradingBody:
         'Trabajamos el mercado en tu cuenta y el beneficio se queda en tu club. Precio por ' +
         'millón y entrega en menos de una hora.',
@@ -1116,7 +1116,7 @@ const es: Dictionary = {
   },
   catalog: {
     services: {
-      TRADING_SERVICE: 'Servicio de trading seguro',
+      TRADING_SERVICE: 'Comprar monedas',
       BOOST_CHAMPS: 'Boosting de Champs',
       BOOST_RIVALS: 'Boosting de Rivals',
       COACHING: 'Clases FUT',
