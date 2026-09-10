@@ -42,6 +42,7 @@ class ManualPaymentServiceTest {
     private OrderService orderService;
     private com.globalfutservice.credentials.CredentialVaultService vault;
     private com.globalfutservice.notify.NotificationService notifications;
+    private com.globalfutservice.notify.OrderTicketService tickets;
     private ManualPaymentService service;
 
     private static final AppProperties.ManualPayments DESTINATIONS =
@@ -67,8 +68,9 @@ class ManualPaymentServiceTest {
 
         vault = mock(com.globalfutservice.credentials.CredentialVaultService.class);
         notifications = mock(com.globalfutservice.notify.NotificationService.class);
+        tickets = mock(com.globalfutservice.notify.OrderTicketService.class);
 
-        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, props);
+        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, tickets, props);
     }
 
     private static OrderEntity order(OrderStatus status, Sku sku) {
@@ -152,7 +154,7 @@ class ManualPaymentServiceTest {
             when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, bare);
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, tickets, bare);
 
             assertThatThrownBy(() -> noDestinations.submit(
                     order(OrderStatus.AWAITING_PAYMENT, Sku.COACHING),
@@ -230,7 +232,7 @@ class ManualPaymentServiceTest {
             // An account with no link is payable; a link with no account is not. Dropping
             // PayPal here would take away the method over a missing convenience.
             List<ManualPaymentService.PaymentOption> options =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, emailOnly)
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, tickets, emailOnly)
                             .optionsFor("COACHING");
 
             assertThat(options).singleElement()
@@ -248,7 +250,7 @@ class ManualPaymentServiceTest {
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, "TWALLET"));
 
-            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, partial)
+            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, tickets, partial)
                     .optionsFor("COACHING"))
                     .extracting(ManualPaymentService.PaymentOption::method)
                     .containsExactly(ManualPaymentMethod.CRYPTO);

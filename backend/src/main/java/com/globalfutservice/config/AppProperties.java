@@ -434,6 +434,29 @@ public record AppProperties(
              */
             String discordAdminId,
 
+            /**
+             * A bot token, which is a different thing from the webhook above and does a
+             * different job.
+             *
+             * <p>A webhook can post into exactly one channel it was created for and can do
+             * nothing else. Opening a channel per order needs an identity with permissions
+             * in the server, which is what a bot is. Both are kept: the bot creates the
+             * ticket, and the webhook is the fallback for when it cannot.
+             *
+             * <p>Secret. It authenticates as the bot outright -- anyone holding it can act
+             * as the bot everywhere it has been invited.
+             */
+            String discordBotToken,
+
+            /** The server the tickets are opened in. A numeric snowflake. */
+            String discordGuildId,
+
+            /**
+             * The category new ticket channels are created under, so they land beside the
+             * ones already there rather than at the bottom of the channel list.
+             */
+            String discordOrderCategoryId,
+
             @DefaultValue("false") boolean emailEnabled,
             /**
              * Who gets the order alerts. Comma-separated; blank disables the channel.

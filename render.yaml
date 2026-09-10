@@ -172,6 +172,41 @@ services:
       - key: GFS_DISCORD_ADMIN_ID
         value: "1300551868174569595"
 
+      # ---- Discord bot (order tickets) --------------------------------------
+      # Opens a channel per payment submission under the existing ticket category.
+      # A bot, not the webhook: a webhook can only ever post into the one channel
+      # it was created for. The webhook stays as the fallback for when the bot
+      # cannot open a ticket, so both exist and neither replaces the other.
+      #
+      # All three are required together. Without the category a channel would be
+      # created at the root of the server instead of beside the other tickets, so a
+      # half-configured bot falls back to the webhook rather than scattering
+      # channels.
+      #
+      # The token is a SECRET -- it authenticates as the bot everywhere the bot has
+      # been invited.
+      #
+      # The bot ALSO needs four permissions on that category, granted in Discord's
+      # own settings; nothing here can grant them:
+      #
+      #   Manage Channels  create the ticket
+      #   View Channel     find it again when the screenshot arrives
+      #   Send Messages    post the submission into it
+      #   Attach Files     post the screenshot
+      #
+      # Miss the last two and the ticket opens but stays empty, or opens with the
+      # text and never gets the image -- a 403 in the log and nothing on screen.
+      # Only the token is prompted for. The two ids are not secrets -- they are
+      # public identifiers inside the server and useless without the token -- so
+      # they are set here, the same way the admin id is, rather than retyped into
+      # the dashboard on every environment.
+      - key: GFS_DISCORD_BOT_TOKEN
+        sync: false
+      - key: GFS_DISCORD_GUILD_ID
+        value: "1287647266944974909"
+      - key: GFS_DISCORD_ORDER_CATEGORY_ID
+        value: "1547158509509148702"
+
   # ---------------------------------------------------------------------------
   #  Storefront. The public entry point.
   # ---------------------------------------------------------------------------

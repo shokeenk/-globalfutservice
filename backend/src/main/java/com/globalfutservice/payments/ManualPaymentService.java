@@ -40,6 +40,7 @@ public class ManualPaymentService {
     private final OrderService orderService;
     private final CredentialVaultService vaultService;
     private final NotificationService notifications;
+    private final com.globalfutservice.notify.OrderTicketService tickets;
     private final AppProperties props;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
@@ -47,12 +48,14 @@ public class ManualPaymentService {
                                 OrderService orderService,
                                 CredentialVaultService vaultService,
                                 NotificationService notifications,
+                                com.globalfutservice.notify.OrderTicketService tickets,
                                 AppProperties props) {
         this.claims = claims;
         this.proofs = proofs;
         this.orderService = orderService;
         this.vaultService = vaultService;
         this.notifications = notifications;
+        this.tickets = tickets;
         this.props = props;
     }
 
@@ -170,7 +173,13 @@ public class ManualPaymentService {
                 cleaned,
                 order.getGuestEmail(),
                 order.getDiscordUsername(),
+                order.getGuestName(),
                 vaultService.hasCredentials(order.getId()),
+                // False at this point in almost every real submission: the storefront
+                // records the reference first and uploads the image immediately after,
+                // as a second request. The alert says so rather than claiming an
+                // attachment, and attachProof posts the image when it lands.
+                proofs.findByClaimId(claim.getId()).isPresent(),
                 claim.getSubmittedAt(),
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef()));
 
@@ -227,7 +236,17 @@ public class ManualPaymentService {
         log.info("Payment proof attached to claim {} for order {} ({}, {} bytes)",
                 claim.getId(), order.getPublicRef(), type.mediaType(), data.length);
 
-        return proofs.saveAndFlush(proof);
+        ManualPaymentProofEntity saved = proofs.saveAndFlush(proof);
+
+        /*
+         * Into the ticket the claim already opened, so the operator sees the reference and
+         * the screenshot in one place instead of one in Discord and the other in the
+         * console. Best effort and last: the image is safely stored by this point, and a
+         * Discord outage must not turn a successful upload into a failed one.
+         */
+        tickets.attachScreenshot(order.getPublicRef(), data, type.mediaType());
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
