@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Atmosphere } from '../components/Atmosphere'
 import { BrandBadge } from '../brand/Logo'
@@ -6,6 +6,7 @@ import { Alert, Button, Card, Checkbox, Field, Input, Section } from '../compone
 import { SocialSignIn } from '../components/SocialSignIn'
 import { useT } from '../i18n'
 import { ApiError } from '../lib/api'
+import { rememberReturnTo, safeReturnPath } from '../lib/returnTo'
 import { useSeo } from '../lib/seo'
 import { useAuth } from '../state/AuthContext'
 
@@ -31,9 +32,19 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
   // highlighted fields", so something has to actually do the highlighting.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
+  /*
+   * The page that sent them here, which is usually an order: the configurator's account
+   * gate passes its own URL, and the order's service and package live in that URL's query
+   * string. Both ways out of this page go back to it -- the form below from here, and
+   * Google or Discord through /auth/callback, which cannot see router state after a
+   * full-page round trip and so reads the copy stored for it. Visiting /login without one
+   * clears any older copy, so a sign-in never lands on an order from earlier in the tab.
+   */
+  const from = safeReturnPath((location.state as { from?: unknown } | null)?.from)
+  useEffect(() => rememberReturnTo(from), [from])
+
   if (account) {
-    const destination = (location.state as { from?: string } | null)?.from
-      ?? (account.role === 'CUSTOMER' ? '/account' : '/admin')
+    const destination = from ?? (account.role === 'CUSTOMER' ? '/account' : '/admin')
     return <Navigate to={destination} replace />
   }
 
@@ -53,7 +64,8 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
       } else {
         await login(email.trim(), password)
       }
-      navigate('/account', { replace: true })
+      rememberReturnTo(null)
+      navigate(from ?? '/account', { replace: true })
     } catch (e) {
       if (e instanceof ApiError) {
         setFieldErrors(e.fieldErrors)
@@ -177,7 +189,11 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
 
         <p className="mt-6 text-center text-[13.5px] text-chalk-muted">
           {isRegister ? `${t.auth.haveAccount} ` : `${t.auth.newHere} `}
-          <Link to={isRegister ? '/login' : '/register'} className="font-semibold text-brand-400 hover:underline">
+          <Link
+            to={isRegister ? '/login' : '/register'}
+            state={from ? { from } : undefined}
+            className="font-semibold text-brand-400 hover:underline"
+          >
             {isRegister ? t.auth.signInLink : t.auth.createLink}
           </Link>
         </p>

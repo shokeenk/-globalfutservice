@@ -1,5 +1,6 @@
+import type { CSSProperties, ReactNode } from 'react'
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Logo } from '../brand/Logo'
 import { useT } from '../i18n'
 import { useScrollProgress, useScrolled } from '../motion'
@@ -17,6 +18,40 @@ import { Button, ButtonLink } from './ui'
  */
 const SearchDialog = lazy(() => import('./SearchDialog'))
 const prefetchSearch = () => { void import('./SearchDialog') }
+
+/**
+ * Which tab a location belongs to.
+ *
+ * <p>/order is one page for all three services, so its path says nothing about which of
+ * them is being bought. NavLink matched on the path alone and lit "Trading" over a boosting
+ * tier -- telling a customer who had just picked "15 wins" that they were in the coin shop,
+ * which is half of what made the boosting checkout look like the trading one. The service
+ * in the query decides instead; everywhere else the path still does.
+ */
+function isNavActive(to: string, location: { pathname: string; search: string }) {
+  if (location.pathname === '/order') {
+    const service = (new URLSearchParams(location.search).get('service') ?? '').toUpperCase()
+    const owner = service.startsWith('BOOST_') ? '/boosting' : service === 'COACHING' ? '/coaching' : '/order'
+    return to === owner
+  }
+  return location.pathname === to || location.pathname.startsWith(`${to}/`)
+}
+
+/** NavLink's render-prop shape, with the active state taken from `isNavActive`. */
+function ServiceNavLink({ to, className, style, children }: {
+  to: string
+  className: (state: { isActive: boolean }) => string
+  style?: CSSProperties
+  children: (state: { isActive: boolean }) => ReactNode
+}) {
+  const isActive = isNavActive(to, useLocation())
+  return (
+    <Link to={to} style={style} aria-current={isActive ? 'page' : undefined}
+          className={className({ isActive })}>
+      {children({ isActive })}
+    </Link>
+  )
+}
 
 export function Header() {
   const { account, logout } = useAuth()
@@ -218,7 +253,7 @@ export function Header() {
                        sm:px-8 lg:px-10"
           >
             {NAV.map((item) => (
-              <NavLink
+              <ServiceNavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
@@ -281,7 +316,7 @@ export function Header() {
                     */}
                   </>
                 )}
-              </NavLink>
+              </ServiceNavLink>
             ))}
           </nav>
         </div>
@@ -439,7 +474,7 @@ function MobileNav({
 
         <nav className="px-5 pb-2" aria-label="Mobile">
           {nav.map((item, index) => (
-            <NavLink
+            <ServiceNavLink
               key={item.to}
               to={item.to}
               style={{ transitionDelay: open ? `${90 + index * 40}ms` : '0ms' }}
@@ -466,7 +501,7 @@ function MobileNav({
                   )}
                 </>
               )}
-            </NavLink>
+            </ServiceNavLink>
           ))}
         </nav>
 

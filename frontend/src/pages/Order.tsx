@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { ManualPayment } from '../components/ManualPayment'
 import { PageHeader } from '../components/PageHeader'
@@ -26,6 +26,14 @@ import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
 
 type Step = 'configure' | 'details' | 'paying' | 'placed'
+
+/** Where each non-coin service lives, for when the configurator cannot sell it. */
+const SERVICE_LANDING: Record<string, string> = {
+  BOOST_CHAMPS: '/boosting',
+  BOOST_RIVALS: '/boosting',
+  COACHING: '/coaching',
+  CARDS: '/cards',
+}
 
 export default function Order() {
   const t = useT()
@@ -236,6 +244,19 @@ export default function Order() {
         </Section>
       </>
     )
+  }
+
+  /*
+   * A service asked for by name and not on sale does not quietly become coins.
+   *
+   * The trading fallback above is there so a bare /order -- the "Buy coins" button -- has
+   * something to show. It also caught boosting and coaching links whose SKU was switched
+   * off, and put the coin slider under them: the trading checkout, in answer to a
+   * boosting click. Those go back to their own page, which shows what is on sale.
+   */
+  const landingPage = params.has('service') ? SERVICE_LANDING[requestedSku] : undefined
+  if (catalog && landingPage && service?.sku !== requestedSku) {
+    return <Navigate to={landingPage} replace />
   }
 
   const maxRedeemable = policy && quote
@@ -943,6 +964,7 @@ function CheckoutForm({
    */
   const [deliveryMethod] = useState(policy?.defaultDeliveryMethod ?? 'PLAYER_AUCTION')
   const isCoaching = quote.sku === 'COACHING'
+  const isTrading = quote.sku === 'TRADING_SERVICE'
   const [note, setNote] = useState('')
   /*
    * The sign-in, held in component state and nowhere else.
@@ -1199,7 +1221,14 @@ function CheckoutForm({
         this only decides what it is called. Both trading methods set
         `requiresCredentials`, so nothing about the credential step changes either way.
       */}
-      {!isCoaching && (
+      {/*
+        Coins only. The plate names the coin method and says it is "used for every coin
+        order", and it was keyed on "not coaching" -- so every boosting checkout opened
+        with a trading method at the top of the form, one of the things that made a
+        boosting order read as the trading checkout. The method is still posted and
+        still decided server-side; only the label is limited to the orders it describes.
+      */}
+      {isTrading && (
         <div className="plate p-4">
           <p className="text-[12.5px] font-semibold text-chalk-faint">
             {t.order.deliveryMethod}

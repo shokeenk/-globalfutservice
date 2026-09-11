@@ -149,14 +149,21 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { account, loading } = useAuth()
   const location = useLocation()
   if (loading) return <RouteFallback />
-  if (!account) return <Navigate to="/login" state={{ from: location.pathname }} replace />
+  // The whole address, not just the path: a query string is where an order keeps its
+  // service and package, and dropping it lands a boosting customer on coins.
+  if (!account) return <Navigate to="/login" state={{ from: fullPath(location) }} replace />
   return <>{children}</>
 }
 
 function RequireStaff({ children }: { children: React.ReactNode }) {
   const { account, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <RouteFallback />
-  if (!account) return <Navigate to="/login" replace />
+  if (!account) return <Navigate to="/login" state={{ from: fullPath(location) }} replace />
   if (account.role === 'CUSTOMER') return <Navigate to="/account" replace />
   return <>{children}</>
+}
+
+function fullPath(location: { pathname: string; search: string; hash: string }) {
+  return `${location.pathname}${location.search}${location.hash}`
 }
