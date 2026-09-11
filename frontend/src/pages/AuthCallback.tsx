@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Alert, ButtonLink, Section } from '../components/ui'
 import { PageHeader } from '../components/PageHeader'
 import { useT } from '../i18n'
+import { peekReturnTo, rememberReturnTo } from '../lib/returnTo'
 import { useAuth } from '../state/AuthContext'
 
 /**
@@ -26,17 +27,28 @@ export default function AuthCallback() {
 
   const error = params.get('oauth_error')
 
+  /*
+   * Back to the page that sent them to sign in -- usually an order half-built in the
+   * configurator. Google and Discord are a full-page round trip, so router state did not
+   * survive it and this used to send everybody to /account, whose order button starts a
+   * coin order. /login stored the path before they left; it is read once, here, and
+   * cleared so a later sign-in in this tab cannot be sent back to an old order.
+   */
+  const [returnTo] = useState(peekReturnTo)
+  useEffect(() => rememberReturnTo(null), [])
+  const destination = returnTo ?? '/account'
+
   useEffect(() => {
     if (!error && !loading && account) {
       /*
        * `replace`, so the back button returns to wherever they started rather than to
        * this page — which would re-run a callback whose one-time code is long spent.
        */
-      navigate('/account', { replace: true })
+      navigate(destination, { replace: true })
     }
-  }, [error, loading, account, navigate])
+  }, [error, loading, account, navigate, destination])
 
-  if (!error && !loading && account) return <Navigate to="/account" replace />
+  if (!error && !loading && account) return <Navigate to={destination} replace />
 
   const message =
     error === 'NO_EMAIL'
@@ -57,7 +69,7 @@ export default function AuthCallback() {
             <>
               <Alert tone="warn">{message}</Alert>
               <div className="mt-6 flex flex-wrap gap-3">
-                <ButtonLink to="/login" size="lg">
+                <ButtonLink to="/login" size="lg" state={returnTo ? { from: returnTo } : undefined}>
                   {t.auth.signInButton}
                 </ButtonLink>
                 <ButtonLink to="/" variant="ghost" size="lg">
