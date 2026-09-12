@@ -190,6 +190,17 @@ public class AdminOrderController {
 
         OrderEntity order = orderService.requireAny(publicRef);
 
+        if (!order.getSku().isCoinTransfer()) {
+            /*
+             * The partner takes coin orders. Boosting holds a sign-in exactly like a coin
+             * order does, so it arrived here looking releasable and failed inside the
+             * client instead -- burning a dispatch attempt to say so.
+             */
+            throw new ApiExceptions.ConflictException("not_a_coin_order",
+                    "The fulfilment partner only takes coin orders. This one is "
+                            + order.getSku().displayName() + ", which is worked by hand.");
+        }
+
         /*
          * READY_FOR_DELIVERY is the approval state, and it already existed.
          *
@@ -215,7 +226,18 @@ public class AdminOrderController {
         // the transition below is only reached on a supplier order id.
         String supplierOrderId = supplierFulfilment.approveAndDispatch(order, operator.id());
 
-        OrderEntity moved = orderService.transition(order, OrderStatus.IN_PROGRESS,
+        /*
+         * Re-read before moving it, because the release just wrote to this row.
+         *
+         * `approveAndDispatch` stores the partner's order id and commits, which leaves the
+         * copy loaded above one version behind. Transitioning that stale copy failed the
+         * optimistic lock *after* the sign-in had already gone to the partner: the
+         * operator saw a 500, the order sat in the queue, and only a second click moved
+         * it. Loading it again costs one query and makes the successful path succeed.
+         */
+        OrderEntity released = orderService.requireAny(publicRef);
+
+        OrderEntity moved = orderService.transition(released, OrderStatus.IN_PROGRESS,
                 Actor.OPERATOR, operator.id(), operator.email(),
                 "Released to fulfilment partner as " + supplierOrderId);
 

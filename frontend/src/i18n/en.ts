@@ -840,6 +840,7 @@ const en = {
     fixFieldsError: 'Please check the highlighted fields.',
     errEaEmail: 'Please enter Origin (Web App) Email!',
     errEaPassword: 'Please enter Origin (Web App) Password!',
+    errEaPasswordShort: 'That looks too short — an EA password is at least 8 characters.',
     errBackupCode: (n: number) => `Please enter Backup Code ${n}!`,
     errBackupCodeFormat: (n: number) => `Backup Code ${n} must be exactly 8 digits.`,
     userInfoTitle: 'Your details',

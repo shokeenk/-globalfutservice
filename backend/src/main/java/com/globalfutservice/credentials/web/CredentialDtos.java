@@ -33,7 +33,14 @@ public final class CredentialDtos {
             String eaEmail,
 
             @NotBlank(message = "EA password is required")
-            @Size(max = 255)
+            /*
+             * Eight is the partner's minimum, not ours. Without it a shorter password was
+             * accepted at checkout and refused by the partner at release -- after the
+             * customer had paid, and with an operator left holding an order that could
+             * not go out.
+             */
+            @Size(min = 8, max = 255,
+                    message = "An EA password is at least 8 characters — please check it")
             String eaPassword,
 
             @Size(max = 12, message = "Twelve backup codes is the most EA issues")

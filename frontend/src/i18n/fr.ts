@@ -715,6 +715,7 @@ const fr: Dictionary = {
     fixFieldsError: 'Vérifie les champs signalés.',
     errEaEmail: 'Saisis l’e-mail Origin (Web App) !',
     errEaPassword: 'Saisis le mot de passe Origin (Web App) !',
+    errEaPasswordShort: 'Cela semble trop court : un mot de passe EA fait au moins 8 caractères.',
     errBackupCode: (n) => `Saisis le code de secours ${n} !`,
     errBackupCodeFormat: (n) => `Le code de secours ${n} doit faire exactement 8 chiffres.`,
     userInfoTitle: 'Tes informations',

@@ -3,7 +3,6 @@ package com.globalfutservice.fulfilment;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.web.CredentialDtos;
-import com.globalfutservice.domain.orders.DeliveryMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import org.slf4j.Logger;
@@ -62,13 +61,33 @@ public class SupplierFulfilmentService {
      */
     @Transactional
     public String dispatch(OrderEntity order) {
+        return dispatch(order, false);
+    }
+
+    /**
+     * @param propagate whether the partner's own reason should reach the caller.
+     *                  False on the customer path, where a supplier outage must not
+     *                  become a red error on a checkout nobody can retry; true on the
+     *                  operator path, where somebody is waiting to be told what happened
+     *                  and "check the application log" is not an answer they can act on
+     *                  from the screen they are looking at.
+     */
+    private String dispatch(OrderEntity order, boolean propagate) {
         if (!isEnabled()) {
             log.debug("Supplier disabled — order {} stays for manual fulfilment",
                     order.getPublicRef());
             return null;
         }
-        if (order.getDeliveryMethod() == DeliveryMethod.SCHEDULED_SESSION) {
-            return null;                       // coaching is not a coin order
+        if (!order.getSku().isCoinTransfer()) {
+            /*
+             * Keyed off the SKU, not the delivery method. The delivery-method test
+             * excluded coaching and let boosting through -- and boosting reaches this
+             * point looking dispatchable, because it holds a sign-in like a coin order
+             * does. See Sku#isCoinTransfer for what the partner's API actually takes.
+             */
+            log.debug("Order {} is not a coin order — nothing to dispatch",
+                    order.getPublicRef());
+            return null;
         }
         if (order.getSupplierOrderId() != null) {
             return order.getSupplierOrderId(); // already sent; never submit twice
@@ -109,6 +128,23 @@ public class SupplierFulfilmentService {
             log.error("Could not dispatch order {} to supplier (attempt {}): {}",
                     order.getPublicRef(), order.getSupplierDispatchAttempts(), e.getMessage());
             orders.save(order);
+
+            if (propagate) {
+                /*
+                 * The partner's own words, not a summary of them. The message is built
+                 * from the status, the path and the order reference -- never a request
+                 * body -- so it is safe to put in front of an operator, and it is the
+                 * difference between "try again later" and "our API account is out of
+                 * balance".
+                 */
+                String reason = e.getMessage() == null ? "no reason given" : e.getMessage().trim();
+                if (!reason.endsWith(".")) {
+                    reason = reason + ".";
+                }
+                throw new FutTransferClient.FutTransferException(
+                        "The fulfilment partner refused order " + order.getPublicRef()
+                                + ": " + reason + " The order has not moved.");
+            }
 
             if (order.getSupplierDispatchAttempts() >= props.futTransfer().maxDispatchAttempts()) {
                 /*
@@ -175,7 +211,7 @@ public class SupplierFulfilmentService {
         log.info("FULFILMENT APPROVAL: operator {} is releasing order {} to the supplier",
                 operatorAccountId, order.getPublicRef());
 
-        String supplierId = dispatch(order);
+        String supplierId = dispatch(order, true);
         if (supplierId == null) {
             // dispatch() logged the cause and swallowed it. The operator gets told plainly
             // rather than being left to infer failure from an unchanged screen.

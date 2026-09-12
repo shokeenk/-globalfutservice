@@ -254,7 +254,8 @@ export default function AdminOrder() {
                 the same list as "Mark on hold" would make the most consequential button
                 on this screen look like the least.
               */}
-              {order.status === 'READY_FOR_DELIVERY' && order.credentialsSubmitted && (
+              {order.status === 'READY_FOR_DELIVERY' && order.credentialsSubmitted
+                && order.sku === 'TRADING_SERVICE' && (
                 <div className="mb-3 rounded-edge border border-brand-500/40 bg-brand-500/[0.06] p-3">
                   <p className="text-[12.5px] leading-snug text-chalk-muted">
                     Sends this customer’s EA sign-in to FUT Transfer so they can work the

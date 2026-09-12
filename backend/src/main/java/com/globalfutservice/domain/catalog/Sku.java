@@ -89,6 +89,19 @@ public enum Sku {
         return this == TRADING_SERVICE || this == BOOST_CHAMPS || this == BOOST_RIVALS;
     }
 
+    /**
+     * Whether the fulfilment partner can take this SKU.
+     *
+     * <p>Their API moves coins: it wants a platform and an amount in thousands. Only the
+     * trading service is that shape. Boosting also needs the customer's sign-in, which is
+     * what made it look dispatchable, but it is worked by a player rather than by a
+     * transfer -- and a boosting order carries no platform and a quantity of 1, so
+     * submitting one asks the partner to move 1,000K coins on no platform.
+     */
+    public boolean isCoinTransfer() {
+        return this == TRADING_SERVICE;
+    }
+
     /** True for SKUs fulfilled by scheduled sessions rather than by an operator queue. */
     public boolean isScheduled() {
         return this == COACHING;
