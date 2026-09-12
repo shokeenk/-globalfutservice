@@ -2,6 +2,7 @@ package com.globalfutservice.web;
 
 import com.globalfutservice.domain.orders.IllegalTransitionException;
 import com.globalfutservice.domain.pricing.PricingException;
+import com.globalfutservice.fulfilment.FutTransferClient;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,6 +122,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> noResource(NoResourceFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiError.of("not_found", "No such endpoint.", traceId()));
+    }
+
+    /**
+     * The fulfilment partner refused a release.
+     *
+     * <p>Unmapped, this fell through to the catch-all and an operator was told "something
+     * went wrong on our side" with a trace id -- for a refusal whose reason the partner
+     * had already given us, on the one screen where knowing it decides what to do next.
+     * The message is safe to show: {@code FutTransferClient} builds it from the status and
+     * the order reference and never from a request body, which is where the sign-in is.
+     */
+    @ExceptionHandler(FutTransferClient.FutTransferException.class)
+    public ResponseEntity<ApiError> fulfilmentPartner(FutTransferClient.FutTransferException e) {
+        String trace = traceId();
+        // Message only, no stack: the frame below this one held a password.
+        log.error("[{}] Fulfilment partner refused a release: {}", trace, e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ApiError.of(
+                "fulfilment_partner_refused", e.getMessage(), trace));
     }
 
     @ExceptionHandler(ApiExceptions.UpstreamException.class)

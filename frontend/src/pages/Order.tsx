@@ -2089,6 +2089,9 @@ function validateCredentials(
   const errors: Record<string, string> = {}
   if (!eaEmail.trim()) errors.eaEmail = t.order.errEaEmail
   if (!eaPassword) errors.eaPassword = t.order.errEaPassword
+  // Eight is the fulfilment partner's minimum. Caught here so it is a correction while
+  // the customer is typing, rather than a refused order after they have paid.
+  else if (eaPassword.length < 8) errors.eaPassword = t.order.errEaPasswordShort
   backupCodes.forEach((code, index) => {
     const value = code.trim()
     if (!value) {

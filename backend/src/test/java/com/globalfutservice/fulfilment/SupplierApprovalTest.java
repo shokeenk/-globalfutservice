@@ -3,6 +3,7 @@ package com.globalfutservice.fulfilment;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.domain.catalog.Platform;
+import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.orders.DeliveryMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
@@ -64,6 +65,7 @@ class SupplierApprovalTest {
         when(order.getId()).thenReturn(7L);
         when(order.getPublicRef()).thenReturn("GFS-26-READY");
         when(order.getDeliveryMethod()).thenReturn(DeliveryMethod.PLAYER_AUCTION);
+        when(order.getSku()).thenReturn(Sku.TRADING_SERVICE);
         when(order.getPlatform()).thenReturn(Platform.PC);
         when(order.getQuantity()).thenReturn(new BigDecimal("3.00"));
         when(order.getSupplierOrderId()).thenReturn(null);
@@ -113,6 +115,29 @@ class SupplierApprovalTest {
         // worse, could start a second transfer against the customer's account.
         assertThat(service.approveAndDispatch(already, OPERATOR)).isEqualTo("supplier-123");
         verify(client, never()).submitOrder(anyString(), anyString(), any(), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("never sends a boosting order to an API that only moves coins")
+    void boostingIsNeverDispatched() {
+        OrderEntity boost = readyOrder();
+        when(boost.getSku()).thenReturn(Sku.BOOST_CHAMPS);
+        when(boost.getPlatform()).thenReturn(null);
+        when(boost.getQuantity()).thenReturn(new BigDecimal("1.00"));
+
+        /*
+         * Boosting reaches this point looking dispatchable: it is paid, it holds a
+         * sign-in, and its delivery method is the same as a coin order's -- which is how
+         * it used to get through, the old guard having excluded only coaching. What the
+         * partner would have received is an order to move 1,000K coins on a null
+         * platform, because a flat SKU's quantity is 1 and it carries no platform.
+         */
+        assertThatThrownBy(() -> service.approveAndDispatch(boost, OPERATOR))
+                .isInstanceOf(FutTransferClient.FutTransferException.class);
+
+        verify(client, never()).submitOrder(anyString(), anyString(), any(), anyLong(), any());
+        // And the vault is never opened for an order that was never going out.
+        verify(vault, never()).reveal(anyLong(), any());
     }
 
     @Test

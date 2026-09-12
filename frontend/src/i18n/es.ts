@@ -715,6 +715,7 @@ const es: Dictionary = {
     fixFieldsError: 'Revisa los campos marcados.',
     errEaEmail: '¡Introduce el correo de Origin (Web App)!',
     errEaPassword: '¡Introduce la contraseña de Origin (Web App)!',
+    errEaPasswordShort: 'Parece demasiado corta: una contraseña de EA tiene al menos 8 caracteres.',
     errBackupCode: (n) => `¡Introduce el código de respaldo ${n}!`,
     errBackupCodeFormat: (n) => `El código de respaldo ${n} debe tener exactamente 8 dígitos.`,
     userInfoTitle: 'Tus datos',
