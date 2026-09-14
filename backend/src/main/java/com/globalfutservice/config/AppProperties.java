@@ -255,6 +255,13 @@ public record AppProperties(
             /** How long after delivery an EA sign-in may remain in the vault. */
             @DefaultValue("24h") Duration credentialRetention,
 
+            /**
+             * How long a payment screenshot is kept after upload. Not held while the order
+             * is disputed or on hold -- the image may be the evidence -- and removed by the
+             * next sweep once that is resolved.
+             */
+            @DefaultValue("90d") Duration proofRetention,
+
             /** Contractual outer bound quoted in the Terms — deliberately far looser
              *  than the marketing promise, so the business under-promises in writing. */
             @DefaultValue("48h") Duration deliverySla,

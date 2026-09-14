@@ -300,6 +300,7 @@ gfs:
   fulfilment:
     guarantee-window: 7d
     credential-retention: 24h    # after which EA sign-ins are destroyed regardless
+    proof-retention: ${GFS_PROOF_RETENTION:90d}   # payment screenshots, from upload
     delivery-sla: 48h            # the contractual outer bound, not the promise
     default-delivery-method: PLAYER_AUCTION   # needs no credentials — prefer it
     refund-fee-bps: 500
