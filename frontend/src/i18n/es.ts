@@ -789,6 +789,13 @@ const es: Dictionary = {
     payTabUpi: 'UPI',
     payTabPaypal: 'PayPal',
     payTabCrypto: 'Cripto',
+    payTabInternational: 'Internacional',
+    payIntlBadge: 'Próximamente',
+    payIntlTitle: 'Las opciones de pago internacional llegarán pronto',
+    payIntlBody: (methods: string[]) =>
+      `Por ahora, usa ${methods.join(' o ')} para los pedidos internacionales.`,
+    payIntlNote: 'Aquí aparecerán más formas de pagar desde fuera de la India.',
+    payIntlUse: (method: string) => `Pagar con ${method}`,
     payScanHint: 'Escanea el código con tu aplicación de pago, o copia la dirección de abajo.',
     payAmountDue: (total: string) => `Importe a enviar: ${total}`,
     payPayTo: 'Pagando a',
@@ -799,13 +806,15 @@ const es: Dictionary = {
     payCryptoWarning:
       'Envía únicamente USDT por la red TRON (TRC20) a esta dirección. Enviar cualquier otro ' +
       'activo, o usar otra red, provocará la pérdida permanente de los fondos.',
-    payProofLabel: 'Captura del pago (opcional)',
-    payProofHint: 'Acelera la comprobación. Un JPG, PNG o WebP de menos de 5 MB: lo que muestre tu aplicación de pago al enviarlo.',
+    payProofLabel: 'Captura del pago',
+    payProofHint: 'La pantalla de confirmación que muestra tu aplicación de pago tras enviarlo: un JPG, PNG o WebP de menos de 5 MB.',
     payProofRemove: 'Quitar',
     payProofPreviewAlt: 'La captura que has seleccionado',
     payProofWrongType: 'Ese archivo no es una imagen. Adjunta una captura en JPG, PNG o WebP.',
     payProofTooBig: 'Esa imagen supera los 5 MB. Una captura suele pesar mucho menos.',
-    payProofFailed: 'Hemos registrado tu referencia, pero la captura no se ha subido. Puedes enviarla más tarde si te la pedimos.',
+    payProofFailed: 'Hemos registrado tu referencia, pero la captura no se ha subido. Vuelve a adjuntarla abajo.',
+    payProofRequired: 'Adjunta una captura del pago antes de enviar.',
+    payProofRetry: 'Subir captura',
     payReferenceLabel: 'Número de referencia UTR / de la transacción',
     payReferenceHint:
       'Cuando hayas completado el pago, introduce aquí el número de referencia para que podamos ' +

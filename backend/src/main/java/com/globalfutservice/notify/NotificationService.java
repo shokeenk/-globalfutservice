@@ -67,6 +67,16 @@ public class NotificationService {
         each(notifier -> notifier.paymentClaimed(n));
     }
 
+    /**
+     * Off the request thread, like the claim. The image is already stored when this runs,
+     * so a slow Discord costs the operator a few seconds and the customer's upload nothing
+     * -- before this it was posted inside the upload request itself.
+     */
+    @Async
+    public void paymentProofAttached(PaymentProofNotification n) {
+        each(notifier -> notifier.paymentProofAttached(n));
+    }
+
     public void orderDelivered(OrderNotification n) {
         each(notifier -> notifier.orderDelivered(n));
     }

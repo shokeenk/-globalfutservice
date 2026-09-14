@@ -790,6 +790,13 @@ const fr: Dictionary = {
     payTabUpi: 'UPI',
     payTabPaypal: 'PayPal',
     payTabCrypto: 'Crypto',
+    payTabInternational: 'International',
+    payIntlBadge: 'Bientôt',
+    payIntlTitle: 'Les options de paiement international arrivent bientôt',
+    payIntlBody: (methods: string[]) =>
+      `Pour l’instant, utilise ${methods.join(' ou ')} pour les commandes internationales.`,
+    payIntlNote: 'C’est ici qu’apparaîtront d’autres moyens de payer depuis l’étranger.',
+    payIntlUse: (method: string) => `Payer avec ${method}`,
     payScanHint: 'Scanne le code avec ton application de paiement, ou copie l’adresse ci-dessous.',
     payAmountDue: (total: string) => `Montant à envoyer : ${total}`,
     payPayTo: 'Paiement à',
@@ -800,13 +807,15 @@ const fr: Dictionary = {
     payCryptoWarning:
       'N’envoie que des USDT sur le réseau TRON (TRC20) à cette adresse. Envoyer un autre actif, ' +
       'ou utiliser un autre réseau, entraînera la perte définitive des fonds.',
-    payProofLabel: 'Capture du paiement (facultatif)',
-    payProofHint: 'Accélère la vérification. Un JPG, PNG ou WebP de moins de 5 Mo — ce que ton application de paiement affiche après l’envoi.',
+    payProofLabel: 'Capture du paiement',
+    payProofHint: 'L’écran de confirmation que ton application de paiement affiche après l’envoi — un JPG, PNG ou WebP de moins de 5 Mo.',
     payProofRemove: 'Retirer',
     payProofPreviewAlt: 'La capture que tu as sélectionnée',
     payProofWrongType: 'Ce fichier n’est pas une image. Joins une capture au format JPG, PNG ou WebP.',
     payProofTooBig: 'Cette image dépasse 5 Mo. Une capture pèse généralement bien moins.',
-    payProofFailed: 'Ta référence a été enregistrée, mais la capture n’a pas été envoyée. Tu pourras la joindre plus tard si nous te la demandons.',
+    payProofFailed: 'Ta référence a été enregistrée, mais la capture n’a pas été envoyée. Joins-la à nouveau ci-dessous.',
+    payProofRequired: 'Joins une capture du paiement avant d’envoyer.',
+    payProofRetry: 'Envoyer la capture',
     payReferenceLabel: 'Numéro de référence UTR / de transaction',
     payReferenceHint:
       'Une fois ton paiement effectué, saisis ici le numéro de référence pour que nous puissions ' +

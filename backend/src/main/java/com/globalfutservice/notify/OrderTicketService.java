@@ -93,23 +93,30 @@ public class OrderTicketService {
      * -- a screenshot that does not reach Discord is still in the admin console, which is
      * where an operator can always go.
      */
-    public void attachScreenshot(String publicRef, byte[] image, String contentType) {
+    /**
+     * @return whether the image is now in the order's ticket. False sends the caller to
+     *         the webhook instead, so a screenshot is never simply dropped -- that covers no
+     *         bot, no ticket (the claim itself went to the webhook) and a ticket that
+     *         refused the upload.
+     */
+    public boolean attachScreenshot(String publicRef, byte[] image, String contentType) {
         if (!isEnabled()) {
-            return;
+            return false;
         }
         try {
             Optional<String> channelId = bot.findTicketChannel(publicRef);
             if (channelId.isEmpty()) {
-                log.debug("No Discord ticket for {}; screenshot stays in the console only",
-                        publicRef);
-                return;
+                log.debug("No Discord ticket for {}; the screenshot goes to the webhook", publicRef);
+                return false;
             }
             bot.postImage(channelId.get(), image, filenameFor(publicRef, contentType),
                     "📸 Payment screenshot for " + publicRef);
             log.info("Posted the payment screenshot into the Discord ticket for {}", publicRef);
+            return true;
         } catch (RuntimeException e) {
             log.warn("Could not post the screenshot for {} to Discord: {}",
                     publicRef, e.getMessage());
+            return false;
         }
     }
 
@@ -182,7 +189,7 @@ public class OrderTicketService {
         };
     }
 
-    private static String filenameFor(String publicRef, String contentType) {
+    static String filenameFor(String publicRef, String contentType) {
         String ext = switch (contentType == null ? "" : contentType) {
             case "image/png" -> ".png";
             case "image/webp" -> ".webp";

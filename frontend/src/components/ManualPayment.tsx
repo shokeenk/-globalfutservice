@@ -37,6 +37,12 @@ function qrFor(method: ManualPaymentMethod, sku: string): string {
   return QR_IMAGES[`${method}:${sku}`] ?? QR_IMAGES[`${method}:*`] ?? ''
 }
 
+/**
+ * The tabs across the top. `INTERNATIONAL` is the storefront's own: nothing sits behind it
+ * on the API yet, which is why it is not a ManualPaymentMethod.
+ */
+type PaymentTab = ManualPaymentMethod | 'INTERNATIONAL'
+
 export function ManualPayment({
   publicRef, email, sku, totalFormatted,
 }: {
@@ -50,7 +56,7 @@ export function ManualPayment({
 
   const [options, setOptions] = useState<ManualPaymentOption[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [method, setMethod] = useState<ManualPaymentMethod | null>(null)
+  const [method, setMethod] = useState<PaymentTab | null>(null)
   const [reference, setReference] = useState('')
   const [touched, setTouched] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -59,6 +65,10 @@ export function ManualPayment({
   // Kept apart from `error`: the reference was recorded and only the screenshot failed,
   // which is a different thing to tell somebody who has already sent money.
   const [proofError, setProofError] = useState<string | null>(null)
+  const [proofRetrying, setProofRetrying] = useState(false)
+  // Set by pressing submit, not by leaving the reference field: the screenshot sits below
+  // the reference, and flagging it missing before anyone has reached it is nagging.
+  const [attempted, setAttempted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -80,11 +90,36 @@ export function ManualPayment({
 
   const referenceIsEmpty = reference.trim().length === 0
 
+  /** Whether the screenshot landed. A failure is shown with a retry, never thrown. */
+  async function uploadProof(picked: File): Promise<boolean> {
+    try {
+      const form = new FormData()
+      form.append('email', email)
+      form.append('file', picked)
+      await api.upload(
+        `/api/v1/payments/claims/${encodeURIComponent(publicRef)}/proof`, form)
+      setProofError(null)
+      return true
+    } catch (uploadFailed) {
+      setProofError(uploadFailed instanceof ApiError
+        ? uploadFailed.message : t.order.payProofFailed)
+      return false
+    }
+  }
+
+  async function retryProof() {
+    if (!file || proofRetrying) return
+    setProofRetrying(true)
+    await uploadProof(file)
+    setProofRetrying(false)
+  }
+
   async function submit() {
     setTouched(true)
+    setAttempted(true)
     // The guard is here as well as on the button because a form can also be submitted
     // with the keyboard, and a disabled button does not stop that on its own.
-    if (referenceIsEmpty || !active || submitting) return
+    if (referenceIsEmpty || !file || !active || submitting) return
 
     setSubmitting(true)
     setError(null)
@@ -95,26 +130,15 @@ export function ManualPayment({
       )
 
       /*
-       * The screenshot goes second, and its failure is not the claim's failure.
+       * The screenshot is required, but it still goes second.
        *
-       * The reference is what an operator needs; the image only makes checking it
-       * faster. Having recorded the reference successfully, throwing the whole
-       * submission away because a 4 MB upload timed out would lose the part that
-       * matters to save the part that does not -- and the customer, who has already
-       * sent money, would be told their payment was not recorded.
+       * It attaches to the claim this request just created -- and to the Discord ticket
+       * that claim opens -- so it cannot go first. And its failure is not the claim's
+       * failure: discarding a recorded reference because a 4 MB upload timed out would
+       * tell somebody who has already sent money that their payment was not recorded.
+       * So the reference stands, and the next screen offers the upload again.
        */
-      if (file) {
-        try {
-          const form = new FormData()
-          form.append('email', email)
-          form.append('file', file)
-          await api.upload(
-            `/api/v1/payments/claims/${encodeURIComponent(publicRef)}/proof`, form)
-        } catch (uploadFailed) {
-          setProofError(uploadFailed instanceof ApiError
-            ? uploadFailed.message : t.order.payProofFailed)
-        }
-      }
+      await uploadProof(file)
 
       setClaim(recorded)
     } catch (e) {
@@ -136,7 +160,14 @@ export function ManualPayment({
           {t.order.payClaimBody(claim.reference)}
         </p>
         {proofError && (
-          <p className="mt-2 text-[12.5px] leading-snug text-warn">{proofError}</p>
+          <div className="mt-3 space-y-3">
+            <p className="text-[12.5px] leading-snug text-warn">{proofError}</p>
+            <ProofPicker file={file} onPick={setFile} required />
+            <Button size="md" loading={proofRetrying} disabled={!file}
+                    onClick={() => void retryProof()}>
+              {t.order.payProofRetry}
+            </Button>
+          </div>
         )}
         {/*
           A way back, because the most common thing to go wrong here is a mistyped
@@ -145,7 +176,9 @@ export function ManualPayment({
         */}
         <button
           type="button"
-          onClick={() => { setClaim(null); setReference(''); setTouched(false); setProofError(null) }}
+          onClick={() => {
+            setClaim(null); setReference(''); setTouched(false); setAttempted(false); setProofError(null)
+          }}
           className="mt-4 text-[13px] font-semibold text-brand-400 hover:underline
                      focus-visible:outline focus-visible:outline-2
                      focus-visible:outline-offset-2 focus-visible:outline-brand-400"
@@ -156,15 +189,20 @@ export function ManualPayment({
     )
   }
 
-  if (!options || !active) {
+  if (!options) {
     return <div className="h-64 animate-pulse rounded-panel border border-ink-400 bg-ink-700/40" />
   }
+  if (options.length === 0) {
+    return <Alert tone="warn">{t.order.payMethodsFailed}</Alert>
+  }
 
-  const label: Record<ManualPaymentMethod, string> = {
+  const label: Record<PaymentTab, string> = {
     UPI: t.order.payTabUpi,
     PAYPAL: t.order.payTabPaypal,
     CRYPTO: t.order.payTabCrypto,
+    INTERNATIONAL: t.order.payTabInternational,
   }
+  const tabs: PaymentTab[] = [...options.map((option) => option.method), 'INTERNATIONAL']
 
   return (
     <div className="animate-rise space-y-4 rounded-panel border border-ink-400 bg-paper p-5">
@@ -174,73 +212,89 @@ export function ManualPayment({
       </div>
 
       {/*
-        Only rendered when there is a choice to make. With a single configured method a
-        one-tab tablist is a control that cannot do anything, and reads as though options
-        failed to load.
+        Always a choice now: whatever the API offers, plus International. That one is a
+        placeholder -- selectable, so the customer can read what it says, but with no
+        destination, no reference and no submit behind it, so it cannot pass for a way
+        to pay that silently does nothing.
       */}
-      {options.length > 1 && (
-        <div role="tablist" aria-label={t.order.payTitle} className="flex gap-1">
-          {options.map((option) => (
-            <button
-              key={option.method}
-              type="button"
-              role="tab"
-              aria-selected={option.method === active.method}
-              onClick={() => { setMethod(option.method); setError(null) }}
-              className={[
-                'h-11 flex-1 rounded-edge text-[12.5px] font-semibold transition-colors duration-200',
-                option.method === active.method
-                  ? 'bg-brand-500 text-paper'
-                  : 'bg-ink-700 text-chalk-muted hover:text-chalk',
-              ].join(' ')}
-            >
-              {label[option.method]}
-            </button>
-          ))}
-        </div>
+      {/*
+        Two by two on a phone, one row from tablet width up. Four tabs share about 77px
+        each on a 375px screen, which fits "UPI" and clips "International" -- and a
+        shorter label ("Intl") reads as an abbreviation somebody has to decode.
+      */}
+      <div role="tablist" aria-label={t.order.payTitle} className="grid grid-cols-2 gap-1 sm:flex">
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={tab === method}
+            onClick={() => { setMethod(tab); setError(null) }}
+            className={[
+              'h-11 min-w-0 flex-1 rounded-edge px-1.5 text-[12.5px] font-semibold',
+              'transition-colors duration-200',
+              tab === method
+                ? 'bg-brand-500 text-paper'
+                : 'bg-ink-700 text-chalk-muted hover:text-chalk',
+            ].join(' ')}
+          >
+            {label[tab]}
+          </button>
+        ))}
+      </div>
+
+      {method === 'INTERNATIONAL' ? (
+        <InternationalSoon
+          alternatives={options
+            .filter((option) => option.method === 'PAYPAL' || option.method === 'CRYPTO')
+            .map((option) => ({ method: option.method, name: label[option.method] }))}
+          onUse={(next) => { setMethod(next); setError(null) }}
+        />
+      ) : active && (
+        <>
+          <Destination option={active} sku={sku} totalFormatted={totalFormatted} />
+
+          <Field
+            label={t.order.payReferenceLabel}
+            required
+            hint={t.order.payReferenceHint}
+            error={touched && referenceIsEmpty ? t.order.payReferenceRequired : undefined}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                onBlur={() => setTouched(true)}
+                placeholder={t.order.payReferencePlaceholder(active.referenceName)}
+                /*
+                 * inputMode text, not numeric: a UTR is digits but a TXID is hex and a PayPal
+                 * id is alphanumeric, and the field is shared. autoComplete off because a
+                 * transaction reference is single-use -- offering last month's is noise.
+                 */
+                inputMode="text"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={120}
+              />
+            )}
+          </Field>
+
+          <ProofPicker file={file} onPick={setFile} required missing={attempted} />
+
+          {error && <Alert tone="warn">{error}</Alert>}
+
+          <Button
+            full
+            size="lg"
+            loading={submitting}
+            disabled={referenceIsEmpty}
+            onClick={() => void submit()}
+          >
+            {t.order.paySubmit}
+          </Button>
+        </>
       )}
-
-      <Destination option={active} sku={sku} totalFormatted={totalFormatted} />
-
-      <Field
-        label={t.order.payReferenceLabel}
-        required
-        hint={t.order.payReferenceHint}
-        error={touched && referenceIsEmpty ? t.order.payReferenceRequired : undefined}
-      >
-        {(props) => (
-          <Input
-            {...props}
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            onBlur={() => setTouched(true)}
-            placeholder={t.order.payReferencePlaceholder(active.referenceName)}
-            /*
-             * inputMode text, not numeric: a UTR is digits but a TXID is hex and a PayPal
-             * id is alphanumeric, and the field is shared. autoComplete off because a
-             * transaction reference is single-use -- offering last month's is noise.
-             */
-            inputMode="text"
-            autoComplete="off"
-            spellCheck={false}
-            maxLength={120}
-          />
-        )}
-      </Field>
-
-      <ProofPicker file={file} onPick={setFile} />
-
-      {error && <Alert tone="warn">{error}</Alert>}
-
-      <Button
-        full
-        size="lg"
-        loading={submitting}
-        disabled={referenceIsEmpty}
-        onClick={() => void submit()}
-      >
-        {t.order.paySubmit}
-      </Button>
     </div>
   )
 }
@@ -252,17 +306,34 @@ const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_PROOF_BYTES = 5 * 1024 * 1024
 
 /**
- * Optional screenshot of the payment.
+ * The screenshot of the payment. Required.
  *
- * <p>Optional is the whole design. It is evidence that saves an operator a lookup, not
- * authorisation — a claim without one is verified exactly the same way. Requiring it
- * would block somebody whose phone will not share an image, on the screen where they have
- * already sent money and cannot undo it.
+ * <p>It used to be optional, on the reasoning that it is evidence rather than
+ * authorisation -- a claim without one is verified the same way, only slower. Required
+ * is the business's call: the Discord ticket an operator works from is built around the
+ * image, and without one they are searching a bank account by reference alone. The cost
+ * is somebody whose phone will not share an image being unable to submit here; support is
+ * the way through for them.
+ *
+ * <p>Enforced in the storefront, not on the server. The image is a second request that
+ * attaches to the claim the first one creates, so the server cannot refuse a claim for
+ * lacking something that has not been sent yet.
  */
-function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | null) => void }) {
+function ProofPicker({
+  file, onPick, required = false, missing = false,
+}: {
+  file: File | null
+  onPick: (f: File | null) => void
+  required?: boolean
+  /** The customer tried to submit without one. */
+  missing?: boolean
+}) {
   const t = useT()
   const [preview, setPreview] = useState<string | null>(null)
   const [rejected, setRejected] = useState<string | null>(null)
+  // Cleared on remove and on rejection. A file input keeps its own value, and without the
+  // reset, choosing the same file again after removing it fires no change event at all.
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!file) {
@@ -278,7 +349,9 @@ function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | n
 
   function choose(picked: File | null) {
     setRejected(null)
+    const reset = () => { if (inputRef.current) inputRef.current.value = '' }
     if (!picked) {
+      reset()
       onPick(null)
       return
     }
@@ -289,11 +362,13 @@ function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | n
      */
     if (!ACCEPTED.includes(picked.type)) {
       setRejected(t.order.payProofWrongType)
+      reset()
       onPick(null)
       return
     }
     if (picked.size > MAX_PROOF_BYTES) {
       setRejected(t.order.payProofTooBig)
+      reset()
       onPick(null)
       return
     }
@@ -301,15 +376,20 @@ function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | n
   }
 
   return (
-    <div className="rounded-edge border border-dashed border-ink-400 p-3">
+    <div className={`rounded-edge border border-dashed p-3 ${
+      missing && !file ? 'border-warn' : 'border-ink-400'}`}>
       <label className="block text-[13px] font-medium text-chalk-muted" htmlFor="payment-proof">
         {t.order.payProofLabel}
+        {required && <span className="ml-1 text-brand-400">*</span>}
       </label>
       <p className="mt-1 text-[12px] leading-snug text-chalk-faint">{t.order.payProofHint}</p>
 
       <input
+        ref={inputRef}
         id="payment-proof"
         type="file"
+        required={required}
+        aria-invalid={missing && !file ? true : undefined}
         accept={ACCEPTED.join(',')}
         onChange={(e) => choose(e.target.files?.[0] ?? null)}
         className="mt-2 block w-full text-[12.5px] text-chalk-muted
@@ -319,6 +399,11 @@ function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | n
       />
 
       {rejected && <p className="mt-2 text-[12px] leading-snug text-warn">{rejected}</p>}
+      {missing && !file && !rejected && (
+        <p role="alert" className="mt-2 text-[12px] leading-snug text-warn">
+          {t.order.payProofRequired}
+        </p>
+      )}
 
       {preview && file && (
         <div className="mt-3 flex items-start gap-3">
@@ -342,6 +427,55 @@ function ProofPicker({ file, onPick }: { file: File | null; onPick: (f: File | n
               {t.order.payProofRemove}
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------ international --- */
+
+/**
+ * A placeholder, and it says so.
+ *
+ * <p>Selectable rather than disabled: a tab that cannot be chosen gives no way to read why.
+ * Choosing this one shows what is coming and the ways to pay today, with a button straight
+ * to each -- nothing to type and nothing to submit, so it cannot pass for a payment method
+ * that failed. The alternatives come from what is configured, so this never names a method
+ * that has been switched off.
+ */
+function InternationalSoon({
+  alternatives, onUse,
+}: {
+  alternatives: { method: ManualPaymentMethod; name: string }[]
+  onUse: (method: ManualPaymentMethod) => void
+}) {
+  const t = useT()
+  return (
+    <div
+      role="tabpanel"
+      className="rounded-panel border border-dashed border-ink-400 bg-ink-700/40 px-5 py-8 text-center"
+    >
+      <span className="inline-block rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px]
+                       font-semibold uppercase tracking-[0.14em] text-brand-400">
+        {t.order.payIntlBadge}
+      </span>
+      <h4 className="display mt-3 text-[15px] text-chalk">{t.order.payIntlTitle}</h4>
+      {alternatives.length > 0 && (
+        <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-chalk-muted">
+          {t.order.payIntlBody(alternatives.map((a) => a.name))}
+        </p>
+      )}
+      <p className="mx-auto mt-1.5 max-w-sm text-[12px] leading-snug text-chalk-faint">
+        {t.order.payIntlNote}
+      </p>
+      {alternatives.length > 0 && (
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {alternatives.map((a) => (
+            <Button key={a.method} size="md" variant="secondary" onClick={() => onUse(a.method)}>
+              {t.order.payIntlUse(a.name)}
+            </Button>
+          ))}
         </div>
       )}
     </div>
