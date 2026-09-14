@@ -18,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -246,6 +247,26 @@ public class ManualPaymentService {
                         order.getPublicRef(), data, type.mediaType()));
 
         return saved;
+    }
+
+    /**
+     * Deletes payment screenshots past their retention window. Called on a timer by
+     * {@link PaymentProofPurgeJob}.
+     *
+     * <p>Only the count and the cutoff are logged -- never which orders, because a list of
+     * order references beside "deleted their bank screenshot" is its own small disclosure.
+     *
+     * @return how many were deleted
+     */
+    @Transactional
+    public int purgeExpiredProofs(Instant now) {
+        Instant cutoff = now.minus(props.fulfilment().proofRetention());
+        int removed = proofs.deleteExpired(cutoff);
+        if (removed > 0) {
+            log.info("Retention sweep deleted {} payment screenshot(s) uploaded before {}",
+                    removed, cutoff);
+        }
+        return removed;
     }
 
     @Transactional(readOnly = true)
