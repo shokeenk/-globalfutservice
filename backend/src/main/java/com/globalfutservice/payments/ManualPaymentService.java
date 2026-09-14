@@ -40,7 +40,6 @@ public class ManualPaymentService {
     private final OrderService orderService;
     private final CredentialVaultService vaultService;
     private final NotificationService notifications;
-    private final com.globalfutservice.notify.OrderTicketService tickets;
     private final AppProperties props;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
@@ -48,14 +47,12 @@ public class ManualPaymentService {
                                 OrderService orderService,
                                 CredentialVaultService vaultService,
                                 NotificationService notifications,
-                                com.globalfutservice.notify.OrderTicketService tickets,
                                 AppProperties props) {
         this.claims = claims;
         this.proofs = proofs;
         this.orderService = orderService;
         this.vaultService = vaultService;
         this.notifications = notifications;
-        this.tickets = tickets;
         this.props = props;
     }
 
@@ -239,12 +236,14 @@ public class ManualPaymentService {
         ManualPaymentProofEntity saved = proofs.saveAndFlush(proof);
 
         /*
-         * Into the ticket the claim already opened, so the operator sees the reference and
-         * the screenshot in one place instead of one in Discord and the other in the
-         * console. Best effort and last: the image is safely stored by this point, and a
-         * Discord outage must not turn a successful upload into a failed one.
+         * To wherever the claim went -- its ticket if the bot opened one, the webhook
+         * otherwise -- so the operator sees the reference and the screenshot in one place.
+         * Asynchronous and last: the image is safely stored by this point, and a Discord
+         * outage must neither slow nor fail an upload that has succeeded.
          */
-        tickets.attachScreenshot(order.getPublicRef(), data, type.mediaType());
+        notifications.paymentProofAttached(
+                new com.globalfutservice.notify.PaymentProofNotification(
+                        order.getPublicRef(), data, type.mediaType()));
 
         return saved;
     }

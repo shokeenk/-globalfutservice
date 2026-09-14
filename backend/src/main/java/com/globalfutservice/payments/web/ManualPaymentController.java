@@ -98,7 +98,9 @@ public class ManualPaymentController {
     @PostMapping(value = "/claims/{publicRef}/proof", consumes = "multipart/form-data")
     @Operation(summary = "Attach a screenshot of the payment",
             description = """
-                    Optional. A reference alone cannot be told apart from a typo until an
+                    Required by the storefront, which will not send a reference without
+                    one -- but a separate request, because it attaches to the claim that
+                    request creates. A reference alone cannot be told apart from a typo until an
                     operator checks the account; the screenshot usually settles it in
                     seconds because it carries the amount, the time and the destination as
                     the customer's own app rendered them.

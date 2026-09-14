@@ -174,6 +174,21 @@ class OrderTicketServiceTest {
         }
 
         @Test
+        @DisplayName("reports the screenshot as delivered only when it reached the ticket")
+        void screenshotDeliveryIsReported() {
+            // False is what sends the image to the webhook instead. A true here that was
+            // not really delivered would drop the screenshot on the floor.
+            when(bot.findTicketChannel(anyString())).thenReturn(Optional.of("channel-9"));
+            assertThat(tickets.attachScreenshot("GFS-26-000123", new byte[]{1}, "image/png")).isTrue();
+
+            when(bot.findTicketChannel(anyString())).thenReturn(Optional.empty());
+            assertThat(tickets.attachScreenshot("GFS-26-000123", new byte[]{1}, "image/png")).isFalse();
+
+            when(bot.isEnabled()).thenReturn(false);
+            assertThat(tickets.attachScreenshot("GFS-26-000123", new byte[]{1}, "image/png")).isFalse();
+        }
+
+        @Test
         @DisplayName("a failed screenshot upload never propagates")
         void screenshotFailureIsSwallowed() {
             when(bot.findTicketChannel(anyString())).thenReturn(Optional.of("channel-9"));

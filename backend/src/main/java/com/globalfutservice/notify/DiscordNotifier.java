@@ -133,6 +133,22 @@ public class DiscordNotifier implements Notifier {
     }
 
     /**
+     * The payment screenshot, a moment after the claim it belongs to.
+     *
+     * <p>Sent the way the claim was: into its ticket when the bot opened one, to the
+     * webhook otherwise. It used to go to the bot and nowhere else, so an install running
+     * on the webhook alone delivered the claim and never the image that proves it.
+     */
+    @Override
+    public void paymentProofAttached(PaymentProofNotification n) {
+        if (tickets != null && tickets.attachScreenshot(n.publicRef(), n.image(), n.contentType())) {
+            return;
+        }
+        sendImage("📸 Payment screenshot for `" + n.publicRef() + "`", n.image(),
+                OrderTicketService.filenameFor(n.publicRef(), n.contentType()), n.publicRef());
+    }
+
+    /**
      * New orders, which the phone channels deliberately skip.
      *
      * <p>Unmentioned on purpose. Most orders that reach this point are never paid for, and
@@ -287,6 +303,52 @@ public class DiscordNotifier implements Notifier {
              * a slow Discord costs alert latency and nothing else.
              */
             log.warn("Discord notification failed for {}: {}", publicRef, e.getMessage());
+        }
+    }
+
+    /** An image to the webhook, as an attachment rather than a link it cannot open. */
+    private void sendImage(String caption, byte[] image, String filename, String publicRef) {
+        if (!isEnabled()) {
+            log.debug("Discord disabled; would have posted the screenshot for {}", publicRef);
+            return;
+        }
+        String boundary = "gfs" + java.util.UUID.randomUUID().toString().replace("-", "");
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("content", clamp(caption, CONTENT_LIMIT));
+            payload.put("allowed_mentions", mentionAllowList());
+
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            out.write(("--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"payload_json\"\r\n"
+                    + "Content-Type: application/json\r\n\r\n"
+                    + mapper.writeValueAsString(payload) + "\r\n").getBytes(StandardCharsets.UTF_8));
+            out.write(("--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"files[0]\"; filename=\"" + filename + "\"\r\n"
+                    + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+            out.write(image);
+            out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(props.notifications().discordWebhookUrl()))
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .timeout(Duration.ofSeconds(20))
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(out.toByteArray()))
+                    .build();
+
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                // Status only: this body can echo the request, and the request is a
+                // customer's banking screen.
+                log.warn("Discord rejected the screenshot for {}: HTTP {}",
+                        publicRef, response.statusCode());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Discord screenshot interrupted for {}", publicRef);
+        } catch (Exception e) {
+            // Swallowed like every other post: the image is stored whatever happens here.
+            log.warn("Discord screenshot failed for {}: {}", publicRef, e.getMessage());
         }
     }
 

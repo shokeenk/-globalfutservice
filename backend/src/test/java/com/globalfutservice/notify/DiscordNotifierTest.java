@@ -91,6 +91,24 @@ class DiscordNotifierTest {
         return MAPPER.readTree(body);
     }
 
+    @Test
+    @DisplayName("sends the payment screenshot to the webhook as an attachment when there is no ticket")
+    void screenshotReachesTheWebhook() throws Exception {
+        byte[] image = "PNG-fake-image-bytes".getBytes(StandardCharsets.ISO_8859_1);
+
+        enabled().paymentProofAttached(new PaymentProofNotification("GFS-26-000123", image, "image/png"));
+
+        String body = received.poll(5, TimeUnit.SECONDS);
+        assertThat(body).as("the screenshot should have reached the webhook").isNotNull();
+        // An attachment, not a link: the operator reading this is on a phone that cannot
+        // open the admin console.
+        assertThat(body)
+                .contains("name=\"payload_json\"")
+                .contains("name=\"files[0]\"; filename=\"order-gfs-26-000123.png\"")
+                .contains("PNG-fake-image-bytes")
+                .contains("Payment screenshot for `GFS-26-000123`");
+    }
+
     /* --------------------------------------------------------------- fixtures --- */
 
     private static PaymentClaimNotification claim(boolean credentialsHeld) {

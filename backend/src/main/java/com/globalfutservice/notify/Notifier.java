@@ -48,6 +48,11 @@ public interface Notifier {
         // Channels opt in by overriding.
     }
 
+    /** The screenshot for a claim, which arrives a moment after the claim itself. */
+    default void paymentProofAttached(PaymentProofNotification notification) {
+        // Channels opt in by overriding. Only a channel that can show an image should.
+    }
+
     /**
      * A coaching session starting tomorrow.
      *

@@ -913,6 +913,13 @@ const en = {
     payTabUpi: 'UPI',
     payTabPaypal: 'PayPal',
     payTabCrypto: 'Crypto',
+    payTabInternational: 'International',
+    payIntlBadge: 'Coming soon',
+    payIntlTitle: 'International payment options are coming soon',
+    payIntlBody: (methods: string[]) =>
+      `For now, please use ${methods.join(' or ')} for international orders.`,
+    payIntlNote: 'This is where more ways to pay from outside India will appear.',
+    payIntlUse: (method: string) => `Pay with ${method}`,
     payScanHint: 'Scan the code with your payment app, or copy the address below.',
     payAmountDue: (total: string) => `Amount to send: ${total}`,
     payPayTo: 'Paying',
@@ -930,13 +937,15 @@ const en = {
     payCryptoWarning:
       'Only send USDT on the TRON (TRC20) network to this address. Sending any other asset, ' +
       'or using a different network, will result in permanent loss of funds.',
-    payProofLabel: 'Screenshot of the payment (optional)',
-    payProofHint: 'Speeds up checking. A JPG, PNG or WebP under 5 MB — whatever your payment app shows after it sends.',
+    payProofLabel: 'Payment screenshot',
+    payProofHint: 'The confirmation screen your payment app shows after sending — a JPG, PNG or WebP under 5 MB.',
     payProofRemove: 'Remove',
     payProofPreviewAlt: 'The screenshot you selected',
     payProofWrongType: 'That file is not an image. Attach a JPG, PNG or WebP screenshot.',
     payProofTooBig: 'That image is larger than 5 MB. A screenshot is usually well under it.',
-    payProofFailed: 'Your reference was recorded, but the screenshot did not upload. You can attach it later if we ask.',
+    payProofFailed: 'Your reference was recorded, but the screenshot did not upload. Attach it again below.',
+    payProofRequired: 'Attach a screenshot of the payment before submitting.',
+    payProofRetry: 'Upload screenshot',
     payReferenceLabel: 'UTR / Transaction reference number',
     payReferenceHint:
       'After completing your payment, enter the reference number here so we can verify and ' +
