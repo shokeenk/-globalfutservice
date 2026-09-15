@@ -44,13 +44,21 @@ function qrFor(method: ManualPaymentMethod, sku: string): string {
 type PaymentTab = ManualPaymentMethod | 'INTERNATIONAL'
 
 export function ManualPayment({
-  publicRef, email, sku, totalFormatted,
+  publicRef, email, sku, totalFormatted, initialMethod, onSubmitted,
 }: {
   publicRef: string
   /** The email on the order. Guest auth for the claim, exactly as order tracking. */
   email: string
   sku: string
   totalFormatted: string
+  /** Opens on this tab when it is on offer, for a flow that already asked. */
+  initialMethod?: ManualPaymentMethod
+  /**
+   * Called once the reference and the screenshot have both landed. A caller that moves on
+   * from here must not be told before the screenshot is in: a failed upload keeps this
+   * component on its retry screen, and the call comes after the retry succeeds.
+   */
+  onSubmitted?: () => void
 }) {
   const t = useT()
 
@@ -77,7 +85,9 @@ export function ManualPayment({
       .then((found) => {
         if (!live) return
         setOptions(found)
-        setMethod((current) => current ?? found[0]?.method ?? null)
+        setMethod((current) => current
+          ?? (initialMethod && found.some((o) => o.method === initialMethod) ? initialMethod : undefined)
+          ?? found[0]?.method ?? null)
       })
       .catch(() => { if (live) setLoadFailed(true) })
     return () => { live = false }
@@ -110,8 +120,9 @@ export function ManualPayment({
   async function retryProof() {
     if (!file || proofRetrying) return
     setProofRetrying(true)
-    await uploadProof(file)
+    const landed = await uploadProof(file)
     setProofRetrying(false)
+    if (landed) onSubmitted?.()
   }
 
   async function submit() {
@@ -138,9 +149,10 @@ export function ManualPayment({
        * tell somebody who has already sent money that their payment was not recorded.
        * So the reference stands, and the next screen offers the upload again.
        */
-      await uploadProof(file)
+      const landed = await uploadProof(file)
 
       setClaim(recorded)
+      if (landed) onSubmitted?.()
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t.order.payClaimFailed)
     } finally {

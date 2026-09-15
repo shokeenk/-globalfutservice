@@ -48,6 +48,11 @@ public interface Notifier {
         // Channels opt in by overriding.
     }
 
+    /** A coaching order's payment is confirmed. The customer's next step is Discord. */
+    default void coachingConfirmed(OrderNotification notification) {
+        // Channels opt in by overriding.
+    }
+
     /** The screenshot for a claim, which arrives a moment after the claim itself. */
     default void paymentProofAttached(PaymentProofNotification notification) {
         // Channels opt in by overriding. Only a channel that can show an image should.

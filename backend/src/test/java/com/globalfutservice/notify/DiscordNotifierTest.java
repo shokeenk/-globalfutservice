@@ -125,14 +125,14 @@ class DiscordNotifierTest {
                 credentialsHeld,
                 false,
                 Instant.parse("2026-09-07T10:15:30Z"),
-                "https://globalfutservices.com/admin/orders/GFS-26-000123");
+                "https://globalfutservices.com/admin/orders/GFS-26-000123", null);
     }
 
     private static OrderNotification order() {
         return new OrderNotification(
                 "GFS-26-000124", "AWAITING_PAYMENT", "FUT Classes — Single session",
                 "₹922.50", "buyer@example.com", "buyer#1234", "PLAYER_AUCTION",
-                "https://globalfutservices.com/admin/orders/GFS-26-000124");
+                "https://globalfutservices.com/admin/orders/GFS-26-000124", null);
     }
 
     /* ------------------------------------------------------------ the payload --- */
@@ -196,7 +196,7 @@ class DiscordNotifierTest {
             PaymentClaimNotification hostile = new PaymentClaimNotification(
                     "GFS-26-000125", "@everyone @here", "₹1.00", "UPI", "x@y",
                     "999999999999", "a@b.com", "@everyone", "@everyone", false, false,
-                    Instant.now(), "https://example.test/admin");
+                    Instant.now(), "https://example.test/admin", null);
 
             enabled().paymentClaimed(hostile);
             JsonNode allowed = posted().get("allowed_mentions");

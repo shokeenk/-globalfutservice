@@ -177,6 +177,24 @@ export default function AdminOrder() {
               <Detail label="Points earned" value={String(order.pointsEarned)} />
             </dl>
 
+            {/* What the customer told the coach at checkout. Coaching orders only. */}
+            {order.sku === 'COACHING' && (order.coachingPlatform || order.eaPlatformHandle) && (
+              <div className="mt-6 border-t border-ink-400 pt-5">
+                <p className="stamp mb-4">Coaching details</p>
+                <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-2">
+                  <Detail
+                    label="Platform"
+                    value={order.coachingPlatform === 'PLAYSTATION' ? 'PlayStation'
+                      : order.coachingPlatform === 'XBOX' ? 'Xbox'
+                        : order.coachingPlatform === 'PC' ? 'PC (EA App)' : '—'}
+                  />
+                  <Detail label="In-game ID" value={order.eaPlatformHandle ?? '—'} />
+                  <Detail label="Current rank" value={order.coachingRank ?? '—'} />
+                  <Detail label="Wants to work on" value={order.coachingFocus ?? '—'} />
+                </dl>
+              </div>
+            )}
+
             {order.lines.length > 0 && (
               <div className="mt-6 border-t border-ink-400 pt-5">
                 <p className="stamp mb-4">Frozen price breakdown</p>

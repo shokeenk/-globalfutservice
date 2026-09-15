@@ -141,6 +141,8 @@ public class OrderTicketService {
                 + "👤 **Customer:** " + orDash(n.customerName()) + "\n"
                 + "📧 **Email:** " + orDash(n.customerEmail()) + "\n\n"
                 + "📦 **Product:** " + orDash(n.serviceLabel()) + "\n"
+                + (n.coachingDetails() == null ? ""
+                        : "🎮 **Coaching:** " + n.coachingDetails() + "\n")
                 + "💵 **Amount:** " + orDash(n.amountFormatted()) + "\n"
                 + "💳 **Payment Method:** " + readableMethod(n.method())
                 + " → `" + orDash(n.destination()) + "`\n\n"

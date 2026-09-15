@@ -118,7 +118,21 @@ public final class CatalogDtos {
              */
             int coachingSessionMinutes,
             /** Length of one session from a multi-session block. */
-            int coachingBlockSessionMinutes) {
+            int coachingBlockSessionMinutes,
+            /**
+             * Whether card and online payment through the gateway is available.
+             *
+             * <p>Served so a checkout lists only ways to pay that exist. Without it the
+             * page could offer cards and net banking on an install where only scan-and-pay
+             * is configured, and the customer would find out after choosing one.
+             */
+            boolean onlinePaymentsEnabled,
+            /**
+             * Whether customer emails are switched on. The storefront says "we have
+             * emailed you" only when this is true -- otherwise it would be a promise about
+             * a message nobody sends.
+             */
+            boolean customerEmailsEnabled) {
     }
 
     public record TierView(

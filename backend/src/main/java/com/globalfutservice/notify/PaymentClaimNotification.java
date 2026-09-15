@@ -54,5 +54,7 @@ public record PaymentClaimNotification(
          */
         boolean hasProof,
         Instant submittedAt,
-        String adminDeepLink) {
+        String adminDeepLink,
+        /** Coaching orders: platform, in-game ID, rank and focus on one line. Null otherwise. */
+        String coachingDetails) {
 }

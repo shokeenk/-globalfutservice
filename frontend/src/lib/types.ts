@@ -82,6 +82,10 @@ export interface Policy {
    * advertises one of them at a duration it is not sold at.
    */
   coachingBlockSessionMinutes: number
+  /** Whether card and online payment through the gateway is available. */
+  onlinePaymentsEnabled: boolean
+  /** Whether customer emails are on. The storefront only says it emailed when this is true. */
+  customerEmailsEnabled: boolean
 }
 
 export interface LoyaltyTierView {
@@ -197,6 +201,11 @@ export interface Order {
   deliveredAt: string | null
   guaranteeExpiresAt: string | null
   timeline: OrderEvent[]
+  /** Coaching orders: what the customer told the coach at checkout. Null otherwise. */
+  eaPlatformHandle: string | null
+  coachingPlatform: string | null
+  coachingRank: string | null
+  coachingFocus: string | null
 }
 
 /**

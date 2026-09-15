@@ -47,6 +47,21 @@ public final class OrderDtos {
             @Size(max = 500)
             String note,
 
+            /*
+             * Coaching only, and ignored on every other service. The platform is required
+             * for a coaching order -- OrderService refuses one without it -- but cannot be
+             * @NotBlank here, because the same request places coin and boosting orders.
+             * The in-game ID travels as eaPlatformHandle above.
+             */
+            @Pattern(regexp = "^(PLAYSTATION|XBOX|PC)?$", message = "Choose PlayStation, Xbox or PC")
+            String coachingPlatform,
+
+            @Size(max = 40, message = "That rank is too long")
+            String currentRank,
+
+            @Size(max = 500, message = "Keep this under 500 characters")
+            String improvementFocus,
+
             @AssertTrue(message = "Please accept the terms to place your order")
             boolean acceptedTerms) {
     }
@@ -130,7 +145,17 @@ public final class OrderDtos {
             Instant createdAt,
             Instant deliveredAt,
             Instant guaranteeExpiresAt,
-            List<OrderEventDto> timeline) {
+            List<OrderEventDto> timeline,
+
+            /*
+              What a coaching customer told the coach at checkout. Null on every other
+              service, including the in-game ID, which a coin order also stores but has
+              no reason to echo back.
+            */
+            String eaPlatformHandle,
+            String coachingPlatform,
+            String coachingRank,
+            String coachingFocus) {
     }
 
     /**
