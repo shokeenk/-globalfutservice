@@ -179,7 +179,8 @@ public class ManualPaymentService {
                 // attachment, and attachProof posts the image when it lands.
                 proofs.findByClaimId(claim.getId()).isPresent(),
                 claim.getSubmittedAt(),
-                props.publicUrl() + "/admin/orders/" + order.getPublicRef()));
+                props.publicUrl() + "/admin/orders/" + order.getPublicRef(),
+                OrderService.coachingSummary(order)));
 
         return claim;
     }

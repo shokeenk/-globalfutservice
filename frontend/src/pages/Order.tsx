@@ -227,6 +227,17 @@ export default function Order() {
     />
   )
 
+  /*
+   * Coaching has its own booking flow, which collects what the coach needs and is where
+   * every coaching button leads. The generic configurator cannot collect those details,
+   * and the order endpoint now refuses a coaching order without them, so an old link here
+   * is sent on rather than into a checkout that would fail at the last step.
+   */
+  if (requestedSku === 'COACHING') {
+    const wanted = params.get('variant')
+    return <Navigate to={`/coaching/book${wanted ? `?variant=${encodeURIComponent(wanted)}` : ''}`} replace />
+  }
+
   if (loading) {
     return (
       <>

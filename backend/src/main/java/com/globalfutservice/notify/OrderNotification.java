@@ -22,5 +22,7 @@ public record OrderNotification(
          */
         String customerDiscord,
         String deliveryMethod,
-        String adminDeepLink) {
+        String adminDeepLink,
+        /** Coaching orders: platform, in-game ID, rank and focus on one line. Null otherwise. */
+        String coachingDetails) {
 }

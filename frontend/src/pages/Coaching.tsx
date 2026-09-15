@@ -1,44 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, endOfMonth, startOfMonth } from '../components/Calendar'
 import { BUSINESS } from '../content/business'
-import { PageHeader } from '../components/PageHeader'
-import { Testimonials } from '../components/Testimonials'
+import { CoachIcon } from '../components/CoachingIcons'
+import type { CoachIconName } from '../components/CoachingIcons'
 import { Reveal } from '../motion/Reveal'
-import {
-  Alert,
-  Badge,
-  Button,
-  ButtonLink,
-  Card,
-  EmptyState,
-  Section,
-  Skeleton,
-  Spinner,
-} from '../components/ui'
-import { BrandRing } from '../brand/Ring'
-import { useT } from '../i18n'
+import { Alert, Badge, Button, ButtonLink, Card, EmptyState, Section, Skeleton, Spinner } from '../components/ui'
+import { useI18n, useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { ApiError, api } from '../lib/api'
 import { SEASON, useSeo } from '../lib/seo'
 import type { CatalogOption, Coach, CoachSlots, CoachingSession, MyCoaching } from '../lib/types'
+import { TESTIMONIALS } from '../data/testimonials'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 
 /**
- * The coaching storefront and booking calendar in one page.
+ * The coaching page: what coaching is, who runs it, what it costs, and the way in.
  *
- * <p>The order the page presents things in matters. A visitor who has never bought
- * coaching sees the pricing first and the calendar not at all — showing an empty booking
- * grid to someone with no credits is an invitation to click through three steps and be
- * told no. A customer with credits sees the calendar first, because for them the only
- * remaining question is "when".
+ * <p>Every "book" and "buy" control leads to the same place, the booking flow at
+ * /coaching/book -- including "View coach profile". This is a one-coach service and there
+ * is no profile page behind that button; sending it anywhere else would be two destinations
+ * for one action.
+ *
+ * <p>A customer who already holds session credits sees the booking calendar straight under
+ * the hero, as before. That is how credits are spent, and a redesign of the marketing page is
+ * not a reason to hide it from somebody who has paid.
  */
 export default function Coaching() {
   const t = useT()
+  const p = t.coachingPage
   useSeo({
     title: t.coaching.seoTitle(SEASON),
-    description: t.coaching.seoDescription(SEASON),
+    description: p.seoDescription(SEASON),
   })
 
   const { account } = useAuth()
@@ -50,6 +45,7 @@ export default function Coaching() {
 
   const coachingService = catalog?.services.find((s) => s.sku === 'COACHING')
 
+  // Coaches feed the booking calendar only; the page itself presents the one coach.
   useEffect(() => {
     let cancelled = false
     api
@@ -83,57 +79,18 @@ export default function Coaching() {
 
   return (
     <>
-      <PageHeader
-        eyebrow={t.coaching.eyebrow(SEASON)}
-        title={t.coaching.title}
-        lead={t.coaching.lead}
-        // The strongest light on the site after the homepage hero. Coaching is the
-        // one product where the customer is buying a person's judgement rather than
-        // a throughput, and the page has to look like it is worth that.
-        intensity={0.75}
-        aside={
-          account && credits > 0 ? (
-            /*
-             * A credit balance is the single most useful thing this page can tell a
-             * signed-in customer, so it is promoted out of the content flow and into
-             * the masthead as a reading. Buried in an alert below the fold it was
-             * routinely missed, and someone who does not know they have credits buys
-             * a second block.
-             */
-            <div className="plate ticks px-6 py-5 text-center">
-              <p className="tnum display text-[clamp(2.4rem,5vw,3rem)] leading-none text-chalk">
-                {credits}
-              </p>
-              <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-chalk-faint">
-                {t.coaching.creditsLeft(credits)}
-              </p>
-            </div>
-          ) : undefined
-        }
-      />
+      <Hero />
 
-      {(error || (account && credits > 0)) && (
-        <Section className="pt-8">
-          {error && <Alert tone="warn">{error}</Alert>}
-          {account && credits > 0 && (
+      {account && credits > 0 && (
+        <>
+          <Section className="pt-8">
+            {error && <Alert tone="warn">{error}</Alert>}
             <Alert tone="ok">
               {t.coaching.creditsAlertPrefix} <strong>{credits}</strong>{' '}
               {t.coaching.creditsLeft(credits)}{t.coaching.creditsAlertSuffix}
             </Alert>
-          )}
-        </Section>
-      )}
-
-      {/* Credits first for someone who has them; pricing first for everyone else. */}
-      {account && credits > 0 ? (
-        <>
+          </Section>
           <BookingArea coaches={coaches} mine={mine} onBooked={loadMine} />
-          <Pricing options={coachingService?.options} currency={catalog?.currency} secondary />
-        </>
-      ) : (
-        <>
-          <Pricing options={coachingService?.options} currency={catalog?.currency} />
-          <CoachList coaches={coaches} />
         </>
       )}
 
@@ -141,12 +98,98 @@ export default function Coaching() {
         <UpcomingSessions sessions={mine.upcoming} onChanged={loadMine} />
       )}
 
-      {/* Coaching-only, and no filter — a reader on this page has already chosen
-          the service, so offering them coin testimonials would be noise. */}
-      <div className="border-t border-ink-400 bg-paper">
-        <Testimonials only="coaching" />
-      </div>
+      <Pricing options={coachingService?.options} currency={catalog?.currency} />
+      <Process />
+      <MeetCoach />
+      <Areas />
+      <CustomerWords />
+      <FinalCta />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ shared --------- */
+
+function Eyebrow({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-chalk-muted">
+      <span aria-hidden="true" className="h-[2px] w-6 bg-brand-500" />
+      {children}
+    </p>
+  )
+}
+
+function scrollToCoach() {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  document.getElementById('coach')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+}
+
+/* -------------------------------------------------------------------- hero ---------- */
+
+/**
+ * The artwork is the supplied composition, served from /brand/coaching/hero.webp. Until
+ * that file is in place the column is simply left out -- the headline takes the width --
+ * rather than standing in another image the brief did not ask for.
+ */
+function Hero() {
+  const p = useT().coachingPage
+  const [artwork, setArtwork] = useState(true)
+  const badges: { icon: CoachIconName; label: string }[] = [
+    { icon: 'chat', label: p.badgeFeedback },
+    { icon: 'clipboard', label: p.badgeImprovements },
+    { icon: 'gamepad', label: p.badgeConfidence },
+  ]
+
+  return (
+    <section className="relative overflow-hidden bg-paper">
+      <div
+        className={[
+          'mx-auto grid max-w-[1320px] items-center gap-10 px-5 pb-10 pt-10 sm:px-8 lg:gap-12 lg:px-10 lg:pb-14 lg:pt-14',
+          artwork ? 'lg:grid-cols-[1fr_1.1fr]' : '',
+        ].join(' ')}
+      >
+        <div>
+          <Eyebrow>{p.eyebrow(SEASON)}</Eyebrow>
+          <h1 className="display mt-4 max-w-[17ch] text-balance text-[clamp(2.2rem,4.6vw,3.3rem)] leading-[1.04] text-chalk">
+            {p.title}
+          </h1>
+          <p className="mt-5 max-w-[54ch] text-body leading-relaxed text-chalk-muted">{p.lead}</p>
+
+          <div className="mt-7 flex flex-wrap gap-3">
+            <ButtonLink to="/coaching/book" size="lg">
+              {p.bookCta}
+              <CoachIcon name="arrowRight" className="ml-2 h-4 w-4" />
+            </ButtonLink>
+            <Button variant="secondary" size="lg" onClick={scrollToCoach}>
+              {p.meetCta}
+            </Button>
+          </div>
+
+          <ul className="mt-8 grid gap-4 sm:grid-cols-3">
+            {badges.map((badge) => (
+              <li key={badge.label} className="flex items-center gap-3 text-[13px] font-medium leading-snug text-chalk">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-brand-500/30 bg-brand-500/[0.06] text-brand-500">
+                  <CoachIcon name={badge.icon} />
+                </span>
+                {badge.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {artwork && (
+          <img
+            src="/brand/coaching/hero.webp"
+            alt={p.heroAlt}
+            width={1536}
+            height={1024}
+            className="h-auto w-full"
+            fetchPriority="high"
+            onError={() => setArtwork(false)}
+          />
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -155,13 +198,12 @@ export default function Coaching() {
 function Pricing({
   options,
   currency,
-  secondary = false,
 }: {
   options: CatalogOption[] | undefined
   currency: string | undefined
-  secondary?: boolean
 }) {
   const t = useT()
+  const p = t.coachingPage
   const labels = useCatalogLabels()
   /*
    * The block's saving badge.
@@ -176,114 +218,64 @@ function Pricing({
    */
   const pack = options?.find((o) => o.variant === 'MONTHLY_6_SESSIONS')
 
-  let listFormatted: string | null = null
-  let savingPercent = 0
-  if (pack && currency) {
+  const { listFormatted, savingPercent } = useMemo(() => {
+    if (!pack || !currency) return { listFormatted: null, savingPercent: 0 }
     const listMinor = Math.round(pack.unitPriceMinor / 0.9)
-    if (listMinor > pack.unitPriceMinor) {
-      savingPercent = Math.round(((listMinor - pack.unitPriceMinor) / listMinor) * 100)
-      listFormatted = new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency,
-        maximumFractionDigits: 0,
-      }).format(listMinor / 100)
+    if (listMinor <= pack.unitPriceMinor) return { listFormatted: null, savingPercent: 0 }
+    return {
+      savingPercent: Math.round(((listMinor - pack.unitPriceMinor) / listMinor) * 100),
+      listFormatted: new Intl.NumberFormat(undefined, {
+        style: 'currency', currency, maximumFractionDigits: 0,
+      }).format(listMinor / 100),
     }
-  }
+  }, [pack, currency])
 
   return (
-    <Section
-      className={secondary ? 'rhythm-section' : 'pb-4 pt-8'}
-      title={secondary ? t.coaching.needMore : undefined}
-    >
-      {/*
-        A heading the eye does not need and the document structure does.
+    <Section className="pb-14 pt-2">
+      <h2 className="sr-only">{t.coaching.pricingHeading}</h2>
 
-        In the primary layout this block deliberately has no visible title — the
-        masthead above it has already said what the page is, and a second heading
-        would be repetition. But the price cards below are `h3`, so without an `h2`
-        here the page jumps h1 → h3, and anyone navigating by headings lands in a
-        level that has no parent. One screen-reader-only element fixes the outline
-        without putting a word back on screen.
-      */}
-      {!secondary && <h2 className="sr-only">{t.coaching.pricingHeading}</h2>}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {!options && Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-44 w-full" />)}
+      <div className="grid gap-5 md:grid-cols-2">
+        {!options && Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-60 w-full" />)}
 
         {options?.map((option, index) => {
           const isPack = option.variant === 'MONTHLY_6_SESSIONS'
           return (
             <Reveal key={option.variant ?? option.label} delay={index * 90}>
-              {/*
-                The block is the recommended purchase, so it is the one that is lit.
-                A brand-tinted ground and a real border against a plain panel is a
-                clearer recommendation than a "most popular" ribbon, and it does not
-                cost a line of copy to say it.
-              */}
               <div
                 className={[
-                  'relative flex h-full flex-col overflow-hidden rounded-panel border p-7',
-                  /*
-                    Both grounds are opaque. `bg-paper` was white at half strength,
-                    which over the page composited to something within a percent of the
-                    page itself — the card was carried entirely by its border. It also
-                    means anything painted behind the section (the soft colour wash now
-                    used on several bands) would show through unevenly and tint one card
-                    differently from its neighbour.
-                  */
-                  isPack
-                    ? 'border-gold-500/40 bg-[#FFFDF6] shadow-e3'
-                    : 'border-ink-400 bg-paper shadow-e2',
+                  'relative flex h-full flex-col rounded-panel border p-7',
+                  isPack ? 'border-gold-500/40 bg-[#FFFBEF] shadow-e3' : 'border-ink-400 bg-paper shadow-e2',
                 ].join(' ')}
               >
-                {isPack && (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full
-                               bg-gold-500/10 blur-[70px]"
-                  />
-                )}
-
                 {isPack && savingPercent > 0 && (
-                  <Badge tone="gold" className="relative self-start">
-                    {t.coaching.saveBadge(savingPercent)}
-                  </Badge>
+                  <Badge tone="gold" className="self-start">{p.saveBadge(savingPercent)}</Badge>
                 )}
 
-                <h3 className="display relative mt-4 text-display-md text-chalk">
+                <h3 className={`display ${isPack && savingPercent > 0 ? 'mt-3' : ''} text-[1.25rem] text-chalk`}>
                   {labels.option(option)}
                 </h3>
 
-                {/*
-                  The list price sits above the real one rather than beside it.
-                  Side by side at similar sizes, a struck-through figure and a live
-                  figure read as two prices and the customer has to work out which
-                  one applies. Stacked, with the live price three steps larger, the
-                  hierarchy answers that before it is asked.
-                */}
-                <div className="relative mt-5">
+                <div className="mt-4">
                   {isPack && listFormatted && (
-                    <p className="tnum text-body-sm text-chalk-faint line-through">
-                      {listFormatted}
-                    </p>
+                    <p className="tnum text-body-sm text-chalk-faint line-through">{listFormatted}</p>
                   )}
                   <p className="tnum display text-[clamp(1.9rem,4vw,2.4rem)] leading-none text-chalk">
                     {option.unitPriceFormatted}
                   </p>
                 </div>
 
-                <p className="relative mt-5 flex-1 text-body-sm leading-relaxed text-chalk-muted">
-                  {isPack ? t.coaching.packBody : t.coaching.singleBody}
+                <p className="mt-5 flex-1 text-body-sm leading-relaxed text-chalk-muted">
+                  {isPack ? p.packBody : p.singleBody}
                 </p>
 
                 <ButtonLink
-                  to={`/order?service=COACHING&variant=${option.variant ?? ''}`}
-                  className="relative mt-7"
+                  to={`/coaching/book?variant=${option.variant ?? ''}`}
+                  className="mt-7"
                   full
                   size="md"
                   variant={isPack ? 'primary' : 'secondary'}
                 >
-                  {isPack ? t.coaching.buyBlock : t.coaching.buySession}
+                  {isPack ? p.buyPackage : p.buySession}
                 </ButtonLink>
               </div>
             </Reveal>
@@ -294,66 +286,229 @@ function Pricing({
   )
 }
 
-/* -------------------------------------------------------------------- coaches -------- */
+/* ------------------------------------------------------------------ process ---------- */
 
-function CoachList({ coaches }: { coaches: Coach[] | null }) {
-  const t = useT()
-  if (coaches && coaches.length === 0) {
-    return null
-  }
+function Process() {
+  const p = useT().coachingPage
+  const steps: { n: string; icon: CoachIconName; title: string; body: string }[] = [
+    { n: '01', icon: 'video', title: p.watchTitle, body: p.watchBody },
+    { n: '02', icon: 'bars', title: p.findTitle, body: p.findBody },
+    { n: '03', icon: 'bulb', title: p.fixTitle, body: p.fixBody },
+    { n: '04', icon: 'checkCircle', title: p.applyTitle, body: p.applyBody },
+  ]
+
   return (
-    <Section className="py-10" title={t.coaching.whoTitle}>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {!coaches && Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
-        {coaches?.map((coach) => (
-          <Card key={coach.id} className="p-6">
-            <div className="flex items-center gap-3">
-              {coach.avatarUrl ? (
-                <img
-                  src={coach.avatarUrl}
-                  alt=""
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-              ) : (
-                /*
-                  Initials in the brand ring rather than a grey circle.
+    <section className="border-y border-ink-400 bg-ink-700/30">
+      <div className="mx-auto max-w-[1320px] px-5 py-14 sm:px-8 lg:px-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Eyebrow>{p.processEyebrow}</Eyebrow>
+            <h2 className="display mt-3 max-w-[18ch] text-balance text-[clamp(1.7rem,3.4vw,2.4rem)] leading-tight text-chalk">
+              {p.processTitle}
+            </h2>
+          </div>
+          <p className="text-body-sm text-chalk-muted">{p.processAside}</p>
+        </div>
 
-                  A coach without a photograph is the common case, and the fallback
-                  is what most people will actually see. A plain disc says "missing
-                  image"; the ring says the person belongs to this company.
-                */
-                <BrandRing size={48} strokeClassName="text-brand-500">
-                  <span className="text-sm font-semibold text-chalk-muted">
-                    {coach.displayName.slice(0, 2).toUpperCase()}
-                  </span>
-                </BrandRing>
-              )}
-              <div>
-                <p className="font-semibold text-chalk">{coach.displayName}</p>
-                {coach.headline && (
-                  <p className="text-[13px] text-chalk-muted">{coach.headline}</p>
-                )}
+        <ol className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          {steps.map((s, i) => (
+            <li key={s.n} className="relative flex gap-4">
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-500/[0.08] text-brand-500">
+                <CoachIcon name={s.icon} className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <p className="tnum text-[12px] font-bold text-chalk">{s.n}</p>
+                <h3 className="text-body-sm font-bold text-chalk">{s.title}</h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-chalk-muted">{s.body}</p>
               </div>
-            </div>
-            {coach.bio && (
-              <p className="mt-4 text-[14px] leading-relaxed text-chalk-muted">{coach.bio}</p>
-            )}
-            <dl className="mt-4 space-y-1 text-[13px] text-chalk-faint">
-              {coach.credentials && (
-                <div className="flex gap-2">
-                  <dt className="text-chalk-muted">{t.coaching.peak}</dt>
-                  <dd>{coach.credentials}</dd>
-                </div>
+              {i < steps.length - 1 && (
+                <CoachIcon name="arrowRight" className="absolute -right-6 top-5 hidden h-4 w-4 text-chalk-faint lg:block" />
               )}
-              {coach.languages && (
-                <div className="flex gap-2">
-                  <dt className="text-chalk-muted">{t.coaching.speaks}</dt>
-                  <dd>{coach.languages}</dd>
-                </div>
-              )}
-            </dl>
-          </Card>
-        ))}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------- coach ---------- */
+
+function MeetCoach() {
+  const p = useT().coachingPage
+
+  return (
+    <div id="coach" className="scroll-mt-28">
+      <Section className="py-14">
+        <div className="grid items-center gap-8 lg:grid-cols-[190px_1.25fr_1fr_1fr]">
+          <div className="mx-auto w-[190px] overflow-hidden rounded-panel bg-brand-500 shadow-e3 lg:mx-0">
+            <img
+              src="/brand/coaches/vinay-256.jpg"
+              alt={p.coachPhotoAlt}
+              width={256}
+              height={256}
+              loading="lazy"
+              className="aspect-[4/5] h-full w-full object-cover"
+            />
+          </div>
+
+          <div>
+            <Eyebrow>{p.coachEyebrow}</Eyebrow>
+            <h2 className="display mt-3 text-[2.3rem] leading-none text-chalk">Vinay</h2>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-chalk-muted">
+              {p.coachTitleLine}
+            </p>
+            <p className="mt-4 text-body-sm leading-relaxed text-chalk-muted">{p.coachBio}</p>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-chalk-faint">
+              {p.specialtiesLabel}
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {p.specialties.map((item) => (
+                <li key={item} className="rounded-full border border-ink-400 bg-paper px-3 py-1 text-[12px] text-chalk-muted">
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 flex items-center gap-2 text-[13px] text-chalk-muted">
+              <CoachIcon name="globe" className="h-4 w-4" />
+              <span className="font-semibold text-chalk">{p.languagesLabel}</span> {p.languagesValue}
+            </p>
+            {/* V1 has one coach and no profile page: this starts the same booking as every other button. */}
+            <ButtonLink to="/coaching/book" variant="secondary" size="md" className="mt-5">
+              {p.viewProfile}
+            </ButtonLink>
+          </div>
+
+          <figure className="rounded-panel border border-ink-400 bg-paper p-6 shadow-e2">
+            <CoachIcon name="quote" className="h-7 w-7 text-brand-500" strokeWidth={2.4} />
+            <blockquote className="mt-3 text-[1.05rem] leading-relaxed text-chalk">{p.coachQuote}</blockquote>
+            <figcaption className="mt-4 text-[13px] font-semibold text-chalk">— Vinay</figcaption>
+          </figure>
+        </div>
+      </Section>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------- areas ---------- */
+
+const AREA_ICONS: Record<string, CoachIconName> = {
+  attacking: 'target',
+  defending: 'shield',
+  buildup: 'trend',
+  tactics: 'sliders',
+  decisions: 'brain',
+  champs: 'trophy',
+}
+
+function Areas() {
+  const p = useT().coachingPage
+
+  return (
+    <section className="border-t border-ink-400 bg-ink-700/30">
+      <div className="mx-auto max-w-[1320px] px-5 py-14 sm:px-8 lg:px-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Eyebrow>{p.areasEyebrow}</Eyebrow>
+            <h2 className="display mt-3 text-balance text-[clamp(1.7rem,3.4vw,2.4rem)] leading-tight text-chalk">
+              {p.areasTitle}
+            </h2>
+          </div>
+          <p className="max-w-sm text-body-sm text-chalk-muted">{p.areasAside}</p>
+        </div>
+
+        <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {p.areas.map((area) => (
+            <li key={area.key} className="rounded-panel border border-ink-400 bg-paper p-5 shadow-e1">
+              <CoachIcon name={AREA_ICONS[area.key] ?? 'target'} className="h-7 w-7 text-brand-500" />
+              <h3 className="mt-4 text-body-sm font-bold text-chalk">{area.title}</h3>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-chalk-muted">{area.body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+/* ----------------------------------------------------------------- customers --------- */
+
+/** The three published coaching testimonials, word for word, from the data file. */
+const FEATURED = ['Manish', 'Deepak', 'Saurabh']
+
+function CustomerWords() {
+  const { t, lang } = useI18n()
+  const p = t.coachingPage
+  const quotes = FEATURED
+    .map((name) => TESTIMONIALS.find((q) => q.service === 'coaching' && q.name === name))
+    .filter((q): q is (typeof TESTIMONIALS)[number] => !!q)
+
+  return (
+    <Section className="py-14">
+      <Eyebrow>{p.reviewsEyebrow}</Eyebrow>
+      <h2 className="display mt-3 text-balance text-[clamp(1.7rem,3.4vw,2.4rem)] leading-tight text-chalk">
+        {p.reviewsTitle}
+      </h2>
+
+      <ul className="mt-8 grid gap-5 md:grid-cols-3">
+        {quotes.map((q) => {
+          const translated = lang === 'es' || lang === 'fr' ? q.translated?.[lang] : undefined
+          return (
+            <li key={q.name} className="flex flex-col rounded-panel bg-[#3B2FB6] p-6 text-white shadow-e3">
+              <CoachIcon name="quote" className="h-6 w-6 text-white/70" strokeWidth={2.4} />
+              <blockquote className="mt-3 flex-1 text-[13.5px] leading-relaxed text-white/90">
+                {translated ?? q.quote}
+              </blockquote>
+              {translated && <p className="mt-3 text-[11px] text-white/55">{t.proof.translated}</p>}
+              <div className="mt-5 flex items-center justify-between border-t border-white/15 pt-4 text-[12.5px]">
+                <span className="flex items-center gap-2 font-semibold">
+                  <span aria-hidden="true" className="h-3.5 w-[2px] bg-white/70" />{q.name}
+                </span>
+                <span className="tracking-[0.14em] text-white/60">{q.country}</span>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------- cta ----------- */
+
+function FinalCta() {
+  const t = useT()
+  const p = t.coachingPage
+
+  return (
+    <Section className="pb-10 pt-2">
+      {/* One row only from lg: at tablet width the three parts do not fit and the button was clipped. */}
+      <div className="flex flex-col items-start gap-6 rounded-panel border border-brand-500/20 bg-brand-500/[0.05] p-7 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex shrink-0 items-center gap-4">
+          <CoachIcon name="bars" className="h-10 w-10 shrink-0 text-brand-500" />
+          <p className="display text-[1.35rem] leading-tight text-chalk">
+            {p.ctaTitle1}
+            <br />
+            {p.ctaTitle2}
+          </p>
+        </div>
+        <p className="max-w-md text-[13px] leading-relaxed text-chalk-muted lg:min-w-0 lg:flex-1">{p.ctaBody}</p>
+        <ButtonLink to="/coaching/book" size="lg" className="shrink-0">
+          {p.ctaButton}
+          <CoachIcon name="arrowRight" className="ml-2 h-4 w-4" />
+        </ButtonLink>
+      </div>
+
+      {/* The disclosure stays: it is what makes the quotes above something a reader can weigh. */}
+      <div className="mt-8 flex flex-col gap-3 border-t border-ink-400 pt-6 text-[12px] leading-relaxed text-chalk-faint md:flex-row md:justify-between">
+        <p className="max-w-3xl">{t.proof.disclosure}</p>
+        <p className="flex shrink-0 items-center gap-2">
+          <span aria-hidden="true" className="h-[2px] w-5 bg-brand-500" />
+          {p.tagline}
+        </p>
       </div>
     </Section>
   )

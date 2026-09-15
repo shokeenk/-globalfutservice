@@ -130,6 +130,20 @@ public class OrderEntity {
     @Column(name = "ea_platform_handle")
     private String eaPlatformHandle;
 
+    /*
+     * Coaching orders only -- see V21. What the coach needs before the first session,
+     * kept on the order rather than asked for again on Discord.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "coaching_platform")
+    private Platform coachingPlatform;
+
+    @Column(name = "coaching_rank")
+    private String coachingRank;
+
+    @Column(name = "coaching_focus")
+    private String coachingFocus;
+
     /* ---------------------------------------------------- supplier fulfilment --- */
 
     /**
@@ -509,5 +523,29 @@ public class OrderEntity {
 
     public void setDiscordUsername(String discordUsername) {
         this.discordUsername = discordUsername;
+    }
+
+    public Platform getCoachingPlatform() {
+        return coachingPlatform;
+    }
+
+    public void setCoachingPlatform(Platform coachingPlatform) {
+        this.coachingPlatform = coachingPlatform;
+    }
+
+    public String getCoachingRank() {
+        return coachingRank;
+    }
+
+    public void setCoachingRank(String coachingRank) {
+        this.coachingRank = coachingRank;
+    }
+
+    public String getCoachingFocus() {
+        return coachingFocus;
+    }
+
+    public void setCoachingFocus(String coachingFocus) {
+        this.coachingFocus = coachingFocus;
     }
 }

@@ -37,6 +37,13 @@ public record AppProperties(
         /** Public origin of the storefront, used to build links in emails. */
         @DefaultValue("http://localhost:5173") String publicUrl,
 
+        /**
+         * The official server invite. Coaching customers are sent it once their payment is
+         * confirmed; the storefront shows the same link from its own content file, so a
+         * change of invite means changing both.
+         */
+        @DefaultValue("https://discord.com/invite/8FeP7C6tXt") String discordInvite,
+
         @Valid @NotNull Security security,
         @Valid @NotNull Pricing pricing,
         @Valid @NotNull Fulfilment fulfilment,

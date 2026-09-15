@@ -25,6 +25,7 @@ const Legal = lazy(() => import('./pages/Legal'))
 const About = lazy(() => import('./pages/About'))
 const ComingSoon = lazy(() => import('./pages/ComingSoon'))
 const Coaching = lazy(() => import('./pages/Coaching'))
+const CoachingBook = lazy(() => import('./pages/CoachingBook'))
 const Login = lazy(() => import('./pages/Login'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
 const Account = lazy(() => import('./pages/Account'))
@@ -87,6 +88,7 @@ export default function App() {
             */}
             <Route path="/cards" element={<ComingSoon service="Player Cards" />} />
             <Route path="/coaching" element={<Coaching />} />
+            <Route path="/coaching/book" element={<CoachingBook />} />
 
             <Route path="/login" element={<Login mode="login" />} />
             <Route path="/register" element={<Login mode="register" />} />

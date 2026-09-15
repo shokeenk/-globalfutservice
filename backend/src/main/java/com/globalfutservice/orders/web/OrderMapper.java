@@ -37,6 +37,7 @@ public class OrderMapper {
     public OrderDtos.OrderResponse toResponse(OrderEntity order,
                                               List<OrderEventEntity> timeline,
                                               boolean credentialsSubmitted) {
+        boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
         return new OrderDtos.OrderResponse(
                 order.getPublicRef(),
                 order.getStatus().name(),
@@ -63,7 +64,11 @@ public class OrderMapper {
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
                 order.getGuaranteeExpiresAt(),
-                timeline.stream().map(OrderMapper::toEventDto).toList());
+                timeline.stream().map(OrderMapper::toEventDto).toList(),
+                coaching ? order.getEaPlatformHandle() : null,
+                coaching && order.getCoachingPlatform() != null ? order.getCoachingPlatform().name() : null,
+                coaching ? order.getCoachingRank() : null,
+                coaching ? order.getCoachingFocus() : null);
     }
 
     public OrderDtos.AdminOrderSummary toAdminSummary(OrderEntity order, boolean credentialsHeld) {

@@ -102,6 +102,35 @@ public class EmailNotifier implements Notifier {
                 """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted()));
     }
 
+    /**
+     * The Discord invite, once the money is confirmed.
+     *
+     * <p>Sent at confirmation rather than at checkout because the storefront already shows
+     * the link on screen, and an email that arrives while the payment is still being
+     * checked would read as a receipt for money that has not been found yet.
+     */
+    @Override
+    public void coachingConfirmed(OrderNotification n) {
+        send(n, "Your coaching is confirmed — join us on Discord", """
+                Your payment is confirmed and your coaching is ready to schedule.
+
+                Reference: %s
+                Service:   %s
+                Total:     %s
+
+                Next, join our Discord server. It is where your coach reaches you, where
+                your session gets scheduled, and where you can share gameplay if asked:
+
+                  %s
+
+                Once you have joined, our team will reach out with further instructions.
+
+                Play smarter. Improve deliberately.
+                — Global FUT Services
+                """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted(),
+                props.discordInvite()));
+    }
+
     private String publicUrl() {
         return props.publicUrl();
     }

@@ -156,6 +156,9 @@ public class OrderService {
         order.setDiscordUsername(blankToNull(request.discordUsername()));
         order.setEaPlatformHandle(request.eaPlatformHandle());
         order.setCustomerNote(request.note());
+        if (quote.sku() == Sku.COACHING) {
+            applyCoachingDetails(order, request);
+        }
         order.setPointsRedeemed(quote.pointsRedeemed());
         order.setPointsEarned(quote.pointsEarned());
         order.setReferralCode(quote.referralCode());
@@ -416,6 +419,10 @@ public class OrderService {
             // only a pool of credits.
             coachingService.grantCredits(paid.getAccountId(), paid.getId(), sessions,
                     paid.getPublicRef(), props.coaching().sessionLengthFor(paid.getVariant()));
+
+            // The customer's next step is Discord, so the invite goes out the moment the
+            // money is confirmed -- by whichever path confirmed it, gateway or operator.
+            notifications.coachingConfirmed(notificationFor(paid));
         }
 
         /*
@@ -573,7 +580,57 @@ public class OrderService {
                 order.getGuestEmail(),
                 order.getDiscordUsername(),
                 order.getDeliveryMethod().name(),
-                props.publicUrl() + "/admin/orders/" + order.getPublicRef());
+                props.publicUrl() + "/admin/orders/" + order.getPublicRef(),
+                coachingSummary(order));
+    }
+
+    /**
+     * Refuses a coaching order that is missing what the coach needs, and stores the rest.
+     *
+     * <p>Checked here rather than by annotation because the same request places coin and
+     * boosting orders, where none of it applies. Runs before the order is saved, so a
+     * refusal leaves nothing behind and the quote can still be used.
+     */
+    private static void applyCoachingDetails(OrderEntity order, OrderDtos.CreateOrderRequest request) {
+        if (request.eaPlatformHandle() == null || request.eaPlatformHandle().isBlank()) {
+            throw new ApiExceptions.BadRequestException("coaching_handle_required",
+                    "Enter your EA FC ID, PSN or Xbox ID so your coach can find you.");
+        }
+        if (request.coachingPlatform() == null || request.coachingPlatform().isBlank()) {
+            throw new ApiExceptions.BadRequestException("coaching_platform_required",
+                    "Choose the platform you play on.");
+        }
+        order.setEaPlatformHandle(request.eaPlatformHandle().trim());
+        order.setCoachingPlatform(com.globalfutservice.domain.catalog.Platform.valueOf(
+                request.coachingPlatform()));
+        order.setCoachingRank(blankToNull(request.currentRank()));
+        order.setCoachingFocus(blankToNull(request.improvementFocus()));
+    }
+
+    /**
+     * One line an operator or coach can read at a glance, or null for any other service.
+     *
+     * <p>Built from what the customer typed, so it goes through Discord's mention guard
+     * like every other customer-supplied field -- see DiscordNotifier.
+     */
+    public static String coachingSummary(OrderEntity order) {
+        if (order.getSku() != Sku.COACHING) {
+            return null;
+        }
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (order.getCoachingPlatform() != null) {
+            parts.add(order.getCoachingPlatform().displayName());
+        }
+        if (order.getEaPlatformHandle() != null && !order.getEaPlatformHandle().isBlank()) {
+            parts.add("ID " + order.getEaPlatformHandle());
+        }
+        if (order.getCoachingRank() != null) {
+            parts.add(order.getCoachingRank());
+        }
+        if (order.getCoachingFocus() != null) {
+            parts.add("Wants to work on: " + order.getCoachingFocus());
+        }
+        return parts.isEmpty() ? null : String.join(" · ", parts);
     }
 
     /**

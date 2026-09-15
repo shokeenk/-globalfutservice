@@ -68,7 +68,7 @@ class OrderTicketServiceTest {
                 credentialsHeld,
                 hasProof,
                 Instant.parse("2026-09-08T10:42:00Z"),
-                "https://globalfutservices.com/admin/orders/GFS-26-000123");
+                "https://globalfutservices.com/admin/orders/GFS-26-000123", null);
     }
 
     @Nested

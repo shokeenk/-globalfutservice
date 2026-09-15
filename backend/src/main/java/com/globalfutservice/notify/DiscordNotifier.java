@@ -114,6 +114,9 @@ public class DiscordNotifier implements Notifier {
         fields.add(field("Order", "`" + n.publicRef() + "`", true));
         fields.add(field("Amount", "**" + n.amountFormatted() + "**", true));
         fields.add(field("Service", n.serviceLabel(), false));
+        if (n.coachingDetails() != null) {
+            fields.add(field("Coaching", n.coachingDetails(), false));
+        }
         fields.add(field("Paid via", n.method(), true));
         fields.add(field("Into", "`" + n.destination() + "`", true));
 
@@ -157,14 +160,15 @@ public class DiscordNotifier implements Notifier {
      */
     @Override
     public void orderPlaced(OrderNotification n) {
-        send("🧾 New order",
-                embed(n.publicRef(), SLATE, List.of(
-                        field("Service", n.serviceLabel(), false),
-                        field("Amount", "**" + n.amountFormatted() + "**", true),
-                        field("Delivery", readableMethod(n.deliveryMethod()), true),
-                        field("Customer", contactLine(n.customerEmail(), n.customerDiscord()), false)
-                ), n.adminDeepLink(), null),
-                n.publicRef());
+        List<Map<String, Object>> fields = new ArrayList<>();
+        fields.add(field("Service", n.serviceLabel(), false));
+        if (n.coachingDetails() != null) {
+            fields.add(field("Coaching", n.coachingDetails(), false));
+        }
+        fields.add(field("Amount", "**" + n.amountFormatted() + "**", true));
+        fields.add(field("Delivery", readableMethod(n.deliveryMethod()), true));
+        fields.add(field("Customer", contactLine(n.customerEmail(), n.customerDiscord()), false));
+        send("🧾 New order", embed(n.publicRef(), SLATE, fields, n.adminDeepLink(), null), n.publicRef());
     }
 
     @Override
@@ -248,6 +252,9 @@ public class DiscordNotifier implements Notifier {
 
     private static String readableMethod(String method) {
         if (method == null) return "—";
+        // Coaching is a session, not a delivery -- labelling it "Transfer market" told the
+        // operator to look for a coin transfer that was never part of the order.
+        if ("SCHEDULED_SESSION".equals(method)) return "Coaching session";
         return "COMFORT_TRADE".equals(method) ? "Comfort trade" : "Transfer market";
     }
 

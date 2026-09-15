@@ -63,6 +63,11 @@ public class NotificationService {
     }
 
     @Async
+    public void coachingConfirmed(OrderNotification n) {
+        each(notifier -> notifier.coachingConfirmed(n));
+    }
+
+    @Async
     public void paymentClaimed(PaymentClaimNotification n) {
         each(notifier -> notifier.paymentClaimed(n));
     }

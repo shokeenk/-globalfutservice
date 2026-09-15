@@ -138,6 +138,11 @@ public class CatalogService {
                 policy.tierDiscountEnabled(),
                 props.loyalty().dailyBonusPoints(),
                 (int) props.coaching().sessionLength().toMinutes(),
-                (int) props.coaching().blockSessionLength().toMinutes());
+                (int) props.coaching().blockSessionLength().toMinutes(),
+                // The same three conditions RazorpayGateway.isEnabled checks.
+                props.razorpay().enabled()
+                        && props.razorpay().keyId() != null && !props.razorpay().keyId().isBlank()
+                        && props.razorpay().keySecret() != null && !props.razorpay().keySecret().isBlank(),
+                props.notifications().emailEnabled());
     }
 }
