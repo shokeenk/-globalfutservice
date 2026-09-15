@@ -127,9 +127,9 @@ function scrollToCoach() {
 /* -------------------------------------------------------------------- hero ---------- */
 
 /**
- * The artwork is the supplied composition, served from /brand/coaching/hero.webp. Until
- * that file is in place the column is simply left out -- the headline takes the width --
- * rather than standing in another image the brief did not ask for.
+ * The artwork is the supplied composition, served from /brand/coaching/ at two widths so a
+ * phone does not download the desktop file. If it ever fails to load, the column is simply
+ * left out -- the headline takes the width -- rather than showing a broken image.
  */
 function Hero() {
   const p = useT().coachingPage
@@ -180,6 +180,8 @@ function Hero() {
         {artwork && (
           <img
             src="/brand/coaching/hero.webp"
+            srcSet="/brand/coaching/hero-768.webp 768w, /brand/coaching/hero.webp 1536w"
+            sizes="(min-width: 1024px) 52vw, 100vw"
             alt={p.heroAlt}
             width={1536}
             height={1024}
