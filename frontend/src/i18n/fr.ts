@@ -1053,7 +1053,7 @@ const fr: Dictionary = {
     languagesLabel: 'Langues :',
     languagesValue: 'Anglais, hindi',
     coachQuote: 'Mon objectif est simple : t’aider à comprendre ton jeu et à progresser régulièrement.',
-    viewProfile: 'Voir le profil du coach',
+    viewProfile: 'Réserve ta séance',
     coachPhotoAlt: 'Vinay, coach EA FC',
     areasEyebrow: 'Sur quoi peut-on travailler ?',
     areasTitle: 'Les points qu’on peut t’aider à améliorer',

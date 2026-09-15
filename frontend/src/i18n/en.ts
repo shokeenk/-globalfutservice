@@ -1198,7 +1198,7 @@ const en = {
     languagesLabel: 'Languages:',
     languagesValue: 'English, Hindi',
     coachQuote: 'My goal is simple. To help you understand your game and make consistent progress.',
-    viewProfile: 'View coach profile',
+    viewProfile: 'Book your session',
     coachPhotoAlt: 'Vinay, EA FC coach',
     areasEyebrow: 'What can we work on?',
     areasTitle: 'Areas we can help you improve',

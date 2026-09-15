@@ -20,7 +20,7 @@ import { useCatalog } from '../state/CatalogContext'
  * The coaching page: what coaching is, who runs it, what it costs, and the way in.
  *
  * <p>Every "book" and "buy" control leads to the same place, the booking flow at
- * /coaching/book -- including "View coach profile". This is a one-coach service and there
+ * /coaching/book -- including the "Book your session" button in the coach section. This is a one-coach service and there
  * is no profile page behind that button; sending it anywhere else would be two destinations
  * for one action.
  *
