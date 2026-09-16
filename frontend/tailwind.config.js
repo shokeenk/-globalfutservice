@@ -165,10 +165,24 @@ export default {
         ok: '#12692F',
         'ok-solid': '#15803D',
         warn: '#AE2418',
+        /*
+         * Each platform and storefront in its own colour, at the owner's instruction.
+         *
+         * These are the brands' own: PlayStation blue, Xbox green, Steam's dark navy,
+         * EA's red and Epic's near-black. Steam and Epic really are drawn in greyscale
+         * by their owners -- a "colour" for them would be invented, and an invented brand
+         * colour is worse than the right dark one.
+         *
+         * PC is nobody's brand, so it stays the site's own ink: there is no PC logo and
+         * no PC colour to be faithful to.
+         */
         platform: {
-          pc:   '#111114',
-          ps:   '#3F3F46',
-          xbox: '#71717A',
+          pc:    '#111114',
+          ps:    '#0070D1',
+          xbox:  '#107C10',
+          steam: '#1B2838',
+          ea:    '#FF4747',
+          epic:  '#2F2F2F',
         },
       },
 

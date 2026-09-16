@@ -427,9 +427,9 @@ function DetailsStep({
    * 20px and honest about whose software it is.
    */
   const launcherCopy: Record<Launcher, { title: string; sub: string; icon: ReactNode }> = {
-    STEAM: { title: b.steam, sub: b.steamSub, icon: <SiSteam size={20} /> },
-    EA_APP: { title: b.eaApp, sub: b.eaAppSub, icon: <SiEa size={20} /> },
-    EPIC: { title: b.epic, sub: b.epicSub, icon: <SiEpicgames size={20} /> },
+    STEAM: { title: b.steam, sub: b.steamSub, icon: <SiSteam size={20} className="text-platform-steam" /> },
+    EA_APP: { title: b.eaApp, sub: b.eaAppSub, icon: <SiEa size={20} className="text-platform-ea" /> },
+    EPIC: { title: b.epic, sub: b.epicSub, icon: <SiEpicgames size={20} className="text-platform-epic" /> },
   }
 
   return (
