@@ -34,14 +34,20 @@ export function PlatformIcon({
   className?: string
 }) {
   const key = (platform ?? '').toUpperCase()
+  /*
+   * The brand's own colour by default, everywhere the mark appears -- a card, a cart
+   * line, a summary row. `className` still wins where a caller passes its own text
+   * colour, because it comes last and Tailwind emits both at the same specificity.
+   */
+  const tone = `${platformAccent(platform).text} ${className}`.trim()
 
   if (key === 'PLAYSTATION') {
-    return <SiPlaystation size={size} className={className} aria-hidden="true" />
+    return <SiPlaystation size={size} className={tone} aria-hidden="true" />
   }
 
   if (key === 'XBOX') {
     // Simple Icons has no Xbox mark; Font Awesome's is the same sphere.
-    return <FaXbox size={size} className={className} aria-hidden="true" />
+    return <FaXbox size={size} className={tone} aria-hidden="true" />
   }
 
   if (key === 'PC') {
@@ -56,7 +62,7 @@ export function PlatformIcon({
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
-        className={className}
+        className={tone}
       >
         {/* Monitor and stand. The one platform that needs no disambiguation. */}
         <rect x="2.5" y="4" width="19" height="12.5" rx="1.6" />
@@ -106,7 +112,7 @@ export function platformAccent(platform: string | null | undefined): {
         disc: 'bg-platform-ps/[0.14] ring-platform-ps/25',
         wash: 'bg-platform-ps/25',
         border: 'border-platform-ps',
-        glow: '0 0 0 1px rgb(174 36 24 / 0.5), 0 14px 34px -14px rgb(174 36 24 / 0.55)',
+        glow: '0 0 0 1px rgb(0 112 209 / 0.5), 0 14px 34px -14px rgb(0 112 209 / 0.55)',
       }
     case 'XBOX':
       return {
@@ -114,7 +120,7 @@ export function platformAccent(platform: string | null | undefined): {
         disc: 'bg-platform-xbox/[0.14] ring-platform-xbox/25',
         wash: 'bg-platform-xbox/25',
         border: 'border-platform-xbox',
-        glow: '0 0 0 1px rgb(95 81 144 / 0.5), 0 14px 34px -14px rgb(95 81 144 / 0.55)',
+        glow: '0 0 0 1px rgb(16 124 16 / 0.5), 0 14px 34px -14px rgb(16 124 16 / 0.55)',
       }
     default:
       return {

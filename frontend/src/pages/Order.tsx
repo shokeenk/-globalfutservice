@@ -1812,7 +1812,8 @@ function CartCard({ quote, onEdit }: { quote: SignedQuote; onEdit: () => void })
       {hasBadge(quote.variant) ? (
         <RankBadge variant={quote.variant} size={38} className="mt-0.5 shrink-0" />
       ) : quote.platform ? (
-        <PlatformIcon platform={quote.platform} className="mt-0.5 h-9 w-9 shrink-0 text-chalk-muted" />
+        // No text colour here: the mark brings its own, like everywhere else it appears.
+        <PlatformIcon platform={quote.platform} className="mt-0.5 h-9 w-9 shrink-0" />
       ) : (
         <CoinIcon size={36} className="mt-0.5" />
       )}
