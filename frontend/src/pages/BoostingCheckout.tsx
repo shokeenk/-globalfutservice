@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { EaSignInFields, validateEaSignIn } from '../components/EaSignInFields'
 import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
+import { SiEa, SiEpicgames, SiSteam } from 'react-icons/si'
 import { RankBadge, hasBadge } from '../components/RankBadge'
 import { Alert, Badge, Button, Input, Section, Spinner } from '../components/ui'
 import { BUSINESS } from '../content/business'
@@ -420,10 +421,15 @@ function DetailsStep({
   const t = useT()
   const b = t.boostingCheckout
 
-  const launcherCopy: Record<Launcher, { title: string; sub: string }> = {
-    STEAM: { title: b.steam, sub: b.steamSub },
-    EA_APP: { title: b.eaApp, sub: b.eaAppSub },
-    EPIC: { title: b.epic, sub: b.epicSub },
+  /*
+   * Each storefront's own mark. SiEa is Electronic Arts' corporate logo rather than the EA
+   * app's badge -- Simple Icons ships no separate one -- which is close enough to read at
+   * 20px and honest about whose software it is.
+   */
+  const launcherCopy: Record<Launcher, { title: string; sub: string; icon: ReactNode }> = {
+    STEAM: { title: b.steam, sub: b.steamSub, icon: <SiSteam size={20} /> },
+    EA_APP: { title: b.eaApp, sub: b.eaAppSub, icon: <SiEa size={20} /> },
+    EPIC: { title: b.epic, sub: b.epicSub, icon: <SiEpicgames size={20} /> },
   }
 
   return (
@@ -467,7 +473,7 @@ function DetailsStep({
                 onSelect={() => onLauncher(option)}
                 title={launcherCopy[option].title}
                 sub={launcherCopy[option].sub}
-                icon={<PlatformIcon platform="PC" className="h-5 w-5" />}
+                icon={launcherCopy[option].icon}
               />
             ))}
           </div>
@@ -541,7 +547,12 @@ function ChoiceCard({
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-chalk">{title}</span>
+        {/*
+          The name wraps rather than truncates: three storefronts across one row leaves
+          "Epic Games" a few pixels short, and a clipped brand name is worse than a
+          second line. The caption under it may still truncate -- it repeats the name.
+        */}
+        <span className="block text-sm font-semibold leading-snug text-chalk">{title}</span>
         <span className="block truncate text-[12px] text-chalk-muted">{sub}</span>
       </span>
       {/* The second, non-colour channel that says "this one". */}
