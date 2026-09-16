@@ -345,10 +345,12 @@ function MeetCoach() {
         <div className="grid items-center gap-8 lg:grid-cols-[190px_1.25fr_1fr_1fr]">
           <div className="mx-auto w-[190px] overflow-hidden rounded-panel bg-brand-500 shadow-e3 lg:mx-0">
             <img
-              src="/brand/coaches/vinay-256.jpg"
+              src="/brand/coaches/vinay-512.webp"
+              srcSet="/brand/coaches/vinay-256.webp 256w, /brand/coaches/vinay-512.webp 512w"
+              sizes="190px"
               alt={p.coachPhotoAlt}
-              width={256}
-              height={256}
+              width={512}
+              height={640}
               loading="lazy"
               className="aspect-[4/5] h-full w-full object-cover"
             />
