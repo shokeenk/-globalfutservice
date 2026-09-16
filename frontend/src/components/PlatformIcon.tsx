@@ -1,26 +1,27 @@
+import { FaXbox } from 'react-icons/fa6'
+import { SiPlaystation } from 'react-icons/si'
+
 /**
- * Platform glyphs for the coin configurator.
+ * Platform marks for the checkouts.
  *
- * <p><b>These are not the official logos, deliberately.</b> The PlayStation
- * wordmark and the Xbox sphere are Sony and Microsoft trademarks with published
- * usage rules — no recolouring, no redrawing, minimum clear space. Approximating
- * them by hand in path data would break every one of those rules and produce a
- * worse drawing than the real asset, on a site that already has one rights
- * question hanging over it.
+ * <p><b>The official logos, at the owner's instruction.</b> These were hand-drawn
+ * controller glyphs for a while, because the PlayStation wordmark and the Xbox sphere are
+ * Sony and Microsoft trademarks with published usage rules and approximating them by hand
+ * breaks every one of those rules. The owner asked for the real marks; they now come from
+ * react-icons, which ships the vector artwork rather than a redrawing of it, so at least
+ * the shapes are right.
  *
- * <p>What actually separates the two consoles at a glance is not the logo, it is
- * the <b>stick layout</b>: PlayStation puts both sticks low and symmetrical,
- * Xbox offsets them diagonally. That is industrial design rather than a
- * trademark, it survives being drawn at 20px, and any player reads it instantly.
- * PC gets a monitor, which needs no explanation at all.
+ * <p>They are trademarks of their owners and this business is not affiliated with either —
+ * the footer says so on every page. Used here only to label which platform a customer is
+ * buying for, never as a badge of endorsement.
  *
- * <p>If the official artwork is wanted, it should come from Sony's and
- * Microsoft's partner brand portals as supplied files — not from me redrawing
- * them. Swapping these for real assets is a one-component change.
+ * <p>PC keeps its monitor: there is no PC trademark to show, and a monitor needs no
+ * explanation. It is still stroked in the site's own weight, which is why it is drawn here
+ * rather than imported.
  *
- * <p>Everything is stroked in `currentColor` at the same 1.7 weight the rest of
- * the site's icons use, so a selected tile's colour carries through without a
- * second set of rules.
+ * <p><b>The API is unchanged.</b> Same props, same default size, same {@code currentColor}
+ * — the brand marks are solid fills where the monitor is a stroke, so a selected tile's
+ * colour carries through either way without a second set of rules.
  */
 export function PlatformIcon({
   platform,
@@ -34,22 +35,29 @@ export function PlatformIcon({
 }) {
   const key = (platform ?? '').toUpperCase()
 
-  const common = {
-    width: size,
-    height: size,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.7,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true,
-    className,
+  if (key === 'PLAYSTATION') {
+    return <SiPlaystation size={size} className={className} aria-hidden="true" />
+  }
+
+  if (key === 'XBOX') {
+    // Simple Icons has no Xbox mark; Font Awesome's is the same sphere.
+    return <FaXbox size={size} className={className} aria-hidden="true" />
   }
 
   if (key === 'PC') {
     return (
-      <svg {...common}>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className={className}
+      >
         {/* Monitor and stand. The one platform that needs no disambiguation. */}
         <rect x="2.5" y="4" width="19" height="12.5" rx="1.6" />
         <path d="M12 16.5v3" />
@@ -58,60 +66,9 @@ export function PlatformIcon({
     )
   }
 
-  if (key === 'PLAYSTATION') {
-    return (
-      <svg {...common}>
-        <GamepadBody />
-        {/* D-pad, left. */}
-        <path d="M7.4 12.2h2.2M8.5 11.1v2.2" />
-        {/* Face buttons, right. */}
-        <circle cx="15.6" cy="11.2" r="0.7" fill="currentColor" stroke="none" />
-        <circle cx="17.1" cy="12.4" r="0.7" fill="currentColor" stroke="none" />
-        {/*
-          Both sticks low and side by side — the PlayStation arrangement, and the
-          whole reason this glyph is distinguishable from the next one.
-        */}
-        <circle cx="10.6" cy="14.4" r="1.15" />
-        <circle cx="13.9" cy="14.4" r="1.15" />
-      </svg>
-    )
-  }
-
-  if (key === 'XBOX') {
-    return (
-      <svg {...common}>
-        <GamepadBody />
-        {/* Left stick high, right stick low: the Xbox diagonal offset. */}
-        <circle cx="8.6" cy="11.6" r="1.15" />
-        <circle cx="14.6" cy="14.3" r="1.15" />
-        {/* D-pad sits under the left stick. */}
-        <path d="M10.6 14.3h1.8M11.5 13.4v1.8" />
-        {/* Face buttons, upper right. */}
-        <circle cx="15.9" cy="11.2" r="0.7" fill="currentColor" stroke="none" />
-        <circle cx="17.4" cy="12.3" r="0.7" fill="currentColor" stroke="none" />
-      </svg>
-    )
-  }
-
   // Unknown platform: render nothing rather than a wrong icon. A missing glyph is
   // a gap; the wrong glyph is a lie about what the customer is buying.
   return null
-}
-
-/**
- * The shared controller outline.
- *
- * <p>Identical for both consoles on purpose — the pads really are close to the
- * same silhouette, and inventing a difference here would just make both glyphs
- * slightly wrong. The stick positions carry the distinction.
- */
-function GamepadBody() {
-  return (
-    <path
-      d="M8.4 8.4h7.2c2.4 0 4.4 2.1 4.4 4.8 0 2.2-.9 3.9-2.3 3.9-1.3 0-1.8-1.6-3.2-1.6H9.5
-         c-1.4 0-1.9 1.6-3.2 1.6-1.4 0-2.3-1.7-2.3-3.9 0-2.7 2-4.8 4.4-4.8Z"
-    />
-  )
 }
 
 /**
