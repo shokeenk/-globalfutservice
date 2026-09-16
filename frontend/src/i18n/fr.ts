@@ -1097,6 +1097,104 @@ const fr: Dictionary = {
     ctaButton: 'Réserve ta séance',
     tagline: 'Joue plus intelligemment. Progresse volontairement.',
   },
+  boostingCheckout: {
+    seoTitle: 'Paiement du boosting',
+    secureCheckout: 'Paiement sécurisé',
+    secureLead: 'Finalise ta commande pour commencer',
+    stepDetails: 'Détails',
+    stepPayment: 'Paiement',
+    stepConfirmation: 'Confirmation',
+
+    signInTitle: 'Connecte-toi pour passer cette commande',
+    signInBody: 'Les commandes de boosting se passent depuis un compte, pour que la commande et tes points restent chez toi.',
+    signInCta: 'Se connecter pour continuer',
+
+    platformTitle: 'Choisis ta plateforme',
+    platformLead: 'Choisis la plateforme sur laquelle tu joues pour ce service.',
+    playstation: 'PlayStation',
+    playstationSub: 'Tu joues sur PlayStation',
+    pc: 'PC',
+    pcSub: 'Choisis ta plateforme PC',
+    psNote: 'Rien d’autre à choisir sur PlayStation.',
+    pcTitle: 'Choisis ta plateforme PC',
+    pcLead: 'Choisis la plateforme à laquelle ton compte EA FC est lié.',
+    steam: 'Steam',
+    steamSub: 'Tu joues sur Steam',
+    eaApp: 'EA App',
+    eaAppSub: 'Tu joues sur EA App',
+    epic: 'Epic Games',
+    epicSub: 'Tu joues sur Epic Games',
+    pcNote: 'Vérifie bien la plateforme choisie. Cela nous permet de traiter ta commande plus vite.',
+    needPlatform: 'Choisis une plateforme pour continuer.',
+    needLauncher: 'Choisis où tu joues sur PC pour continuer.',
+
+    signInSectionTitle: 'Ta connexion EA',
+    signInSectionLead:
+      'Quelqu’un joue ces matchs sur ton compte, il faut donc s’y connecter. Tout est chiffré '
+      + 'avec une clé propre à cette commande, ouvert seulement par le joueur qui s’en occupe, '
+      + 'puis détruit à la fin. Ne l’envoie jamais sur Discord.',
+
+    continueToPayment: 'Continuer vers le paiement',
+    termsLead: 'En continuant, tu acceptes nos',
+    termsTerms: 'Conditions de service',
+    termsPrivacy: 'Politique de confidentialité',
+    termsAnd: 'et',
+    termsAml: 'Politique AML et KYC',
+
+    orderTitle: 'Ta commande',
+    edit: 'Modifier',
+    couponPlaceholder: 'Entre un code',
+    apply: 'Appliquer',
+    rewardsTitle: 'Récompenses',
+    total: 'Total',
+    trustSecureTitle: 'Paiement sécurisé',
+    trustSecureBody: 'Tes informations sont en sécurité',
+    trustFastTitle: 'Traitement rapide',
+    trustFastBody: 'On démarre vite après le paiement',
+    trustSupportTitle: 'Support 24/7',
+    trustSupportBody: 'On est là pour t’aider',
+
+    payTitle: 'Comment veux-tu payer ?',
+    payOnlineTitle: 'Payer en ligne',
+    payOnlineBody: 'Carte, UPI ou virement via notre prestataire.',
+    payUpiTitle: 'UPI',
+    payUpiBody: 'Scanne le code, puis envoie-nous la référence.',
+    payPaypalTitle: 'PayPal',
+    payPaypalBody: 'Fais le paiement, puis partage l’identifiant de transaction.',
+    payCryptoTitle: 'Crypto',
+    payCryptoBody: 'Envoie à l’adresse indiquée, puis partage le hash.',
+
+    processingTitle: 'Confirmation de ton paiement',
+    processingBody: 'Quelques secondes. Ne ferme pas cette page.',
+
+    confirmedTitle: 'Commande confirmée !',
+    confirmedBody: 'Ton paiement est bien passé.',
+    confirmedLead:
+      'On a envoyé les détails par e-mail et notre équipe est prévenue. Rejoins notre Discord '
+      + 'pour parler au joueur qui s’occupe de ta commande et suivre son avancement.',
+    submittedTitle: 'Paiement envoyé',
+    submittedBody: 'On le vérifie sur notre compte.',
+    submittedLead:
+      'Ta commande est enregistrée et notre équipe est prévenue. On confirme le paiement à la '
+      + 'main, en général en quelques minutes, et cette page se met à jour toute seule. Rejoins '
+      + 'notre Discord pour parler au joueur qui s’en occupe.',
+    joinDiscord: 'Rejoindre notre Discord',
+    joinCaption: 'Clique sur le bouton pour entrer ; notre équipe prend ta commande là-bas.',
+    orderId: 'N° de commande',
+    service: 'Service',
+    platformLabel: 'Plateforme',
+    amountPaid: 'Montant payé',
+    amount: 'Montant',
+    statusVerifying: 'Vérification',
+    needHelp: 'Besoin d’aide ?',
+    joinOurDiscord: 'Rejoins notre Discord',
+    orWord: 'ou',
+    contactSupport: 'contacte le support',
+
+    loadFailed: 'Impossible de charger cette commande. Vérifie le lien ou contacte le support.',
+    placeFailed: 'Impossible de créer la commande. Réessaie ou contacte le support.',
+  },
+
   coachingBook: {
     seoTitle: 'Réserver un coaching',
     back: 'Retour',

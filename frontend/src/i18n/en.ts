@@ -1253,6 +1253,112 @@ const en = {
     ctaButton: 'Book your session',
     tagline: 'Play smarter. Improve deliberately.',
   },
+  /*
+   * The boosting checkout: platform, sign-in, payment, confirmation.
+   *
+   * Its own block rather than more keys under `order`, because the page is its own
+   * checkout -- and because the confirmation screen says two different things depending
+   * on whether a person has checked the payment yet, which is the kind of pair that goes
+   * wrong when it is scattered.
+   */
+  boostingCheckout: {
+    seoTitle: 'Boosting checkout',
+    secureCheckout: 'Secure Checkout',
+    secureLead: 'Complete your purchase to get started',
+    stepDetails: 'Details',
+    stepPayment: 'Payment',
+    stepConfirmation: 'Confirmation',
+
+    signInTitle: 'Sign in to place this order',
+    signInBody: 'Boosting orders are placed from an account, so your order and reward points stay with you.',
+    signInCta: 'Sign in to continue',
+
+    platformTitle: 'Select Platform',
+    platformLead: 'Choose the platform you play on for this service.',
+    playstation: 'PlayStation',
+    playstationSub: 'Play on PlayStation',
+    pc: 'PC',
+    pcSub: 'Choose your PC platform',
+    psNote: 'No further selection is required for PlayStation.',
+    pcTitle: 'Select PC Platform',
+    pcLead: 'Choose the platform your EA FC account is linked to.',
+    steam: 'Steam',
+    steamSub: 'Play on Steam',
+    eaApp: 'EA App',
+    eaAppSub: 'Play on EA App',
+    epic: 'Epic Games',
+    epicSub: 'Play on Epic Games',
+    pcNote: 'Make sure to select the correct platform. This helps us process your order faster.',
+    needPlatform: 'Choose a platform to continue.',
+    needLauncher: 'Choose where you play on PC to continue.',
+
+    signInSectionTitle: 'Your EA sign-in',
+    signInSectionLead:
+      'Somebody plays these games on your account, so we need to sign in. It is encrypted '
+      + 'with a key unique to this order, opened only by the player working it, and destroyed '
+      + 'when the order is done. Never send it over Discord.',
+
+    continueToPayment: 'Continue to Payment',
+    termsLead: 'By continuing you agree to our',
+    termsTerms: 'Terms of Service',
+    termsPrivacy: 'Privacy Policy',
+    termsAnd: 'and',
+    termsAml: 'AML & KYC Policy',
+
+    orderTitle: 'Your Order',
+    edit: 'Edit',
+    couponPlaceholder: 'Enter coupon code',
+    apply: 'Apply',
+    rewardsTitle: 'Rewards',
+    total: 'Total',
+    trustSecureTitle: 'Secure Payment',
+    trustSecureBody: 'Your information is safe with us',
+    trustFastTitle: 'Fast Processing',
+    trustFastBody: 'Get started quickly after payment',
+    trustSupportTitle: '24/7 Support',
+    trustSupportBody: 'We are here to help',
+
+    payTitle: 'How would you like to pay?',
+    payOnlineTitle: 'Pay online',
+    payOnlineBody: 'Card, UPI or net banking through our payment gateway.',
+    payUpiTitle: 'UPI',
+    payUpiBody: 'Scan the code, then send us the reference.',
+    payPaypalTitle: 'PayPal',
+    payPaypalBody: 'Send the payment, then share the transaction id.',
+    payCryptoTitle: 'Crypto',
+    payCryptoBody: 'Send to the address shown, then share the hash.',
+
+    processingTitle: 'Confirming your payment',
+    processingBody: 'This takes a few seconds. Do not close this page.',
+
+    confirmedTitle: 'Order Confirmed!',
+    confirmedBody: 'Your payment has been successful.',
+    confirmedLead:
+      'We have sent the details to your email and our team has been notified. Join our '
+      + 'Discord server to talk to the player handling your order and follow its progress.',
+    submittedTitle: 'Payment submitted',
+    submittedBody: 'We are checking it against our account now.',
+    submittedLead:
+      'Your order is placed and our team has been notified. We confirm the payment by hand, '
+      + 'usually within minutes — this page updates itself when it lands. Join our Discord to '
+      + 'talk to the player handling your order.',
+    joinDiscord: 'Join Our Discord',
+    joinCaption: 'Click the button above to join, and our team will pick up your order there.',
+    orderId: 'Order ID',
+    service: 'Service',
+    platformLabel: 'Platform',
+    amountPaid: 'Amount Paid',
+    amount: 'Amount',
+    statusVerifying: 'Verifying',
+    needHelp: 'Need help?',
+    joinOurDiscord: 'Join our Discord',
+    orWord: 'or',
+    contactSupport: 'contact support',
+
+    loadFailed: 'We could not load that order. Check the link, or contact support.',
+    placeFailed: 'We could not place that order. Please try again, or contact support.',
+  },
+
   coachingBook: {
     seoTitle: 'Book coaching',
     back: 'Back',
