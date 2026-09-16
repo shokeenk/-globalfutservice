@@ -577,6 +577,9 @@ export default function Order() {
               onRequote={() => void fetchQuote()}
               boostPlatform={boostPlatform}
               pcLauncher={pcLauncher}
+              pointsToRedeem={pointsToRedeem}
+              setPointsToRedeem={setPointsToRedeem}
+              maxRedeemable={maxRedeemable}
             />
           )}
         </div>
@@ -1054,6 +1057,7 @@ function QuoteTimer({ expiresAt, onExpire }: { expiresAt: string; onExpire: () =
 
 function CheckoutForm({
   quote, step, setStep, onRequote, boostPlatform, pcLauncher,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable,
 }: {
   quote: SignedQuote
   step: Step
@@ -1063,6 +1067,10 @@ function CheckoutForm({
   /** Boosting only: chosen in the configurator, posted with the order. Empty otherwise. */
   boostPlatform: string
   pcLauncher: string
+  /** The page's points state, so the balance panel here can spend them. */
+  pointsToRedeem: number
+  setPointsToRedeem: (points: number) => void
+  maxRedeemable: number
 }) {
   const navigate = useNavigate()
   const { account } = useAuth()
@@ -1092,7 +1100,6 @@ function CheckoutForm({
   const [deliveryMethod] = useState(policy?.defaultDeliveryMethod ?? 'PLAYER_AUCTION')
   const isCoaching = quote.sku === 'COACHING'
   const isTrading = quote.sku === 'TRADING_SERVICE'
-  const [note, setNote] = useState('')
   /*
    * The sign-in, held in component state and nowhere else.
    *
@@ -1168,7 +1175,8 @@ function CheckoutForm({
         discordUsername: discord.trim().replace(/^@/, '') || null,
         // Asked for after the order exists, on the credential form. See note 14.
         eaPlatformHandle: null,
-        note: note.trim() || null,
+        // No longer asked here -- see BalancePanel. The sign-in form still takes one.
+        note: null,
         /*
          * Boosting only. Null rather than an empty string everywhere else: the API
          * pattern accepts "", but the column should say "not applicable" rather than
@@ -1396,17 +1404,19 @@ function CheckoutForm({
         />
       )}
 
-      <Field label={t.order.noteLabel}>
-        {(props) => (
-          <Input
-            {...props}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={t.order.notePlaceholder}
-            maxLength={500}
-          />
-        )}
-      </Field>
+      {/*
+        Where "Anything we should know?" used to be.
+
+        The free-text box moved rather than vanished: the same question is asked on the
+        sign-in form, which is the step an operator actually reads before starting work.
+        What belongs at the moment of paying is what this order can cost less -- a balance
+        a customer had to open a tab in the summary to find.
+      */}
+      <BalancePanel
+        pointsToRedeem={pointsToRedeem}
+        setPointsToRedeem={setPointsToRedeem}
+        maxRedeemable={maxRedeemable}
+      />
 
       {/*
         Not paperwork. Each of these is a failed order turned into a checkbox: an
@@ -1634,6 +1644,85 @@ function SavingsTabs({
           balance={account?.pointsBalance ?? null}
           capPercent={policy ? bpsToPercent(policy.maxWalletRedemptionBps) : null}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * What the customer has, at the moment they are about to spend.
+ *
+ * <p>The numbers are the same ones {@link RewardsPane} uses -- the balance from the
+ * account, the ceiling from the policy through the pricing engine -- and neither is
+ * recomputed here. The difference is where they are: the summary's Rewards tab has to be
+ * opened before a balance is visible at all, so a customer with points sitting unspent
+ * had no reason to look.
+ *
+ * <p>One button, and it spends everything this order allows. A second number to type is
+ * what the Rewards tab is for; this is for the customer who wants the discount and does
+ * not want to do arithmetic to get it.
+ */
+function BalancePanel({
+  pointsToRedeem, setPointsToRedeem, maxRedeemable,
+}: {
+  pointsToRedeem: number
+  setPointsToRedeem: (points: number) => void
+  maxRedeemable: number
+}) {
+  const t = useT()
+  const { account } = useAuth()
+  const loyaltyActive = useLoyaltyActive()
+
+  // Checkout is behind sign-in, so this is the belt to the braces rather than a state a
+  // customer reaches.
+  if (!account) return null
+
+  const balance = account.pointsBalance
+  const ceiling = Math.min(balance, maxRedeemable)
+
+  return (
+    <div className="hairline rounded-panel bg-paper p-4">
+      <p className="stamp mb-3">{t.order.balanceTitle}</p>
+
+      <p className="tnum text-display-sm font-semibold text-chalk">
+        {t.order.balancePoints(balance)}
+      </p>
+      <p className="mt-1 text-[12.5px] text-chalk-muted">
+        {t.order.balanceWorth(account.pointsValueFormatted)}
+      </p>
+
+      {/*
+        Points settle in one currency. Outside it the engine returns no redemption, so the
+        balance is still true and the button would do nothing -- the notice says which.
+      */}
+      {!loyaltyActive ? (
+        <div className="mt-3"><LoyaltyCurrencyNotice /></div>
+      ) : balance <= 0 ? (
+        <p className="mt-3 text-[12.5px] leading-relaxed text-chalk-muted">{t.order.balanceNone}</p>
+      ) : pointsToRedeem > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p className="text-[12.5px] font-semibold text-ok">{t.order.balanceApplied(pointsToRedeem)}</p>
+          <button
+            type="button"
+            onClick={() => setPointsToRedeem(0)}
+            className="text-[12.5px] font-semibold text-brand-400 hover:underline
+                       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-brand-400"
+          >
+            {t.order.balanceRemove}
+          </button>
+        </div>
+      ) : ceiling > 0 ? (
+        <div className="mt-3">
+          <Button variant="secondary" onClick={() => setPointsToRedeem(ceiling)}>
+            {t.order.balanceUse(ceiling)}
+          </Button>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-chalk-muted">
+            {t.order.balanceUsable(ceiling)}
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 text-[12.5px] leading-relaxed text-chalk-muted">{t.order.balanceTooSmall}</p>
       )}
     </div>
   )

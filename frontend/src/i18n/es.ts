@@ -687,6 +687,16 @@ const es: Dictionary = {
     createAccount: 'Crea una cuenta',
     createAccountRest: 'para ganar puntos con este pedido y gastarlos en el siguiente.',
 
+    balanceTitle: 'Tu saldo de la cuenta',
+    balancePoints: (points) => `${points} puntos de recompensa`,
+    balanceWorth: (value) => `Equivalen a ${value} al pagar.`,
+    balanceUsable: (points) => `Es el máximo que permite este pedido: ${points} puntos.`,
+    balanceUse: (points) => `Usar ${points} puntos`,
+    balanceApplied: (points) => `${points} puntos aplicados a este pedido.`,
+    balanceRemove: 'Quitar',
+    balanceNone: 'Aún no tienes puntos. Este pedido te dará algunos cuando termine tu periodo de garantía.',
+    balanceTooSmall: 'Este pedido es demasiado pequeño para gastar puntos.',
+
     summaryTitle: 'Tu pedido',
     total: 'Total',
     earnsPoints: (points) =>
@@ -764,8 +774,6 @@ const es: Dictionary = {
       'Se cifran en cuanto nos llegan, solo ' +
       'las abre el trader que lleva tu pedido y se destruyen al terminar. Te recordaremos ' +
       'que cambies la contraseña después.',
-    noteLabel: '¿Algo que debamos saber?',
-    notePlaceholder: 'Opcional',
     beforeYouPay: 'Antes de pagar',
     readyCheck:
       'Mi mercado de traspasos está desbloqueado, tengo al menos 5.000 monedas y menos de ' +
