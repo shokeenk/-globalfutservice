@@ -12,7 +12,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -116,6 +119,34 @@ public class GlobalExceptionHandler {
         // caller sent — including, on the credential endpoint, a password. Never echo it.
         return ResponseEntity.badRequest()
                 .body(ApiError.of("malformed_request", "The request body could not be read.", traceId()));
+    }
+
+    /**
+     * A request that left out a field the endpoint requires, or sent a part it could not
+     * use.
+     *
+     * <p>Unmapped, these fell to the catch-all: the caller was told the server had broken
+     * ("Something went wrong on our side", with a trace id), and the log recorded an
+     * unhandled exception with a stack trace. Both are wrong about whose fault it is, and
+     * the second is the expensive one -- a shelf of fake server errors is where a real one
+     * hides.
+     *
+     * <p>The parameter name is safe to name: it comes from the method signature, never
+     * from what the caller sent. The value is not echoed, which matters on the multipart
+     * endpoints, where the part next to it is a payment screenshot.
+     */
+    @ExceptionHandler({MissingServletRequestParameterException.class,
+            MissingServletRequestPartException.class,
+            MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ApiError> missingParameter(Exception e) {
+        String field = e instanceof MissingServletRequestParameterException missing
+                ? missing.getParameterName()
+                : e instanceof MissingServletRequestPartException part
+                        ? part.getRequestPartName()
+                        : ((MethodArgumentTypeMismatchException) e).getName();
+        return ResponseEntity.badRequest().body(ApiError.of("invalid_request",
+                "This request is missing " + field + ", or sent it in a form we cannot read.",
+                traceId()));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
