@@ -687,6 +687,16 @@ const fr: Dictionary = {
     createAccount: 'Crée un compte',
     createAccountRest: 'pour gagner des points sur cette commande et les dépenser sur la suivante.',
 
+    balanceTitle: 'Le solde de ton compte',
+    balancePoints: (points) => `${points} points de fidélité`,
+    balanceWorth: (value) => `Ils valent ${value} au paiement.`,
+    balanceUsable: (points) => `C’est le maximum autorisé sur cette commande : ${points} points.`,
+    balanceUse: (points) => `Utiliser ${points} points`,
+    balanceApplied: (points) => `${points} points appliqués à cette commande.`,
+    balanceRemove: 'Retirer',
+    balanceNone: 'Pas encore de points. Cette commande t’en donnera à la fin de ta période de garantie.',
+    balanceTooSmall: 'Cette commande est trop petite pour y dépenser des points.',
+
     summaryTitle: 'Ta commande',
     total: 'Total',
     earnsPoints: (points) =>
@@ -764,8 +774,6 @@ const fr: Dictionary = {
       'Ils sont chiffrés dès ' +
       'réception, ouverts uniquement par le trader qui traite ta commande, et détruits une ' +
       'fois terminée. Nous te rappellerons de changer ton mot de passe ensuite.',
-    noteLabel: 'Quelque chose à signaler ?',
-    notePlaceholder: 'Facultatif',
     beforeYouPay: 'Avant de payer',
     readyCheck:
       'Mon marché des transferts est déverrouillé, j’ai au moins 5 000 crédits et moins de ' +

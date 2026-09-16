@@ -802,6 +802,21 @@ const en = {
     createAccount: 'Create an account',
     createAccountRest: 'to earn points on this order and spend them on the next.',
 
+    /*
+     * The reward balance, shown at the moment of paying rather than behind the summary's
+     * Rewards tab. Points, not money, in every line but the worth: the engine prices the
+     * redemption and nothing here does its own arithmetic.
+     */
+    balanceTitle: 'Your account balance',
+    balancePoints: (points: number) => `${points} reward points`,
+    balanceWorth: (value: string) => `Worth ${value} at checkout.`,
+    balanceUsable: (points: number) => `That is the most this order allows — ${points} points.`,
+    balanceUse: (points: number) => `Use ${points} points`,
+    balanceApplied: (points: number) => `${points} points applied to this order.`,
+    balanceRemove: 'Remove',
+    balanceNone: 'No points yet. This order earns some once your guarantee window closes.',
+    balanceTooSmall: 'This order is too small to spend points on.',
+
     summaryTitle: 'Your order',
     total: 'Total',
     /*
@@ -894,8 +909,6 @@ const en = {
       'It is encrypted the moment it reaches us, only ever opened by the trader working ' +
       'your order, and destroyed within 24 hours whether the order completes or not. We ' +
       'will remind you to change your password afterwards.',
-    noteLabel: 'Anything we should know?',
-    notePlaceholder: 'Optional',
     beforeYouPay: 'Before you pay',
     readyCheck:
       'My transfer market is unlocked, I have at least 5,000 coins and fewer than five ' +
