@@ -62,7 +62,16 @@ export function CredentialForm({
   const [error, setError] = useState<string | null>(null)
 
   const acknowledged = signedOut && marketUnlocked && itemsClear && acceptedTerms
-  const ready = eaEmail.trim() !== '' && eaPassword !== '' && acknowledged
+  /*
+   * The same three-by-eight-digits the checkout asks for.
+   *
+   * The two forms collect the same thing for the same order and disagreed: checkout
+   * refused anything but three codes of exactly eight digits, while this one took any
+   * number of boxes in any shape. A customer who filled this one in could hand the
+   * trader two codes and a typo, and nothing said so until the sign-in failed.
+   */
+  const codesComplete = backupCodes.every((code) => /^\d{8}$/.test(code.trim()))
+  const ready = eaEmail.trim() !== '' && eaPassword !== '' && codesComplete && acknowledged
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -76,7 +85,7 @@ export function CredentialForm({
         eaPassword,
         // Trimmed and blanks dropped: the boxes are optional individually, and a
         // customer with only two codes should not send an empty third.
-        backupCodes: backupCodes.map((code) => code.trim()).filter(Boolean),
+        backupCodes: backupCodes.map((code) => code.trim()),
         platformHandle: platformHandle.trim() || null,
         note: note.trim() || null,
         acknowledgedSignedOut: signedOut,

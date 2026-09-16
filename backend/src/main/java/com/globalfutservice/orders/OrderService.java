@@ -218,7 +218,7 @@ public class OrderService {
                 order.getPublicRef(),
                 order.total(),
                 order.getGuestEmail(),
-                describe(order));
+                gatewayDescription(order));
 
         payments.save(new PaymentEntity(order.getId(), gatewayOrder.providerOrderId(),
                 order.getTotalMinor(), order.getCurrency()));
@@ -717,7 +717,7 @@ public class OrderService {
             return stored;
         }
         return switch (order.getSku()) {
-            case TRADING_SERVICE -> "Safe Trading Service — "
+            case TRADING_SERVICE -> "Buy Coins — "
                     + order.getQuantity().stripTrailingZeros().toPlainString() + "M"
                     + (order.getPlatform() == null ? "" : " (" + order.getPlatform().displayName() + ")");
             case BOOST_CHAMPS -> "Champs Boosting — " + order.getVariant();
@@ -725,6 +725,22 @@ public class OrderService {
             case COACHING -> "FUT Classes — " + order.getVariant();
             case CARDS -> "Player Cards — " + order.getVariant();
         };
+    }
+
+    /**
+     * The line item the payment processor stores, which is not what the customer sees.
+     *
+     * <p>Same order, same detail -- the amount, the platform, the tier -- with the SKU
+     * named the way {@link Sku#gatewayName()} explains. The detail is taken from the
+     * frozen label rather than recomposed, so the two descriptions can never drift into
+     * describing different orders.
+     */
+    static String gatewayDescription(OrderEntity order) {
+        String label = describe(order);
+        int dash = label.indexOf(" — ");
+        return dash < 0
+                ? order.getSku().gatewayName()
+                : order.getSku().gatewayName() + label.substring(dash);
     }
 
     public static Money totalOf(OrderEntity order) {

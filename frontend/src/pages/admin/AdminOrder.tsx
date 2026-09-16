@@ -167,9 +167,12 @@ export default function AdminOrder() {
           <Card className="p-6 sm:p-7">
             <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
               <Detail label="Total" value={order.totalFormatted} />
+              {/* The same name the customer was sold, so a support call has one vocabulary. */}
               <Detail
                 label="Method"
-                value={order.deliveryMethod === 'COMFORT_TRADE' ? 'Comfort trade' : 'Transfer market'}
+                value={order.sku === 'COACHING' ? 'Scheduled session'
+                  : order.sku.startsWith('BOOST_') ? 'Played on the account'
+                    : 'GFS Trading Method 3.0'}
               />
               <Detail label="Placed" value={dateTime(order.createdAt)} />
               <Detail label="Delivered" value={dateTime(order.deliveredAt)} />

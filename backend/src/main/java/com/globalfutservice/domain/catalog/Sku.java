@@ -16,8 +16,15 @@ package com.globalfutservice.domain.catalog;
  */
 public enum Sku {
 
-    /** Coin trading service, priced per million coins moved. */
-    TRADING_SERVICE("Safe Trading Service", PriceUnit.PER_MILLION, true, true),
+    /**
+     * Coin trading service, priced per million coins moved.
+     *
+     * <p>Named "Buy Coins" because that is what it is called everywhere a customer meets
+     * it -- the menu, the landing page, the order button -- and an order that arrives on
+     * the tracking page under a different name reads as somebody else's order. What the
+     * payment processor is told is a separate string; see {@link #gatewayName()}.
+     */
+    TRADING_SERVICE("Buy Coins", PriceUnit.PER_MILLION, true, true),
 
     /** FUT Champions win-count push. */
     BOOST_CHAMPS("Champs Boosting", PriceUnit.FLAT, true, false),
@@ -52,6 +59,21 @@ public enum Sku {
 
     public String displayName() {
         return displayName;
+    }
+
+    /**
+     * What the payment processor is told this is.
+     *
+     * <p><b>Not the customer-facing name, and deliberately so.</b> "Sale of virtual
+     * currency" is on the prohibited-business list of most processors, Razorpay included,
+     * and the line item is what a risk reviewer reads. The business does not sell
+     * currency -- it sells the trading performed on the customer's own account -- and
+     * this is the string that has to say so, whatever the storefront calls the button.
+     *
+     * <p>Every other SKU describes itself the same way to both audiences.
+     */
+    public String gatewayName() {
+        return this == TRADING_SERVICE ? "FC coin trading service" : displayName;
     }
 
     public PriceUnit unit() {
