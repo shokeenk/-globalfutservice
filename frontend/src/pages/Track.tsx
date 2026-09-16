@@ -183,10 +183,17 @@ export function OrderView({
         <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
           <Detail label={t.track.total} value={order.totalFormatted} />
           <Detail label={t.track.placed} value={dateTime(order.createdAt)} />
-          <Detail
-            label={t.track.deliveryMethod}
-            value={order.deliveryMethod === 'COMFORT_TRADE' ? 'Comfort trade' : 'Transfer market'}
-          />
+          {/*
+            Named the way the checkout named it.
+
+            This row used to print the enum's own words -- "Transfer market", "Comfort
+            trade" -- while the checkout that sold the order called the same thing "GFS
+            Trading Method 3.0 (Latest)". One order, two names, and the second one arrives
+            after the money has gone. The enum still decides what happens; this decides
+            what it is called, and it answers per service, because "Transfer market" on a
+            boosting order was not a different name for the same thing but a wrong one.
+          */}
+          <Detail label={t.track.deliveryMethod} value={deliveryLabel(order, t)} />
         </dl>
 
         {order.lines.length > 0 && (
@@ -308,6 +315,20 @@ function NextAction({
     default:
       return null
   }
+}
+
+/**
+ * What this order's delivery is called, per service.
+ *
+ * <p>Coins are worked through the transfer market under the name the checkout uses.
+ * Boosting is somebody playing the account, and coaching is a booked session -- neither
+ * is a "method" of moving anything, and printing the coin wording on them was simply
+ * inaccurate.
+ */
+function deliveryLabel(order: Order, t: ReturnType<typeof useT>): string {
+  if (order.sku === 'COACHING') return t.track.deliveryCoaching
+  if (order.sku.startsWith('BOOST_')) return t.track.deliveryBoosting
+  return t.track.deliveryTrading
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
