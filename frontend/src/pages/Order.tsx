@@ -3,10 +3,11 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { ManualPayment } from '../components/ManualPayment'
 import { PageHeader } from '../components/PageHeader'
+import { EaSignInFields, validateEaSignIn } from '../components/EaSignInFields'
 import { PlatformCard } from '../components/PlatformCard'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
-  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, Select, SelectTile,
+  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, SelectTile,
   Skeleton, Spinner, StepCard,
 } from '../components/ui'
 import { useT } from '../i18n'
@@ -26,16 +27,6 @@ import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
 
 type Step = 'configure' | 'details' | 'paying' | 'placed'
-
-/**
- * The platforms a boosting order can be played on.
- *
- * <p>Two, not three. Xbox is missing because the boosters do not play on it, and the
- * API refuses the value as well -- a list here that the server would reject is a
- * checkout that fails after the customer has filled everything in. Adding Xbox is this
- * line plus the pattern on CreateOrderRequest.
- */
-const BOOST_PLATFORMS = ['PLAYSTATION', 'PC'] as const
 
 /** Where each non-coin service lives, for when the configurator cannot sell it. */
 const SERVICE_LANDING: Record<string, string> = {
@@ -72,7 +63,6 @@ export default function Order() {
    * is the one flat service that still needs to know where. It is asked here rather than
    * on Discord after payment, which is where it used to be asked.
    */
-  const isBoosting = (service?.sku ?? '').startsWith('BOOST_')
 
   /*
    * Named after whatever is being bought, not after coins.
@@ -95,14 +85,6 @@ export default function Order() {
   })
 
   const [platform, setPlatform] = useState<string>('')
-  /*
-   * Kept apart from `platform` above, which is the priced one: a coin rate card is per
-   * platform, a boosting tier costs the same everywhere. Mixing them would put a
-   * platform into the quote request for a SKU whose rate card has none, and that
-   * lookup finds nothing.
-   */
-  const [boostPlatform, setBoostPlatform] = useState<string>('')
-  const [pcLauncher, setPcLauncher] = useState<string>('')
   const [variant, setVariant] = useState<string>(params.get('variant') ?? '')
   const [quantity, setQuantity] = useState(3)
   // Accepts ?coupon= so a code can be shared as a link rather than typed off a stream.
@@ -130,18 +112,6 @@ export default function Order() {
     ? options.find((o) => o.variant === variant) ?? options[0]
     : options.find((o) => o.platform === platform) ?? options[0]
 
-  /*
-   * Why "Continue" is not available yet, or null when it is.
-   *
-   * The server refuses a boosting order with no platform, and refuses PC with no
-   * launcher. Catching it here means the customer is told at the step that asks rather
-   * than by an error on the page where they were about to pay.
-   */
-  const boostBlockedReason = !isBoosting || step !== 'configure'
-    ? null
-    : !boostPlatform ? t.order.boostPlatformNeeded
-      : boostPlatform === 'PC' && !pcLauncher ? t.order.launcherNeeded
-        : null
   const min = Number(selected?.minQuantity ?? 0.5)
   const max = Number(selected?.maxQuantity ?? 100)
   const stepSize = Number(selected?.stepQuantity ?? 0.5)
@@ -270,6 +240,23 @@ export default function Order() {
    * and the order endpoint now refuses a coaching order without them, so an old link here
    * is sent on rather than into a checkout that would fail at the last step.
    */
+  /*
+    Boosting has its own checkout, which asks the platform question a coin configurator
+    has no place for and which the order endpoint now requires. Links from the boosting
+    page, from old emails and from anywhere else land there instead of on a form that
+    would refuse them at the last step.
+  */
+  if (requestedSku.startsWith('BOOST_')) {
+    const wanted = params.get('variant')
+    return (
+      <Navigate
+        replace
+        to={`/boosting/checkout?service=${encodeURIComponent(requestedSku)}${
+          wanted ? `&variant=${encodeURIComponent(wanted)}` : ''}`}
+      />
+    )
+  }
+
   if (requestedSku === 'COACHING') {
     const wanted = params.get('variant')
     return <Navigate to={`/coaching/book${wanted ? `?variant=${encodeURIComponent(wanted)}` : ''}`} replace />
@@ -343,63 +330,9 @@ export default function Order() {
           {/* Trading only: boosting tiers and coaching packs have no account prerequisites. */}
           {step === 'configure' && !isFlat && <RequirementsPanel />}
 
-          {/*
-            Boosting only. Coaching asks for the platform in its own booking flow, and a
-            coin order's platform is priced, so it is a catalogue option rather than a
-            question.
-          */}
-          {step === 'configure' && isBoosting && (
-            <StepCard step={1} title={t.order.stepPlatform(1)}>
-              <p className="mb-3 text-body-sm text-chalk-muted">{t.order.boostPlatformHint}</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {BOOST_PLATFORMS.map((option) => (
-                  <PlatformCard
-                    key={option}
-                    platform={option}
-                    active={option === boostPlatform}
-                    onSelect={() => {
-                      setBoostPlatform(option)
-                      // A console order has no launcher, so a value picked before
-                      // switching must not survive the switch.
-                      if (option !== 'PC') setPcLauncher('')
-                    }}
-                    label={option === 'PC' ? t.order.boostPlatformPc : t.order.boostPlatformPlayStation}
-                  />
-                ))}
-              </div>
-
-              {/*
-                Revealed by the PC choice rather than always on screen: it is a real
-                question on PC and a meaningless one on console.
-              */}
-              {boostPlatform === 'PC' && (
-                <div className="mt-5 border-t border-ink-400 pt-5">
-                  <Field label={t.order.launcherLabel} hint={t.order.launcherHint} required>
-                    {(props) => (
-                      <Select
-                        {...props}
-                        value={pcLauncher}
-                        onChange={(e) => setPcLauncher(e.target.value)}
-                      >
-                        <option value="">{t.order.launcherPlaceholder}</option>
-                        <option value="STEAM">{t.order.launcherSteam}</option>
-                        <option value="EA_APP">{t.order.launcherEaApp}</option>
-                        <option value="EPIC">{t.order.launcherEpic}</option>
-                      </Select>
-                    )}
-                  </Field>
-                </div>
-              )}
-            </StepCard>
-          )}
-
           {step === 'configure' && (isFlat ? (
             /* Boosting tiers and coaching packs: one choice, no slider. */
-            <StepCard
-              step={isBoosting ? 2 : 1}
-              title={t.order.stepPackage(isBoosting ? 2 : 1,
-                labels.service(service?.sku, service?.displayName))}
-            >
+            <StepCard step={1} title={t.order.stepPackage(1, labels.service(service?.sku, service?.displayName))}>
               <div className="grid gap-3 sm:grid-cols-2">
                 {options.map((option) => (
                   <SelectTile
@@ -575,8 +508,6 @@ export default function Order() {
               step={step}
               setStep={setStep}
               onRequote={() => void fetchQuote()}
-              boostPlatform={boostPlatform}
-              pcLauncher={pcLauncher}
               pointsToRedeem={pointsToRedeem}
               setPointsToRedeem={setPointsToRedeem}
               maxRedeemable={maxRedeemable}
@@ -596,7 +527,6 @@ export default function Order() {
           step={step}
           setStep={setStep}
           onRequote={() => void fetchQuote()}
-          blockedReason={boostBlockedReason}
         />
       </div>
       </Section>
@@ -704,7 +634,7 @@ function AmountReadout({ quantity }: { quantity: number }) {
 
 function QuotePanel({
   quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
-  pointsToRedeem, setPointsToRedeem, maxRedeemable, blockedReason,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -717,8 +647,6 @@ function QuotePanel({
   pointsToRedeem: number
   setPointsToRedeem: (points: number) => void
   maxRedeemable: number
-  /** Why the order cannot be continued yet, shown under a disabled button. */
-  blockedReason?: string | null
 }) {
   const t = useT()
   const money = useMoney()
@@ -945,21 +873,9 @@ function QuotePanel({
               */}
               {step === 'configure' && (
                 account ? (
-                  <div className="space-y-2">
-                    <Button
-                      full
-                      size="lg"
-                      onClick={() => setStep('details')}
-                      disabled={Boolean(blockedReason)}
-                    >
-                      {t.order.continue}
-                    </Button>
-                    {blockedReason && (
-                      <p className="text-center text-[12.5px] leading-snug text-chalk-faint">
-                        {blockedReason}
-                      </p>
-                    )}
-                  </div>
+                  <Button full size="lg" onClick={() => setStep('details')}>
+                    {t.order.continue}
+                  </Button>
                 ) : (
                   <div className="space-y-2">
                     <ButtonLink
@@ -1056,7 +972,7 @@ function QuoteTimer({ expiresAt, onExpire }: { expiresAt: string; onExpire: () =
 /* ----------------------------------------------------------- checkout form --- */
 
 function CheckoutForm({
-  quote, step, setStep, onRequote, boostPlatform, pcLauncher,
+  quote, step, setStep, onRequote,
   pointsToRedeem, setPointsToRedeem, maxRedeemable,
 }: {
   quote: SignedQuote
@@ -1064,9 +980,6 @@ function CheckoutForm({
   setStep: (step: Step) => void
   onRequest?: never
   onRequote: () => void
-  /** Boosting only: chosen in the configurator, posted with the order. Empty otherwise. */
-  boostPlatform: string
-  pcLauncher: string
   /** The page's points state, so the balance panel here can spend them. */
   pointsToRedeem: number
   setPointsToRedeem: (points: number) => void
@@ -1151,7 +1064,7 @@ function CheckoutForm({
      * first costs nothing and means a malformed backup code never becomes an order.
      */
     if (needsCredentials) {
-      const found = validateCredentials(t, eaEmail, eaPassword, backupCodes)
+      const found = validateEaSignIn(t, eaEmail, eaPassword, backupCodes)
       setCredErrors(found)
       if (Object.keys(found).length > 0) {
         setFormError(t.order.fixFieldsError)
@@ -1177,13 +1090,6 @@ function CheckoutForm({
         eaPlatformHandle: null,
         // No longer asked here -- see BalancePanel. The sign-in form still takes one.
         note: null,
-        /*
-         * Boosting only. Null rather than an empty string everywhere else: the API
-         * pattern accepts "", but the column should say "not applicable" rather than
-         * "answered with nothing".
-         */
-        boostPlatform: boostPlatform || null,
-        pcLauncher: pcLauncher || null,
         acceptedTerms: true,
       })
       /*
@@ -2164,7 +2070,6 @@ function DeliveryInformation({
   errors: Record<string, string>
 }) {
   const t = useT()
-  const [showPassword, setShowPassword] = useState(false)
 
   const checks = [
     { text: t.order.deliveryCheck1, help: 'credentials' },
@@ -2219,111 +2124,17 @@ function DeliveryInformation({
         ))}
       </ol>
 
-      <Field label={t.track.credEmail} required hint={t.track.credEmailHint} error={errors.eaEmail}>
-        {(props) => (
-          <Input
-            {...props}
-            type="email"
-            value={eaEmail}
-            onChange={(e) => setEaEmail(e.target.value)}
-            placeholder={t.order.eaEmailPlaceholder}
-            autoComplete="off"
-          />
-        )}
-      </Field>
-
-      <Field label={t.track.credPassword} required hint={t.track.credPasswordHint} error={errors.eaPassword}>
-        {(props) => (
-          <div className="relative">
-            <Input
-              {...props}
-              type={showPassword ? 'text' : 'password'}
-              value={eaPassword}
-              onChange={(e) => setEaPassword(e.target.value)}
-              autoComplete="off"
-              data-1p-ignore
-              className="pr-16"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((on) => !on)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-edge px-2 py-1
-                         text-[11.5px] font-semibold text-chalk-muted hover:text-chalk
-                         focus-visible:outline focus-visible:outline-2
-                         focus-visible:outline-offset-2 focus-visible:outline-brand-400"
-            >
-              {showPassword ? t.track.credHide : t.track.credShow}
-            </button>
-          </div>
-        )}
-      </Field>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {backupCodes.map((code, index) => (
-          <Field
-            key={index}
-            label={t.track.credBackupCodeN(index + 1)}
-            required
-            error={errors[`backup${index}`]}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                value={code}
-                onChange={(e) => setBackupCodes(
-                  backupCodes.map((c, i) => (i === index ? e.target.value : c)),
-                )}
-                placeholder={t.order.backupCodePlaceholder}
-                inputMode="numeric"
-                maxLength={8}
-                /*
-                  `off` plus `data-1p-ignore`: a password manager offering to save a
-                  one-time code would keep a value that is worthless by the time it is
-                  offered back, and long after the vault has purged its own copy.
-                */
-                autoComplete="off"
-                data-1p-ignore
-                spellCheck={false}
-                className="tnum"
-              />
-            )}
-          </Field>
-        ))}
-      </div>
+      <EaSignInFields
+        eaEmail={eaEmail}
+        setEaEmail={setEaEmail}
+        eaPassword={eaPassword}
+        setEaPassword={setEaPassword}
+        backupCodes={backupCodes}
+        setBackupCodes={setBackupCodes}
+        errors={errors}
+      />
     </div>
   )
-}
-
-/**
- * What is wrong with the sign-in, field by field.
- *
- * <p>Empty and malformed are different failures and get different messages: a customer who
- * typed seven digits has done something, and telling them the field is required says the
- * opposite of what happened. Backup codes are exactly eight digits — that is EA's format,
- * not a house rule — so anything else is rejected before it can be sealed into the vault
- * and found to be useless by a trader at three in the morning.
- */
-function validateCredentials(
-  t: ReturnType<typeof useT>,
-  eaEmail: string,
-  eaPassword: string,
-  backupCodes: string[],
-): Record<string, string> {
-  const errors: Record<string, string> = {}
-  if (!eaEmail.trim()) errors.eaEmail = t.order.errEaEmail
-  if (!eaPassword) errors.eaPassword = t.order.errEaPassword
-  // Eight is the fulfilment partner's minimum. Caught here so it is a correction while
-  // the customer is typing, rather than a refused order after they have paid.
-  else if (eaPassword.length < 8) errors.eaPassword = t.order.errEaPasswordShort
-  backupCodes.forEach((code, index) => {
-    const value = code.trim()
-    if (!value) {
-      errors[`backup${index}`] = t.order.errBackupCode(index + 1)
-    } else if (!/^\d{8}$/.test(value)) {
-      errors[`backup${index}`] = t.order.errBackupCodeFormat(index + 1)
-    }
-  })
-  return errors
 }
 
 /* ------------------------------------------------------------ payment step --- */

@@ -1090,6 +1090,104 @@ const es: Dictionary = {
     ctaButton: 'Reserva tu sesión',
     tagline: 'Juega con cabeza. Mejora a propósito.',
   },
+  boostingCheckout: {
+    seoTitle: 'Pago del boosting',
+    secureCheckout: 'Pago seguro',
+    secureLead: 'Completa tu compra para empezar',
+    stepDetails: 'Datos',
+    stepPayment: 'Pago',
+    stepConfirmation: 'Confirmación',
+
+    signInTitle: 'Inicia sesión para hacer este pedido',
+    signInBody: 'Los pedidos de boosting se hacen desde una cuenta, así el pedido y tus puntos se quedan contigo.',
+    signInCta: 'Inicia sesión para continuar',
+
+    platformTitle: 'Elige la plataforma',
+    platformLead: 'Elige la plataforma en la que juegas para este servicio.',
+    playstation: 'PlayStation',
+    playstationSub: 'Juegas en PlayStation',
+    pc: 'PC',
+    pcSub: 'Elige tu plataforma de PC',
+    psNote: 'En PlayStation no hace falta elegir nada más.',
+    pcTitle: 'Elige la plataforma de PC',
+    pcLead: 'Elige la plataforma a la que está vinculada tu cuenta de EA FC.',
+    steam: 'Steam',
+    steamSub: 'Juegas en Steam',
+    eaApp: 'EA App',
+    eaAppSub: 'Juegas en EA App',
+    epic: 'Epic Games',
+    epicSub: 'Juegas en Epic Games',
+    pcNote: 'Asegúrate de elegir la plataforma correcta. Así procesamos tu pedido más rápido.',
+    needPlatform: 'Elige una plataforma para continuar.',
+    needLauncher: 'Elige dónde juegas en PC para continuar.',
+
+    signInSectionTitle: 'Tu inicio de sesión de EA',
+    signInSectionLead:
+      'Alguien juega estas partidas en tu cuenta, así que necesitamos entrar. Se cifra con '
+      + 'una clave única para este pedido, solo la abre quien juega tu pedido y se destruye '
+      + 'al terminar. Nunca lo envíes por Discord.',
+
+    continueToPayment: 'Continuar al pago',
+    termsLead: 'Al continuar aceptas nuestros',
+    termsTerms: 'Términos del servicio',
+    termsPrivacy: 'Política de privacidad',
+    termsAnd: 'y',
+    termsAml: 'Política AML y KYC',
+
+    orderTitle: 'Tu pedido',
+    edit: 'Editar',
+    couponPlaceholder: 'Introduce un código',
+    apply: 'Aplicar',
+    rewardsTitle: 'Recompensas',
+    total: 'Total',
+    trustSecureTitle: 'Pago seguro',
+    trustSecureBody: 'Tus datos están a salvo con nosotros',
+    trustFastTitle: 'Proceso rápido',
+    trustFastBody: 'Empezamos enseguida tras el pago',
+    trustSupportTitle: 'Soporte 24/7',
+    trustSupportBody: 'Estamos aquí para ayudarte',
+
+    payTitle: '¿Cómo quieres pagar?',
+    payOnlineTitle: 'Pagar online',
+    payOnlineBody: 'Tarjeta, UPI o banca online a través de la pasarela.',
+    payUpiTitle: 'UPI',
+    payUpiBody: 'Escanea el código y envíanos la referencia.',
+    payPaypalTitle: 'PayPal',
+    payPaypalBody: 'Haz el pago y comparte el id de la transacción.',
+    payCryptoTitle: 'Cripto',
+    payCryptoBody: 'Envía a la dirección indicada y comparte el hash.',
+
+    processingTitle: 'Confirmando tu pago',
+    processingBody: 'Tarda unos segundos. No cierres esta página.',
+
+    confirmedTitle: '¡Pedido confirmado!',
+    confirmedBody: 'Tu pago se ha completado.',
+    confirmedLead:
+      'Hemos enviado los detalles a tu correo y nuestro equipo ya está avisado. Únete a '
+      + 'nuestro Discord para hablar con quien lleva tu pedido y seguir su avance.',
+    submittedTitle: 'Pago enviado',
+    submittedBody: 'Lo estamos comprobando en nuestra cuenta.',
+    submittedLead:
+      'Tu pedido está hecho y nuestro equipo ya está avisado. Confirmamos el pago a mano, '
+      + 'normalmente en minutos, y esta página se actualiza sola cuando llega. Únete a '
+      + 'nuestro Discord para hablar con quien lleva tu pedido.',
+    joinDiscord: 'Únete a nuestro Discord',
+    joinCaption: 'Pulsa el botón para entrar; nuestro equipo atenderá allí tu pedido.',
+    orderId: 'Nº de pedido',
+    service: 'Servicio',
+    platformLabel: 'Plataforma',
+    amountPaid: 'Importe pagado',
+    amount: 'Importe',
+    statusVerifying: 'Comprobando',
+    needHelp: '¿Necesitas ayuda?',
+    joinOurDiscord: 'Únete a nuestro Discord',
+    orWord: 'o',
+    contactSupport: 'contacta con soporte',
+
+    loadFailed: 'No hemos podido cargar ese pedido. Revisa el enlace o contacta con soporte.',
+    placeFailed: 'No hemos podido crear el pedido. Inténtalo de nuevo o contacta con soporte.',
+  },
+
   coachingBook: {
     seoTitle: 'Reservar clases',
     back: 'Atrás',

@@ -85,7 +85,7 @@ export default function Boosting() {
                     problem entirely, and the arrow just indicates direction.
                   */}
                   <Link
-                    to={`/order?service=${tab}&variant=${tier.variant}`}
+                    to={`/boosting/checkout?service=${tab}&variant=${tier.variant}`}
                     className={[
                       'group relative flex h-full flex-col overflow-hidden rounded-panel border p-6',
                       'transition-[transform,border-color,background-color,box-shadow] duration-500',
