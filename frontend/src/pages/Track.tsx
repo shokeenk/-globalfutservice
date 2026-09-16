@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CredentialForm } from '../components/CredentialForm'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Button, Field, Input, Section } from '../components/ui'
+import { Alert, Badge, Button, Field, Input, Section, Skeleton } from '../components/ui'
 import type { BadgeTone } from '../components/ui'
+import { BUSINESS } from '../content/business'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { ApiError, api } from '../lib/api'
 import { dateTime } from '../lib/format'
 import { useSeo } from '../lib/seo'
-import type { Order } from '../lib/types'
+import type { Order, OrderSummary } from '../lib/types'
 import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
 
@@ -29,15 +30,26 @@ export default function Track() {
    *
    * The account page links straight here with `?ref=`, and a signed-in customer's
    * email is already known — so for the common case ("where is the order I just
-   * placed?") there is nothing left to type. Typing a reference you were shown two
-   * seconds ago into a box is exactly the kind of small indignity that makes a
-   * product feel unfinished.
+   * placed?") there is nothing left to type.
    */
   const [publicRef, setPublicRef] = useState(() => (params.get('ref') ?? '').toUpperCase())
   const [email, setEmail] = useState(account?.email ?? '')
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /*
+   * A signed-in customer gets their orders, not a box asking for a reference.
+   *
+   * The reference lookup is what a guest has -- no account, no list to show -- so it
+   * stays, one click away, rather than being the front door for everybody. Somebody who
+   * has just paid and wants to know where the order is should not have to find a
+   * reference to ask about an order we already know is theirs.
+   */
+  const signedIn = !!account
+  const [mine, setMine] = useState<OrderSummary[] | null>(null)
+  const [tab, setTab] = useState<Tab>('ALL')
+  const [showLookup, setShowLookup] = useState(false)
 
   const lookup = useCallback(async (ref: string, mail: string) => {
     setLoading(true)
@@ -55,6 +67,26 @@ export default function Track() {
     }
   }, [])
 
+  /** One order, by reference, for a customer who owns it. */
+  const openOrder = useCallback(async (ref: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      setOrder(await api.get<Order>(`/api/v1/orders/${encodeURIComponent(ref)}`))
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'We could not open that order.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadMine = useCallback(() => {
+    if (!signedIn) return
+    api.get<OrderSummary[]>('/api/v1/orders').then(setMine).catch(() => setMine([]))
+  }, [signedIn])
+
+  useEffect(loadMine, [loadMine])
+
   // The session resolves after first paint, so pick the email up when it lands —
   // but never overwrite something the visitor has already typed.
   const touchedEmail = useRef(false)
@@ -63,19 +95,165 @@ export default function Track() {
   }, [account?.email, email])
 
   /*
-   * Auto-lookup, exactly once, and only when the page was opened with both halves
-   * already known. Guarded by a ref rather than by state so a re-render cannot fire
-   * a second request — and deliberately not re-run when the fields change, because
-   * looking up on every keystroke would hammer an endpoint that takes an email
-   * address as an argument.
+   * Auto-open, exactly once, when the page was opened pointing at an order. Signed in
+   * that is a plain fetch; as a guest it needs the email as well, which the session
+   * supplies or the form asks for.
    */
   const autoRan = useRef(false)
   useEffect(() => {
     const ref = params.get('ref')
-    if (autoRan.current || !ref || !account?.email) return
-    autoRan.current = true
-    void lookup(ref, account.email)
-  }, [params, account?.email, lookup])
+    if (autoRan.current || !ref) return
+    // Keyed on `account` itself rather than the boolean, so the guest branch still
+    // knows the session may carry an email.
+    if (account) {
+      autoRan.current = true
+      void openOrder(ref)
+    } else if (email.trim()) {
+      autoRan.current = true
+      void lookup(ref, email)
+    }
+  }, [params, account, email, lookup, openOrder])
+
+  /*
+   * The page keeps itself current.
+   *
+   * An order moves because somebody else acted -- an operator verified a payment, a
+   * trader finished. Polling every 20 seconds, and again whenever the tab is brought
+   * back to the front, means the customer never has to wonder whether what they are
+   * looking at is still true. Stops once the order is finished, which is the point
+   * after which nothing changes.
+   */
+  useEffect(() => {
+    if (!order || ['COMPLETED', 'ABANDONED', 'REFUNDED', 'CREDITED'].includes(order.status)) return
+    const ref = order.publicRef
+    const refresh = () => {
+      if (signedIn) {
+        api.get<Order>(`/api/v1/orders/${encodeURIComponent(ref)}`).then(setOrder).catch(() => {})
+      } else if (email.trim()) {
+        api.post<Order>('/api/v1/orders/track', { publicRef: ref, email: email.trim() })
+          .then(setOrder).catch(() => {})
+      }
+    }
+    const timer = window.setInterval(refresh, 20_000)
+    const onFocus = () => refresh()
+    window.addEventListener('focus', onFocus)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
+  }, [order, signedIn, email])
+
+  const visible = (mine ?? []).filter((row) => {
+    if (tab === 'ALL') return true
+    if (tab === 'COMPLETED') return row.status === 'COMPLETED' || row.status === 'DELIVERED'
+    if (tab === 'TRADING') return row.sku === 'TRADING_SERVICE'
+    if (tab === 'COACHING') return row.sku === 'COACHING'
+    return row.sku.startsWith('BOOST_')
+  })
+
+  const lookupForm = (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void lookup(publicRef, email)
+      }}
+    >
+      <Field label={t.track.reference} required>
+        {(props) => (
+          <Input
+            {...props}
+            value={publicRef}
+            placeholder="GFS-26-XXXXXXXX"
+            autoComplete="off"
+            className="tnum"
+            onChange={(e) => setPublicRef(e.target.value.toUpperCase())}
+          />
+        )}
+      </Field>
+      <Field label={t.track.email} required>
+        {(props) => (
+          <Input
+            {...props}
+            type="email"
+            value={email}
+            placeholder="you@example.com"
+            autoComplete="email"
+            onChange={(e) => {
+              touchedEmail.current = true
+              setEmail(e.target.value)
+            }}
+          />
+        )}
+      </Field>
+      {error && <Alert tone="warn">{error}</Alert>}
+      {/* A real submit button inside a real form: Enter works from either field. */}
+      <Button type="submit" full loading={loading} disabled={!publicRef || !email}>
+        {t.track.find}
+      </Button>
+    </form>
+  )
+
+  /* ---------------------------------------------------------- signed in ------ */
+
+  if (signedIn) {
+    return (
+      <>
+        <PageHeader eyebrow={t.track.eyebrow} title={t.track.myOrdersTitle} lead={t.track.myOrdersLead} />
+
+        <Section className="rhythm-section">
+          {order ? (
+            <div className="space-y-5">
+              <button
+                type="button"
+                onClick={() => { setOrder(null); loadMine() }}
+                className="inline-flex items-center gap-2 text-body-sm font-semibold text-brand-400
+                           hover:underline focus-visible:outline focus-visible:outline-2
+                           focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+              >
+                <span aria-hidden="true">&larr;</span> {t.track.backToOrders}
+              </button>
+              <OrderView order={order} signedIn onSubmitted={setOrder} />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <OrderTabs current={tab} onTab={setTab} />
+
+              {error && <Alert tone="warn">{error}</Alert>}
+
+              {!mine && <Skeleton className="h-40 w-full" />}
+
+              {mine && visible.length === 0 && (
+                <div className="plate grid min-h-[220px] place-items-center p-10 text-center">
+                  <p className="text-body-sm text-chalk-faint">
+                    {mine.length === 0 ? t.track.noOrdersYet : t.track.noOrdersInTab}
+                  </p>
+                </div>
+              )}
+
+              {visible.length > 0 && (
+                <ul className="space-y-3">
+                  {visible.map((row) => (
+                    <OrderRow key={row.publicRef} row={row} onOpen={() => void openOrder(row.publicRef)} />
+                  ))}
+                </ul>
+              )}
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLookup((on) => !on)}
+                  className="text-[12.5px] font-semibold text-chalk-muted underline-offset-2 hover:underline"
+                >
+                  {showLookup ? t.track.guestLookupClose : t.track.guestLookupOpen}
+                </button>
+                {showLookup && <div className="surface mt-3 max-w-md p-6">{lookupForm}</div>}
+              </div>
+            </div>
+          )}
+        </Section>
+      </>
+    )
+  }
+
+  /* ------------------------------------------------------------- guests ------ */
 
   return (
     <>
@@ -83,59 +261,14 @@ export default function Track() {
 
       <Section className="rhythm-section">
         <div className="grid gap-5 lg:grid-cols-[380px_1fr] lg:items-start">
-          <Reveal className="surface p-6 lg:sticky lg:top-[88px]">
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void lookup(publicRef, email)
-              }}
-            >
-              <Field label={t.track.reference} required>
-                {(props) => (
-                  <Input
-                    {...props}
-                    value={publicRef}
-                    placeholder="GFS-26-XXXXXXXX"
-                    autoComplete="off"
-                    className="tnum"
-                    onChange={(e) => setPublicRef(e.target.value.toUpperCase())}
-                  />
-                )}
-              </Field>
-              <Field label={t.track.email} required>
-                {(props) => (
-                  <Input
-                    {...props}
-                    type="email"
-                    value={email}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    onChange={(e) => {
-                      touchedEmail.current = true
-                      setEmail(e.target.value)
-                    }}
-                  />
-                )}
-              </Field>
-              {error && <Alert tone="warn">{error}</Alert>}
-              {/* A real submit button inside a real form: Enter works from either
-                  field, which is how anyone actually uses a two-box lookup. */}
-              <Button type="submit" full loading={loading} disabled={!publicRef || !email}>
-                {t.track.find}
-              </Button>
-            </form>
-          </Reveal>
+          <Reveal className="surface p-6 lg:sticky lg:top-[88px]">{lookupForm}</Reveal>
 
           {order ? (
-            <OrderView order={order} signedIn={!!account} onSubmitted={setOrder} />
+            <OrderView order={order} signedIn={false} onSubmitted={setOrder} />
           ) : (
             <div className="plate grid min-h-[300px] place-items-center p-10 text-center">
               <div>
-                <span
-                  aria-hidden="true"
-                  className="mx-auto mb-5 block h-px w-10 bg-brand-500"
-                />
+                <span aria-hidden="true" className="mx-auto mb-5 block h-px w-10 bg-brand-500" />
                 <p className="measure-tight mx-auto text-body-sm leading-relaxed text-chalk-faint">
                   {t.track.emptyHint}
                 </p>
@@ -145,6 +278,160 @@ export default function Track() {
         </div>
       </Section>
     </>
+  )
+}
+
+/**
+ * Where the conversation about this order happens.
+ *
+ * <p>Shown once the money is in and while there is still work to do -- which is exactly
+ * the window in which a customer has something to say to the team and the team has
+ * something to ask. Before payment the next action is to pay; after completion there is
+ * nothing to coordinate, and a live "talk to us" panel on a finished order invites
+ * questions the page has already answered.
+ *
+ * <p>It opens the shared orders channel rather than a per-order one. The bot does open a
+ * ticket channel for every payment, but those live in the staff category and a customer
+ * following a link to one would meet an error rather than their ticket -- so this sends
+ * them where they can actually be answered, with the reference to quote.
+ */
+function DiscordTicket({ order }: { order: Order }) {
+  const t = useT()
+  const open = ['PAID', 'CREDENTIALS_PENDING', 'READY_FOR_DELIVERY', 'IN_PROGRESS', 'ON_HOLD', 'DELIVERED']
+    .includes(order.status)
+  if (!open) return null
+
+  return (
+    <div className="rounded-panel border border-[#5865F2]/30 bg-[#5865F2]/[0.06] p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#5865F2] text-paper">
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+            <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13.5px] font-semibold text-chalk">{t.track.discordTicketTitle}</p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-chalk-muted">
+            {t.track.discordTicketBody}
+          </p>
+        </div>
+        <a
+          href={BUSINESS.discordOrdersChannel}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-10 shrink-0 items-center rounded-edge bg-brand-500 px-4 text-[12.5px]
+                     font-semibold text-paper transition-colors duration-200 hover:bg-brand-400
+                     focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                     focus-visible:outline-brand-400"
+        >
+          {t.track.discordTicketCta}
+        </a>
+      </div>
+      <p className="mt-2 text-[11.5px] text-chalk-faint">{t.track.discordTicketQuote(order.publicRef)}</p>
+    </div>
+  )
+}
+
+/**
+ * The stages this order has not reached yet, in the order it will reach them.
+ *
+ * <p>Derived from what has already happened rather than from a fixed list: an order that
+ * never needed a sign-in should not be shown a sign-in stage it will skip, and one that
+ * is finished has nothing ahead of it.
+ */
+function upcomingStages(order: Order, t: ReturnType<typeof useT>): string[] {
+  const done = new Set(order.timeline.map((event) => event.toStatus))
+  const ahead: string[] = []
+  if (!done.has('PAID')) ahead.push(t.track.stagePaymentVerified)
+  if (!done.has('READY_FOR_DELIVERY')) ahead.push(t.track.stageQueued)
+  if (!done.has('IN_PROGRESS')) ahead.push(t.track.stageInProgress)
+  if (!done.has('COMPLETED') && !done.has('DELIVERED')) ahead.push(t.track.stageCompleted)
+  return ['COMPLETED', 'ABANDONED', 'REFUNDED', 'CREDITED'].includes(order.status) ? [] : ahead
+}
+
+/* ------------------------------------------------------------- order list --- */
+
+type Tab = 'ALL' | 'BOOSTING' | 'COACHING' | 'TRADING' | 'COMPLETED'
+
+function OrderTabs({ current, onTab }: { current: Tab; onTab: (next: Tab) => void }) {
+  const t = useT()
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'ALL', label: t.track.tabAll },
+    { id: 'BOOSTING', label: t.track.tabBoosting },
+    { id: 'COACHING', label: t.track.tabCoaching },
+    { id: 'TRADING', label: t.track.tabTrading },
+    { id: 'COMPLETED', label: t.track.tabCompleted },
+  ]
+  return (
+    <div role="tablist" aria-label={t.track.myOrdersTitle} className="flex flex-wrap gap-2">
+      {tabs.map((entry) => (
+        <button
+          key={entry.id}
+          type="button"
+          role="tab"
+          aria-selected={current === entry.id}
+          onClick={() => onTab(entry.id)}
+          className={[
+            'h-9 rounded-edge px-4 text-[12.5px] font-semibold transition-colors duration-200',
+            current === entry.id
+              ? 'bg-brand-500 text-paper'
+              : 'bg-ink-700 text-chalk-muted hover:text-chalk',
+          ].join(' ')}
+        >
+          {entry.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * One order, as a row: what it is, where it has got to, and the way in.
+ *
+ * <p>The service type is a coloured tag rather than a word in the title, because the
+ * question a customer scanning this list is answering is "which of these is my coaching
+ * order" — and that is a shape-and-colour question, not a reading one.
+ */
+function OrderRow({ row, onOpen }: { row: OrderSummary; onOpen: () => void }) {
+  const t = useT()
+  return (
+    <li className="hairline flex flex-wrap items-center gap-x-4 gap-y-3 rounded-panel bg-paper p-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ServiceTag sku={row.sku} />
+          <p className="tnum text-[13.5px] font-semibold text-chalk">{row.publicRef}</p>
+        </div>
+        <p className="mt-1 text-[12.5px] text-chalk-muted">{row.serviceLabel}</p>
+        <p className="mt-0.5 text-[11.5px] text-chalk-faint">{dateTime(row.createdAt)}</p>
+      </div>
+
+      <Badge tone={statusTone(row.status)}>{row.statusLabel}</Badge>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-400
+                   hover:underline focus-visible:outline focus-visible:outline-2
+                   focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+      >
+        {t.track.viewDetails} <span aria-hidden="true">&rarr;</span>
+      </button>
+    </li>
+  )
+}
+
+/** The service, as a coloured tag. Same three colours the operator console uses. */
+export function ServiceTag({ sku }: { sku: string }) {
+  const tone = sku === 'COACHING'
+    ? 'border-deep/30 bg-deep/[0.08] text-deep'
+    : sku.startsWith('BOOST_')
+      ? 'border-brand-500/30 bg-brand-500/[0.08] text-brand-500'
+      : 'border-sun-600/40 bg-sun-500/[0.14] text-sun-700'
+  const label = sku === 'COACHING' ? 'COACHING' : sku.startsWith('BOOST_') ? 'BOOSTING' : 'TRADING'
+  return (
+    <span className={`rounded-edge border px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] ${tone}`}>
+      {label}
+    </span>
   )
 }
 
@@ -177,6 +464,8 @@ export function OrderView({
 
       <div className="space-y-7 p-6">
         <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} />
+
+        <DiscordTicket order={order} />
 
         <SupplierProgress order={order} />
 
@@ -223,6 +512,19 @@ export function OrderView({
             marked in brand and the rest hollow, says these are stages of one thing
             and shows where it has got to.
           */}
+          {/*
+            The marker sits on the stage the order has actually reached.
+
+            It used to sit on `index === 0`, and the events arrive oldest first — so the
+            dot stayed on "Order created" while the order went through payment, checking
+            and delivery. The bar looked stuck because it was reading the wrong end of
+            the list.
+
+            Stages the order has not reached yet are listed too, greyed and without a
+            time. A timeline that ends at wherever the order happens to be answers
+            "where is it?" but not "what happens next?", which is the question somebody
+            opens this page to ask.
+          */}
           <ol className="relative space-y-4 pl-6">
             <span
               aria-hidden="true"
@@ -235,13 +537,23 @@ export function OrderView({
                   aria-hidden="true"
                   className={[
                     'absolute -left-6 top-[5px] h-2 w-2 rounded-full',
-                    index === 0
+                    index === order.timeline.length - 1
                       ? 'bg-brand-500 shadow-[0_0_0_3px_theme(colors.red.ring)]'
                       : 'border border-ink-300 bg-ink',
                   ].join(' ')}
                 />
                 <p className="text-[13px] text-chalk">{event.reason ?? event.toStatus}</p>
                 <p className="text-[11.5px] text-chalk-faint">{dateTime(event.at)}</p>
+              </li>
+            ))}
+            {upcomingStages(order, t).map((stage) => (
+              <li key={stage} className="relative">
+                <span
+                  aria-hidden="true"
+                  className="absolute -left-6 top-[5px] h-2 w-2 rounded-full border border-ink-300 bg-ink"
+                />
+                <p className="text-[13px] text-chalk-faint">{stage}</p>
+                <p className="text-[11.5px] text-chalk-faint">&mdash;</p>
               </li>
             ))}
           </ol>

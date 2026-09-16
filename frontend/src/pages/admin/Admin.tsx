@@ -6,7 +6,7 @@ import { api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { AdminStats, OrderSummary } from '../../lib/types'
-import { statusTone } from '../Track'
+import { ServiceTag, statusTone } from '../Track'
 import { PaymentClaims } from './PaymentClaims'
 
 /**
@@ -240,7 +240,19 @@ export default function Admin() {
                       {order.publicRef}
                     </Link>
                   </td>
-                  <td className="px-4 py-3.5 text-chalk-muted">{order.serviceLabel}</td>
+                  {/*
+                    The service as a coloured tag, not only as words in the label.
+                    A coaching order among fifty coin orders was identifiable only by
+                    reading each row; this is the same three colours the customer's own
+                    order list uses, so an operator on the phone to a customer is looking
+                    at the same marker they are.
+                  */}
+                  <td className="px-4 py-3.5 text-chalk-muted">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <ServiceTag sku={order.sku} />
+                      {order.serviceLabel}
+                    </span>
+                  </td>
                   <td className="px-4 py-3.5 text-chalk-muted">{order.customerEmail ?? '—'}</td>
                   {/*
                     Method and the held-sign-in flag on one line that cannot break.

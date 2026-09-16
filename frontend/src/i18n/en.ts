@@ -493,6 +493,35 @@ const en = {
 
 
   track: {
+    stagePaymentVerified: 'Payment verified',
+    stageQueued: 'Queued for delivery',
+    stageInProgress: 'In progress',
+    stageCompleted: 'Completed',
+    /*
+     * The order list, which is what "track my order" means for somebody with an account:
+     * their orders, not a box asking for a reference they were shown once. The manual
+     * lookup stays for guests, who have no list to show.
+     */
+    myOrdersTitle: 'My Orders',
+    myOrdersLead: 'View and track all your orders in one place.',
+    tabAll: 'All Orders',
+    tabBoosting: 'Boosting',
+    tabCoaching: 'Coaching',
+    tabTrading: 'Trading',
+    tabCompleted: 'Completed',
+    viewDetails: 'View Details',
+    backToOrders: 'Back to my orders',
+    noOrdersYet: 'No orders yet. Your first one will show up here.',
+    noOrdersInTab: 'Nothing here yet.',
+    guestLookupOpen: 'Looking for an order placed without an account?',
+    guestLookupClose: 'Hide the reference lookup',
+    orderList: 'Order List',
+    refreshedLive: 'This page updates itself.',
+    discordTicketTitle: 'Join Your Discord Ticket',
+    discordTicketBody: 'Continue your order on Discord. Our team is ready to assist you.',
+    discordTicketCta: 'Open Discord',
+    discordTicketCreated: 'Your ticket has been created!',
+    discordTicketQuote: (ref: string) => `Quote your order number, ${ref}, and the team will pick it up.`,
     seoTitle: 'Track your order',
     eyebrow: 'Order status',
     title: 'Where is my order?',
@@ -1292,11 +1321,14 @@ const en = {
     needPlatform: 'Choose a platform to continue.',
     needLauncher: 'Choose where you play on PC to continue.',
 
-    signInSectionTitle: 'Your EA sign-in',
-    signInSectionLead:
-      'Somebody plays these games on your account, so we need to sign in. It is encrypted '
-      + 'with a key unique to this order, opened only by the player working it, and destroyed '
-      + 'when the order is done. Never send it over Discord.',
+    discordDetailsTitle: 'Account Details via Discord',
+    discordDetailsLead: 'For your security, we do not collect EA login details on the website.',
+    discordDetailsCallout: 'After payment, you will be connected to our team on Discord.',
+    discordDetailsPoint1: 'Your EA login details will only be requested in your private Discord ticket.',
+    discordDetailsPoint2: 'Our team will guide you step by step.',
+    discordDetailsPoint3: 'This keeps your account safe and secure.',
+    afterPaymentNote: 'Place your order to continue. After payment you will be taken to Discord to finish setting up.',
+    ticketCreated: 'Your ticket has been created!',
 
     continueToPayment: 'Continue to Payment',
     termsLead: 'By continuing you agree to our',
@@ -1333,9 +1365,10 @@ const en = {
 
     confirmedTitle: 'Order Confirmed!',
     confirmedBody: 'Your payment has been successful.',
+    confirmedEmailed: 'We have sent the details to your email.',
     confirmedLead:
-      'We have sent the details to your email and our team has been notified. Join our '
-      + 'Discord server to talk to the player handling your order and follow its progress.',
+      'Our team has been notified. Join our Discord server to talk to the player handling '
+      + 'your order and follow its progress.',
     submittedTitle: 'Payment submitted',
     submittedBody: 'We are checking it against our account now.',
     submittedLead:
