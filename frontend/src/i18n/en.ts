@@ -697,6 +697,22 @@ const en = {
     stepPackage: (_n: number, service: string) => service,
     stepPlatform: (_n: number) => 'Platform',
     stepAmount: (_n: number) => 'Amount',
+    /*
+     * Boosting only. A booster signs in and plays, so the account has to be reachable:
+     * the platform, and on PC the launcher, because the same account opened through
+     * Steam and through the EA app is two different sign-ins.
+     */
+    boostPlatformHint: 'The account the booster will sign in to.',
+    boostPlatformPlayStation: 'PlayStation',
+    boostPlatformPc: 'PC',
+    boostPlatformNeeded: 'Choose a platform to continue.',
+    launcherLabel: 'Which launcher do you play FC on?',
+    launcherHint: 'A PC sign-in differs by launcher, so the booster needs the right one.',
+    launcherPlaceholder: 'Select your launcher',
+    launcherSteam: 'Steam',
+    launcherEaApp: 'EA app',
+    launcherEpic: 'Epic Games',
+    launcherNeeded: 'Choose your launcher to continue.',
     stepDiscounts: (_n: number) => 'Discounts',
     perMillion: '/ million',
     // The trading proposition, in the three places a price appears. Kept short: it sits

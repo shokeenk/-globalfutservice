@@ -6,7 +6,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PlatformCard } from '../components/PlatformCard'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
-  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, SelectTile,
+  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, Select, SelectTile,
   Skeleton, Spinner, StepCard,
 } from '../components/ui'
 import { useT } from '../i18n'
@@ -26,6 +26,16 @@ import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
 
 type Step = 'configure' | 'details' | 'paying' | 'placed'
+
+/**
+ * The platforms a boosting order can be played on.
+ *
+ * <p>Two, not three. Xbox is missing because the boosters do not play on it, and the
+ * API refuses the value as well -- a list here that the server would reject is a
+ * checkout that fails after the customer has filled everything in. Adding Xbox is this
+ * line plus the pattern on CreateOrderRequest.
+ */
+const BOOST_PLATFORMS = ['PLAYSTATION', 'PC'] as const
 
 /** Where each non-coin service lives, for when the configurator cannot sell it. */
 const SERVICE_LANDING: Record<string, string> = {
@@ -57,6 +67,12 @@ export default function Order() {
     catalog?.services.find((s) => s.sku === 'TRADING_SERVICE')
   const options = useMemo(() => service?.options ?? [], [service])
   const isFlat = service?.priceUnit === 'FLAT'
+  /*
+   * Boosting is flat-priced like coaching, but somebody has to sign in and play, so it
+   * is the one flat service that still needs to know where. It is asked here rather than
+   * on Discord after payment, which is where it used to be asked.
+   */
+  const isBoosting = (service?.sku ?? '').startsWith('BOOST_')
 
   /*
    * Named after whatever is being bought, not after coins.
@@ -79,6 +95,14 @@ export default function Order() {
   })
 
   const [platform, setPlatform] = useState<string>('')
+  /*
+   * Kept apart from `platform` above, which is the priced one: a coin rate card is per
+   * platform, a boosting tier costs the same everywhere. Mixing them would put a
+   * platform into the quote request for a SKU whose rate card has none, and that
+   * lookup finds nothing.
+   */
+  const [boostPlatform, setBoostPlatform] = useState<string>('')
+  const [pcLauncher, setPcLauncher] = useState<string>('')
   const [variant, setVariant] = useState<string>(params.get('variant') ?? '')
   const [quantity, setQuantity] = useState(3)
   // Accepts ?coupon= so a code can be shared as a link rather than typed off a stream.
@@ -105,6 +129,19 @@ export default function Order() {
   const selected = isFlat
     ? options.find((o) => o.variant === variant) ?? options[0]
     : options.find((o) => o.platform === platform) ?? options[0]
+
+  /*
+   * Why "Continue" is not available yet, or null when it is.
+   *
+   * The server refuses a boosting order with no platform, and refuses PC with no
+   * launcher. Catching it here means the customer is told at the step that asks rather
+   * than by an error on the page where they were about to pay.
+   */
+  const boostBlockedReason = !isBoosting || step !== 'configure'
+    ? null
+    : !boostPlatform ? t.order.boostPlatformNeeded
+      : boostPlatform === 'PC' && !pcLauncher ? t.order.launcherNeeded
+        : null
   const min = Number(selected?.minQuantity ?? 0.5)
   const max = Number(selected?.maxQuantity ?? 100)
   const stepSize = Number(selected?.stepQuantity ?? 0.5)
@@ -306,9 +343,63 @@ export default function Order() {
           {/* Trading only: boosting tiers and coaching packs have no account prerequisites. */}
           {step === 'configure' && !isFlat && <RequirementsPanel />}
 
+          {/*
+            Boosting only. Coaching asks for the platform in its own booking flow, and a
+            coin order's platform is priced, so it is a catalogue option rather than a
+            question.
+          */}
+          {step === 'configure' && isBoosting && (
+            <StepCard step={1} title={t.order.stepPlatform(1)}>
+              <p className="mb-3 text-body-sm text-chalk-muted">{t.order.boostPlatformHint}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {BOOST_PLATFORMS.map((option) => (
+                  <PlatformCard
+                    key={option}
+                    platform={option}
+                    active={option === boostPlatform}
+                    onSelect={() => {
+                      setBoostPlatform(option)
+                      // A console order has no launcher, so a value picked before
+                      // switching must not survive the switch.
+                      if (option !== 'PC') setPcLauncher('')
+                    }}
+                    label={option === 'PC' ? t.order.boostPlatformPc : t.order.boostPlatformPlayStation}
+                  />
+                ))}
+              </div>
+
+              {/*
+                Revealed by the PC choice rather than always on screen: it is a real
+                question on PC and a meaningless one on console.
+              */}
+              {boostPlatform === 'PC' && (
+                <div className="mt-5 border-t border-ink-400 pt-5">
+                  <Field label={t.order.launcherLabel} hint={t.order.launcherHint} required>
+                    {(props) => (
+                      <Select
+                        {...props}
+                        value={pcLauncher}
+                        onChange={(e) => setPcLauncher(e.target.value)}
+                      >
+                        <option value="">{t.order.launcherPlaceholder}</option>
+                        <option value="STEAM">{t.order.launcherSteam}</option>
+                        <option value="EA_APP">{t.order.launcherEaApp}</option>
+                        <option value="EPIC">{t.order.launcherEpic}</option>
+                      </Select>
+                    )}
+                  </Field>
+                </div>
+              )}
+            </StepCard>
+          )}
+
           {step === 'configure' && (isFlat ? (
             /* Boosting tiers and coaching packs: one choice, no slider. */
-            <StepCard step={1} title={t.order.stepPackage(1, labels.service(service?.sku, service?.displayName))}>
+            <StepCard
+              step={isBoosting ? 2 : 1}
+              title={t.order.stepPackage(isBoosting ? 2 : 1,
+                labels.service(service?.sku, service?.displayName))}
+            >
               <div className="grid gap-3 sm:grid-cols-2">
                 {options.map((option) => (
                   <SelectTile
@@ -479,7 +570,14 @@ export default function Order() {
             cart they describe; the panel keeps the total, the points and the payment.
           */}
           {step !== 'configure' && quote && (
-            <CheckoutForm quote={quote} step={step} setStep={setStep} onRequote={() => void fetchQuote()} />
+            <CheckoutForm
+              quote={quote}
+              step={step}
+              setStep={setStep}
+              onRequote={() => void fetchQuote()}
+              boostPlatform={boostPlatform}
+              pcLauncher={pcLauncher}
+            />
           )}
         </div>
 
@@ -495,6 +593,7 @@ export default function Order() {
           step={step}
           setStep={setStep}
           onRequote={() => void fetchQuote()}
+          blockedReason={boostBlockedReason}
         />
       </div>
       </Section>
@@ -602,7 +701,7 @@ function AmountReadout({ quantity }: { quantity: number }) {
 
 function QuotePanel({
   quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
-  pointsToRedeem, setPointsToRedeem, maxRedeemable,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable, blockedReason,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -615,6 +714,8 @@ function QuotePanel({
   pointsToRedeem: number
   setPointsToRedeem: (points: number) => void
   maxRedeemable: number
+  /** Why the order cannot be continued yet, shown under a disabled button. */
+  blockedReason?: string | null
 }) {
   const t = useT()
   const money = useMoney()
@@ -841,9 +942,21 @@ function QuotePanel({
               */}
               {step === 'configure' && (
                 account ? (
-                  <Button full size="lg" onClick={() => setStep('details')}>
-                    {t.order.continue}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      full
+                      size="lg"
+                      onClick={() => setStep('details')}
+                      disabled={Boolean(blockedReason)}
+                    >
+                      {t.order.continue}
+                    </Button>
+                    {blockedReason && (
+                      <p className="text-center text-[12.5px] leading-snug text-chalk-faint">
+                        {blockedReason}
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     <ButtonLink
@@ -940,13 +1053,16 @@ function QuoteTimer({ expiresAt, onExpire }: { expiresAt: string; onExpire: () =
 /* ----------------------------------------------------------- checkout form --- */
 
 function CheckoutForm({
-  quote, step, setStep, onRequote,
+  quote, step, setStep, onRequote, boostPlatform, pcLauncher,
 }: {
   quote: SignedQuote
   step: Step
   setStep: (step: Step) => void
   onRequest?: never
   onRequote: () => void
+  /** Boosting only: chosen in the configurator, posted with the order. Empty otherwise. */
+  boostPlatform: string
+  pcLauncher: string
 }) {
   const navigate = useNavigate()
   const { account } = useAuth()
@@ -1053,6 +1169,13 @@ function CheckoutForm({
         // Asked for after the order exists, on the credential form. See note 14.
         eaPlatformHandle: null,
         note: note.trim() || null,
+        /*
+         * Boosting only. Null rather than an empty string everywhere else: the API
+         * pattern accepts "", but the column should say "not applicable" rather than
+         * "answered with nothing".
+         */
+        boostPlatform: boostPlatform || null,
+        pcLauncher: pcLauncher || null,
         acceptedTerms: true,
       })
       /*

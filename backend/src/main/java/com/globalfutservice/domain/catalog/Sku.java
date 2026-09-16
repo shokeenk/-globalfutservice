@@ -106,4 +106,14 @@ public enum Sku {
     public boolean isScheduled() {
         return this == COACHING;
     }
+
+    /**
+     * True for the win-count services, which a person plays on the customer's account.
+     *
+     * <p>They are the two SKUs that need a platform without being priced by one: the
+     * rate card is flat, but the booster still has to sign in somewhere.
+     */
+    public boolean isBoosting() {
+        return this == BOOST_CHAMPS || this == BOOST_RIVALS;
+    }
 }

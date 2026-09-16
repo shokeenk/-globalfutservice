@@ -1,5 +1,6 @@
 package com.globalfutservice.orders;
 
+import com.globalfutservice.domain.catalog.PcLauncher;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.money.Currency;
@@ -143,6 +144,14 @@ public class OrderEntity {
 
     @Column(name = "coaching_focus")
     private String coachingFocus;
+
+    /*
+     * Boosting orders only -- see V22. Which launcher a PC account signs in through;
+     * null on console, and null on every other service.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pc_launcher")
+    private PcLauncher pcLauncher;
 
     /* ---------------------------------------------------- supplier fulfilment --- */
 
@@ -294,6 +303,25 @@ public class OrderEntity {
 
     public Platform getPlatform() {
         return platform;
+    }
+
+    /**
+     * Only for a boosting order, which is sold at one price on every platform and so
+     * arrives from the quote with none.
+     *
+     * <p>Package-private: on a coin order the platform is part of what was priced and
+     * signed, and nothing outside this package has any business changing it afterwards.
+     */
+    void setPlatform(Platform platform) {
+        this.platform = platform;
+    }
+
+    public PcLauncher getPcLauncher() {
+        return pcLauncher;
+    }
+
+    void setPcLauncher(PcLauncher pcLauncher) {
+        this.pcLauncher = pcLauncher;
     }
 
     /**

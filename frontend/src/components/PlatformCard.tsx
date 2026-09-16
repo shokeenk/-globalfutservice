@@ -35,8 +35,14 @@ export function PlatformCard({
 }: {
   platform: string | null | undefined
   label: string
-  /** Rendered small under the label — the per-million rate. */
-  price: string
+  /**
+   * Rendered small under the label — the per-million rate.
+   *
+   * <p>Optional because a boosting tier costs the same on every platform: there is no
+   * second number to show, and an empty line under the label would leave a gap that
+   * reads as something failing to load.
+   */
+  price?: string
   /** e.g. "EA 5% tax included". Omitted where EA takes no cut. */
   taxNote?: string
   active: boolean
@@ -81,7 +87,9 @@ export function PlatformCard({
         <PlatformBadge platform={platform} active={active} />
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold text-chalk">{label}</span>
-          <span className="tnum mt-0.5 block text-[12.5px] text-chalk-muted">{price}</span>
+          {price && (
+            <span className="tnum mt-0.5 block text-[12.5px] text-chalk-muted">{price}</span>
+          )}
           {/*
             Under every price, not just the total.
 

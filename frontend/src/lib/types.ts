@@ -206,6 +206,8 @@ export interface Order {
   coachingPlatform: string | null
   coachingRank: string | null
   coachingFocus: string | null
+  /** Boosting on PC: STEAM, EA_APP or EPIC. Null on console and on every other service. */
+  pcLauncher: string | null
 }
 
 /**
