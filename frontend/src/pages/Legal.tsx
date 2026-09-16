@@ -519,6 +519,17 @@ function Privacy({ policy }: { policy: Policy | null }) {
           For comfort-trade orders only: your EA sign-in and backup codes, handled as described
           below.
         </p>
+        {/*
+          The screenshot is named because it is a file the customer uploads, and an
+          upload that goes unmentioned in a privacy policy is the kind of omission that
+          reads as concealment later. What it contains is whatever their payment app put
+          on the screen, which is why the deletion promise in section 4 matters.
+        */}
+        <p>
+          If you pay by UPI, PayPal or crypto: the reference number you enter and the
+          screenshot of the payment you upload, which we use to match the payment to your
+          order.
+        </p>
       </Clause>
 
       <Clause n={2} title="Your EA sign-in">
@@ -595,6 +606,17 @@ function Privacy({ policy }: { policy: Policy | null }) {
           Order records are retained for as long as we are required to keep transaction records.
           Sign-in details are destroyed as described above. You can ask us to delete your account
           and we will, subject to those record-keeping obligations.
+        </p>
+        {/*
+          Ninety days is not a promise made here and kept by hand: PaymentProofPurgeJob
+          deletes the image on a schedule, and the window is one setting
+          (GFS_PROOF_RETENTION). If that setting changes, this sentence has to change with
+          it -- which is why it names the number rather than saying "a limited period".
+        */}
+        <p>
+          Payment screenshots are deleted automatically 90 days after they are uploaded.
+          The reference number stays on the order as part of the transaction record; the
+          image itself does not.
         </p>
       </Clause>
 
