@@ -6,6 +6,8 @@ import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.web.CredentialDtos;
+import com.globalfutservice.domain.catalog.PcLauncher;
+import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.crypto.SecureIds;
 import com.globalfutservice.domain.money.Money;
@@ -158,6 +160,9 @@ public class OrderService {
         order.setCustomerNote(request.note());
         if (quote.sku() == Sku.COACHING) {
             applyCoachingDetails(order, request);
+        }
+        if (quote.sku().isBoosting()) {
+            applyBoostingDetails(order, request);
         }
         order.setPointsRedeemed(quote.pointsRedeemed());
         order.setPointsEarned(quote.pointsEarned());
@@ -601,10 +606,65 @@ public class OrderService {
                     "Choose the platform you play on.");
         }
         order.setEaPlatformHandle(request.eaPlatformHandle().trim());
-        order.setCoachingPlatform(com.globalfutservice.domain.catalog.Platform.valueOf(
-                request.coachingPlatform()));
+        order.setCoachingPlatform(Platform.valueOf(request.coachingPlatform()));
         order.setCoachingRank(blankToNull(request.currentRank()));
         order.setCoachingFocus(blankToNull(request.improvementFocus()));
+    }
+
+    /**
+     * Refuses a boosting order that does not say where it is to be played, and stores it.
+     *
+     * <p>A boosting tier costs the same on every platform, so the platform is not part of
+     * the price and does not travel on the signed quote -- it arrives here, with the rest
+     * of what the customer typed, and is written straight onto the order. Nothing about
+     * the total can change as a result, which is why taking it from the request rather
+     * than from the quote is safe.
+     *
+     * <p>The launcher question only exists on PC. Asking a PlayStation customer which
+     * launcher they use would be nonsense, so it is required exactly when it applies.
+     *
+     * <p>Package-private rather than private so the rules can be tested on their own:
+     * reaching them through {@code create} would need a priced quote, a payment gateway
+     * and a database for a check that touches none of them.
+     */
+    static void applyBoostingDetails(OrderEntity order, OrderDtos.CreateOrderRequest request) {
+        if (request.boostPlatform() == null || request.boostPlatform().isBlank()) {
+            throw new ApiExceptions.BadRequestException("boost_platform_required",
+                    "Choose the platform this account plays on.");
+        }
+        Platform platform = Platform.valueOf(request.boostPlatform());
+        PcLauncher launcher = null;
+        if (platform == Platform.PC) {
+            if (request.pcLauncher() == null || request.pcLauncher().isBlank()) {
+                throw new ApiExceptions.BadRequestException("pc_launcher_required",
+                        "Choose the launcher you sign in to FC through.");
+            }
+            launcher = PcLauncher.valueOf(request.pcLauncher());
+        }
+        order.setPlatform(platform);
+        order.setPcLauncher(launcher);
+
+        /*
+         * Named in the label as well as stored in the column.
+         *
+         * A coin order already reads "Safe Trading Service -- 3M (PC)" everywhere it is
+         * quoted, because its platform is part of the priced line. A boosting order's is
+         * not, so without this the Discord alert, the operator email, the tracking page
+         * and the customer's own order list would all name a tier and no platform -- and
+         * the booster would be back to asking on Discord, which is the thing this
+         * replaces.
+         */
+        String label = order.getServiceLabel();
+        if (label != null && !label.isBlank()) {
+            order.setServiceLabel(label + " (" + platformSummary(platform, launcher) + ")");
+        }
+    }
+
+    /** "PlayStation", or "PC · Steam" where the launcher is known. */
+    private static String platformSummary(Platform platform, PcLauncher launcher) {
+        return launcher == null
+                ? platform.displayName()
+                : platform.displayName() + " · " + launcher.displayName();
     }
 
     /**

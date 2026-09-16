@@ -68,7 +68,8 @@ public class OrderMapper {
                 coaching ? order.getEaPlatformHandle() : null,
                 coaching && order.getCoachingPlatform() != null ? order.getCoachingPlatform().name() : null,
                 coaching ? order.getCoachingRank() : null,
-                coaching ? order.getCoachingFocus() : null);
+                coaching ? order.getCoachingFocus() : null,
+                order.getPcLauncher() == null ? null : order.getPcLauncher().name());
     }
 
     public OrderDtos.AdminOrderSummary toAdminSummary(OrderEntity order, boolean credentialsHeld) {

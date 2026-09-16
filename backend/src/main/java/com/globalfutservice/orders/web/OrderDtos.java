@@ -62,6 +62,22 @@ public final class OrderDtos {
             @Size(max = 500, message = "Keep this under 500 characters")
             String improvementFocus,
 
+            /*
+             * Boosting only, and ignored on every other service. Both are refused by
+             * OrderService rather than by annotation, for the same reason as the coaching
+             * fields above: one request type places every kind of order, so "required"
+             * here would break the other two.
+             *
+             * Xbox is absent on purpose -- the boosters play on PlayStation and PC, and a
+             * value this enum does not list never reaches the order.
+             */
+            @Pattern(regexp = "^(PLAYSTATION|PC)?$", message = "Choose PlayStation or PC")
+            String boostPlatform,
+
+            @Pattern(regexp = "^(STEAM|EA_APP|EPIC)?$",
+                    message = "Choose Steam, the EA app or Epic Games")
+            String pcLauncher,
+
             @AssertTrue(message = "Please accept the terms to place your order")
             boolean acceptedTerms) {
     }
@@ -155,7 +171,10 @@ public final class OrderDtos {
             String eaPlatformHandle,
             String coachingPlatform,
             String coachingRank,
-            String coachingFocus) {
+            String coachingFocus,
+
+            /** Boosting on PC: the launcher the account signs in through. Null otherwise. */
+            String pcLauncher) {
     }
 
     /**

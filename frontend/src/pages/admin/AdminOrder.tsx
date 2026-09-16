@@ -177,6 +177,29 @@ export default function AdminOrder() {
               <Detail label="Points earned" value={String(order.pointsEarned)} />
             </dl>
 
+            {/*
+              Where a boosting order is played. The service label carries it too, but the
+              booster reads this panel, and a launcher is the kind of detail that gets
+              skimmed past in a one-line title.
+            */}
+            {order.sku.startsWith('BOOST_') && order.platform && (
+              <div className="mt-6 border-t border-ink-400 pt-5">
+                <p className="stamp mb-4">Boosting account</p>
+                <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-2">
+                  <Detail
+                    label="Platform"
+                    value={order.platform === 'PLAYSTATION' ? 'PlayStation' : order.platform}
+                  />
+                  <Detail
+                    label="PC launcher"
+                    value={order.pcLauncher === 'STEAM' ? 'Steam'
+                      : order.pcLauncher === 'EA_APP' ? 'EA app'
+                        : order.pcLauncher === 'EPIC' ? 'Epic Games' : '—'}
+                  />
+                </dl>
+              </div>
+            )}
+
             {/* What the customer told the coach at checkout. Coaching orders only. */}
             {order.sku === 'COACHING' && (order.coachingPlatform || order.eaPlatformHandle) && (
               <div className="mt-6 border-t border-ink-400 pt-5">
