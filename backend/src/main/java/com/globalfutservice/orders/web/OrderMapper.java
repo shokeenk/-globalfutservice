@@ -3,6 +3,7 @@ package com.globalfutservice.orders.web;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.domain.orders.OrderStateMachine;
+import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.domain.orders.SupplierStatusMapper;
 import com.globalfutservice.orders.OrderEntity;
@@ -41,7 +42,7 @@ public class OrderMapper {
         return new OrderDtos.OrderResponse(
                 order.getPublicRef(),
                 order.getStatus().name(),
-                statusLabel(order.getStatus()),
+                statusLabel(order),
                 nextAction(order, credentialsSubmitted),
                 OrderService.describe(order),
                 order.getSku().name(),
@@ -78,6 +79,8 @@ public class OrderMapper {
         return new OrderDtos.AdminOrderSummary(
                 order.getPublicRef(),
                 order.getStatus().name(),
+                order.getSku().name(),
+                statusLabel(order),
                 OrderService.describe(order),
                 order.getPlatform() == null ? null : order.getPlatform().name(),
                 order.getQuantity(),
@@ -126,18 +129,35 @@ public class OrderMapper {
      * Human-readable status, computed here rather than in the UI so that the storefront,
      * the emails and the admin console cannot describe the same state three ways.
      */
-    public static String statusLabel(OrderStatus status) {
-        return switch (status) {
+    /**
+     * The status in the customer's words.
+     *
+     * <p>Thirteen internal states, four words a customer needs: <b>Queued</b> once the
+     * money is in and the order is waiting its turn, <b>Processing</b> or <b>Being
+     * delivered</b> while somebody is working it, <b>Completed</b> at the end. The states
+     * that are not part of that line -- unpaid, on hold, disputed, refunded -- keep saying
+     * what they actually are, because collapsing "under review" into "processing" would
+     * hide the one status a customer most needs to ask about.
+     *
+     * <p><b>In progress reads differently per service.</b> A coin or boosting order in
+     * progress is being delivered: coins are moving, games are being played. A coaching
+     * order in progress is a schedule being arranged, and "being delivered" says nothing
+     * a customer recognises -- so it is Processing.
+     *
+     * <p>The internal names are untouched. This is the label layered over them, and the
+     * admin console still shows the state itself.
+     */
+    public static String statusLabel(OrderEntity order) {
+        return switch (order.getStatus()) {
             case DRAFT -> "Starting";
             case AWAITING_PAYMENT -> "Waiting for payment";
             case ABANDONED -> "Cancelled";
-            case PAID -> "Paid";
-            case CREDENTIALS_PENDING -> "Waiting for your details";
-            case READY_FOR_DELIVERY -> "In the queue";
-            case IN_PROGRESS -> "Being delivered";
+            // Paid and waiting: one word for the three states between the money landing
+            // and somebody picking the order up.
+            case PAID, CREDENTIALS_PENDING, READY_FOR_DELIVERY -> "Queued";
+            case IN_PROGRESS -> order.getSku() == Sku.COACHING ? "Processing" : "Being delivered";
             case ON_HOLD -> "On hold";
-            case DELIVERED -> "Delivered";
-            case COMPLETED -> "Complete";
+            case DELIVERED, COMPLETED -> "Completed";
             case DISPUTED -> "Under review";
             case REFUNDED -> "Refunded";
             case CREDITED -> "Settled as store credit";

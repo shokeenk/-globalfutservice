@@ -49,6 +49,13 @@ export const BUSINESS = {
   discordUserId: '1300551868174569595',
   discordDm: 'https://discord.com/users/1300551868174569595',
   discordInvite: 'https://discord.com/invite/8FeP7C6tXt',
+  /*
+   * The orders channel inside the server, which is where a customer with a live order is
+   * sent. Not the ticket the bot opens for that order: those sit in the staff category
+   * and a customer following a link to one meets an error, not their ticket. Here they
+   * quote the reference and the team picks it up from the alert it already has.
+   */
+  discordOrdersChannel: 'https://discord.com/channels/1287647266944974909/1287877333675409448',
 
   /**
    * The line-of-business statement.

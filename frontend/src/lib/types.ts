@@ -232,6 +232,10 @@ export type CustomerAction =
 export interface OrderSummary {
   publicRef: string
   status: string
+  /** TRADING_SERVICE, BOOST_CHAMPS, BOOST_RIVALS or COACHING. */
+  sku: string
+  /** The status in the customer's words: Queued, Being delivered, Completed. */
+  statusLabel: string
   serviceLabel: string
   platform: string | null
   quantity: string

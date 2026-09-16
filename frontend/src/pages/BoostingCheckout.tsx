@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { EaSignInFields, validateEaSignIn } from '../components/EaSignInFields'
 import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
 import { SiEa, SiEpicgames, SiSteam } from 'react-icons/si'
@@ -33,10 +32,12 @@ import { useCatalog } from '../state/CatalogContext'
  * and turns itself into "confirmed" when the order moves. Telling somebody their payment
  * succeeded before anyone has looked is the one thing a checkout must not do.
  *
- * <p><b>The sign-in never goes near Discord.</b> It is collected here, sealed with a key
- * unique to the order before it reaches the database, and destroyed when the order is done
- * -- the same vault the coin checkout uses. Discord is where the booster talks to the
- * customer, not where passwords are typed.
+ * <p><b>No sign-in is collected here, at the owner's instruction.</b> A booster asks for
+ * the account in the customer's own Discord ticket instead, and the checkout says so
+ * before the money rather than after it -- a customer who finds out at the end that they
+ * still have to hand over an account has been told the price of something they had not
+ * agreed to. The vault, the encrypted form and the coin checkout that uses them are
+ * untouched; boosting simply stops being one of their callers.
  */
 
 type Step = 'details' | 'pay' | 'processing' | 'done'
@@ -75,10 +76,6 @@ export default function BoostingCheckout() {
   const [step, setStep] = useState<Step>('details')
   const [platform, setPlatform] = useState<BoostPlatform | null>(null)
   const [launcher, setLauncher] = useState<Launcher | null>(null)
-  const [eaEmail, setEaEmail] = useState('')
-  const [eaPassword, setEaPassword] = useState('')
-  const [backupCodes, setBackupCodes] = useState(['', '', ''])
-  const [credErrors, setCredErrors] = useState<Record<string, string>>({})
   const [touched, setTouched] = useState(false)
 
   const [couponInput, setCouponInput] = useState(params.get('coupon') ?? '')
@@ -195,9 +192,7 @@ export default function BoostingCheckout() {
 
   async function placeOrder() {
     setTouched(true)
-    const found = validateEaSignIn(t, eaEmail, eaPassword, backupCodes)
-    setCredErrors(found)
-    if (blockedReason || Object.keys(found).length > 0) return
+    if (blockedReason) return
     if (!quote || !account || !platform || placing) return
 
     setPlacing(true)
@@ -217,25 +212,6 @@ export default function BoostingCheckout() {
         boostPlatform: platform,
         pcLauncher: platform === 'PC' ? launcher : null,
       })
-      /*
-       * The sign-in is a second request on purpose. `/orders` writes plain columns; the
-       * vault endpoint seals with a per-order key before anything reaches the database,
-       * so bundling the password into the first call would have put it in plaintext.
-       */
-      await api.post(`/api/v1/orders/${order.publicRef}/credentials`, {
-        eaEmail: eaEmail.trim(),
-        eaPassword,
-        backupCodes: backupCodes.map((code) => code.trim()),
-        platformHandle: null,
-        note: null,
-        acknowledgedSignedOut: true,
-        acknowledgedMarketUnlocked: true,
-        acknowledgedItemsClear: true,
-        acceptedTerms: true,
-      })
-      // Cleared the moment the vault has it: nothing here outlives the request.
-      setEaPassword('')
-      setBackupCodes(['', '', ''])
       setCreated(order)
       navigate(`/boosting/checkout?order=${encodeURIComponent(order.publicRef)}`, { replace: true })
       await proceedToPayment(order)
@@ -277,7 +253,7 @@ export default function BoostingCheckout() {
         {error && <div className="mb-6"><Alert tone="warn">{error}</Alert></div>}
 
         {step === 'done' && orderRef ? (
-          <Confirmation orderRef={orderRef} />
+          <Confirmation orderRef={orderRef} emailsEnabled={!!policy?.customerEmailsEnabled} />
         ) : (
           <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
             <div className="space-y-5">
@@ -292,10 +268,6 @@ export default function BoostingCheckout() {
                   }}
                   launcher={launcher}
                   onLauncher={setLauncher}
-                  eaEmail={eaEmail} setEaEmail={setEaEmail}
-                  eaPassword={eaPassword} setEaPassword={setEaPassword}
-                  backupCodes={backupCodes} setBackupCodes={setBackupCodes}
-                  credErrors={credErrors}
                   blockedReason={touched ? blockedReason : null}
                   disabled={Boolean(blockedReason) || placing || !quote}
                   placing={placing}
@@ -399,20 +371,12 @@ function CheckoutHeader({ current }: { current: number }) {
 
 function DetailsStep({
   platform, onPlatform, launcher, onLauncher,
-  eaEmail, setEaEmail, eaPassword, setEaPassword, backupCodes, setBackupCodes, credErrors,
   blockedReason, disabled, placing, onContinue,
 }: {
   platform: BoostPlatform | null
   onPlatform: (next: BoostPlatform) => void
   launcher: Launcher | null
   onLauncher: (next: Launcher) => void
-  eaEmail: string
-  setEaEmail: (v: string) => void
-  eaPassword: string
-  setEaPassword: (v: string) => void
-  backupCodes: string[]
-  setBackupCodes: (codes: string[]) => void
-  credErrors: Record<string, string>
   blockedReason: string | null
   disabled: boolean
   placing: boolean
@@ -482,22 +446,48 @@ function DetailsStep({
       )}
 
       {/*
-        The sign-in, on the site and not in a chat window.
+        Said before the money, not after it.
 
-        A booster has to log in and play the games, so this is unavoidable — what is
-        avoidable is where it lives. Sealed with a key unique to this order before it
-        reaches the database, opened by the person working the order, destroyed when it
-        is done.
+        The account is still needed -- somebody has to sign in and play -- but it is asked
+        for in Discord now. A customer who pays expecting to be done, and only then learns
+        they must hand over an account somewhere else, has been sold something they did
+        not agree to. So this sits above the pay button rather than on the receipt.
       */}
       <div className="mt-6 border-t border-ink-400 pt-6">
-        <h2 className="display text-[16px] text-chalk">{b.signInSectionTitle}</h2>
-        <p className="mb-5 mt-1 text-body-sm text-chalk-muted">{b.signInSectionLead}</p>
-        <EaSignInFields
-          eaEmail={eaEmail} setEaEmail={setEaEmail}
-          eaPassword={eaPassword} setEaPassword={setEaPassword}
-          backupCodes={backupCodes} setBackupCodes={setBackupCodes}
-          errors={credErrors}
-        />
+        <div className="text-center">
+          <span aria-hidden="true" className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-ink-700 text-chalk">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="4" y="10" width="16" height="10" rx="2" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+            </svg>
+          </span>
+          <h2 className="display mt-3 text-[16px] text-chalk">{b.discordDetailsTitle}</h2>
+          <p className="mx-auto mt-1 max-w-[46ch] text-body-sm leading-relaxed text-chalk-muted">
+            {b.discordDetailsLead}
+          </p>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3 rounded-panel border border-[#5865F2]/30 bg-[#5865F2]/[0.07] p-3.5">
+          <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-edge bg-[#5865F2] text-paper">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+              <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
+            </svg>
+          </span>
+          <p className="text-[13px] font-semibold leading-snug text-chalk">{b.discordDetailsCallout}</p>
+        </div>
+
+        <ul className="mt-4 space-y-2.5">
+          {[b.discordDetailsPoint1, b.discordDetailsPoint2, b.discordDetailsPoint3].map((line) => (
+            <li key={line} className="flex gap-2.5">
+              <span aria-hidden="true" className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full bg-ok text-paper">
+                <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3.2">
+                  <path d="m5 10.5 3.5 3.5L15 7" />
+                </svg>
+              </span>
+              <p className="text-[12.5px] leading-relaxed text-chalk-muted">{line}</p>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="mt-6">
@@ -507,6 +497,9 @@ function DetailsStep({
         {blockedReason && (
           <p className="mt-2 text-center text-[12.5px] text-chalk-faint">{blockedReason}</p>
         )}
+        <div className="mt-3 rounded-edge border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">
+          <p className="text-center text-[12.5px] leading-relaxed text-chalk">{b.afterPaymentNote}</p>
+        </div>
         <p className="mt-3 text-center text-[12px] leading-relaxed text-chalk-faint">
           {b.termsLead}{' '}
           <Link className="font-semibold text-brand-400 hover:underline" to="/terms">{b.termsTerms}</Link>,{' '}
@@ -659,7 +652,7 @@ function ProcessingStep({ orderRef, onConfirmed }: { orderRef: string; onConfirm
  * version the moment an operator verifies the payment — which is the difference between a
  * customer refreshing a page and a customer opening a support ticket.
  */
-function Confirmation({ orderRef }: { orderRef: string }) {
+function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEnabled: boolean }) {
   const t = useT()
   const b = t.boostingCheckout
   const [order, setOrder] = useState<Order | null>(null)
@@ -705,12 +698,21 @@ function Confirmation({ orderRef }: { orderRef: string }) {
       <h1 className="display mt-5 text-display-md text-chalk">{paid ? b.confirmedTitle : b.submittedTitle}</h1>
       <p className="mt-2 text-body-sm text-chalk-muted">{paid ? b.confirmedBody : b.submittedBody}</p>
       <p className="mx-auto mt-3 max-w-xl text-body-sm leading-relaxed text-chalk-muted">
+        {/*
+          The email half is said only where email is actually switched on. Telling a
+          customer to check an inbox nothing was sent to is how a working order turns
+          into a support message.
+        */}
+        {emailsEnabled && paid ? `${b.confirmedEmailed} ` : ''}
         {paid ? b.confirmedLead : b.submittedLead}
       </p>
 
-      <div className="mt-6">
+      {/* The bot opened a ticket for this order the moment the payment was submitted. */}
+      <p className="mt-5 text-[13px] font-semibold text-ok">{b.ticketCreated}</p>
+
+      <div className="mt-3">
         <a
-          href={BUSINESS.discordInvite}
+          href={BUSINESS.discordOrdersChannel}
           target="_blank"
           rel="noreferrer"
           className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-edge
@@ -742,7 +744,7 @@ function Confirmation({ orderRef }: { orderRef: string }) {
 
       <p className="mt-6 text-[12.5px] text-chalk-muted">
         {b.needHelp}{' '}
-        <a className="font-semibold text-brand-400 hover:underline" href={BUSINESS.discordInvite} target="_blank" rel="noreferrer">
+        <a className="font-semibold text-brand-400 hover:underline" href={BUSINESS.discordOrdersChannel} target="_blank" rel="noreferrer">
           {b.joinOurDiscord}
         </a>{' '}
         {b.orWord}{' '}

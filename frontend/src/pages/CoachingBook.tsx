@@ -955,7 +955,7 @@ function ConfirmedSteps({
         </ul>
 
         <a
-          href={BUSINESS.discordInvite}
+          href={BUSINESS.discordOrdersChannel}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-press bg-[#5865F2]

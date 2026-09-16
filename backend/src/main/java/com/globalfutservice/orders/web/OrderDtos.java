@@ -198,6 +198,15 @@ public final class OrderDtos {
     public record AdminOrderSummary(
             String publicRef,
             String status,
+            /*
+              Two additions the operator queue and the customer's own order list both
+              wanted. `sku` is what a coaching order needs to be identifiable among fifty
+              coin orders; `statusLabel` is the same status said in the customer's words,
+              so their list and this one can never drift into describing an order
+              differently.
+            */
+            String sku,
+            String statusLabel,
             String serviceLabel,
             String platform,
             BigDecimal quantity,

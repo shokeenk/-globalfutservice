@@ -423,6 +423,30 @@ const fr: Dictionary = {
 
 
   track: {
+    stagePaymentVerified: 'Paiement vérifié',
+    stageQueued: 'En file pour la livraison',
+    stageInProgress: 'En cours',
+    stageCompleted: 'Terminée',
+    myOrdersTitle: 'Mes commandes',
+    myOrdersLead: 'Consulte et suis toutes tes commandes au même endroit.',
+    tabAll: 'Toutes',
+    tabBoosting: 'Boosting',
+    tabCoaching: 'Coaching',
+    tabTrading: 'Pièces',
+    tabCompleted: 'Terminées',
+    viewDetails: 'Voir les détails',
+    backToOrders: 'Retour à mes commandes',
+    noOrdersYet: 'Pas encore de commande. La première apparaîtra ici.',
+    noOrdersInTab: 'Rien ici pour l’instant.',
+    guestLookupOpen: 'Tu cherches une commande passée sans compte ?',
+    guestLookupClose: 'Masquer la recherche par référence',
+    orderList: 'Liste des commandes',
+    refreshedLive: 'Cette page se met à jour toute seule.',
+    discordTicketTitle: 'Rejoins ton ticket Discord',
+    discordTicketBody: 'Continue ta commande sur Discord. Notre équipe est prête à t’aider.',
+    discordTicketCta: 'Ouvrir Discord',
+    discordTicketCreated: 'Ton ticket est créé !',
+    discordTicketQuote: (ref) => `Donne ton numéro de commande, ${ref}, et l’équipe s’en occupe.`,
     seoTitle: 'Suivre ta commande',
     eyebrow: 'Statut de la commande',
     title: 'Où en est ma commande ?',
@@ -1128,11 +1152,14 @@ const fr: Dictionary = {
     needPlatform: 'Choisis une plateforme pour continuer.',
     needLauncher: 'Choisis où tu joues sur PC pour continuer.',
 
-    signInSectionTitle: 'Ta connexion EA',
-    signInSectionLead:
-      'Quelqu’un joue ces matchs sur ton compte, il faut donc s’y connecter. Tout est chiffré '
-      + 'avec une clé propre à cette commande, ouvert seulement par le joueur qui s’en occupe, '
-      + 'puis détruit à la fin. Ne l’envoie jamais sur Discord.',
+    discordDetailsTitle: 'Infos du compte via Discord',
+    discordDetailsLead: 'Pour ta sécurité, nous ne demandons pas tes identifiants EA sur le site.',
+    discordDetailsCallout: 'Après le paiement, tu seras mis en relation avec notre équipe sur Discord.',
+    discordDetailsPoint1: 'Tes identifiants EA ne sont demandés que dans ton ticket Discord privé.',
+    discordDetailsPoint2: 'Notre équipe te guide étape par étape.',
+    discordDetailsPoint3: 'C’est ce qui garde ton compte en sécurité.',
+    afterPaymentNote: 'Passe ta commande pour continuer. Après le paiement, direction Discord pour finir la mise en place.',
+    ticketCreated: 'Ton ticket est créé !',
 
     continueToPayment: 'Continuer vers le paiement',
     termsLead: 'En continuant, tu acceptes nos',
@@ -1169,9 +1196,10 @@ const fr: Dictionary = {
 
     confirmedTitle: 'Commande confirmée !',
     confirmedBody: 'Ton paiement est bien passé.',
+    confirmedEmailed: 'On t’a envoyé les détails par e-mail.',
     confirmedLead:
-      'On a envoyé les détails par e-mail et notre équipe est prévenue. Rejoins notre Discord '
-      + 'pour parler au joueur qui s’occupe de ta commande et suivre son avancement.',
+      'Notre équipe est prévenue. Rejoins notre Discord pour parler au joueur qui s’occupe '
+      + 'de ta commande et suivre son avancement.',
     submittedTitle: 'Paiement envoyé',
     submittedBody: 'On le vérifie sur notre compte.',
     submittedLead:
