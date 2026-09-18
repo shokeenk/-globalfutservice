@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { RouteErrorBoundary } from './components/ErrorBoundary'
+import { CookieNotice } from './components/CookieNotice'
+import { NotificationToasts } from './components/NotificationToasts'
 import { Footer } from './components/Footer'
 import { AskWidget } from './components/AskWidget'
 import { CursorLight } from './components/CursorLight'
@@ -110,6 +112,12 @@ export default function App() {
         </RouteErrorBoundary>
       </main>
       <Footer />
+
+      {/* Shown until this visitor answers, and never again after they do. */}
+      <CookieNotice />
+
+      {/* Real-time only: anything older than this page load is read in the bell. */}
+      <NotificationToasts />
       {/* Outside <main> and fixed-positioned: it follows the reader across every
           route rather than being a thing you have to navigate to. */}
       <AskWidget />

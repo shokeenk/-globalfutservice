@@ -6,6 +6,7 @@ import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.domain.payments.ClaimStatus;
 import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.orders.OrderEntity;
+import com.globalfutservice.notify.feed.CustomerFeedService;
 import com.globalfutservice.orders.OrderService;
 import com.globalfutservice.web.ApiExceptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,7 @@ class ManualPaymentServiceTest {
     private OrderService orderService;
     private com.globalfutservice.credentials.CredentialVaultService vault;
     private com.globalfutservice.notify.NotificationService notifications;
+    private final CustomerFeedService feed = mock(CustomerFeedService.class);
     private ManualPaymentService service;
 
     private static final AppProperties.ManualPayments DESTINATIONS =
@@ -68,7 +70,7 @@ class ManualPaymentServiceTest {
         vault = mock(com.globalfutservice.credentials.CredentialVaultService.class);
         notifications = mock(com.globalfutservice.notify.NotificationService.class);
 
-        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, props);
+        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, props);
     }
 
     private static OrderEntity order(OrderStatus status, Sku sku) {
@@ -152,7 +154,7 @@ class ManualPaymentServiceTest {
             when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, bare);
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, bare);
 
             assertThatThrownBy(() -> noDestinations.submit(
                     order(OrderStatus.AWAITING_PAYMENT, Sku.COACHING),
@@ -230,7 +232,7 @@ class ManualPaymentServiceTest {
             // An account with no link is payable; a link with no account is not. Dropping
             // PayPal here would take away the method over a missing convenience.
             List<ManualPaymentService.PaymentOption> options =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, emailOnly)
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, emailOnly)
                             .optionsFor("COACHING");
 
             assertThat(options).singleElement()
@@ -248,7 +250,7 @@ class ManualPaymentServiceTest {
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, "TWALLET"));
 
-            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, partial)
+            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, partial)
                     .optionsFor("COACHING"))
                     .extracting(ManualPaymentService.PaymentOption::method)
                     .containsExactly(ManualPaymentMethod.CRYPTO);

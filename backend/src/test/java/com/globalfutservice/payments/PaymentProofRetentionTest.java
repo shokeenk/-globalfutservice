@@ -3,6 +3,7 @@ package com.globalfutservice.payments;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.notify.NotificationService;
+import com.globalfutservice.notify.feed.CustomerFeedService;
 import com.globalfutservice.orders.OrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,7 +45,8 @@ class PaymentProofRetentionTest {
 
         service = new ManualPaymentService(
                 mock(ManualPaymentClaimRepository.class), proofs, mock(OrderService.class),
-                mock(CredentialVaultService.class), mock(NotificationService.class), props);
+                mock(CredentialVaultService.class), mock(NotificationService.class),
+                mock(CustomerFeedService.class), props);
     }
 
     @Test

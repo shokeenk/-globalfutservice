@@ -6,6 +6,7 @@ import { useT } from '../i18n'
 import { useScrollProgress, useScrolled } from '../motion'
 import { useAuth } from '../state/AuthContext'
 import { CurrencySwitcher, LanguageSwitcher } from './LocaleSwitchers'
+import { NotificationBell } from './NotificationBell'
 import { NavIcon } from './NavIcon'
 import { SearchIconButton, SearchTrigger } from './SearchTrigger'
 import { Button, ButtonLink } from './ui'
@@ -171,6 +172,8 @@ export function Header() {
 
             {account ? (
               <>
+                {/* Customers only: an operator's alerts are the Discord tickets. */}
+                {account.role === 'CUSTOMER' && <NotificationBell />}
                 <Link
                   to={account.role === 'CUSTOMER' ? '/account' : '/admin'}
                   className="rounded-edge px-3 py-2 text-[13.5px] font-medium text-chalk-muted

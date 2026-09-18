@@ -5,6 +5,7 @@ import App from './App'
 import { I18nProvider } from './i18n'
 import { AuthProvider } from './state/AuthContext'
 import { CatalogProvider } from './state/CatalogContext'
+import { NotificationsProvider } from './state/NotificationsContext'
 import './index.css'
 
 const container = document.getElementById('root')
@@ -20,7 +21,9 @@ createRoot(container).render(
       <I18nProvider>
         <AuthProvider>
           <CatalogProvider>
-            <App />
+            <NotificationsProvider>
+              <App />
+            </NotificationsProvider>
           </CatalogProvider>
         </AuthProvider>
       </I18nProvider>
