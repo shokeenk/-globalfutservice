@@ -249,18 +249,37 @@ function Pricing({
                   isPack ? 'border-gold-500/40 bg-[#FFFBEF] shadow-e3' : 'border-ink-400 bg-paper shadow-e2',
                 ].join(' ')}
               >
-                {isPack && savingPercent > 0 && (
-                  <Badge tone="gold" className="self-start">{p.saveBadge(savingPercent)}</Badge>
-                )}
+                {/*
+                  The badge row exists on both cards, empty on the one without a saving.
 
-                <h3 className={`display ${isPack && savingPercent > 0 ? 'mt-3' : ''} text-[1.25rem] text-chalk`}>
+                  Two cards side by side are read across as much as down: title against
+                  title, price against price. Letting the badge and the struck-through
+                  list price exist on one card only pushed everything below them down by
+                  55px on that side, so the pair read as two different sizes of card
+                  rather than two prices for one service. `invisible` keeps the space and
+                  takes the placeholder out of the accessibility tree.
+                */}
+                <Badge
+                  tone="gold"
+                  className={`self-start ${
+                    isPack && savingPercent > 0 ? '' : 'hidden md:invisible md:inline-flex'
+                  }`}
+                >
+                  {p.saveBadge(savingPercent || 10)}
+                </Badge>
+
+                <h3 className="display mt-3 text-[1.25rem] text-chalk">
                   {labels.option(option)}
                 </h3>
 
                 <div className="mt-4">
-                  {isPack && listFormatted && (
-                    <p className="tnum text-body-sm text-chalk-faint line-through">{listFormatted}</p>
-                  )}
+                  <p
+                    className={`tnum text-body-sm text-chalk-faint line-through ${
+                      isPack && listFormatted ? '' : 'hidden md:invisible md:block'
+                    }`}
+                  >
+                    {listFormatted ?? option.unitPriceFormatted}
+                  </p>
                   <p className="tnum display text-[clamp(1.9rem,4vw,2.4rem)] leading-none text-chalk">
                     {option.unitPriceFormatted}
                   </p>
