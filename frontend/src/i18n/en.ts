@@ -492,6 +492,29 @@ const en = {
   },
 
 
+  /*
+   * The cookie bar. Deliberately specific: this site sets one cookie, to keep somebody
+   * signed in, and stores two preferences. Saying "we use cookies to improve your
+   * experience" would be vaguer than the truth, and the truth is short.
+   */
+  cookies: {
+    title: 'Cookies on this site',
+    body:
+      'We use one cookie, to keep you signed in. With your agreement we also remember your '
+      + 'language and currency in this browser. No tracking, no advertising, nothing shared '
+      + 'with anyone else.',
+    policyLink: 'Read the privacy policy',
+    accept: 'Accept',
+    decline: 'Decline',
+  },
+  /* The customer's bell, and the bar that appears when something happens live. */
+  notifications: {
+    bell: 'Notifications',
+    bellWithCount: (n: number) => `Notifications, ${n} unread`,
+    title: 'Notifications',
+    empty: 'Nothing yet. Updates about your orders show up here.',
+    dismiss: 'Dismiss',
+  },
   track: {
     stagePaymentVerified: 'Payment verified',
     stageQueued: 'Queued for delivery',

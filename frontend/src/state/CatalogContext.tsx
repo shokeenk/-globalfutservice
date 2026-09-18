@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../lib/api'
+import { mayStorePreferences } from '../lib/consent'
 import type { Catalog, Policy } from '../lib/types'
 
 type CatalogState = {
@@ -101,7 +102,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const setCurrency = useCallback((next: string) => {
     setCurrencyState(next)
     try {
-      window.localStorage.setItem(STORAGE_KEY, next)
+      // Same rule as the language: remembered only where that was agreed to.
+      if (mayStorePreferences()) window.localStorage.setItem(STORAGE_KEY, next)
     } catch {
       // The choice still applies to this session; losing it on reload beats a crash.
     }

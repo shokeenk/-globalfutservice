@@ -419,6 +419,23 @@ const es: Dictionary = {
   },
 
 
+  cookies: {
+    title: 'Cookies en este sitio',
+    body:
+      'Usamos una cookie para mantener tu sesión iniciada. Si nos lo permites, también '
+      + 'recordamos tu idioma y tu moneda en este navegador. Sin rastreo, sin publicidad y '
+      + 'sin compartir nada con nadie.',
+    policyLink: 'Leer la política de privacidad',
+    accept: 'Aceptar',
+    decline: 'Rechazar',
+  },
+  notifications: {
+    bell: 'Notificaciones',
+    bellWithCount: (n) => `Notificaciones, ${n} sin leer`,
+    title: 'Notificaciones',
+    empty: 'Nada todavía. Aquí verás las novedades de tus pedidos.',
+    dismiss: 'Cerrar',
+  },
   track: {
     stagePaymentVerified: 'Pago verificado',
     stageQueued: 'En cola para entrega',

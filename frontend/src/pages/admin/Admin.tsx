@@ -7,6 +7,7 @@ import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { AdminStats, OrderSummary } from '../../lib/types'
 import { ServiceTag, statusTone } from '../Track'
+import { Announcements } from './Announcements'
 import { PaymentClaims } from './PaymentClaims'
 
 /**
@@ -106,6 +107,9 @@ export default function Admin() {
         a person checks it, and no other view in the console surfaces them -- to the
         order queue below they are indistinguishable from customers who never paid.
       */}
+      {/* Admin only, and it renders nothing for an operator. */}
+      <Announcements />
+
       <PaymentClaims />
 
       {stats && (

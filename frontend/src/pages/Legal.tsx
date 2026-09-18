@@ -631,7 +631,19 @@ function Privacy({ policy }: { policy: Policy | null }) {
         <p>
           We use one cookie, and it exists to keep you signed in. It is not readable by scripts,
           is not sent to other sites, and is not used for tracking or advertising. There is no
-          analytics or advertising cookie on this site, which is why there is no consent banner.
+          analytics or advertising cookie on this site.
+        </p>
+        {/*
+          The banner is described rather than merely mentioned, because what it controls is
+          unusual: there is no tracking to switch off, so "decline" has to say what it does
+          do or it means nothing.
+        */}
+        <p>
+          On your first visit we ask whether this browser may also remember your language and
+          currency. Accept and those two choices are kept here on your device. Decline and they
+          are not: they last until you close the tab, anything already stored is deleted, and
+          only the sign-in cookie above remains. Your answer itself is stored, so that we do
+          not ask again on every page.
         </p>
       </Clause>
     </>

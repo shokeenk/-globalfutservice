@@ -3,6 +3,8 @@ package com.globalfutservice.payments;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.notify.NotificationService;
+import com.globalfutservice.notify.feed.CustomerFeedService;
+import com.globalfutservice.notify.feed.NotificationKind;
 import com.globalfutservice.notify.PaymentClaimNotification;
 import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.domain.payments.ClaimStatus;
@@ -41,6 +43,7 @@ public class ManualPaymentService {
     private final OrderService orderService;
     private final CredentialVaultService vaultService;
     private final NotificationService notifications;
+    private final CustomerFeedService feed;
     private final AppProperties props;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
@@ -48,7 +51,9 @@ public class ManualPaymentService {
                                 OrderService orderService,
                                 CredentialVaultService vaultService,
                                 NotificationService notifications,
+                                CustomerFeedService feed,
                                 AppProperties props) {
+        this.feed = feed;
         this.claims = claims;
         this.proofs = proofs;
         this.orderService = orderService;
@@ -162,6 +167,17 @@ public class ManualPaymentService {
          * The notification carries no EA sign-in. `hasCredentials` is a boolean by
          * design -- an operator needs to know the sign-in arrived, never what it is.
          */
+        /*
+         * The customer's own copy of the same event. The operator alert says "check the
+         * account for this reference"; this says "we have it, we are looking" -- which is
+         * the answer to the question somebody asks three minutes after paying.
+         */
+        feed.record(order.getAccountId(), NotificationKind.PAYMENT_SUBMITTED,
+                "Payment submitted",
+                "We are checking your payment for " + OrderService.describe(order)
+                        + " against our account.",
+                "/track?ref=" + order.getPublicRef(), order.getPublicRef());
+
         notifications.paymentClaimed(new PaymentClaimNotification(
                 order.getPublicRef(),
                 OrderService.describe(order),

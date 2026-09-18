@@ -22,6 +22,8 @@ import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.loyalty.LoyaltyService;
 import com.globalfutservice.notify.NotificationService;
+import com.globalfutservice.notify.feed.CustomerFeedService;
+import com.globalfutservice.notify.feed.NotificationKind;
 import com.globalfutservice.notify.OrderNotification;
 import com.globalfutservice.orders.web.OrderDtos;
 import com.globalfutservice.payments.PaymentEntity;
@@ -66,6 +68,7 @@ public class OrderService {
     private final NotificationService notifications;
     private final AccountRepository accounts;
     private final CoachingService coachingService;
+    private final CustomerFeedService feed;
     private final CouponService couponService;
     private final ObjectMapper mapper;
     private final AppProperties props;
@@ -77,7 +80,9 @@ public class OrderService {
                         AffiliateService affiliateService, CredentialVaultService vaultService,
                         NotificationService notifications, AccountRepository accounts,
                         CoachingService coachingService, CouponService couponService,
+                        CustomerFeedService feed,
                         ObjectMapper mapper, AppProperties props, Clock clock) {
+        this.feed = feed;
         this.coachingService = coachingService;
         this.couponService = couponService;
         this.orders = orders;
@@ -347,6 +352,8 @@ public class OrderService {
         OrderEntity saved = orders.save(order);
         record(saved, from, to, actor, actorId, actorLabel, reason);
 
+        tellTheCustomer(saved, to);
+
         if (to == OrderStatus.DELIVERED) {
             notifications.orderDelivered(notificationFor(saved));
         } else if (to == OrderStatus.CREDENTIALS_PENDING) {
@@ -369,6 +376,52 @@ public class OrderService {
 
         log.info("Order {} {} -> {} by {}", saved.getPublicRef(), from, to, actor);
         return saved;
+    }
+
+    /**
+     * The same moment, in the customer's own words.
+     *
+     * <p>Hung off the one transition every status change already goes through, so the bell
+     * cannot drift from the order: there is no second place deciding what happened. The
+     * operator alert and the customer's line are written from the same event and say
+     * different things, because an operator needs "GFS-26-XXXX paid, ready to fulfil" and
+     * a customer needs "Payment confirmed".
+     *
+     * <p>Only the states a customer would act on or ask about are here. PAID on its own is
+     * not one of them: an auction order passes through it and lands on READY_FOR_DELIVERY
+     * in the same breath, and two notifications a second apart for one event is how a bell
+     * teaches people to ignore it.
+     */
+    private void tellTheCustomer(OrderEntity order, OrderStatus to) {
+        String ref = order.getPublicRef();
+        String what = describe(order);
+        String link = "/track?ref=" + ref;
+        switch (to) {
+            case AWAITING_PAYMENT -> feed.record(order.getAccountId(), NotificationKind.ORDER_PLACED,
+                    "Order placed", what + " — waiting for payment.", link, ref);
+            case CREDENTIALS_PENDING -> feed.record(order.getAccountId(), NotificationKind.ACTION_NEEDED,
+                    "We need your EA sign-in",
+                    "Your order cannot start until we have it. It is encrypted and deleted when the "
+                            + "order is done.", link, ref);
+            case READY_FOR_DELIVERY -> feed.record(order.getAccountId(), NotificationKind.PAYMENT_CONFIRMED,
+                    "Payment confirmed", what + " is queued for delivery.", link, ref);
+            case IN_PROGRESS -> feed.record(order.getAccountId(), NotificationKind.STATUS_CHANGED,
+                    "Your order has started", "Someone is working on " + what + " now.", link, ref);
+            case ON_HOLD -> feed.record(order.getAccountId(), NotificationKind.ACTION_NEEDED,
+                    "Your order is on hold", "We have paused " + what + ". Open the order to see why.",
+                    link, ref);
+            case DELIVERED -> feed.record(order.getAccountId(), NotificationKind.DELIVERED,
+                    "Order delivered", what + " is done.", link, ref);
+            case COMPLETED -> feed.record(order.getAccountId(), NotificationKind.STATUS_CHANGED,
+                    "Order completed", "Your guarantee window on " + what + " has closed and your "
+                            + "reward points have landed.", link, ref);
+            case REFUNDED -> feed.record(order.getAccountId(), NotificationKind.STATUS_CHANGED,
+                    "Order refunded", what + " has been refunded.", link, ref);
+            default -> {
+                // Draft, abandoned, disputed and credited are either invisible to the
+                // customer or arrive through a conversation rather than a bell.
+            }
+        }
     }
 
     /**

@@ -28,6 +28,8 @@ export type Language = (typeof LANGUAGES)[number]['code']
 
 const DICTIONARIES: Record<Language, Dictionary> = { en, es, fr }
 
+import { mayStorePreferences } from '../lib/consent'
+
 const STORAGE_KEY = 'gfs.language'
 
 type I18nValue = {
@@ -69,7 +71,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((next: Language) => {
     setLangState(next)
     try {
-      window.localStorage.setItem(STORAGE_KEY, next)
+      // Written down only where the visitor agreed to it. Declined, the choice still
+      // applies -- it simply lasts as long as the tab.
+      if (mayStorePreferences()) window.localStorage.setItem(STORAGE_KEY, next)
     } catch {
       // Private browsing denies localStorage. The choice still applies for this
       // session; losing it on reload is a far better outcome than a crash.
