@@ -834,6 +834,12 @@ const es: Dictionary = {
     orderCreated: 'Pedido creado',
     keepReference:
       'Guarda esa referencia: es como sigues el pedido y como soporte lo encuentra.',
+    testingTitle: 'Los pagos están en pruebas',
+    testingBody:
+      'Nuestro sistema de pago aún se está afinando. Tomamos todas las precauciones y tu ' +
+      'pedido se gestiona igual que siempre, pero si algo en esta pantalla parece incorrecto, ' +
+      'detente y habla con nosotros antes de pagar.',
+    testingContact: 'Escribir a soporte',
     stubTitle: 'La pasarela de pago no está configurada',
     stubBody:
       'Este entorno funciona sin credenciales de pago reales, así que no se moverá dinero. ' +
@@ -1491,7 +1497,7 @@ const es: Dictionary = {
       SINGLE_SESSION: 'Sesión única · 1 hora',
       MONTHLY_6_SESSIONS: '6 sesiones × 40 minutos',
     },
-    millions: (qty: string): string => `${qty} M`,
+    coins: (value: string, unit: 'K' | 'M'): string => `${value} ${unit}`,
     lines: {
       base: (service: string, detail: string): string => `${service} — ${detail}`,
       marketTax: (pct: string): string => `Impuesto del mercado de fichajes de EA (${pct})`,

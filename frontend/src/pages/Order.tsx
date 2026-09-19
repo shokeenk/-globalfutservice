@@ -12,7 +12,7 @@ import {
 } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
-import { bpsToPercent, coinsLabel, trimNumber } from '../lib/format'
+import { bpsToPercent, coinsLabel, coinsShort } from '../lib/format'
 import { useMoney } from '../lib/money'
 import { openCheckout, isStubGateway } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
@@ -22,7 +22,7 @@ import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 import { CoinIcon } from '../brand/CoinIcon'
 import { RankBadge, hasBadge } from '../components/RankBadge'
-import { useCatalogLabels } from '../content/catalogLabels'
+import { coinsText, useCatalogLabels } from '../content/catalogLabels'
 import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
 
@@ -86,7 +86,7 @@ export default function Order() {
 
   const [platform, setPlatform] = useState<string>('')
   const [variant, setVariant] = useState<string>(params.get('variant') ?? '')
-  const [quantity, setQuantity] = useState(3)
+  const [quantity, setQuantity] = useState(DEFAULT_QUANTITY)
   // Accepts ?coupon= so a code can be shared as a link rather than typed off a stream.
   const [couponCode, setCouponCode] = useState(params.get('coupon') ?? '')
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
@@ -112,9 +112,47 @@ export default function Order() {
     ? options.find((o) => o.variant === variant) ?? options[0]
     : options.find((o) => o.platform === platform) ?? options[0]
 
-  const min = Number(selected?.minQuantity ?? 0.5)
-  const max = Number(selected?.maxQuantity ?? 100)
-  const stepSize = Number(selected?.stepQuantity ?? 0.5)
+  /*
+   * Fallbacks only, for the frame before the catalog lands. They match the rate card
+   * rather than being round numbers, so a slider rendered in that frame cannot offer an
+   * amount the server would refuse to quote.
+   */
+  const min = Number(selected?.minQuantity ?? 0.01)
+  const max = Number(selected?.maxQuantity ?? 1)
+  const stepSize = Number(selected?.stepQuantity ?? 0.01)
+
+  /*
+   * The shortcut buttons, derived from the range rather than written into it.
+   *
+   * A hardcoded 1/2/5/10/20/50 was a list of millions, and when the ceiling came down to
+   * one million exactly one of them survived. Working in whole thousands keeps the
+   * step test exact -- 0.05 - 0.01 is 0.04000000000000001 in binary floating point and
+   * would drop a perfectly valid preset -- and the candidates span both scales so the
+   * row stays populated whichever way the range moves next.
+   */
+  /*
+   * Whatever the amount is, it has to be one the rate card would sell.
+   *
+   * The opening value used to be the constant 3, which was inside the old 0.5M-5M range
+   * and outside the current one -- the slider clamped its thumb to the ceiling while the
+   * state stayed at 3, so the first quote of every visit came back "Maximum order is 1M
+   * coins". A constant cannot know the range; this reads it. It also covers a customer
+   * who switches platform to a card with different bounds, which nothing did before.
+   */
+  useEffect(() => {
+    if (isFlat || !selected) return
+    setQuantity((current) => clampToStep(current, min, max, stepSize))
+  }, [isFlat, selected, min, max, stepSize])
+
+  const presets = useMemo(() => {
+    const stepK = Math.max(1, Math.round(stepSize * 1000))
+    const minK = Math.round(min * 1000)
+    const maxK = Math.round(max * 1000)
+    return [50, 100, 250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000]
+      .filter((k) => k >= minK && k <= maxK && (k - minK) % stepK === 0)
+      .slice(0, 6)
+      .map((k) => k / 1000)
+  }, [min, max, stepSize])
 
   /*
    * Quoting is debounced and every in-flight request is aborted when a newer one
@@ -383,7 +421,7 @@ export default function Order() {
                    * whole time. It is also the only red on the panel, because it is
                    * the value the customer is actually choosing.
                    */
-                  <AmountReadout quantity={quantity} />
+                  <AmountReadout quantity={quantity} stepSize={stepSize} />
                 }
               >
                 {/*
@@ -408,9 +446,15 @@ export default function Order() {
                   />
                 </div>
 
+                {/*
+                  The ends of the track, in the unit the amount is actually said in.
+                  These read the rate card, so they follow a range change rather than
+                  needing one — "0.01M" was what a hardcoded M suffix produced the day
+                  the floor dropped to ten thousand coins.
+                */}
                 <div className="tnum flex justify-between text-[11.5px] text-chalk-faint">
-                  <span>{trimNumber(min)}M</span>
-                  <span>{trimNumber(max)}M</span>
+                  <span>{coinsShort(min)}</span>
+                  <span>{coinsShort(max)}</span>
                 </div>
 
                 {/*
@@ -445,7 +489,7 @@ export default function Order() {
                              transition-opacity duration-300"
                   style={{ opacity: selected?.unitPriceFormatted ? 1 : 0 }}
                 >
-                  <span className="text-chalk-faint">{trimNumber(quantity)}M</span>
+                  <span className="text-chalk-faint">{coinsShort(quantity)}</span>
                   <span aria-hidden="true" className="text-chalk-faint">&times;</span>
                   <span>{selected?.unitPriceFormatted ?? '—'}</span>
                   <span aria-hidden="true" className="h-3 w-px bg-ink-300" />
@@ -459,7 +503,7 @@ export default function Order() {
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
-                  {[1, 2, 5, 10, 20, 50].filter((v) => v >= min && v <= max).map((preset) => (
+                  {presets.map((preset) => (
                     <button
                       key={preset}
                       type="button"
@@ -479,7 +523,7 @@ export default function Order() {
                           : 'border border-ink-400 bg-ink-700 text-chalk-muted hover:border-ink-300 hover:text-chalk',
                       ].join(' ')}
                     >
-                      {preset}M
+                      {coinsShort(preset)}
                     </button>
                   ))}
                 </div>
@@ -553,6 +597,37 @@ export default function Order() {
 }
 
 /**
+ * The amount somebody opens the page on.
+ *
+ * <p>A hundred thousand coins, because it is the round number the price is quoted in and
+ * a real order rather than a demonstration. It is clamped to the rate card on arrival, so
+ * a card that does not reach it opens at its own nearest step instead.
+ *
+ * <p>It is a starting position and nothing depends on it. Changing it is changing this
+ * line.
+ */
+const DEFAULT_QUANTITY = 0.1
+
+/**
+ * The nearest amount the rate card would actually sell, at or inside its bounds.
+ *
+ * <p>Integer thousands throughout, and `Math.round` rather than a cast: these numbers
+ * come from NUMERIC(10,2) by way of JSON, so 0.5 can arrive as 0.49999999999999994 and
+ * truncation would quietly lose a step. Working in whole thousands also keeps the
+ * remainder test exact, which it is not in binary floating point -- 0.05 - 0.01 is
+ * 0.04000000000000001.
+ */
+function clampToStep(value: number, min: number, max: number, step: number): number {
+  const stepK = Math.max(1, Math.round(step * 1000))
+  const minK = Math.round(min * 1000)
+  const maxK = Math.round(max * 1000)
+  if (!Number.isFinite(value)) return minK / 1000
+  const clamped = Math.min(maxK, Math.max(minK, Math.round(value * 1000)))
+  const steps = Math.round((clamped - minK) / stepK)
+  return Math.min(maxK, minK + steps * stepK) / 1000
+}
+
+/**
  * The live coin amount, eased toward its target.
  *
  * <p>The tween is the interesting part, and it is deliberately *not* what the
@@ -565,7 +640,7 @@ export default function Order() {
  * to it. The threshold is what separates the two, and no state has to track
  * which input the change came from.
  */
-function AmountReadout({ quantity }: { quantity: number }) {
+function AmountReadout({ quantity, stepSize }: { quantity: number; stepSize: number }) {
   const [shown, setShown] = useState(quantity)
   const reduced = useReducedMotion()
   const frame = useRef(0)
@@ -577,8 +652,10 @@ function AmountReadout({ quantity }: { quantity: number }) {
     }
     const from = shown
     const delta = Math.abs(quantity - from)
-    // A drag step is 0.5M. Anything bigger came from a button.
-    if (delta <= 0.75) {
+    // Anything bigger than a step and a half came from a button, not a drag. Read from
+    // the rate card because the step is the rate card's to set: pinned at 0.75 it meant
+    // "a drag step is 0.5M", which stopped being true the day the step became 0.01M.
+    if (delta <= stepSize * 1.5) {
       setShown(quantity)
       return
     }
@@ -594,7 +671,7 @@ function AmountReadout({ quantity }: { quantity: number }) {
     return () => cancelAnimationFrame(frame.current)
     // `shown` is read as a starting point, not depended on — including it would
     // restart the tween on every frame it sets.
-  }, [quantity, reduced]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [quantity, reduced, stepSize]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <span
@@ -1838,7 +1915,7 @@ function CartCard({ quote, onEdit }: { quote: SignedQuote; onEdit: () => void })
           */}
           {quote.variant
             ? labels.variant(quote.variant, null)
-            : quote.quantity ? t.catalog.millions(quote.quantity) : null}
+            : quote.quantity ? coinsText(t, quote.quantity) : null}
           {quote.platform && ` · ${quote.platform}`}
         </p>
       </div>
@@ -1930,12 +2007,10 @@ function ManualAmount({
       setSnapped(null)
       return
     }
-    const clamped = Math.min(maxK, Math.max(minK, typed))
-    const steps = Math.round((clamped - minK) / stepK)
-    const exactK = Math.min(maxK, minK + steps * stepK)
+    const exactK = Math.round(clampToStep(typed / 1000, min, max, stepSize) * 1000)
 
     setDraft(String(exactK))
-    setSnapped(exactK !== typed ? `${formatK(exactK)}K` : null)
+    setSnapped(exactK !== typed ? coinsShort(exactK / 1000) : null)
     onCommit(exactK / 1000)
   }
 
@@ -1943,7 +2018,7 @@ function ManualAmount({
     <div className="mt-5">
       <Field
         label={t.order.amountManualLabel}
-        hint={snapped ? t.order.amountSnapped(snapped) : t.order.amountManualHint(stepK, `${formatK(minK)}K`, `${formatK(maxK)}K`)}
+        hint={snapped ? t.order.amountSnapped(snapped) : t.order.amountManualHint(stepK, coinsShort(min), coinsShort(max))}
       >
         {(props) => (
           <div className="relative">
@@ -1976,10 +2051,6 @@ function ManualAmount({
 }
 
 /** Thousands with separators, so 1250 reads as 1,250 rather than 1250. */
-function formatK(value: number): string {
-  return value.toLocaleString('en-US')
-}
-
 /* --------------------------------------------------------------- requirements --- */
 
 /**
@@ -2160,6 +2231,7 @@ function PaymentStage({
   const [settled, setSettled] = useState(false)
   const stub = isStubGateway(order.payment)
   const isCoaching = sku === 'COACHING'
+  const isTrading = sku === 'TRADING_SERVICE'
 
   async function pay() {
     setOpening(true)
@@ -2188,6 +2260,27 @@ function PaymentStage({
       <p className="text-[13px] leading-relaxed text-chalk-muted">
         {t.order.keepReference}
       </p>
+
+      {/*
+        The testing notice, above every way of paying rather than beside one of them.
+
+        It sits here because this is the last screen before money moves and it has to be
+        read before the decision, not found afterwards — under the pay button it would be
+        a disclaimer, above it it is information. `neutral` rather than `warn`: the
+        amber panel on this site means something has gone wrong, and nothing has.
+
+        Trading only. The gateway is shared with boosting and coaching, so the same words
+        would be true there — but the owner asked for it on the coin checkout, and where a
+        caution appears is their call to make, not one to infer.
+      */}
+      {isTrading && (
+        <Alert tone="neutral" title={t.order.testingTitle}>
+          {t.order.testingBody}{' '}
+          <Link className="font-semibold underline" to="/support">
+            {t.order.testingContact}
+          </Link>
+        </Alert>
+      )}
 
       {/*
         The gateway button appears only when a gateway is actually configured, and is no
