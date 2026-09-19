@@ -145,10 +145,12 @@ export default function About() {
                   <dt className="w-[132px] shrink-0 text-chalk-faint">Legal name</dt>
                   <dd className="text-chalk-muted">{BUSINESS.legalName}</dd>
                 </div>
-                <div className="flex gap-2">
-                  <dt className="w-[132px] shrink-0 text-chalk-faint">Registered address</dt>
-                  <dd className="text-chalk-muted">{BUSINESS.registeredAddress}</dd>
-                </div>
+                {/*
+                  No registered address here. This block exists so a reader knows who they
+                  are dealing with and how to reach them, and the name, number and email do
+                  that. The address is on /contact and in the policy documents, where it is
+                  part of the contract rather than part of an introduction.
+                */}
                 <div className="flex gap-2">
                   <dt className="w-[132px] shrink-0 text-chalk-faint">Mobile</dt>
                   <dd>

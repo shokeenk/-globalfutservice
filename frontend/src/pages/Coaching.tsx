@@ -360,58 +360,125 @@ function MeetCoach() {
 
   return (
     <div id="coach" className="scroll-mt-28">
-      <Section className="py-14">
-        <div className="grid items-center gap-8 lg:grid-cols-[190px_1.25fr_1fr_1fr]">
-          <div className="mx-auto w-[190px] overflow-hidden rounded-panel bg-brand-500 shadow-e3 lg:mx-0">
-            <img
-              src="/brand/coaches/vinay-512.webp"
-              srcSet="/brand/coaches/vinay-256.webp 256w, /brand/coaches/vinay-512.webp 512w"
-              sizes="190px"
-              alt={p.coachPhotoAlt}
-              width={512}
-              height={640}
-              loading="lazy"
-              className="aspect-[4/5] h-full w-full object-cover"
-            />
-          </div>
+      <Section wide className="py-12">
+        {/*
+         * `items-start`, not `items-center`. Centring gave every column its own top edge --
+         * the photo, the name, the specialities and the quote each floated to the middle of
+         * whichever column happened to be tallest, so nothing lined up with anything and the
+         * section read as four loose blocks. Top-aligned they share one edge, which is what
+         * the rest of the page does.
+         *
+         * Four columns only from `xl`, and on the wide measure. At `lg` there were 1072px
+         * to divide between a photo, a biography, five pills and a pull quote, and the
+         * result was four columns none of which had room -- the specialities track came
+         * out at 239px against the 310 its first row of pills needs, so "Decision Making"
+         * dropped to a line of its own. That is the actual fault: not a spacing value, but
+         * a four-column arrangement switched on 256px before it fits. Below `xl` the same
+         * blocks pair up two by two, which is what they were always going to do on a
+         * laptop anyway.
+         *
+         * The `minmax` floor then holds the pill row together at every width above that,
+         * including translations -- Spanish's "Toma de decisiones" is the longest pill the
+         * three dictionaries produce.
+         */}
+        <div className="grid items-start gap-x-8 gap-y-10 sm:grid-cols-2 xl:grid-cols-[210px_1.45fr_minmax(312px,1.25fr)_1fr]">
+          <CoachPortrait alt={p.coachPhotoAlt} />
 
           <div>
             <Eyebrow>{p.coachEyebrow}</Eyebrow>
-            <h2 className="display mt-3 text-[2.3rem] leading-none text-chalk">Vinay</h2>
-            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-chalk-muted">
+            <h2 className="display mt-2.5 text-[2.3rem] leading-none text-chalk">Vinay</h2>
+            <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-chalk-muted">
               {p.coachTitleLine}
             </p>
-            <p className="mt-4 text-body-sm leading-relaxed text-chalk-muted">{p.coachBio}</p>
+            <p className="mt-3 text-body-sm leading-relaxed text-chalk-muted">{p.coachBio}</p>
           </div>
 
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-chalk-faint">
               {p.specialtiesLabel}
             </p>
-            <ul className="mt-3 flex flex-wrap gap-2">
+            {/*
+             * Fixed height, and no wrapping inside a pill. `py-1` let one grow a line taller
+             * the moment its label was long enough to break -- "Decision Making" is one line
+             * in English and two in French -- and a taller pill puts its whole row out of
+             * step with the row under it. Sized by height rather than by padding, a row stays
+             * a row whatever the words are.
+             */}
+            <ul className="mt-2.5 flex flex-wrap gap-2">
               {p.specialties.map((item) => (
-                <li key={item} className="rounded-full border border-ink-400 bg-paper px-3 py-1 text-[12px] text-chalk-muted">
+                <li
+                  key={item}
+                  className="inline-flex h-7 items-center whitespace-nowrap rounded-full border
+                             border-ink-400 bg-paper px-3 text-[12px] leading-none text-chalk-muted"
+                >
                   {item}
                 </li>
               ))}
             </ul>
-            <p className="mt-4 flex items-center gap-2 text-[13px] text-chalk-muted">
+            <p className="mt-3 flex items-center gap-2 text-[13px] text-chalk-muted">
               <CoachIcon name="globe" className="h-4 w-4" />
               <span className="font-semibold text-chalk">{p.languagesLabel}</span> {p.languagesValue}
             </p>
             {/* V1 has one coach and no profile page: this starts the same booking as every other button. */}
-            <ButtonLink to="/coaching/book" variant="secondary" size="md" className="mt-5">
+            <ButtonLink to="/coaching/book" variant="secondary" size="md" className="mt-4">
               {p.viewProfile}
             </ButtonLink>
           </div>
 
-          <figure className="rounded-panel border border-ink-400 bg-paper p-6 shadow-e2">
+          <figure className="rounded-panel border border-ink-400 bg-paper p-5 shadow-e2">
             <CoachIcon name="quote" className="h-7 w-7 text-brand-500" strokeWidth={2.4} />
             <blockquote className="mt-3 text-[1.05rem] leading-relaxed text-chalk">{p.coachQuote}</blockquote>
-            <figcaption className="mt-4 text-[13px] font-semibold text-chalk">— Vinay</figcaption>
+            <figcaption className="mt-3 text-[13px] font-semibold text-chalk">— Vinay</figcaption>
           </figure>
         </div>
       </Section>
+    </div>
+  )
+}
+
+/**
+ * The coach photograph, in its panel.
+ *
+ * <p>The red wedge and the badge belong to the panel, not to the photograph. In the
+ * original design both were baked into the picture -- it was shot against a red studio
+ * diagonal, and the badge was the logo printed on the shirt -- so changing the photograph
+ * took the treatment with it and left a bare headshot on a grey wall. Built in CSS
+ * instead, the composition survives the next photograph, and the one after that.
+ *
+ * <p>The wedge is a frame, not an overlay: it shows in the panel's padding around the
+ * top-left corner and stops at the image. Painting red across the subject would be closer
+ * to the reference and worse to look at.
+ */
+function CoachPortrait({ alt }: { alt: string }) {
+  return (
+    <div className="relative mx-auto w-[210px] sm:mx-0">
+      <div className="relative overflow-hidden rounded-panel bg-gray-100 p-3.5 shadow-e3">
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 bg-brand-500"
+          style={{ clipPath: 'polygon(0 0, 88% 0, 0 88%)' }}
+        />
+        <img
+          src="/brand/coaches/vinay-512.webp"
+          srcSet="/brand/coaches/vinay-256.webp 256w, /brand/coaches/vinay-512.webp 512w"
+          sizes="182px"
+          alt={alt}
+          width={512}
+          height={640}
+          loading="lazy"
+          className="relative aspect-[4/5] w-full rounded-edge object-cover"
+        />
+      </div>
+      {/* Decorative: the business names itself three times on this page already. */}
+      <img
+        src="/brand/gfs-badge.png"
+        alt=""
+        aria-hidden="true"
+        width={128}
+        height={128}
+        loading="lazy"
+        className="absolute -bottom-3 -right-3 h-14 w-14 rounded-full object-cover shadow-e2 ring-[3px] ring-paper"
+      />
     </div>
   )
 }
