@@ -207,7 +207,13 @@ export function Footer() {
             {BUSINESS.lineOfBusiness}
           </p>
           <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
-            Operated by {BUSINESS.legalName} · {BUSINESS.registeredAddress} ·{' '}
+            {/*
+              Named, reachable, but not addressed. The operator has to be identifiable on
+              every page; the residential address behind the business does not have to be
+              on every page to achieve that. It stays in full on /contact, which is the
+              page the gateway's verification points at, and in each policy document.
+            */}
+            Operated by {BUSINESS.legalName} ·{' '}
             <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> ·{' '}
             <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
           </p>

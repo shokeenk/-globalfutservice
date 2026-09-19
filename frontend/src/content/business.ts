@@ -1,11 +1,16 @@
 /**
  * The operating entity, written once.
  *
- * <p>These four facts have to appear identically on the contact page, in the footer,
- * and inside every policy document that names who you are contracting with. A payment
+ * <p>These four facts have to appear identically wherever they appear at all. A payment
  * gateway's reviewer checks that they match; a customer chasing an order checks that
  * the number they are dialling is the one on the invoice. Typing them out five times
  * is how the address on one page ends up a flat number different from another.
+ *
+ * <p>The address is the exception to "everywhere". It is a residential one, so it is
+ * shown only where it is doing work: /contact, which is the page the gateway's
+ * verification points at, and the operator block appended to each policy document,
+ * where it is part of what the customer is contracting with. It is deliberately not in
+ * the sitewide footer or on the about page.
  *
  * <p>Taken from the KYC submission, and formatted exactly as filed. The legal name is
  * the one on the PAN, which is why it is a person rather than a trading name — the
