@@ -7,10 +7,10 @@
  * is how the address on one page ends up a flat number different from another.
  *
  * <p>The address is the exception to "everywhere". It is a residential one, so it is
- * shown only where it is doing work: /contact, which is the page the gateway's
- * verification points at, and the operator block appended to each policy document,
- * where it is part of what the customer is contracting with. It is deliberately not in
- * the sitewide footer or on the about page.
+ * published on exactly one page: /contact, which is where the payment gateway's
+ * verification points. It is deliberately absent from the sitewide footer, the about
+ * page and the operator block on the policy documents — every one of which names and
+ * links the operator, so a reader who wants the address is one click from it.
  *
  * <p>Taken from the KYC submission, and formatted exactly as filed. The legal name is
  * the one on the PAN, which is why it is a person rather than a trading name — the
