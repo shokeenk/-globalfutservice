@@ -6,6 +6,7 @@ import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.web.CredentialDtos;
+import com.globalfutservice.domain.catalog.CoinAmount;
 import com.globalfutservice.domain.catalog.PcLauncher;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
@@ -771,7 +772,7 @@ public class OrderService {
         }
         return switch (order.getSku()) {
             case TRADING_SERVICE -> "Buy Coins — "
-                    + order.getQuantity().stripTrailingZeros().toPlainString() + "M"
+                    + CoinAmount.describe(order.getQuantity())
                     + (order.getPlatform() == null ? "" : " (" + order.getPlatform().displayName() + ")");
             case BOOST_CHAMPS -> "Champs Boosting — " + order.getVariant();
             case BOOST_RIVALS -> "Rivals Boosting — " + order.getVariant();
