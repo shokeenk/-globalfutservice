@@ -1099,6 +1099,12 @@ function updatedOn() {
  * <p>Appended to every policy document rather than living only on the contact page. A
  * policy that never names its operator is one a reader has to take on trust, and a
  * gateway reviewing these pages checks each of them for the entity rather than just one.
+ *
+ * <p>The registered address is not among them, at the owner's instruction. It is a
+ * residential one, and it is published in full on /contact -- which is where the
+ * gateway's verification points, and where a reader following "who operates this" from
+ * any policy page arrives. Named, phoned and emailed is enough to identify the operator
+ * here; the address is one page away rather than on all six.
  */
 function Operator() {
   return (
@@ -1109,10 +1115,6 @@ function Operator() {
         {BUSINESS.tradingName}.
       </p>
       <dl className="mt-4 space-y-1.5 text-[14px]">
-        <div className="flex gap-2">
-          <dt className="w-[132px] shrink-0 text-chalk-faint">Registered address</dt>
-          <dd className="text-chalk-muted">{BUSINESS.registeredAddress}</dd>
-        </div>
         <div className="flex gap-2">
           <dt className="w-[132px] shrink-0 text-chalk-faint">Mobile</dt>
           <dd><a className="text-chalk-muted underline" href={PHONE_HREF}>{BUSINESS.phone}</a></dd>
