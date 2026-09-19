@@ -835,6 +835,12 @@ const fr: Dictionary = {
     orderCreated: 'Commande créée',
     keepReference:
       'Garde cette référence — c’est ainsi que tu suis ta commande et que l’assistance la retrouve.',
+    testingTitle: 'Les paiements sont en test',
+    testingBody:
+      'Notre système de paiement est encore en cours d’ajustement. Nous prenons toutes les ' +
+      'précautions et ta commande est traitée comme d’habitude, mais si quelque chose semble ' +
+      'incorrect sur cet écran, arrête-toi et parle-nous avant de payer.',
+    testingContact: 'Contacter l’assistance',
     stubTitle: 'La passerelle de paiement n’est pas configurée',
     stubBody:
       'Cet environnement fonctionne sans identifiants de paiement réels, donc aucun argent ne ' +
@@ -1498,7 +1504,7 @@ const fr: Dictionary = {
       SINGLE_SESSION: 'Séance unique · 1 heure',
       MONTHLY_6_SESSIONS: '6 séances × 40 minutes',
     },
-    millions: (qty: string): string => `${qty} M`,
+    coins: (value: string, unit: 'K' | 'M'): string => `${value} ${unit}`,
     lines: {
       base: (service: string, detail: string): string => `${service} — ${detail}`,
       marketTax: (pct: string): string => `Taxe du marché des transferts EA (${pct})`,
