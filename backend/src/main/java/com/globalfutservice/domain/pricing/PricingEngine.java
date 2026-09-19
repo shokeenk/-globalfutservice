@@ -1,5 +1,6 @@
 package com.globalfutservice.domain.pricing;
 
+import com.globalfutservice.domain.catalog.CoinAmount;
 import com.globalfutservice.domain.catalog.PriceUnit;
 import com.globalfutservice.domain.catalog.RateCard;
 import com.globalfutservice.domain.loyalty.LoyaltyTier;
@@ -330,8 +331,8 @@ public final class PricingEngine {
 
     private static String baseLabel(RateCard card, BigDecimal qty) {
         if (card.sku().unit() == PriceUnit.PER_MILLION) {
-            return card.sku().displayName() + " — " + qty.stripTrailingZeros().toPlainString()
-                    + "M (" + card.platform().displayName() + ")";
+            return card.sku().displayName() + " — " + CoinAmount.describe(qty)
+                    + " (" + card.platform().displayName() + ")";
         }
         // The rate card's own label, not the variant. A receipt reading
         // "Rivals Boosting — DIV_1_TO_ELITE" tells the customer we shipped a database
