@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useT } from '../i18n'
 import { useCatalog } from '../state/CatalogContext'
+import { coinsParts } from '../lib/format'
 import type { QuoteLine } from '../lib/types'
 
 /**
@@ -31,6 +32,23 @@ import type { QuoteLine } from '../lib/types'
  * translating them would leave a player unable to match what they bought to what they
  * see on their console.
  */
+/**
+ * A quantity from the server, said the way a player says it.
+ *
+ * <p>The wire carries millions because the rate card prices in millions, so a 100,000-coin
+ * order arrives as "0.10". Printed straight it reads "0.1M", which is nobody's way of
+ * describing that order -- and it appears on the checkout summary line and again on the
+ * order page. The unit is chosen here and the spacing in the dictionary, because English
+ * writes "100K" and French writes "100 K".
+ *
+ * <p>A plain function rather than part of {@link useCatalogLabels}: the order page needs
+ * it outside that hook, and it depends on nothing but the translator.
+ */
+export function coinsText(t: ReturnType<typeof useT>, quantity: string): string {
+  const { value, unit } = coinsParts(Number(quantity))
+  return t.catalog.coins(value, unit)
+}
+
 export function useCatalogLabels() {
   const t = useT()
   const { policy } = useCatalog()
@@ -100,7 +118,7 @@ export function useCatalogLabels() {
           const name = service(context.sku, null)
           const detail = context.variant
             ? variant(context.variant, null)
-            : [context.quantity ? t.catalog.millions(context.quantity) : null, context.platform]
+            : [context.quantity ? coinsText(t, context.quantity) : null, context.platform]
                 .filter(Boolean)
                 .join(' · ')
           return detail ? t.catalog.lines.base(name, detail) : name
