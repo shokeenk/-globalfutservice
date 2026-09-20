@@ -1,11 +1,18 @@
 package com.globalfutservice.notify;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.notify.email.EmailTemplate;
+import com.globalfutservice.notify.email.TransactionalEmails;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
+
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -42,22 +49,38 @@ public class EmailNotifier implements Notifier {
         return "email";
     }
 
+    /**
+     * Deliberately silent.
+     *
+     * <p>Placing an order is no longer an email. The mailing specification consolidates
+     * the customer's payment-status mail down to two messages — awaiting verification and
+     * confirmed — and an "order received" note sent before either of them arrives is the
+     * third. The event itself still fans out to the operator channels, which do want to
+     * know an order exists before any money moves.
+     */
     @Override
     public void orderPlaced(OrderNotification n) {
-        send(n, "Order " + n.publicRef() + " received", """
-                Thanks — we have your order.
+        log.debug("orderPlaced is not emailed to customers; {} gets awaitingVerification instead",
+                n.publicRef());
+    }
 
-                Reference: %s
-                Service:   %s
-                Total:     %s
+    /**
+     * Email 1 — the customer has submitted a payment reference and screenshot.
+     */
+    @Override
+    public void awaitingVerification(OrderNotification n) {
+        var rendered = TransactionalEmails.awaitingVerification(n, brand(), trackUrl(n));
+        sendHtml(n, rendered);
+    }
 
-                Track it any time at %s/track
-
-                We aim to deliver well inside our published window. You will get another
-                email the moment it is done.
-
-                — Global FUT Services
-                """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted(), publicUrl()));
+    /**
+     * Email 2 — an operator verified the payment, or the gateway captured it.
+     */
+    @Override
+    public void orderConfirmed(OrderNotification n) {
+        var rendered = TransactionalEmails.orderConfirmed(
+                n, brand(), trackUrl(n), props.discordInvite());
+        sendHtml(n, rendered);
     }
 
     @Override
@@ -103,32 +126,18 @@ public class EmailNotifier implements Notifier {
     }
 
     /**
-     * The Discord invite, once the money is confirmed.
+     * Deliberately silent, for the same reason as {@link #orderPlaced}.
      *
-     * <p>Sent at confirmation rather than at checkout because the storefront already shows
-     * the link on screen, and an email that arrives while the payment is still being
-     * checked would read as a receipt for money that has not been found yet.
+     * <p>Coaching used to get its own "join us on Discord" mail at confirmation. The
+     * confirmation email now carries that: its Discord branch covers Champs, boosting and
+     * coaching alike, with the three-step block the reference design specifies. Leaving
+     * this one sending too would put two confirmations in a coaching customer's inbox
+     * within a second of each other. The event still fans out to the other channels.
      */
     @Override
     public void coachingConfirmed(OrderNotification n) {
-        send(n, "Your coaching is confirmed — join us on Discord", """
-                Your payment is confirmed and your coaching is ready to schedule.
-
-                Reference: %s
-                Service:   %s
-                Total:     %s
-
-                Next, join our Discord server. It is where your coach reaches you, where
-                your session gets scheduled, and where you can share gameplay if asked:
-
-                  %s
-
-                Once you have joined, our team will reach out with further instructions.
-
-                Play smarter. Improve deliberately.
-                — Global FUT Services
-                """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted(),
-                props.discordInvite()));
+        log.debug("coachingConfirmed is not emailed separately; {} is covered by orderConfirmed",
+                n.publicRef());
     }
 
     private String publicUrl() {
@@ -195,6 +204,77 @@ public class EmailNotifier implements Notifier {
             }
         }
         return props.loyalty().bonusZone();
+    }
+
+    /** Footer destinations, resolved from configuration rather than written into the copy. */
+    private EmailTemplate.Brand brand() {
+        String website = props.publicUrl();
+        return new EmailTemplate.Brand(
+                website, hostOf(website),
+                props.discordInvite(), "Join the GFS Discord",
+                props.instagramUrl(), "@" + handleOf(props.instagramUrl()));
+    }
+
+    /**
+     * The customer's own order, not the generic lookup form.
+     *
+     * <p>{@code /track?ref=...} is what the in-app notification feed already links to, so
+     * this is the same destination by the same route rather than a second tracking
+     * mechanism. The page still asks for the email on the order before it shows anything.
+     */
+    private String trackUrl(OrderNotification n) {
+        return publicUrl() + "/track?ref=" + n.publicRef();
+    }
+
+    private static String hostOf(String url) {
+        try {
+            String host = java.net.URI.create(url).getHost();
+            return host == null ? url : host.replaceFirst("^www\\.", "");
+        } catch (RuntimeException e) {
+            return url;
+        }
+    }
+
+    private static String handleOf(String instagramUrl) {
+        String trimmed = instagramUrl.replaceAll("/+$", "");
+        return trimmed.substring(trimmed.lastIndexOf('/') + 1);
+    }
+
+    /**
+     * Sends the branded message, with a plain-text part alongside it.
+     *
+     * <p>Multipart rather than HTML alone: a text/plain alternative is what a screen
+     * reader, a watch and a spam filter each read first, and an HTML-only message scores
+     * worse on delivery for no benefit. Both parts carry the same facts.
+     */
+    private void sendHtml(OrderNotification n, TransactionalEmails.Rendered rendered) {
+        if (!isEnabled()) {
+            log.debug("Email disabled; would have sent '{}' to {}",
+                    rendered.subject(), n.customerEmail());
+            return;
+        }
+        if (n.customerEmail() == null || n.customerEmail().isBlank()) {
+            log.warn("No email address on order {}", n.publicRef());
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message, MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name());
+            helper.setFrom(props.notifications().emailFrom(),
+                    props.notifications().emailFromName());
+            helper.setTo(n.customerEmail());
+            helper.setSubject(rendered.subject());
+            helper.setText(rendered.text(), rendered.html());
+            mailSender.send(message);
+            log.info("Sent '{}' for order {}", rendered.subject(), n.publicRef());
+        } catch (UnsupportedEncodingException e) {
+            // The from-name is configuration, so this is a deployment error, not a per-order one.
+            log.error("Sender name is not encodable: {}", e.getMessage());
+        } catch (Exception e) {
+            log.warn("Email to order {} failed: {}", n.publicRef(), e.getMessage());
+        }
     }
 
     private void send(OrderNotification n, String subject, String body) {

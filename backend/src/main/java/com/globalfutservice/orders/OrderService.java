@@ -467,6 +467,20 @@ public class OrderService {
         OrderEntity paid = transition(order, OrderStatus.PAID, Actor.SYSTEM, null,
                 "gateway", "Payment captured: " + paymentReference);
 
+        /*
+         * The customer's confirmation, for every order and every payment route.
+         *
+         * Raised here rather than in ManualPaymentService.verify() because this is the
+         * single place an order becomes paid -- the gateway webhook and an operator
+         * verifying a bank transfer both arrive at this line. Raising it in the manual
+         * path would have left card-paid customers with no confirmation at all, which is
+         * what happened before: only coaching sent anything at this point.
+         *
+         * The transition above refuses anything not in AWAITING_PAYMENT, so a retried
+         * webhook cannot send this twice.
+         */
+        notifications.orderConfirmed(notificationFor(paid));
+
         // Coaching credits are granted at PAID, unlike loyalty points, which wait for the
         // guarantee window. The customer has bought sessions and needs to book them now;
         // making them wait a week for the credits would make the product unusable. The
@@ -630,7 +644,14 @@ public class OrderService {
         events.save(new OrderEventEntity(order.getId(), from, to, actor, actorId, actorLabel, reason));
     }
 
-    private OrderNotification notificationFor(OrderEntity order) {
+    /**
+     * The notification shape for an order.
+     *
+     * <p>Public so the manual-payment flow can raise the customer's "awaiting
+     * verification" email from the same builder the order lifecycle uses — one definition
+     * of what an order looks like to a notification channel, rather than two that drift.
+     */
+    public OrderNotification notificationFor(OrderEntity order) {
         return new OrderNotification(
                 order.getPublicRef(),
                 order.getStatus().name(),
@@ -639,6 +660,8 @@ public class OrderService {
                 order.getGuestEmail(),
                 order.getDiscordUsername(),
                 order.getDeliveryMethod().name(),
+                order.getSku() == null ? null : order.getSku().name(),
+                order.getPlatform() == null ? null : order.getPlatform().displayName(),
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef(),
                 coachingSummary(order));
     }

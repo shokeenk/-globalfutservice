@@ -49,6 +49,27 @@ public interface Notifier {
     }
 
     /** A coaching order's payment is confirmed. The customer's next step is Discord. */
+    /**
+     * The customer has told us they paid, and nobody has checked yet.
+     *
+     * <p>Distinct from {@code paymentClaimed}, which alerts an operator to go and look.
+     * This is the customer's own copy, and it is careful not to say the payment is
+     * confirmed — at this point no human has seen it.
+     */
+    default void awaitingVerification(OrderNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    /**
+     * An operator found the money and the order is live.
+     *
+     * <p>Branches by service in the channels that render it: coins get a tracking link,
+     * everything else gets pointed at Discord.
+     */
+    default void orderConfirmed(OrderNotification notification) {
+        // Channels opt in by overriding.
+    }
+
     default void coachingConfirmed(OrderNotification notification) {
         // Channels opt in by overriding.
     }
