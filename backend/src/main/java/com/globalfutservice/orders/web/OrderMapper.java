@@ -8,6 +8,9 @@ import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.domain.orders.SupplierStatusMapper;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
+import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.notify.DiscordBotClient;
+import com.globalfutservice.notify.discord.DiscordVerificationService;
 import com.globalfutservice.orders.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Entity to wire shape.
@@ -30,9 +34,68 @@ public class OrderMapper {
     private static final Logger log = LoggerFactory.getLogger(OrderMapper.class);
 
     private final ObjectMapper mapper;
+    private final AppProperties props;
+    private final DiscordVerificationService verification;
+    private final DiscordBotClient bot;
 
-    public OrderMapper(ObjectMapper mapper) {
+    public OrderMapper(ObjectMapper mapper, AppProperties props,
+                       DiscordVerificationService verification, DiscordBotClient bot) {
         this.mapper = mapper;
+        this.props = props;
+        this.verification = verification;
+        this.bot = bot;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    /**
+     * How this customer gets to their ticket.
+     *
+     * <p>Only services that are actually run in Discord get a panel at all — a coin order
+     * is tracked on this site and pointing its customer at a ticket would be inventing a
+     * step. For the rest it comes down to whether we already know their Discord account:
+     * if they signed in with Discord they were let into the channel when it opened, and
+     * anyone else has to join and claim the order.
+     */
+    private OrderDtos.DiscordAccessDto discordAccess(OrderEntity order) {
+        if (order.getSku() == Sku.TRADING_SERVICE) {
+            return new OrderDtos.DiscordAccessDto("NONE", null, null, null);
+        }
+        String invite = props.discordInvite();
+        String command = "/verify " + order.getPublicRef();
+
+        /*
+         * If the slash command is not actually registered, do not tell anybody to run it.
+         *
+         * The command only exists once the bot is configured and an application id is
+         * set, and until then a customer following these instructions types something
+         * Discord does not recognise and concludes the site is broken. The older panel --
+         * join, and quote your reference to the team -- is worse than /verify and works
+         * without any of this, so it is what an unconfigured deployment keeps showing.
+         */
+        if (!bot.isEnabled() || isBlank(props.notifications().discordApplicationId())) {
+            return new OrderDtos.DiscordAccessDto("QUOTE", null, invite, null);
+        }
+
+        /*
+         * A deep link is only offered to somebody who has actually been granted the
+         * channel -- which is every Discord-authenticated customer once the ticket
+         * exists, and anybody else who has already run /verify. Linking a channel the
+         * reader cannot open would look like the site was broken.
+         */
+        Optional<String> ticket = verification.ticketUrl(
+                order.getId(), props.notifications().discordGuildId());
+        if (ticket.isPresent()) {
+            return new OrderDtos.DiscordAccessDto("DIRECT", ticket.get(), invite, null);
+        }
+        if (verification.isDiscordAuthenticated(order.getAccountId())) {
+            // Signed in with Discord, but the ticket is not open yet -- the payment has
+            // not been submitted. They will be let in without doing anything.
+            return new OrderDtos.DiscordAccessDto("PENDING", null, invite, null);
+        }
+        return new OrderDtos.DiscordAccessDto("VERIFY", null, invite, command);
     }
 
     public OrderDtos.OrderResponse toResponse(OrderEntity order,
@@ -70,7 +133,8 @@ public class OrderMapper {
                 coaching && order.getCoachingPlatform() != null ? order.getCoachingPlatform().name() : null,
                 coaching ? order.getCoachingRank() : null,
                 coaching ? order.getCoachingFocus() : null,
-                order.getPcLauncher() == null ? null : order.getPcLauncher().name());
+                order.getPcLauncher() == null ? null : order.getPcLauncher().name(),
+                discordAccess(order));
     }
 
     public OrderDtos.AdminOrderSummary toAdminSummary(OrderEntity order, boolean credentialsHeld) {

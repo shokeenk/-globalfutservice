@@ -1,6 +1,7 @@
 package com.globalfutservice.notify;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.notify.discord.DiscordVerificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,6 +43,7 @@ class OrderTicketServiceTest {
                 false, null, null, "https://api.telegram.org",
                 true, "https://discord.test/webhook", ADMIN_ID,
                 botToken, "guild-1", "category-1",
+                null, null, null,
                 false, null, "orders@globalfutservices.com", "Global FUT Services");
     }
 
@@ -51,7 +53,7 @@ class OrderTicketServiceTest {
         AppProperties props = mock(AppProperties.class);
         when(props.notifications()).thenReturn(notifications("bot-token"));
         when(bot.isEnabled()).thenReturn(true);
-        tickets = new OrderTicketService(bot, props);
+        tickets = new OrderTicketService(bot, props, mock(DiscordVerificationService.class));
     }
 
     private static PaymentClaimNotification claim(boolean hasProof, boolean credentialsHeld) {

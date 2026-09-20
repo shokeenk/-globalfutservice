@@ -369,6 +369,9 @@ gfs:
     discord-bot-token: ${GFS_DISCORD_BOT_TOKEN:}
     discord-guild-id: ${GFS_DISCORD_GUILD_ID:}
     discord-order-category-id: ${GFS_DISCORD_ORDER_CATEGORY_ID:}
+    discord-public-key: ${GFS_DISCORD_PUBLIC_KEY:}
+    discord-application-id: ${GFS_DISCORD_APPLICATION_ID:}
+    discord-verify-channel-id: ${GFS_DISCORD_VERIFY_CHANNEL_ID:}
     email-enabled: ${GFS_EMAIL_ENABLED:false}
     # Who is on shift. Comma-separated. Blank means nobody gets order alerts.
     operator-emails: ${GFS_OPERATOR_EMAILS:}

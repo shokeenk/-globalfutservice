@@ -482,6 +482,28 @@ public record AppProperties(
              */
             String discordOrderCategoryId,
 
+            /**
+             * The application's Ed25519 public key, from the Discord developer portal.
+             *
+             * <p>Not a secret -- it verifies rather than authenticates, and Discord prints
+             * it on the same page as the app id. It is required all the same: without it
+             * the interactions endpoint cannot tell a real Discord request from anybody
+             * who has found the URL, and Discord will not accept an endpoint that fails
+             * its signature probe.
+             */
+            String discordPublicKey,
+
+            /** The application id, used to register the slash command. A snowflake. */
+            String discordApplicationId,
+
+            /**
+             * The channel customers run {@code /verify} in, linked from the order screen.
+             *
+             * <p>Cosmetic: the command works anywhere in the server the bot can see. This
+             * only decides where the instructions point people.
+             */
+            String discordVerifyChannelId,
+
             @DefaultValue("false") boolean emailEnabled,
             /**
              * Who gets the order alerts. Comma-separated; blank disables the channel.

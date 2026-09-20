@@ -219,6 +219,17 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/v1/marketing/o/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/marketing/c/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/marketing/campaigns/*/banner").permitAll()
+                    /*
+                      Discord's interactions callback.
+
+                      Unauthenticated because it must be: Discord calls it and holds no
+                      credential of ours to present. It is not unprotected — every request
+                      carries an Ed25519 signature over the raw body, checked before
+                      anything is read, and Discord itself refuses to register an endpoint
+                      that does not reject a bad one. Spring Security cannot express that
+                      check, so it lives in the controller.
+                    */
+                    .requestMatchers(HttpMethod.POST, "/api/v1/discord/interactions").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
 
                     // The OAuth redirect dance. Both legs must be reachable to a browser

@@ -220,6 +220,26 @@ services:
       - key: GFS_DISCORD_ORDER_CATEGORY_ID
         value: "1547158509509148702"
 
+      # ---- /verify, the post-join ticket claim ------------------------------
+      # Customers who signed in with Google are not known to Discord at checkout,
+      # so they join the server and claim their order with a slash command. All
+      # three are needed before that command exists; without them the tracking
+      # page falls back to "join and quote your reference", which still works.
+      #
+      # The public key is not a secret -- it verifies Discord's signature rather
+      # than authenticating us -- but it is required, or the endpoint cannot tell
+      # a real interaction from anybody who has found the URL.
+      #
+      # Set the interactions endpoint in the Discord developer portal to
+      # https://<this storefront>/api/v1/discord/interactions, and give the bot
+      # Manage Roles or it cannot write the channel permission.
+      - key: GFS_DISCORD_PUBLIC_KEY
+        sync: false
+      - key: GFS_DISCORD_APPLICATION_ID
+        sync: false
+      - key: GFS_DISCORD_VERIFY_CHANNEL_ID
+        sync: false
+
   # ---------------------------------------------------------------------------
   #  Storefront. The public entry point.
   # ---------------------------------------------------------------------------

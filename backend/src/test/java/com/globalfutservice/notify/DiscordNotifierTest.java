@@ -70,6 +70,7 @@ class DiscordNotifierTest {
                 false, null, null, "https://api.telegram.org",
                 enabled, url, adminId,
                 null, null, null,
+                null, null, null,
                 false, null, "orders@globalfutservices.com", "Global FUT Services");
     }
 

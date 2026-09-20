@@ -461,6 +461,18 @@ const es: Dictionary = {
     discordTicketCta: 'Abrir Discord',
     discordTicketCreated: '¡Tu ticket está creado!',
     discordTicketQuote: (ref) => `Indica tu número de pedido, ${ref}, y el equipo lo atenderá.`,
+    discordVerifyTitle: 'Entra en tu ticket',
+    discordVerifyBody:
+      'Entra en nuestro servidor de Discord y ejecuta allí este comando. Abrirá tu '
+      + 'ticket y nadie más podrá usarlo.',
+    discordVerifyJoin: 'Entrar en Discord',
+    discordVerifyCopy: 'Copiar comando',
+    discordVerifyCopied: 'Copiado',
+    discordPendingTitle: 'Tu ticket se abre solo',
+    discordPendingBody:
+      'Iniciaste sesión con Discord, así que ya conocemos tu cuenta. En cuanto se envíe '
+      + 'tu pago, tu ticket aparecerá en el servidor: no tienes que hacer nada.',
+    discordOpenTicket: 'Abrir tu ticket',
     seoTitle: 'Seguir tu pedido',
     eyebrow: 'Estado del pedido',
     title: '¿Dónde está mi pedido?',

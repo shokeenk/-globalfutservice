@@ -15,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -38,6 +39,15 @@ import java.util.Optional;
 public class DiscordBotClient {
 
     private static final Logger log = LoggerFactory.getLogger(DiscordBotClient.class);
+
+    /*
+     * Discord permission bits. Spelled out rather than pulled from a library, because the
+     * only alternative in this codebase would be one number nobody can read back.
+     */
+    private static final long VIEW_CHANNEL         = 1L << 10;
+    private static final long SEND_MESSAGES        = 1L << 11;
+    private static final long ATTACH_FILES         = 1L << 15;
+    private static final long READ_MESSAGE_HISTORY = 1L << 16;
 
     private static final String API = "https://discord.com/api/v10";
 
@@ -204,6 +214,55 @@ public class DiscordBotClient {
         }
     }
 
+    /**
+     * Let one Discord account into one ticket channel.
+     *
+     * <p>A member permission overwrite on the channel itself, which is how somebody gets
+     * into a private channel without being given a role that would let them into every
+     * other one as well.
+     *
+     * <p><b>Read Message History is in the set deliberately.</b> The specification asks
+     * for View Channel, Send Messages and Attach Files. Those three let a customer open
+     * the ticket and find it empty: the payment submission was posted into it before they
+     * were granted anything, and without history Discord shows them only what arrives
+     * after they walk in. The whole point of the link is that they can see their order.
+     *
+     * @param channelId     the ticket
+     * @param discordUserId the member's snowflake, which is what /verify has just proved
+     */
+    public void grantChannelAccess(String channelId, String discordUserId) {
+        long allow = VIEW_CHANNEL | SEND_MESSAGES | ATTACH_FILES | READ_MESSAGE_HISTORY;
+        put(API + "/channels/" + channelId + "/permissions/" + discordUserId,
+                Map.of("type", 1,
+                       "allow", Long.toString(allow),
+                       "deny", "0"),
+                "grant " + discordUserId + " access to " + channelId);
+    }
+
+    /**
+     * Take one account's access back.
+     *
+     * <p>Here for the support override: an operator who has to move a ticket to a
+     * different Discord account removes the old overwrite rather than leaving two people
+     * able to read it.
+     */
+    public void revokeChannelAccess(String channelId, String discordUserId) {
+        delete(API + "/channels/" + channelId + "/permissions/" + discordUserId,
+                "revoke " + discordUserId + " from " + channelId);
+    }
+
+    /**
+     * Replace the guild's slash-command list with exactly this set.
+     *
+     * <p>{@code PUT} rather than {@code POST} so the call is idempotent — posting once
+     * per boot would leave a pile of identical commands.
+     */
+    public void registerGuildCommands(String applicationId, List<Map<String, Object>> commands) {
+        putArray(API + "/applications/" + applicationId
+                        + "/guilds/" + props.notifications().discordGuildId() + "/commands",
+                commands, "register slash commands");
+    }
+
     /* -------------------------------------------------------------- transport --- */
 
     private JsonNode post(String url, Map<String, Object> body, String what) {
@@ -240,6 +299,59 @@ public class DiscordBotClient {
         }
     }
 
+    private JsonNode put(String url, Map<String, Object> body, String what) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bot " + props.notifications().discordBotToken())
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(10))
+                    .PUT(HttpRequest.BodyPublishers.ofString(
+                            mapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+            return send(request, what);
+        } catch (DiscordException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DiscordException("Could not " + what + ": " + e.getMessage());
+        }
+    }
+
+    /** As {@link #put}, for the endpoints whose body is a JSON array rather than an object. */
+    private JsonNode putArray(String url, List<Map<String, Object>> body, String what) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bot " + props.notifications().discordBotToken())
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(10))
+                    .PUT(HttpRequest.BodyPublishers.ofString(
+                            mapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+            return send(request, what);
+        } catch (DiscordException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DiscordException("Could not " + what + ": " + e.getMessage());
+        }
+    }
+
+    private void delete(String url, String what) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bot " + props.notifications().discordBotToken())
+                    .timeout(Duration.ofSeconds(10))
+                    .DELETE()
+                    .build();
+            send(request, what);
+        } catch (DiscordException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DiscordException("Could not " + what + ": " + e.getMessage());
+        }
+    }
+
     private JsonNode send(HttpRequest request, String what) throws Exception {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 300) {
@@ -257,7 +369,15 @@ public class DiscordBotClient {
             throw new DiscordException("Discord refused to " + what
                     + ": HTTP " + response.statusCode());
         }
-        return mapper.readTree(response.body());
+        /*
+         * A permission overwrite answers 204 with nothing in it. Asking Jackson to parse
+         * an empty string is undefined enough to be worth not doing.
+         */
+        String body = response.body();
+        if (body == null || body.isBlank()) {
+            return mapper.createObjectNode();
+        }
+        return mapper.readTree(body);
     }
 
     private static boolean present(String value) {
