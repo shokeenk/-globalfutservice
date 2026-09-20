@@ -134,7 +134,8 @@ public class CampaignService {
     @Transactional(readOnly = true)
     public CampaignStats stats(Long campaignId) {
         CampaignStats s = recipients.statsFor(campaignId);
-        return s == null ? CampaignStats.empty() : s;
+        return (s == null ? CampaignStats.empty() : s)
+                .withUnsubscribed(accounts.countByMarketingOptOutCampaignId(campaignId));
     }
 
     // ---- audience ----------------------------------------------------------

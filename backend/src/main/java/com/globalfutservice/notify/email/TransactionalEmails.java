@@ -45,12 +45,15 @@ public final class TransactionalEmails {
     public static Rendered awaitingVerification(OrderNotification n, EmailTemplate.Brand brand,
                                                 String trackUrl) {
         List<EmailTemplate.InfoCard> cards = new ArrayList<>();
-        cards.add(EmailTemplate.InfoCard.of("Order Number", "#" + n.publicRef()));
-        cards.add(EmailTemplate.InfoCard.of("Service", n.serviceLabel()));
-        cards.add(EmailTemplate.InfoCard.accented("Order Status", "Awaiting Verification"));
+        cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
+        cards.add(EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()));
+        cards.add(EmailTemplate.InfoCard.accented("▸", "Order Status", "Awaiting Verification"));
 
         EmailTemplate.Content content = new EmailTemplate.Content(
                 "We have your payment details — our team is verifying them now.",
+                // Not a tick: nothing has been verified yet, and a tick here would
+                // read as confirmation to somebody skimming.
+                "▸",
                 null,
                 "YOUR GFS ORDER IS AWAITING VERIFICATION",
                 "Thank you for submitting your payment details. We have received your payment "
@@ -101,15 +104,15 @@ public final class TransactionalEmails {
         boolean coins = COINS_SKU.equals(n.sku());
 
         List<EmailTemplate.InfoCard> cards = new ArrayList<>();
-        cards.add(EmailTemplate.InfoCard.of("Order Number", "#" + n.publicRef()));
-        cards.add(EmailTemplate.InfoCard.of("Service", n.serviceLabel()));
-        cards.add(EmailTemplate.InfoCard.accented("Order Status", "Confirmed"));
+        cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
+        cards.add(EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()));
+        cards.add(EmailTemplate.InfoCard.accented("✓", "Order Status", "Confirmed"));
 
         // Amount, and platform only where the SKU has one — printed empty it reads as a
         // missing value rather than an inapplicable one.
-        cards.add(EmailTemplate.InfoCard.of("Amount", n.amountFormatted()));
+        cards.add(EmailTemplate.InfoCard.of("■", "Amount", n.amountFormatted()));
         if (n.platform() != null && !n.platform().isBlank()) {
-            cards.add(EmailTemplate.InfoCard.of("Platform", n.platform()));
+            cards.add(EmailTemplate.InfoCard.of("▪", "Platform", n.platform()));
         }
 
         List<EmailTemplate.Step> steps = coins ? List.of() : List.of(
@@ -127,6 +130,7 @@ public final class TransactionalEmails {
 
         EmailTemplate.Content content = new EmailTemplate.Content(
                 "Your payment is verified and your order is confirmed.",
+                "✓",
                 null,
                 "YOUR GFS ORDER IS CONFIRMED!",
                 "Thank you for your order. Your order has been successfully received and is "

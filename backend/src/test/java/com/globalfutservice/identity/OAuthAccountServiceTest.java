@@ -183,6 +183,10 @@ class OAuthAccountServiceTest {
         @Override public Optional<AccountEntity> findByMarketingToken(java.util.UUID token) {
             return Optional.empty();
         }
+
+        @Override public long countByMarketingOptOutCampaignId(Long campaignId) {
+            return 0;
+        }
         @Override public long countStaff() { return 0; }
         @Override public boolean existsByEmailNormalised(String email) { return byEmail.containsKey(email); }
         @Override public java.util.List<AccountEntity> findAll() { return java.util.List.of(); }

@@ -24,10 +24,14 @@ import java.util.List;
  *
  * <p><b>Content the reference image carries that this does not.</b> "SINCE 2019" is not
  * claimed anywhere on the site and is not repeated here — an unverified founding year is
- * not something to publish to customers. "PLAY MORE · WORRY LESS", the side service list
- * and "YOUR ULTIMATE FC PARTNER" are likewise absent from the site, so they are left out
- * until somebody confirms they are real brand lines rather than template filler. The
- * trust badges and the Instagram handle below are the wording the site actually uses.
+ * not something to publish to customers. "YOUR ULTIMATE FC PARTNER" is also left out,
+ * which the specification explicitly allows for a line the site does not already use.
+ *
+ * <p>The header tagline and the service list <i>are</i> carried, because neither is
+ * that kind of statement: "PLAY MORE · WORRY LESS" is a slogan already printed in the
+ * trust bar at the foot of this same email, and the list names the three things the
+ * site sells. The trust badges and the Instagram handle below are the wording the site
+ * actually uses.
  *
  * <p>Pure string building, no Spring — so it can be rendered and eyeballed in a test
  * without booting anything.
@@ -52,15 +56,22 @@ public final class EmailTemplate {
     private EmailTemplate() {
     }
 
-    /** One row of the order-detail strip: a label over a value. */
-    public record InfoCard(String label, String value, boolean accent) {
-        public static InfoCard of(String label, String value) {
-            return new InfoCard(label, value, false);
+    /**
+     * One row of the order-detail strip: an icon, a label, and a value.
+     *
+     * <p>The icon is a character, not an image, for the reason the wordmark is: a client
+     * that blocks remote images would otherwise show a row of empty boxes. These are
+     * chosen from the ranges that render in Outlook's font stack as well as on a phone,
+     * which rules out most of the pictograms the reference artwork uses.
+     */
+    public record InfoCard(String icon, String label, String value, boolean accent) {
+        public static InfoCard of(String icon, String label, String value) {
+            return new InfoCard(icon, label, value, false);
         }
 
         /** Renders the value in brand red — for the status, which is the point of the email. */
-        public static InfoCard accented(String label, String value) {
-            return new InfoCard(label, value, true);
+        public static InfoCard accented(String icon, String label, String value) {
+            return new InfoCard(icon, label, value, true);
         }
     }
 
@@ -83,6 +94,9 @@ public final class EmailTemplate {
      * @param preheader   the grey line clients show beside the subject in the inbox list.
      *                    Worth setting: left empty, clients scrape the first text they find,
      *                    which is usually the wordmark.
+     * @param statusIcon  a single character shown in a badge above the headline — a tick
+     *                    for a confirmation, something quieter for a state that is still
+     *                    in progress. Null for no badge.
      * @param eyebrow     small caps line above the headline, or null
      * @param headline    the main statement, rendered across two weights
      * @param intro       a sentence under the headline, or null
@@ -94,7 +108,8 @@ public final class EmailTemplate {
      * @param ctaUrl      primary button destination
      * @param footerNote  a line above the footer links — used to say why this email arrived
      */
-    public record Content(String preheader, String eyebrow, String headline, String intro,
+    public record Content(String preheader, String statusIcon, String eyebrow,
+                          String headline, String intro,
                           List<InfoCard> cards, String bodyHtml, String stepsHeading,
                           List<Step> steps, String note, String ctaText, String ctaUrl,
                           String footerNote) {
@@ -172,6 +187,23 @@ public final class EmailTemplate {
          .append("<div style=\"font-family:").append(FONT)
          .append(";font-size:11px;line-height:16px;letter-spacing:4px;font-weight:600;color:")
          .append(TEXT_ON_DARK_MUTED).append(";padding-top:6px;\">GLOBAL FUT SERVICES</div>\n")
+         /*
+          * The tagline and the service list, both from the reference artwork.
+          *
+          * Unlike "SINCE 2019" neither is a claim that could turn out to be untrue: one
+          * is a slogan already printed in the trust bar at the foot of this same email,
+          * and the other names the three things the site actually sells. A founding year
+          * is checkable and was therefore left out; these are not the same kind of
+          * statement.
+          */
+         .append("<div style=\"font-family:").append(FONT)
+         .append(";font-size:12px;line-height:17px;letter-spacing:2.5px;font-weight:700;")
+         .append("color:").append(RED).append(";padding-top:14px;\">")
+         .append("PLAY MORE &#183; WORRY LESS</div>\n")
+         .append("<div style=\"font-family:").append(FONT)
+         .append(";font-size:10px;line-height:15px;letter-spacing:1.6px;font-weight:600;")
+         .append("color:").append(TEXT_ON_DARK_MUTED).append(";padding-top:8px;\">")
+         .append("EA FC COINS &#183; CHAMPS BOOSTING &#183; 1-TO-1 COACHING &amp; MORE</div>\n")
          .append("</td></tr>\n");
     }
 
@@ -180,6 +212,23 @@ public final class EmailTemplate {
          .append(";background-image:linear-gradient(135deg,").append(RED).append(" 0%,")
          .append(RED_DARK).append(" 100%);padding:34px 32px;\" class=\"gfs-pad\">\n");
 
+        /*
+         * The status badge: one character in a white disc.
+         *
+         * A table cell rather than a styled div, because Outlook drops border-radius on
+         * a div and would render a white square. The character is centred with
+         * line-height for the same reason -- there is no flexbox here.
+         */
+        if (c.statusIcon() != null && !c.statusIcon().isBlank()) {
+            b.append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"")
+             .append(" style=\"margin-bottom:16px;\"><tr>")
+             .append("<td align=\"center\" valign=\"middle\" width=\"46\" height=\"46\"")
+             .append(" style=\"width:46px;height:46px;background:#FFFFFF;border-radius:23px;")
+             .append("font-family:").append(FONT)
+             .append(";font-size:24px;line-height:46px;font-weight:800;color:").append(RED)
+             .append(";\">").append(esc(c.statusIcon()))
+             .append("</td></tr></table>\n");
+        }
         if (c.eyebrow() != null && !c.eyebrow().isBlank()) {
             b.append("<div style=\"font-family:").append(FONT)
              .append(";font-size:11px;letter-spacing:3px;font-weight:700;color:#FFD7DE;")
@@ -209,7 +258,10 @@ public final class EmailTemplate {
              .append("\">\n")
              .append("<div style=\"font-family:").append(FONT)
              .append(";font-size:12px;letter-spacing:.5px;color:").append(TEXT_MUTED)
-             .append(";padding-left:").append(last ? "0" : "0").append(";\">")
+             .append(";\">")
+             // The icon sits inside the label line so the two never wrap apart.
+             .append(card.icon() == null ? "" : "<span style=\"color:" + RED
+                     + ";font-weight:700;padding-right:6px;\">" + esc(card.icon()) + "</span>")
              .append(esc(card.label())).append("</div>\n")
              .append("<div style=\"font-family:").append(FONT)
              .append(";font-size:17px;line-height:24px;font-weight:700;padding-top:4px;color:")
@@ -305,19 +357,31 @@ public final class EmailTemplate {
          .append(";padding:20px 24px;\" class=\"gfs-pad\">\n")
          .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" ")
          .append("border=\"0\" class=\"gfs-stack\"><tr>\n");
-        footerLink(b, "WEBSITE", brand.websiteLabel(), brand.websiteUrl(), false);
-        footerLink(b, "DISCORD (SUPPORT)", brand.discordLabel(), brand.discordUrl(), false);
-        footerLink(b, "INSTAGRAM", brand.instagramLabel(), brand.instagramUrl(), true);
+        footerLink(b, "◆", "WEBSITE", brand.websiteLabel(), brand.websiteUrl(), false);
+        footerLink(b, "●", "DISCORD (SUPPORT)", brand.discordLabel(), brand.discordUrl(),
+                false);
+        footerLink(b, "■", "INSTAGRAM", brand.instagramLabel(), brand.instagramUrl(), true);
         b.append("</tr></table>\n</td></tr>\n");
     }
 
-    private static void footerLink(StringBuilder b, String label, String value, String url,
-                                   boolean last) {
+    /**
+     * One footer row: a mark, a label, and the link itself.
+     *
+     * <p>Geometric marks rather than brand glyphs. There is no Discord or Instagram
+     * character in any font a mail client can be relied on to have, and the alternatives
+     * -- a remote image, or an emoji that renders as a coloured picture on a phone and a
+     * hollow box in older Outlook -- both fail in a way the reader sees.
+     */
+    private static void footerLink(StringBuilder b, String icon, String label, String value,
+                                   String url, boolean last) {
         b.append("<td valign=\"top\" style=\"padding:4px 12px 8px 0;")
          .append(last ? "" : "border-right:1px solid " + BORDER + ";").append("\">\n")
          .append("<div style=\"font-family:").append(FONT)
          .append(";font-size:12px;font-weight:800;letter-spacing:.6px;color:").append(TEXT)
-         .append(";\">").append(esc(label)).append("</div>\n")
+         .append(";\">")
+         .append("<span style=\"color:").append(RED).append(";padding-right:6px;\">")
+         .append(esc(icon)).append("</span>")
+         .append(esc(label)).append("</div>\n")
          .append("<a href=\"").append(esc(url)).append("\" style=\"font-family:").append(FONT)
          .append(";font-size:13px;color:").append(TEXT_MUTED).append(";text-decoration:underline;\">")
          .append(esc(value)).append("</a>\n</td>\n");

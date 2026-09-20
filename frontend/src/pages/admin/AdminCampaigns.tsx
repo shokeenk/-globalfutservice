@@ -426,12 +426,14 @@ function Analytics({ campaign }: { campaign: Campaign }) {
   return (
     <>
       <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-edge bg-ink-400
-                     shadow-sm ring-1 ring-ink-400 sm:grid-cols-5">
+                     shadow-sm ring-1 ring-ink-400 sm:grid-cols-6">
         <Stat label="Recipients" value={String(s.total)} />
         <Stat label="Sent" value={String(s.sent)} />
         <Stat label="Failed" value={String(s.failed)} warn={s.failed > 0} />
         <Stat label="Opened" value={`${s.opened} (${pct(s.opened)})`} />
         <Stat label="Clicked" value={`${s.clicked} (${pct(s.clicked)})`} accent />
+        <Stat label="Unsubscribed" value={`${s.unsubscribed} (${pct(s.unsubscribed)})`}
+              warn={s.unsubscribed > 0} />
       </dl>
       {/*
         Stated beside the numbers rather than in a footnote nobody reads. Opens are the
@@ -444,7 +446,9 @@ function Analytics({ campaign }: { campaign: Campaign }) {
         <strong className="text-chalk-muted">Opened</strong> undercounts anyone with images
         off and overcounts anyone whose provider pre-fetches images.{' '}
         <strong className="text-chalk-muted">Clicked</strong> is the only one that needed a
-        deliberate action.
+        deliberate action.{' '}
+        <strong className="text-chalk-muted">Unsubscribed</strong> counts people who left
+        marketing through this campaign specifically; they still receive order email.
       </p>
     </>
   )

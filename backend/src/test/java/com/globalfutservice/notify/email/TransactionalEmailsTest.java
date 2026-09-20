@@ -171,8 +171,34 @@ class TransactionalEmailsTest {
                 // the other one sends customers to an account this business may not own.
                 assertThat(r.html()).doesNotContain("@globalfutservices");
                 assertThat(r.html()).doesNotContainIgnoringCase("ULTIMATE FC PARTNER");
-                assertThat(r.html()).doesNotContainIgnoringCase("PLAY MORE ·");
             }
+        }
+
+        @Test
+        @DisplayName("the header carries the tagline and the service list")
+        void header_carries_the_brand_lines() {
+            for (var r : new TransactionalEmails.Rendered[]{
+                    TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK),
+                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)}) {
+                // Neither is a checkable claim about the business, unlike the founding
+                // year above: one is a slogan already in the trust bar, the other lists
+                // what the site sells.
+                assertThat(r.html()).contains("PLAY MORE &#183; WORRY LESS");
+                assertThat(r.html()).contains("EA FC COINS");
+                assertThat(r.html()).contains("CHAMPS BOOSTING");
+                assertThat(r.html()).contains("1-TO-1 COACHING");
+            }
+        }
+
+        @Test
+        @DisplayName("only a finished thing gets a tick")
+        void tick_means_confirmed() {
+            // U+2713. A tick on "awaiting verification" would tell somebody skimming that
+            // their payment had been accepted, which is the opposite of what it says.
+            assertThat(TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)
+                    .html()).contains("✓");
+            assertThat(TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK)
+                    .html()).doesNotContain("✓");
         }
 
         @Test

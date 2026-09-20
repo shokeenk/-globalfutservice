@@ -70,6 +70,8 @@ public final class PromotionalEmail {
 
         EmailTemplate.Content content = new EmailTemplate.Content(
                 preheaderFrom(campaign),
+                // No status badge: a promotion is not reporting on anything.
+                null,
                 null,
                 campaign.heading(),
                 null,

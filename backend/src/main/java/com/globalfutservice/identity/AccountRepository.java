@@ -21,6 +21,9 @@ public interface AccountRepository extends JpaRepository<AccountEntity, Long> {
      */
     Optional<AccountEntity> findByMarketingToken(java.util.UUID marketingToken);
 
+    /** How many people left marketing via one campaign's unsubscribe link. */
+    long countByMarketingOptOutCampaignId(Long campaignId);
+
     boolean existsByEmailNormalised(String emailNormalised);
 
     @Query("select count(a) from AccountEntity a where a.role in "

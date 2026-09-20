@@ -454,6 +454,8 @@ export interface CampaignStats {
   failed: number
   opened: number
   clicked: number
+  /** Counted from accounts that used this campaign's unsubscribe link. */
+  unsubscribed: number
 }
 
 export interface Campaign {
