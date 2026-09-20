@@ -5,6 +5,7 @@ import { Alert, Badge, Button, ButtonLink, EmptyState, Input, Section, Select, S
 import { api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
+import { useAuth } from '../../state/AuthContext'
 import type { AdminStats, OrderSummary } from '../../lib/types'
 import { ServiceTag, statusTone } from '../Track'
 import { Announcements } from './Announcements'
@@ -51,6 +52,10 @@ function filterLabel(value: string): string {
  */
 export default function Admin() {
   useSeo({ title: 'Operations', noindex: true })
+
+  // Only to decide whether the admin-only link is drawn; the route and the
+  // endpoint behind it both enforce the same thing independently.
+  const { account } = useAuth()
 
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [orders, setOrders] = useState<OrderSummary[] | null>(null)
@@ -173,11 +178,18 @@ export default function Admin() {
         />
         <Button variant="secondary" onClick={() => void load()}>Refresh</Button>
         {/*
-          Coupons is the only thing on this bar that leaves the page, so it is the only
-          thing on it drawn as a destination rather than a control. Refresh stays
+          The two links are the only things on this bar that leave the page, so they are
+          the only things on it drawn as destinations rather than controls. Refresh stays
           secondary: it acts on the view you are already looking at.
+
+          Coin rates is shown to admins alone, because the route and the endpoint behind
+          it are admin-only. Showing an operator a link that bounces them back here would
+          be advertising a door they cannot open.
         */}
         <ButtonLink to="/admin/coupons" variant="primary" size="md">Coupons</ButtonLink>
+        {account?.role === 'ADMIN' && (
+          <ButtonLink to="/admin/rates" variant="primary" size="md">Coin rates</ButtonLink>
+        )}
       </div>
 
       {!orders && <Skeleton className="h-64 w-full" />}

@@ -424,6 +424,29 @@ export interface AdminPaymentClaim {
   reviewNote: string | null
 }
 
+/**
+ * The coin base price in one currency, as the rates screen edits it.
+ *
+ * <p>`per100k` is the number the owner sets; `perMillionMinor` is what the rate card
+ * actually stores. Both are sent so the screen can show the price in the unit the
+ * business uses while still reconciling against the table when something looks wrong.
+ *
+ * <p>These four prices are set independently per market. Nothing here is converted from
+ * anything else — there is no FX rate in this payload because there is none in the system.
+ */
+export interface CoinRate {
+  currency: string
+  symbol: string
+  perMillionMinor: number
+  /** Price of 100,000 coins, in major units. */
+  per100k: string
+  /** Price of one 10,000-coin slider step. May carry a fraction of a minor unit. */
+  per10k: string
+  /** False when a 10,000-coin step is not a whole cent/paisa — see the note on screen. */
+  stepIsWholeMinorUnit: boolean
+  validFrom: string
+}
+
 export interface ApiErrorBody {
   error: string
   message: string

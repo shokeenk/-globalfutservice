@@ -35,6 +35,7 @@ const Account = lazy(() => import('./pages/Account'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
 const AdminOrder = lazy(() => import('./pages/admin/AdminOrder'))
 const AdminCoupons = lazy(() => import('./pages/admin/AdminCoupons'))
+const AdminRates = lazy(() => import('./pages/admin/AdminRates'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 export default function App() {
@@ -105,6 +106,11 @@ export default function App() {
                    element={<RequireStaff><AdminOrder /></RequireStaff>} />
             <Route path="/admin/coupons"
                    element={<RequireStaff><AdminCoupons /></RequireStaff>} />
+            {/* RequireAdmin, not RequireStaff: this screen sets what customers are
+                charged, and the endpoint behind it is hasRole('ADMIN'). An operator
+                reaching it would see a form that 403s on save. */}
+            <Route path="/admin/rates"
+                   element={<RequireAdmin><AdminRates /></RequireAdmin>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -173,6 +179,25 @@ function RequireStaff({ children }: { children: React.ReactNode }) {
   if (loading) return <RouteFallback />
   if (!account) return <Navigate to="/login" state={{ from: fullPath(location) }} replace />
   if (account.role === 'CUSTOMER') return <Navigate to="/account" replace />
+  return <>{children}</>
+}
+
+/**
+ * ADMIN only — stricter than {@link RequireStaff}, which admits operators too.
+ *
+ * <p>An operator fulfils orders; changing what the business charges is a different kind
+ * of authority, and the server draws the line in the same place. An operator who reaches
+ * an admin-only route is sent to the console they do have, not to the login page: they
+ * are signed in, and asking them to sign in again would suggest otherwise.
+ */
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { account, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <RouteFallback />
+  if (!account) return <Navigate to="/login" state={{ from: fullPath(location) }} replace />
+  if (account.role !== 'ADMIN') {
+    return <Navigate to={account.role === 'CUSTOMER' ? '/account' : '/admin'} replace />
+  }
   return <>{children}</>
 }
 

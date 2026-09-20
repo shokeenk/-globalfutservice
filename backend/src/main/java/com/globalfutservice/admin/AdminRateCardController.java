@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import com.globalfutservice.catalog.RateCardEntity;
 import com.globalfutservice.catalog.RateCardRepository;
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.domain.catalog.CoinBaseRate;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.PriceUnit;
 import com.globalfutservice.domain.catalog.Sku;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -139,6 +141,165 @@ public class AdminRateCardController {
         log.info("Admin {} changed {} {} {} to {}", admin.publicId(), sku, platform,
                 request.variant(), Money.ofMinor(request.unitPriceMinor(), currency).format());
         return ResponseEntity.ok(toDto(saved));
+    }
+
+    // =========================================================================
+    //  Coin base rates
+    //
+    //  The rate card stores coins PER MILLION because that is the unit the
+    //  pricing engine multiplies by. The owner sets the price PER 100,000,
+    //  because that is the unit the business is run in. These two endpoints are
+    //  the translation, and they exist so nobody has to do that arithmetic in
+    //  their head against a live price list: ten times, in minor units.
+    //
+    //  Everything else about a coin price — the close-and-reopen, the ADMIN
+    //  restriction, the audit line — is the same machinery the rest of this
+    //  controller uses. This is a different way of typing the number, not a
+    //  second way of storing it.
+    // =========================================================================
+
+    /** Coin rows are per-platform in the schema, but priced as one number. */
+    private static final List<Platform> TRADING_PLATFORMS =
+            List.of(Platform.PC, Platform.PLAYSTATION, Platform.XBOX);
+
+    public record CoinRateDto(
+            String currency,
+            String symbol,
+            /** What the rate card stores, for anyone reconciling against the table. */
+            long perMillionMinor,
+            /** What the owner sets: the price of 100,000 coins, in major units. */
+            BigDecimal per100k,
+            /** What one slider step costs, derived — may carry a fraction of a cent. */
+            BigDecimal per10k,
+            /**
+             * Whether a 10,000-coin step lands on a whole minor unit.
+             *
+             * <p>False means the price is still exact — the engine rounds once, at the
+             * total, and never accumulates — but consecutive steps on screen differ by
+             * one minor unit more or less than the others. The admin screen says so
+             * rather than leaving the owner to notice it in a customer's receipt.
+             */
+            boolean stepIsWholeMinorUnit,
+            Instant validFrom) {
+    }
+
+    public record CoinRateInput(@NotBlank String currency, BigDecimal per100k) {
+    }
+
+    public record UpdateCoinRatesRequest(List<CoinRateInput> rates) {
+    }
+
+    @GetMapping("/coin-rates")
+    @Operation(summary = "The coin base price per 100,000, per currency",
+            description = "One number per currency. Not converted from any other currency.")
+    public ResponseEntity<List<CoinRateDto>> coinRates() {
+        List<CoinRateDto> out = new ArrayList<>();
+        for (String code : props.pricing().enabledCurrencies()) {
+            Currency currency = parse(Currency.class, code);
+            // PC stands for all three: they are written together and read together.
+            rates.findLive(props.season(), Sku.TRADING_SERVICE, Platform.PC, null, currency)
+                    .map(AdminRateCardController::toCoinDto)
+                    .ifPresent(out::add);
+        }
+        return ResponseEntity.ok(out);
+    }
+
+    @PostMapping("/coin-rates")
+    @Operation(summary = "Set the coin base price for one or more currencies",
+            description = "Writes every platform for each currency. Closes the old rows, "
+                    + "opens new ones — nothing is overwritten.")
+    @Transactional
+    public ResponseEntity<List<CoinRateDto>> updateCoinRates(
+            @Valid @RequestBody UpdateCoinRatesRequest request,
+            @CurrentAccount AccountPrincipal admin) {
+
+        if (request.rates() == null || request.rates().isEmpty()) {
+            throw new ApiExceptions.BadRequestException("No rates were supplied.");
+        }
+
+        Instant now = Instant.now();
+        List<CoinRateDto> out = new ArrayList<>();
+
+        for (CoinRateInput input : request.rates()) {
+            Currency currency = parse(Currency.class, input.currency());
+            long perMillionMinor = toPerMillionMinor(currency, input.per100k());
+
+            RateCardEntity pc = null;
+            for (Platform platform : TRADING_PLATFORMS) {
+                RateCardEntity written = replacePrice(
+                        Sku.TRADING_SERVICE, platform, null, currency, perMillionMinor,
+                        now, admin);
+                if (platform == Platform.PC) {
+                    pc = written;
+                }
+            }
+            if (pc != null) {
+                out.add(toCoinDto(pc));
+            }
+        }
+        return ResponseEntity.ok(out);
+    }
+
+    /**
+     * The owner's number as the column stores it, with a domain error turned into a 400.
+     *
+     * <p>The arithmetic and the validation both live in {@link CoinBaseRate}; this only
+     * decides what a bad price looks like over HTTP.
+     */
+    private static long toPerMillionMinor(Currency currency, BigDecimal per100k) {
+        try {
+            return CoinBaseRate.toPerMillionMinor(currency, per100k);
+        } catch (IllegalArgumentException e) {
+            throw new ApiExceptions.BadRequestException(e.getMessage());
+        }
+    }
+
+    /**
+     * Close the live row and open its replacement — the one write path for a price.
+     *
+     * <p>Bounds, label and sort order are carried across rather than restated: this sets
+     * a price, and a caller that does not mention the slider's range must not silently
+     * reset it.
+     */
+    private RateCardEntity replacePrice(Sku sku, Platform platform, String variant,
+                                        Currency currency, long unitPriceMinor,
+                                        Instant now, AccountPrincipal admin) {
+        RateCardEntity current = rates.findLive(props.season(), sku, platform, variant, currency)
+                .orElse(null);
+        if (current != null && current.getUnitPriceMinor() == unitPriceMinor) {
+            return current; // No-op writes would litter the history and make it useless.
+        }
+        if (current == null) {
+            throw new ApiExceptions.BadRequestException(
+                    "There is no live " + currency + " price for " + sku
+                            + " to replace. Add one through the rate card first.");
+        }
+        current.close(now);
+        rates.save(current);
+        rates.flush();
+
+        RateCardEntity replacement = new RateCardEntity(
+                props.season(), sku, platform, variant, currency, sku.unit(),
+                unitPriceMinor,
+                current.getMinQuantity(), current.getMaxQuantity(), current.getStepQuantity(),
+                current.getLabel(), current.getSortOrder(), admin.id());
+        RateCardEntity saved = rates.save(replacement);
+        log.info("Admin {} changed {} {} {} to {}", admin.publicId(), sku, platform, currency,
+                Money.ofMinor(unitPriceMinor, currency).format());
+        return saved;
+    }
+
+    private static CoinRateDto toCoinDto(RateCardEntity r) {
+        Currency currency = r.getCurrency();
+        long perMillionMinor = r.getUnitPriceMinor();
+        return new CoinRateDto(
+                currency.name(),
+                currency.symbol(),
+                perMillionMinor,
+                CoinBaseRate.per100k(currency, perMillionMinor),
+                CoinBaseRate.per10k(currency, perMillionMinor),
+                CoinBaseRate.stepIsWholeMinorUnit(perMillionMinor),
+                r.getValidFrom());
     }
 
     private static BigDecimal orElse(BigDecimal value, BigDecimal fallback) {
