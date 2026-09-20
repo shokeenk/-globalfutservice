@@ -979,6 +979,19 @@ const en = {
 
     orderCreated: 'Order created',
     keepReference: 'Keep that reference — it is how you track this order and how support finds it.',
+    /*
+     * Said before the money moves, not after.
+     *
+     * Trading only, at the owner's instruction -- the gateway is the same for every
+     * service, but the notice was asked for on the coin checkout and widening it is a
+     * business decision rather than a consistency one.
+     */
+    testingTitle: 'Payments are in testing',
+    testingBody:
+      'Our payment system is still being refined. We take every precaution and your order ' +
+      'is worked exactly as it always is — but if anything on this screen looks wrong, ' +
+      'please stop and talk to us before you pay.',
+    testingContact: 'Message support',
     stubTitle: 'Payment gateway is not configured',
     stubBody:
       'This environment is running without live payment credentials, so no money will move. ' +
@@ -1702,7 +1715,13 @@ const en = {
       MONTHLY_6_SESSIONS: '6 sessions × 40 minutes',
     },
     /** Coin quantities, which are written differently per language. */
-    millions: (qty: string): string => `${qty}M`,
+    /*
+     * The unit is passed in rather than fixed, because a coin amount is said in
+     * thousands below a million and in millions above it -- and the space before it is
+     * a typographic decision each language makes for itself, which is the whole reason
+     * this lives in the dictionary at all.
+     */
+    coins: (value: string, unit: 'K' | 'M'): string => `${value}${unit}`,
     lines: {
       base: (service: string, detail: string): string => `${service} — ${detail}`,
       marketTax: (pct: string): string => `EA transfer market tax (${pct})`,

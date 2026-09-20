@@ -62,7 +62,24 @@ export function trimNumber(value: string | number): string {
   return String(Number(n.toFixed(2)))
 }
 
+/**
+ * A coin amount in the unit a player would say out loud.
+ *
+ * <p>The rate card prices per million and the slider carries millions, but below one
+ * million that unit stops being readable: an order for ten thousand coins is "10K", never
+ * "0.01M". The threshold is where the shorter string wins, not a rounding boundary --
+ * nothing is lost either side of it.
+ */
+export function coinsParts(millions: number): { value: string; unit: 'K' | 'M' } {
+  if (millions >= 1) return { value: trimNumber(millions), unit: 'M' }
+  return { value: Math.round(millions * 1000).toLocaleString('en-US'), unit: 'K' }
+}
+
+export function coinsShort(millions: number): string {
+  const { value, unit } = coinsParts(millions)
+  return `${value}${unit}`
+}
+
 export function coinsLabel(millions: number): string {
-  if (millions >= 1) return `${trimNumber(millions)}M coins`
-  return `${Math.round(millions * 1000)}K coins`
+  return `${coinsShort(millions)} coins`
 }
