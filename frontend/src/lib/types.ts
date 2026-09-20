@@ -208,6 +208,8 @@ export interface Order {
   coachingFocus: string | null
   /** Boosting on PC: STEAM, EA_APP or EPIC. Null on console and on every other service. */
   pcLauncher: string | null
+  /** How this customer reaches their Discord ticket. Decided server-side. */
+  discordAccess: DiscordAccess | null
 }
 
 /**
@@ -448,6 +450,21 @@ export interface CoinRate {
 }
 
 /** What a campaign did, counted from its send log. */
+/**
+ * Which Discord panel the tracking page shows.
+ *
+ * - `DIRECT`  — already in the channel; link straight to it.
+ * - `PENDING` — signed in with Discord, ticket not open yet; nothing to do.
+ * - `VERIFY`  — join the server and run the command.
+ * - `NONE`    — a service that is not run in Discord at all.
+ */
+export interface DiscordAccess {
+  mode: 'DIRECT' | 'PENDING' | 'VERIFY' | 'NONE'
+  channelUrl: string | null
+  inviteUrl: string | null
+  command: string | null
+}
+
 export interface CampaignStats {
   total: number
   sent: number

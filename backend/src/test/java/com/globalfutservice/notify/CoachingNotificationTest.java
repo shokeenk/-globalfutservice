@@ -1,6 +1,7 @@
 package com.globalfutservice.notify;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.notify.discord.DiscordVerificationService;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.orders.OrderEntity;
@@ -103,7 +104,8 @@ class CoachingNotificationTest {
     void ticketCarriesCoachingDetails() {
         AppProperties props = mock(AppProperties.class);
         when(props.notifications()).thenReturn(mock(AppProperties.Notifications.class));
-        OrderTicketService tickets = new OrderTicketService(mock(DiscordBotClient.class), props);
+        OrderTicketService tickets = new OrderTicketService(mock(DiscordBotClient.class), props,
+                mock(DiscordVerificationService.class));
 
         String coaching = tickets.compose(claim("PlayStation · ID VinayFC10 · Division 5 · Wants to work on: defending"));
         assertThat(coaching).contains("**Coaching:** PlayStation · ID VinayFC10 · Division 5");
@@ -137,7 +139,8 @@ class CoachingNotificationTest {
     void coachingTicketHasNoCredentials() {
         AppProperties props = mock(AppProperties.class);
         when(props.notifications()).thenReturn(mock(AppProperties.Notifications.class));
-        String body = new OrderTicketService(mock(DiscordBotClient.class), props)
+        String body = new OrderTicketService(mock(DiscordBotClient.class), props,
+                mock(DiscordVerificationService.class))
                 .compose(claim("PC · ID someone · Wants to work on: tactics"))
                 .toLowerCase(Locale.ROOT);
 

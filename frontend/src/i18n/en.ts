@@ -545,6 +545,18 @@ const en = {
     discordTicketCta: 'Open Discord',
     discordTicketCreated: 'Your ticket has been created!',
     discordTicketQuote: (ref: string) => `Quote your order number, ${ref}, and the team will pick it up.`,
+    discordVerifyTitle: 'Get into your ticket',
+    discordVerifyBody:
+      'Join our Discord server, then run this command there. It opens your ticket and '
+      + 'nobody else can use it.',
+    discordVerifyJoin: 'Join Discord',
+    discordVerifyCopy: 'Copy command',
+    discordVerifyCopied: 'Copied',
+    discordPendingTitle: 'Your ticket opens automatically',
+    discordPendingBody:
+      'You signed in with Discord, so we already know your account. As soon as your '
+      + 'payment is submitted, your ticket appears in our server — nothing to do.',
+    discordOpenTicket: 'Open your ticket',
     seoTitle: 'Track your order',
     eyebrow: 'Order status',
     title: 'Where is my order?',

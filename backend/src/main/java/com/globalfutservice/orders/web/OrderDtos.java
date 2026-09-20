@@ -174,7 +174,36 @@ public final class OrderDtos {
             String coachingFocus,
 
             /** Boosting on PC: the launcher the account signs in through. Null otherwise. */
-            String pcLauncher) {
+            String pcLauncher,
+
+            /**
+             * How this customer reaches their Discord ticket.
+             *
+             * <p>Decided here rather than in the browser, because the answer depends on
+             * how they signed in and the storefront has no business knowing that. Two
+             * genuinely different screens hang off it: a customer whose Discord id we
+             * already hold gets a link straight into their ticket, and everybody else
+             * gets an invite and the reference to quote.
+             */
+            DiscordAccessDto discordAccess) {
+    }
+
+    /**
+     * The Discord half of the tracking page.
+     *
+     * @param mode        {@code DIRECT} when the customer signed in with Discord and has
+     *                    already been let into the channel, {@code VERIFY} when they have
+     *                    to join and run the command, {@code NONE} when there is no
+     *                    ticket to reach
+     * @param channelUrl  straight into the ticket. Only set for {@code DIRECT} — for
+     *                    anyone else it would be a link to a channel they cannot see,
+     *                    which reads as the site being broken
+     * @param inviteUrl   the server invite, for {@code VERIFY}
+     * @param command     the exact thing to type, reference already filled in, so it can
+     *                    be copied rather than assembled
+     */
+    public record DiscordAccessDto(String mode, String channelUrl, String inviteUrl,
+                                   String command) {
     }
 
     /**
