@@ -44,6 +44,17 @@ public record AppProperties(
          */
         @DefaultValue("https://discord.com/invite/8FeP7C6tXt") String discordInvite,
 
+        /**
+         * The Instagram profile, for the email footer.
+         *
+         * <p>The handle is {@code global_fut_services} — what the site's own footer links
+         * to. The mailing specification's reference artwork shows "@globalfutservices",
+         * which is a different handle and not one this business is known to own; it is not
+         * repeated here. Configurable so a real change of handle is a deploy setting
+         * rather than a code change.
+         */
+        @DefaultValue("https://www.instagram.com/global_fut_services/") String instagramUrl,
+
         @Valid @NotNull Security security,
         @Valid @NotNull Pricing pricing,
         @Valid @NotNull Fulfilment fulfilment,

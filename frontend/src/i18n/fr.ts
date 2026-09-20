@@ -580,6 +580,8 @@ const fr: Dictionary = {
     acceptTerms: 'conditions d’utilisation',
     acceptAnd: 'et la',
     acceptPrivacy: 'politique de confidentialité',
+    marketingOptIn:
+      'Envoyez-moi les offres GFS et les annonces de promotions sur les crédits. Facultatif : les mises à jour de commande arrivent dans tous les cas.',
     createAccount: 'Créer un compte',
     signInButton: 'Se connecter',
     haveAccount: 'Tu as déjà un compte ?',
@@ -642,6 +644,13 @@ const fr: Dictionary = {
     useThemBy: (date) => `À utiliser avant le ${date}.`,
     bookSession: 'Réserver une séance',
     manageSessions: 'Gérer mes séances',
+    emailPrefsTitle: 'Préférences d’e-mail',
+    emailPrefsOptIn: 'Envoyez-moi les offres GFS et les annonces de promotions sur les crédits',
+    emailPrefsNote:
+      'Les mises à jour de commande font partie du service et sont envoyées dans tous '
+      + 'les cas : ceci ne concerne que les e-mails promotionnels.',
+    emailPrefsSaved: 'Enregistré.',
+    emailPrefsFailed: 'L’enregistrement a échoué. Réessaie dans un instant.',
     quickActions: 'Actions rapides',
     startOrder: 'Passer commande',
     needChange: 'Besoin de modifier une commande en cours ?',

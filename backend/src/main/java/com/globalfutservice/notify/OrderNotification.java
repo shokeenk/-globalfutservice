@@ -22,6 +22,18 @@ public record OrderNotification(
          */
         String customerDiscord,
         String deliveryMethod,
+        /**
+         * The SKU, as {@code Sku.name()} — TRADING_SERVICE, BOOST_CHAMPS, BOOST_RIVALS,
+         * COACHING. Nullable on notifications not raised from an order.
+         *
+         * <p>Here because the confirmation email branches on it: coins send the customer
+         * to their order tracking page, everything else sends them to a Discord ticket.
+         * Branching on {@code serviceLabel} instead would mean matching display strings
+         * that are translated and rewritten for marketing reasons.
+         */
+        String sku,
+        /** The platform the order is for, or null where the SKU has none. */
+        String platform,
         String adminDeepLink,
         /** Coaching orders: platform, in-game ID, rank and focus on one line. Null otherwise. */
         String coachingDetails) {

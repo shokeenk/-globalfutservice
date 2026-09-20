@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
-import { Badge, ButtonLink, EmptyState, Section, Skeleton } from '../components/ui'
+import { Badge, ButtonLink, Checkbox, EmptyState, Section, Skeleton } from '../components/ui'
 import { useT } from '../i18n'
 import { api } from '../lib/api'
 import { dateTime, points as fmtPoints } from '../lib/format'
@@ -19,6 +19,13 @@ export default function Account() {
   const [wallet, setWallet] = useState<Wallet | null>(null)
   const [orders, setOrders] = useState<OrderSummary[] | null>(null)
   const [coaching, setCoaching] = useState<MyCoaching | null>(null)
+  /*
+   * Promotional email consent. null while unknown, so the control renders unticked but
+   * disabled rather than briefly showing "off" to somebody who is actually opted in and
+   * inviting them to fix a preference that was never wrong.
+   */
+  const [marketingOptIn, setMarketingOptIn] = useState<boolean | null>(null)
+  const [prefState, setPrefState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
 
   useEffect(() => {
     api.get<Wallet>('/api/v1/account/wallet').then(setWallet).catch(() => setWallet(null))
@@ -26,7 +33,30 @@ export default function Account() {
     // Absent rather than empty when it fails: the card below renders nothing at all
     // for someone who has never bought coaching, which is most people.
     api.get<MyCoaching>('/api/v1/coaching/me').then(setCoaching).catch(() => setCoaching(null))
+    api.get<{ optIn: boolean }>('/api/v1/account/marketing')
+      .then((r) => setMarketingOptIn(r.optIn))
+      .catch(() => setMarketingOptIn(null))
   }, [])
+
+  /*
+   * Optimistic, then corrected by what the server says it stored. A consent control that
+   * lags a round trip behind the tap reads as broken, and somebody who taps twice because
+   * nothing happened has told us the opposite of what they meant.
+   */
+  async function saveMarketing(next: boolean) {
+    const previous = marketingOptIn
+    setMarketingOptIn(next)
+    setPrefState('saving')
+    try {
+      const saved = await api.post<{ optIn: boolean }>('/api/v1/account/marketing',
+        { optIn: next })
+      setMarketingOptIn(saved.optIn)
+      setPrefState('saved')
+    } catch {
+      setMarketingOptIn(previous)
+      setPrefState('failed')
+    }
+  }
 
   return (
     <>
@@ -248,6 +278,31 @@ export default function Account() {
             )}
 
             <Reveal delay={140} className="plate p-5">
+              <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-chalk-faint">
+                {t.account.emailPrefsTitle}
+              </h2>
+              <div className="mt-4">
+                <Checkbox
+                  checked={marketingOptIn === true}
+                  onChange={(next) => { void saveMarketing(next) }}
+                >
+                  {t.account.emailPrefsOptIn}
+                </Checkbox>
+              </div>
+              <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
+                {t.account.emailPrefsNote}
+              </p>
+              {prefState === 'saved' && (
+                <p className="mt-2 text-[12px] text-chalk-muted">{t.account.emailPrefsSaved}</p>
+              )}
+              {prefState === 'failed' && (
+                <p role="alert" className="mt-2 text-[12px] text-brand-400">
+                  {t.account.emailPrefsFailed}
+                </p>
+              )}
+            </Reveal>
+
+            <Reveal delay={180} className="plate p-5">
               <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-chalk-faint">
                 {t.account.quickActions}
               </h2>

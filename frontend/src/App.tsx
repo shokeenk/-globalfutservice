@@ -36,6 +36,8 @@ const Admin = lazy(() => import('./pages/admin/Admin'))
 const AdminOrder = lazy(() => import('./pages/admin/AdminOrder'))
 const AdminCoupons = lazy(() => import('./pages/admin/AdminCoupons'))
 const AdminRates = lazy(() => import('./pages/admin/AdminRates'))
+const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
+const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 export default function App() {
@@ -62,6 +64,10 @@ export default function App() {
             <Route path="/boosting" element={<Boosting />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/track" element={<Track />} />
+            {/* Public and unguarded on purpose: this is opened from an email by
+                somebody who is not signed in, and making them sign in to leave a
+                mailing list is how people report mail as spam instead. */}
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="/help" element={<Help />} />
             <Route path="/support" element={<Support />} />
 
@@ -111,6 +117,10 @@ export default function App() {
                 reaching it would see a form that 403s on save. */}
             <Route path="/admin/rates"
                    element={<RequireAdmin><AdminRates /></RequireAdmin>} />
+            {/* Same reasoning as the rate card: a campaign reaches every opted-in
+                customer at once and cannot be recalled, so ADMIN rather than staff. */}
+            <Route path="/admin/campaigns"
+                   element={<RequireAdmin><AdminCampaigns /></RequireAdmin>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

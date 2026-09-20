@@ -196,6 +196,7 @@ gfs:
   season-year: ${GFS_SEASON_YEAR:26}
   public-url: ${GFS_PUBLIC_URL:http://localhost:5173}
   discord-invite: ${GFS_DISCORD_INVITE:https://discord.com/invite/8FeP7C6tXt}
+  instagram-url: ${GFS_INSTAGRAM_URL:https://www.instagram.com/global_fut_services/}
 
   security:
     jwt-secret: ${GFS_JWT_SECRET}                       # openssl rand -base64 48

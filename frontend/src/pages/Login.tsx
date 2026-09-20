@@ -26,6 +26,9 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  // Unticked by default, and stays that way unless somebody ticks it. A pre-ticked
+  // marketing box records a consent nobody gave.
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Per-field messages from the server. The summary it sends says "check the
@@ -60,6 +63,7 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
           password,
           displayName: displayName.trim() || undefined,
           acceptedTerms,
+          marketingOptIn,
         })
       } else {
         await login(email.trim(), password)
@@ -170,6 +174,12 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
                     {fieldErrors.acceptedTerms}
                   </p>
                 )}
+                {/* Its own control, below the terms and never bundled with them. The
+                    submit button does not depend on it: saying no to marketing is a
+                    complete answer. */}
+                <Checkbox checked={marketingOptIn} onChange={setMarketingOptIn}>
+                  {t.auth.marketingOptIn}
+                </Checkbox>
               </>
             )}
 

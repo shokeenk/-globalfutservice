@@ -577,6 +577,8 @@ const es: Dictionary = {
     acceptTerms: 'términos del servicio',
     acceptAnd: 'y la',
     acceptPrivacy: 'política de privacidad',
+    marketingOptIn:
+      'Quiero recibir ofertas de GFS y avisos de rebajas de monedas. Opcional: las actualizaciones de tus pedidos llegan igualmente.',
     createAccount: 'Crear cuenta',
     signInButton: 'Iniciar sesión',
     haveAccount: '¿Ya tienes cuenta?',
@@ -638,6 +640,13 @@ const es: Dictionary = {
     useThemBy: (date) => `Úsalas antes del ${date}.`,
     bookSession: 'Reservar sesión',
     manageSessions: 'Gestionar sesiones',
+    emailPrefsTitle: 'Preferencias de correo',
+    emailPrefsOptIn: 'Quiero recibir ofertas de GFS y avisos de rebajas de monedas',
+    emailPrefsNote:
+      'Las actualizaciones de tus pedidos forman parte del servicio y se envían igualmente: '
+      + 'esto solo controla el correo promocional.',
+    emailPrefsSaved: 'Guardado.',
+    emailPrefsFailed: 'No se pudo guardar. Inténtalo de nuevo en un momento.',
     quickActions: 'Acciones rápidas',
     startOrder: 'Hacer un pedido',
     needChange: '¿Necesitas cambiar algo de un pedido en curso?',

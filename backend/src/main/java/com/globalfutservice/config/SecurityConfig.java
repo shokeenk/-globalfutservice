@@ -198,6 +198,27 @@ public class SecurityConfig {
                       and transaction history.
                     */
                     .requestMatchers(HttpMethod.POST, "/api/v1/payments/claims/*/proof").permitAll()
+                    /*
+                      Everything a promotional email reaches back into.
+
+                      All four are opened from a mail client by somebody who is not
+                      signed in and cannot be, so there is nothing to authenticate
+                      against. Each carries a random UUID in place of an identity:
+
+                        * unsubscribe is POST-only, so the mail scanners that fetch every
+                          URL in an incoming message cannot unsubscribe people who never
+                          clicked. one-click is POST too, per RFC 8058.
+                        * `o/{token}.gif` and `c/{token}` mark one row and nothing else;
+                          the worst a guessed token does is record an open that did not
+                          happen.
+                        * the banner is an image that has already been mailed to every
+                          recipient. It is not a secret by the time it is requested.
+                    */
+                    .requestMatchers(HttpMethod.POST, "/api/v1/marketing/unsubscribe").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/marketing/unsubscribe/one-click").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/marketing/o/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/marketing/c/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/marketing/campaigns/*/banner").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
 
                     // The OAuth redirect dance. Both legs must be reachable to a browser

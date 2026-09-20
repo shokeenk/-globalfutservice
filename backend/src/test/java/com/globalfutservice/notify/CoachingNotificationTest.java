@@ -31,27 +31,71 @@ class CoachingNotificationTest {
 
     private static final String INVITE = "https://discord.com/invite/8FeP7C6tXt";
 
-    @Test
-    @DisplayName("the confirmation email carries the Discord invite and the order reference")
-    void confirmationEmailCarriesInvite() {
-        JavaMailSender sender = mock(JavaMailSender.class);
+    private static OrderNotification coachingOrder() {
+        return new OrderNotification(
+                "GFS-26-COACH01", "PAID", "FUT Classes — Single session · 1 hour", "₹1,000.00",
+                "player@example.com", null, "SCHEDULED_SESSION",
+                "COACHING", "PlayStation",
+                "https://globalfutservices.com/admin/orders/GFS-26-COACH01",
+                "PlayStation · ID VinayFC10");
+    }
+
+    private static EmailNotifier notifierSending(JavaMailSender sender) {
         AppProperties props = mock(AppProperties.class);
         AppProperties.Notifications notifications = mock(AppProperties.Notifications.class);
         when(props.notifications()).thenReturn(notifications);
         when(notifications.emailEnabled()).thenReturn(true);
         when(notifications.emailFrom()).thenReturn("orders@globalfutservices.com");
+        when(notifications.emailFromName()).thenReturn("Global FUT Services");
         when(props.discordInvite()).thenReturn(INVITE);
+        when(props.publicUrl()).thenReturn("https://globalfutservices.com");
+        when(props.instagramUrl()).thenReturn("https://www.instagram.com/global_fut_services/");
+        return new EmailNotifier(props, sender);
+    }
 
-        new EmailNotifier(props, sender).coachingConfirmed(new OrderNotification(
-                "GFS-26-COACH01", "PAID", "FUT Classes — Single session · 1 hour", "₹1,000.00",
-                "player@example.com", null, "SCHEDULED_SESSION",
-                "https://globalfutservices.com/admin/orders/GFS-26-COACH01",
-                "PlayStation · ID VinayFC10"));
+    @Test
+    @DisplayName("the confirmation email carries the Discord invite and the order reference")
+    void confirmationEmailCarriesInvite() {
+        JavaMailSender sender = mock(JavaMailSender.class);
+        when(sender.createMimeMessage()).thenReturn(
+                new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
 
-        ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        // The coaching customer's invite now arrives in the shared confirmation email,
+        // which covers Champs, boosting and coaching with one Discord branch.
+        notifierSending(sender).orderConfirmed(coachingOrder());
+
+        ArgumentCaptor<jakarta.mail.internet.MimeMessage> sent =
+                ArgumentCaptor.forClass(jakarta.mail.internet.MimeMessage.class);
         verify(sender).send(sent.capture());
-        assertThat(sent.getValue().getTo()).containsExactly("player@example.com");
-        assertThat(sent.getValue().getText()).contains(INVITE).contains("GFS-26-COACH01");
+        assertThat(bodyOf(sent.getValue())).contains(INVITE).contains("GFS-26-COACH01");
+    }
+
+    /**
+     * No second email for coaching.
+     *
+     * <p>{@code coachingConfirmed} used to send its own "join us on Discord" message. The
+     * shared confirmation email now says that, so this one is silent — otherwise a
+     * coaching customer gets two confirmations a second apart.
+     */
+    @Test
+    @DisplayName("the retired coaching email sends nothing")
+    void coachingConfirmedIsSilent() {
+        JavaMailSender sender = mock(JavaMailSender.class);
+        notifierSending(sender).coachingConfirmed(coachingOrder());
+        org.mockito.Mockito.verifyNoInteractions(sender);
+    }
+
+    /** The whole MIME body as a string, both alternative parts included. */
+    private static String bodyOf(jakarta.mail.internet.MimeMessage message) {
+        try {
+            var out = new java.io.ByteArrayOutputStream();
+            message.writeTo(out);
+            // Quoted-printable soft-wraps long URLs; unwrap before matching.
+            return out.toString(java.nio.charset.StandardCharsets.UTF_8)
+                    .replaceAll("[\\r\\n]", "").replace("=3D", "=");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test

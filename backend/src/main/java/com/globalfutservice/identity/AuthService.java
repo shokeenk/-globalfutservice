@@ -102,6 +102,15 @@ public class AuthService {
         if (request.referralCode() != null && !request.referralCode().isBlank()) {
             account.setReferredByCode(request.referralCode().trim().toUpperCase(Locale.ROOT));
         }
+        /*
+         * Only when they ticked it. The column already defaults to false, so this branch
+         * is the single place in the application that can turn marketing consent on for a
+         * new account -- which is what makes "where did this consent come from" a
+         * question with one answer and a timestamp.
+         */
+        if (request.marketingOptIn()) {
+            account.optInToMarketing();
+        }
 
         AccountEntity saved = accounts.save(account);
         log.info("Registered account {}", saved.getPublicId());

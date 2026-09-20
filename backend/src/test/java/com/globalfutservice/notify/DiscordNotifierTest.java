@@ -132,6 +132,8 @@ class DiscordNotifierTest {
         return new OrderNotification(
                 "GFS-26-000124", "AWAITING_PAYMENT", "FUT Classes — Single session",
                 "₹922.50", "buyer@example.com", "buyer#1234", "PLAYER_AUCTION",
+                null,
+                null,
                 "https://globalfutservices.com/admin/orders/GFS-26-000124", null);
     }
 

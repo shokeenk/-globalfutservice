@@ -62,6 +62,21 @@ public class NotificationService {
         each(notifier -> notifier.readyToFulfil(n));
     }
 
+    /**
+     * Off the request thread: this runs inside the customer's own submit request, and a
+     * slow SMTP server must not make submitting a payment reference look like it failed.
+     */
+    @Async
+    public void awaitingVerification(OrderNotification n) {
+        each(notifier -> notifier.awaitingVerification(n));
+    }
+
+    /** Off the request thread too — this one runs inside an operator's verify click. */
+    @Async
+    public void orderConfirmed(OrderNotification n) {
+        each(notifier -> notifier.orderConfirmed(n));
+    }
+
     @Async
     public void coachingConfirmed(OrderNotification n) {
         each(notifier -> notifier.coachingConfirmed(n));

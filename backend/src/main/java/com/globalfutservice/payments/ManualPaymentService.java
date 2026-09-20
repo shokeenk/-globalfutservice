@@ -178,6 +178,16 @@ public class ManualPaymentService {
                         + " against our account.",
                 "/track?ref=" + order.getPublicRef(), order.getPublicRef());
 
+        /*
+         * The customer's own email, distinct from the operator alert below.
+         *
+         * Raised on the claim rather than on the screenshot upload: the storefront posts
+         * the reference first and the image immediately after as a second request, so
+         * waiting for the image would delay the email and lose it entirely for anyone who
+         * submits a reference without one.
+         */
+        notifications.awaitingVerification(orderService.notificationFor(order));
+
         notifications.paymentClaimed(new PaymentClaimNotification(
                 order.getPublicRef(),
                 OrderService.describe(order),

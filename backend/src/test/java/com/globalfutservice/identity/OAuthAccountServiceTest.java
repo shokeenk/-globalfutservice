@@ -178,6 +178,15 @@ class OAuthAccountServiceTest {
 
         // ---- unused by these tests -------------------------------------------------
         @Override public Optional<AccountEntity> findByPublicId(String publicId) { return Optional.empty(); }
+        // Marketing consent is not what this test is about; the fake just has to satisfy
+        // the interface.
+        @Override public Optional<AccountEntity> findByMarketingToken(java.util.UUID token) {
+            return Optional.empty();
+        }
+
+        @Override public long countByMarketingOptOutCampaignId(Long campaignId) {
+            return 0;
+        }
         @Override public long countStaff() { return 0; }
         @Override public boolean existsByEmailNormalised(String email) { return byEmail.containsKey(email); }
         @Override public java.util.List<AccountEntity> findAll() { return java.util.List.of(); }
