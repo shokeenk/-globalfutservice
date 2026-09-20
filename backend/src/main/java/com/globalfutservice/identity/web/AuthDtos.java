@@ -48,7 +48,19 @@ public final class AuthDtos {
             String referralCode,
 
             @AssertTrue(message = "Please accept the terms to create an account")
-            boolean acceptedTerms) {
+            boolean acceptedTerms,
+
+            /**
+             * Agreement to receive promotional email. Optional, and separate from
+             * {@code acceptedTerms} on purpose.
+             *
+             * <p>Not annotated {@code @AssertTrue}: accepting the terms is a condition of
+             * having an account, whereas marketing is a thing somebody chooses, and
+             * bundling the two would make every registration look like consent. Absent
+             * from the body means false, which is the answer that does not mail people
+             * who never said yes.
+             */
+            boolean marketingOptIn) {
 
         @Override
         public String toString() {

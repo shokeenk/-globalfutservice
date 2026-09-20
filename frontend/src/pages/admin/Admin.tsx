@@ -188,7 +188,10 @@ export default function Admin() {
         */}
         <ButtonLink to="/admin/coupons" variant="primary" size="md">Coupons</ButtonLink>
         {account?.role === 'ADMIN' && (
-          <ButtonLink to="/admin/rates" variant="primary" size="md">Coin rates</ButtonLink>
+          <>
+            <ButtonLink to="/admin/rates" variant="primary" size="md">Coin rates</ButtonLink>
+            <ButtonLink to="/admin/campaigns" variant="primary" size="md">Campaigns</ButtonLink>
+          </>
         )}
       </div>
 

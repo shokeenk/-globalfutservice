@@ -72,6 +72,30 @@ public class AccountEntity {
     @Column(name = "first_completed_at")
     private Instant firstCompletedAt;
 
+    /**
+     * Promotional email consent. See V26.
+     *
+     * <p>Never consulted when sending transactional order mail: those messages are sent
+     * because somebody placed an order, not because they agreed to be marketed to, and
+     * suppressing them would mean a customer not being told their payment failed.
+     */
+    @Column(name = "marketing_opt_in", nullable = false)
+    private boolean marketingOptIn = false;
+
+    @Column(name = "marketing_opt_in_at")
+    private Instant marketingOptInAt;
+
+    @Column(name = "marketing_opt_out_at")
+    private Instant marketingOptOutAt;
+
+    /** Which campaign's unsubscribe link they used, if that is how they left. */
+    @Column(name = "marketing_opt_out_campaign_id")
+    private Long marketingOptOutCampaignId;
+
+    /** Opaque token carried by unsubscribe links. Not derived from the address. */
+    @Column(name = "marketing_token", nullable = false, updatable = false)
+    private java.util.UUID marketingToken = java.util.UUID.randomUUID();
+
     @Column(name = "failed_login_count", nullable = false)
     private int failedLoginCount;
 
@@ -247,5 +271,45 @@ public class AccountEntity {
     @Override
     public String toString() {
         return "Account[" + publicId + ", role=" + role + "]";
+    }
+
+    public boolean isMarketingOptIn() {
+        return marketingOptIn;
+    }
+
+    public java.util.UUID getMarketingToken() {
+        return marketingToken;
+    }
+
+    public Instant getMarketingOptInAt() {
+        return marketingOptInAt;
+    }
+
+    public Instant getMarketingOptOutAt() {
+        return marketingOptOutAt;
+    }
+
+    public Long getMarketingOptOutCampaignId() {
+        return marketingOptOutCampaignId;
+    }
+
+    /** Recorded with a timestamp, because "when did they agree" is the question asked. */
+    public void optInToMarketing() {
+        this.marketingOptIn = true;
+        this.marketingOptInAt = Instant.now();
+        this.marketingOptOutAt = null;
+        this.marketingOptOutCampaignId = null;
+    }
+
+    /**
+     * Withdraw promotional consent.
+     *
+     * @param campaignId the campaign whose unsubscribe link was used, or null if they
+     *                   opted out from their account rather than from an email
+     */
+    public void optOutOfMarketing(Long campaignId) {
+        this.marketingOptIn = false;
+        this.marketingOptOutAt = Instant.now();
+        this.marketingOptOutCampaignId = campaignId;
     }
 }

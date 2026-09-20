@@ -447,6 +447,40 @@ export interface CoinRate {
   validFrom: string
 }
 
+/** What a campaign did, counted from its send log. */
+export interface CampaignStats {
+  total: number
+  sent: number
+  failed: number
+  opened: number
+  clicked: number
+}
+
+export interface Campaign {
+  publicId: string
+  title: string
+  subject: string
+  heading: string
+  body: string
+  promoCode: string | null
+  ctaText: string | null
+  ctaPath: string | null
+  hasBanner: boolean
+  audience: string
+  audienceLabel: string
+  status: 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'SENT' | 'CANCELLED' | 'FAILED'
+  scheduledAt: string | null
+  completedAt: string | null
+  updatedAt: string
+  stats: CampaignStats
+}
+
+/** The fixed segments and buttons a campaign may use, with live audience counts. */
+export interface CampaignOptions {
+  audiences: { value: string; label: string; detail: string }[]
+  ctas: { value: string; label: string; detail: string }[]
+}
+
 export interface ApiErrorBody {
   error: string
   message: string

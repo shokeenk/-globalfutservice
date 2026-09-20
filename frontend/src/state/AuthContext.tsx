@@ -18,6 +18,12 @@ export type RegisterInput = {
   displayName?: string
   phone?: string
   acceptedTerms: boolean
+  /**
+   * Agreement to promotional email. Separate from acceptedTerms on purpose: the terms are
+   * a condition of having an account, marketing is a choice, and sending them as one field
+   * would make every registration look like consent.
+   */
+  marketingOptIn: boolean
 }
 
 type TokenResponse = { accessToken: string; expiresInSeconds: number; account: Account }

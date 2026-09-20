@@ -667,6 +667,8 @@ const en = {
     acceptTerms: 'terms of service',
     acceptAnd: 'and',
     acceptPrivacy: 'privacy policy',
+    marketingOptIn:
+      'Email me GFS offers and coin sale announcements. Optional — order updates arrive either way.',
     createAccount: 'Create account',
     signInButton: 'Sign in',
     haveAccount: 'Already have an account?',
@@ -728,6 +730,13 @@ const en = {
     useThemBy: (date: string) => `Use them by ${date}.`,
     bookSession: 'Book a session',
     manageSessions: 'Manage sessions',
+    emailPrefsTitle: 'Email preferences',
+    emailPrefsOptIn: 'Send me GFS offers and coin sale announcements',
+    emailPrefsNote:
+      'Order updates are part of the service and are sent either way — this only '
+      + 'controls promotional email.',
+    emailPrefsSaved: 'Saved.',
+    emailPrefsFailed: 'That did not save. Try again in a moment.',
     quickActions: 'Quick actions',
     startOrder: 'Start an order',
     needChange: 'Need something changed on a live order?',

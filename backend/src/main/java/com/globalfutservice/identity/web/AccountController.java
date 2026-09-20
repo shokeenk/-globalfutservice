@@ -6,6 +6,7 @@ import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.loyalty.LoyaltyTier;
 import com.globalfutservice.loyalty.LoyaltyService;
 import com.globalfutservice.loyalty.LoyaltyStatus;
+import com.globalfutservice.marketing.MarketingPreferenceService;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
 import com.globalfutservice.web.ApiExceptions;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,10 +40,13 @@ public class AccountController {
 
     private final LoyaltyService loyaltyService;
     private final AppProperties props;
+    private final MarketingPreferenceService marketing;
 
-    public AccountController(LoyaltyService loyaltyService, AppProperties props) {
+    public AccountController(LoyaltyService loyaltyService, AppProperties props,
+                             MarketingPreferenceService marketing) {
         this.loyaltyService = loyaltyService;
         this.props = props;
+        this.marketing = marketing;
     }
 
     public record WalletEntry(String type, long amount, String description, Instant at) {
@@ -147,6 +152,42 @@ public class AccountController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(toTierView(loyaltyService.status(principal.id())));
+    }
+
+    public record MarketingPreference(boolean optIn) {
+    }
+
+    /**
+     * Whether this customer has agreed to promotional email.
+     *
+     * <p>Only ever about marketing. Order email has no switch here and is not a
+     * preference: somebody who turns this off is still told when their payment is
+     * verified, because that message exists to serve the order they placed.
+     */
+    @GetMapping("/marketing")
+    @Operation(summary = "Promotional email preference")
+    public ResponseEntity<MarketingPreference> marketing(
+            @CurrentAccount AccountPrincipal principal) {
+        if (principal == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in.");
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(new MarketingPreference(marketing.isOptedIn(principal.id())));
+    }
+
+    @PostMapping("/marketing")
+    @Operation(summary = "Turn promotional email on or off")
+    public ResponseEntity<MarketingPreference> setMarketing(
+            @CurrentAccount AccountPrincipal principal,
+            @RequestBody MarketingPreference request) {
+        if (principal == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in.");
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(new MarketingPreference(
+                        marketing.set(principal.id(), request.optIn())));
     }
 
     private static TierView toTierView(LoyaltyStatus s) {
