@@ -335,12 +335,12 @@ function DiscordTicket({ order }: { order: Order }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-semibold text-chalk">
-            {access.mode === 'DIRECT' ? t.track.discordTicketTitle
+            {access.mode === 'DIRECT' || access.mode === 'QUOTE' ? t.track.discordTicketTitle
               : access.mode === 'PENDING' ? t.track.discordPendingTitle
               : t.track.discordVerifyTitle}
           </p>
           <p className="mt-0.5 text-[12.5px] leading-relaxed text-chalk-muted">
-            {access.mode === 'DIRECT' ? t.track.discordTicketBody
+            {access.mode === 'DIRECT' || access.mode === 'QUOTE' ? t.track.discordTicketBody
               : access.mode === 'PENDING' ? t.track.discordPendingBody
               : t.track.discordVerifyBody}
           </p>
@@ -358,7 +358,7 @@ function DiscordTicket({ order }: { order: Order }) {
             {t.track.discordOpenTicket}
           </a>
         )}
-        {access.mode === 'VERIFY' && access.inviteUrl && (
+        {(access.mode === 'VERIFY' || access.mode === 'QUOTE') && access.inviteUrl && (
           <a
             href={access.inviteUrl}
             target="_blank"
@@ -368,7 +368,7 @@ function DiscordTicket({ order }: { order: Order }) {
                        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
                        focus-visible:outline-brand-400"
           >
-            {t.track.discordVerifyJoin}
+            {access.mode === 'QUOTE' ? t.track.discordTicketCta : t.track.discordVerifyJoin}
           </a>
         )}
       </div>
@@ -378,6 +378,12 @@ function DiscordTicket({ order }: { order: Order }) {
         a customer assembling one from two places on the page is a customer who mistypes
         it, and every mistype is a failed attempt against their own rate limit.
       */}
+      {access.mode === 'QUOTE' && (
+        <p className="mt-2 text-[11.5px] text-chalk-faint">
+          {t.track.discordTicketQuote(order.publicRef)}
+        </p>
+      )}
+
       {access.mode === 'VERIFY' && access.command && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="tnum min-w-0 flex-1 overflow-x-auto rounded-edge bg-ink-700/60 px-3 py-2

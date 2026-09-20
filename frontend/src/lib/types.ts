@@ -456,10 +456,11 @@ export interface CoinRate {
  * - `DIRECT`  — already in the channel; link straight to it.
  * - `PENDING` — signed in with Discord, ticket not open yet; nothing to do.
  * - `VERIFY`  — join the server and run the command.
+ * - `QUOTE`   — the command is not configured; join and quote the reference.
  * - `NONE`    — a service that is not run in Discord at all.
  */
 export interface DiscordAccess {
-  mode: 'DIRECT' | 'PENDING' | 'VERIFY' | 'NONE'
+  mode: 'DIRECT' | 'PENDING' | 'VERIFY' | 'QUOTE' | 'NONE'
   channelUrl: string | null
   inviteUrl: string | null
   command: string | null

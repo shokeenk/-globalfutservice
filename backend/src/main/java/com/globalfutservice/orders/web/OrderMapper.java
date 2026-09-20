@@ -9,6 +9,7 @@ import com.globalfutservice.domain.orders.SupplierStatusMapper;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.notify.DiscordBotClient;
 import com.globalfutservice.notify.discord.DiscordVerificationService;
 import com.globalfutservice.orders.OrderService;
 import org.slf4j.Logger;
@@ -35,12 +36,18 @@ public class OrderMapper {
     private final ObjectMapper mapper;
     private final AppProperties props;
     private final DiscordVerificationService verification;
+    private final DiscordBotClient bot;
 
     public OrderMapper(ObjectMapper mapper, AppProperties props,
-                       DiscordVerificationService verification) {
+                       DiscordVerificationService verification, DiscordBotClient bot) {
         this.mapper = mapper;
         this.props = props;
         this.verification = verification;
+        this.bot = bot;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     /**
@@ -58,6 +65,19 @@ public class OrderMapper {
         }
         String invite = props.discordInvite();
         String command = "/verify " + order.getPublicRef();
+
+        /*
+         * If the slash command is not actually registered, do not tell anybody to run it.
+         *
+         * The command only exists once the bot is configured and an application id is
+         * set, and until then a customer following these instructions types something
+         * Discord does not recognise and concludes the site is broken. The older panel --
+         * join, and quote your reference to the team -- is worse than /verify and works
+         * without any of this, so it is what an unconfigured deployment keeps showing.
+         */
+        if (!bot.isEnabled() || isBlank(props.notifications().discordApplicationId())) {
+            return new OrderDtos.DiscordAccessDto("QUOTE", null, invite, null);
+        }
 
         /*
          * A deep link is only offered to somebody who has actually been granted the
