@@ -10,6 +10,7 @@ import { BUSINESS } from '../content/business'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
+import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
 import type {
@@ -680,6 +681,7 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
   }
 
   const paid = isPaid(order)
+  const ticket = ticketLink(order.discordAccess)
   const platformLabel = order.platform === 'PLAYSTATION' ? b.playstation
     : order.platform === 'PC'
       ? `${b.pc}${order.pcLauncher === 'STEAM' ? ` · ${b.steam}`
@@ -712,7 +714,7 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
 
       <div className="mt-3">
         <a
-          href={BUSINESS.discordOrdersChannel}
+          href={ticket ? ticket.href : BUSINESS.discordInvite}
           target="_blank"
           rel="noreferrer"
           className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-edge
@@ -723,12 +725,26 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
             <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
           </svg>
-          {b.joinDiscord}
+          {ticket?.direct ? t.track.discordOpenTicket : b.joinDiscord}
           <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 4h4v4M16 4l-7 7M14 12v4H4V6h4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </a>
-        <p className="mt-2 text-[12px] text-chalk-faint">{b.joinCaption}</p>
+        {/*
+          The command, where the customer still needs it. Without this the button lands
+          them in the server and nothing tells them how to reach the ticket the line
+          above just promised them.
+        */}
+        {ticket?.command ? (
+          <p className="mt-2 text-[12px] leading-relaxed text-chalk-faint">
+            {t.track.discordVerifyBody}{' '}
+            <code className="rounded bg-ink-700/60 px-1.5 py-0.5 font-semibold text-chalk">
+              {ticket.command}
+            </code>
+          </p>
+        ) : (
+          <p className="mt-2 text-[12px] text-chalk-faint">{b.joinCaption}</p>
+        )}
       </div>
 
       <dl className="mt-7 grid gap-px overflow-hidden rounded-panel bg-ink-400 text-left sm:grid-cols-4">
@@ -744,7 +760,8 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
 
       <p className="mt-6 text-[12.5px] text-chalk-muted">
         {b.needHelp}{' '}
-        <a className="font-semibold text-brand-400 hover:underline" href={BUSINESS.discordOrdersChannel} target="_blank" rel="noreferrer">
+        <a className="font-semibold text-brand-400 hover:underline"
+           href={ticket ? ticket.href : BUSINESS.discordInvite} target="_blank" rel="noreferrer">
           {b.joinOurDiscord}
         </a>{' '}
         {b.orWord}{' '}
