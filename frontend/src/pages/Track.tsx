@@ -7,6 +7,7 @@ import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { ApiError, api } from '../lib/api'
+import { ticketLink } from '../lib/discordTicket'
 import { dateTime } from '../lib/format'
 import { useSeo } from '../lib/seo'
 import type { Order, OrderSummary } from '../lib/types'
@@ -311,12 +312,13 @@ function DiscordTicket({ order }: { order: Order }) {
   const open = ['PAID', 'CREDENTIALS_PENDING', 'READY_FOR_DELIVERY', 'IN_PROGRESS', 'ON_HOLD', 'DELIVERED']
     .includes(order.status)
   const access = order.discordAccess
-  if (!open || !access || access.mode === 'NONE') return null
+  const ticket = ticketLink(access)
+  if (!open || !access || !ticket) return null
 
   const copyCommand = async () => {
-    if (!access.command) return
+    if (!ticket?.command) return
     try {
-      await navigator.clipboard.writeText(access.command)
+      await navigator.clipboard.writeText(ticket.command)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -345,9 +347,9 @@ function DiscordTicket({ order }: { order: Order }) {
               : t.track.discordVerifyBody}
           </p>
         </div>
-        {access.mode === 'DIRECT' && access.channelUrl && (
+        {ticket?.direct && (
           <a
-            href={access.channelUrl}
+            href={ticket.href}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-10 shrink-0 items-center rounded-edge bg-brand-500 px-4 text-[12.5px]
@@ -358,9 +360,9 @@ function DiscordTicket({ order }: { order: Order }) {
             {t.track.discordOpenTicket}
           </a>
         )}
-        {(access.mode === 'VERIFY' || access.mode === 'QUOTE') && access.inviteUrl && (
+        {ticket && !ticket.direct && (
           <a
-            href={access.inviteUrl}
+            href={ticket.href}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-10 shrink-0 items-center rounded-edge bg-brand-500 px-4 text-[12.5px]
@@ -384,11 +386,11 @@ function DiscordTicket({ order }: { order: Order }) {
         </p>
       )}
 
-      {access.mode === 'VERIFY' && access.command && (
+      {ticket?.command && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="tnum min-w-0 flex-1 overflow-x-auto rounded-edge bg-ink-700/60 px-3 py-2
                            text-[12.5px] font-semibold text-chalk">
-            {access.command}
+            {ticket.command}
           </code>
           <button
             type="button"

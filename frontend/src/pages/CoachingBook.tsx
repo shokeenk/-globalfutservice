@@ -6,10 +6,10 @@ import type { CoachIconName } from '../components/CoachingIcons'
 import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
 import { Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, Select, Spinner, Textarea } from '../components/ui'
-import { BUSINESS } from '../content/business'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
+import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { useSeo } from '../lib/seo'
 import type {
@@ -890,6 +890,7 @@ function ConfirmedSteps({
   }, [orderRef])
 
   const paid = isPaid(order)
+  const ticket = ticketLink(order?.discordAccess)
 
   if (!order) {
     return <div className="grid min-h-[40vh] place-items-center"><Spinner size={32} /></div>
@@ -954,18 +955,38 @@ function ConfirmedSteps({
           ))}
         </ul>
 
-        <a
-          href={BUSINESS.discordOrdersChannel}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-press bg-[#5865F2]
-                     text-body-sm font-semibold text-white shadow-e2 transition-colors duration-200
-                     hover:bg-[#4752C4] focus-visible:outline focus-visible:outline-2
-                     focus-visible:outline-offset-2 focus-visible:outline-[#5865F2]"
-        >
-          <DiscordMark className="h-5 w-5" /> {b.joinDiscord}
-          <span aria-hidden="true">&#8599;</span>
-        </a>
+        {/*
+          This order's ticket, not the shared order channel.
+
+          It used to be a hardcoded channel id, which sent every customer to the same
+          lobby regardless of what they had just paid for — the bot had already opened a
+          ticket for this order and nothing linked to it.
+        */}
+        {ticket && (
+          <>
+            <a
+              href={ticket.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-press bg-[#5865F2]
+                         text-body-sm font-semibold text-white shadow-e2 transition-colors duration-200
+                         hover:bg-[#4752C4] focus-visible:outline focus-visible:outline-2
+                         focus-visible:outline-offset-2 focus-visible:outline-[#5865F2]"
+            >
+              <DiscordMark className="h-5 w-5" />
+              {ticket.direct ? t.track.discordOpenTicket : b.joinDiscord}
+              <span aria-hidden="true">&#8599;</span>
+            </a>
+            {ticket.command && (
+              <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
+                {t.track.discordVerifyBody}{' '}
+                <code className="rounded bg-ink-700/60 px-1.5 py-0.5 font-semibold text-chalk">
+                  {ticket.command}
+                </code>
+              </p>
+            )}
+          </>
+        )}
         {emailsEnabled && (
           <p className="mt-3 text-[12px] text-chalk-faint">{paid ? b.discordEmailed : b.discordEmailLater}</p>
         )}
