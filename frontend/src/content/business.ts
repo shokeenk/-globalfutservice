@@ -1,10 +1,14 @@
 /**
  * The operating entity, written once.
  *
- * <p>These four facts have to appear identically wherever they appear at all. A payment
- * gateway's reviewer checks that they match; a customer chasing an order checks that
- * the number they are dialling is the one on the invoice. Typing them out five times
- * is how the address on one page ends up a flat number different from another.
+ * <p>These facts have to appear identically wherever they appear at all. A payment
+ * gateway's reviewer checks that they match, and typing them out five times is how the
+ * address on one page ends up a flat number different from another.
+ *
+ * <p><b>There is no phone number here any more.</b> It was removed from every page at
+ * the owner's instruction, and the constant went with it rather than being left unused:
+ * a spare `phone` field is how a number nobody meant to publish reappears on one page a
+ * year later. Discord is the contact channel that replaced it.
  *
  * <p>The address is the exception to "everywhere". It is a residential one, so it is
  * published on exactly one page: /contact, which is where the payment gateway's
@@ -22,7 +26,6 @@ export const BUSINESS = {
   legalName: 'Vinay Kumar Sharma',
   tradingName: 'Global FUT Services',
   registeredAddress: '2/40 KBHB, Jodhpur, Rajasthan - 342005',
-  phone: '+91 7339744705',
   email: 'globalfutservices@gmail.com',
 
   /**
@@ -33,8 +36,13 @@ export const BUSINESS = {
    * rather than a social link, and it is why it sits here with the address and the
    * phone number rather than beside the Instagram icon.
    *
-   * <p><b>Every link on the site now opens a direct message rather than the server</b>,
-   * at the owner's instruction, so a customer reaches a person instead of a channel.
+   * <p><b>Every link on the site opens a direct message rather than the server</b>, at
+   * the owner's instruction, so a customer reaches a person instead of a channel.
+   *
+   * <p>The operator line in the footer and on the policy pages is the exception: there
+   * the handle is printed as <i>text</i>, also at the owner's instruction. It sits beside
+   * a legal name and an email as a way of identifying who you are dealing with, and a
+   * link there would read as a support button rather than a contact detail.
    *
    * <p>Discord has no link that opens a DM from a username, which is why this needs the
    * numeric account id: {@code discord.com/users/<id>} is the only form that works, and
@@ -75,6 +83,4 @@ export const BUSINESS = {
     + 'sales, coaching, and competitive boosting for EA Sports FC Ultimate Team players.',
 } as const
 
-/** `tel:` needs the number without spaces; the display form keeps them. */
-export const PHONE_HREF = `tel:${BUSINESS.phone.replace(/\s+/g, '')}`
 export const EMAIL_HREF = `mailto:${BUSINESS.email}`

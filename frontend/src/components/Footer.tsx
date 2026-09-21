@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandBadge, Logo } from '../brand/Logo'
 import { useT } from '../i18n'
-import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
+import { BUSINESS, EMAIL_HREF } from '../content/business'
 import { useCatalog } from '../state/CatalogContext'
 import { ButtonLink } from './ui'
 
@@ -213,8 +213,13 @@ export function Footer() {
               on every page to achieve that. It stays in full on /contact, which is the
               page the gateway's verification points at, and in each policy document.
             */}
-            Operated by {BUSINESS.legalName} ·{' '}
-            <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> ·{' '}
+            {/*
+              Discord as text, not a link. It identifies the operator here, the way the
+              legal name beside it does — the clickable route to a person is the Discord
+              icon in the row above. Two links to the same place, one of them mid-sentence,
+              reads as a support button rather than a contact detail.
+            */}
+            Operated by {BUSINESS.legalName} · Discord: {BUSINESS.discordName} ·{' '}
             <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a>
           </p>
           <p className="mt-3 text-[12px] text-chalk-faint">

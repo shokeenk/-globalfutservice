@@ -4,7 +4,7 @@ import { Reveal } from '../motion/Reveal'
 import { Alert, Button, Checkbox, Field, Input, Section, Textarea } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
-import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
+import { BUSINESS, EMAIL_HREF } from '../content/business'
 import { useSeo } from '../lib/seo'
 import { useAuth } from '../state/AuthContext'
 
@@ -172,20 +172,14 @@ export default function Support() {
             <h2 className="stamp mb-4">Contact details</h2>
             <p className="text-[13px] leading-relaxed text-chalk-muted">
               This website is operated by{' '}
-              <strong className="text-chalk">{BUSINESS.legalName}</strong>, trading as{' '}
-              {BUSINESS.tradingName}.
+              <strong className="text-chalk">{BUSINESS.legalName}</strong> (Discord:{' '}
+              {BUSINESS.discordName}), trading as {BUSINESS.tradingName}.
             </p>
             <dl className="mt-4 space-y-2.5 text-[13px]">
               <div>
                 <dt className="text-chalk-faint">Registered address</dt>
                 <dd className="mt-0.5 leading-relaxed text-chalk-muted">
                   {BUSINESS.registeredAddress}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-chalk-faint">Mobile</dt>
-                <dd className="mt-0.5">
-                  <a className="text-chalk underline" href={PHONE_HREF}>{BUSINESS.phone}</a>
                 </dd>
               </div>
               <div>
