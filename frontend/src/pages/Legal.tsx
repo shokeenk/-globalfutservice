@@ -4,7 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Section } from '../components/ui'
 import { useSeo } from '../lib/seo'
 import { useCatalog } from '../state/CatalogContext'
-import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
+import { BUSINESS, EMAIL_HREF } from '../content/business'
 import type { Policy } from '../lib/types'
 
 /**
@@ -920,9 +920,9 @@ function Refund({ policy }: { policy: Policy | null }) {
 
       <Clause n={7} title="How to request one">
         <p>
-          Write to <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or call{' '}
-          <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> with your order
-          reference. There is no form to fill in and no queue to join.
+          Write to <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or
+          message us on Discord ({BUSINESS.discordName}) with your order reference. There
+          is no form to fill in and no queue to join.
         </p>
       </Clause>
 
@@ -989,9 +989,9 @@ function Cancellation({ policy }: { policy: Policy | null }) {
 
       <Clause n={4} title="How to cancel">
         <p>
-          Email <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or call{' '}
-          <a className="underline" href={PHONE_HREF}>{BUSINESS.phone}</a> with your order
-          reference. We confirm in writing, and tell you plainly if the order had already
+          Email <a className="underline" href={EMAIL_HREF}>{BUSINESS.email}</a> or message
+          us on Discord ({BUSINESS.discordName}) with your order reference. We confirm in
+          writing, and tell you plainly if the order had already
           started before your message reached us.
         </p>
       </Clause>
@@ -1111,13 +1111,13 @@ function Operator() {
     <div className="hairline rounded-panel bg-paper p-6 shadow-e1">
       <p className="stamp mb-4">Operated by</p>
       <p className="text-chalk">
-        This website is operated by <strong>{BUSINESS.legalName}</strong>, trading as{' '}
-        {BUSINESS.tradingName}.
+        This website is operated by <strong>{BUSINESS.legalName}</strong> (Discord:{' '}
+        {BUSINESS.discordName}), trading as {BUSINESS.tradingName}.
       </p>
       <dl className="mt-4 space-y-1.5 text-[14px]">
         <div className="flex gap-2">
-          <dt className="w-[132px] shrink-0 text-chalk-faint">Mobile</dt>
-          <dd><a className="text-chalk-muted underline" href={PHONE_HREF}>{BUSINESS.phone}</a></dd>
+          <dt className="w-[132px] shrink-0 text-chalk-faint">Discord</dt>
+          <dd className="text-chalk-muted">{BUSINESS.discordName}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-[132px] shrink-0 text-chalk-faint">Email</dt>

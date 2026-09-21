@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Section } from '../components/ui'
-import { BUSINESS, EMAIL_HREF, PHONE_HREF } from '../content/business'
+import { BUSINESS, EMAIL_HREF } from '../content/business'
 import { useSeo } from '../lib/seo'
 import { useCatalog } from '../state/CatalogContext'
 
@@ -132,8 +132,9 @@ export default function About() {
           <section className="space-y-4">
             <h2 className="display text-display-sm text-chalk">The business</h2>
             <p>
-              This website is operated by <strong className="text-chalk">{BUSINESS.legalName}</strong>,
-              trading as {BUSINESS.tradingName}, from Jodhpur, Rajasthan. It is a small
+              This website is operated by <strong className="text-chalk">{BUSINESS.legalName}</strong>{' '}
+              (Discord: {BUSINESS.discordName}), trading as {BUSINESS.tradingName}, from
+              Jodhpur, Rajasthan. It is a small
               operation rather than a marketplace: the people answering support are the
               people working the orders.
             </p>
@@ -147,15 +148,13 @@ export default function About() {
                 </div>
                 {/*
                   No registered address here. This block exists so a reader knows who they
-                  are dealing with and how to reach them, and the name, number and email do
-                  that. The address is on /contact and in the policy documents, where it is
+                  are dealing with and how to reach them, and the name, Discord and email
+                  do that. The address is on /contact and in the policy documents, where it is
                   part of the contract rather than part of an introduction.
                 */}
                 <div className="flex gap-2">
-                  <dt className="w-[132px] shrink-0 text-chalk-faint">Mobile</dt>
-                  <dd>
-                    <a className="text-chalk-muted underline" href={PHONE_HREF}>{BUSINESS.phone}</a>
-                  </dd>
+                  <dt className="w-[132px] shrink-0 text-chalk-faint">Discord</dt>
+                  <dd className="text-chalk-muted">{BUSINESS.discordName}</dd>
                 </div>
                 <div className="flex gap-2">
                   <dt className="w-[132px] shrink-0 text-chalk-faint">Email</dt>
