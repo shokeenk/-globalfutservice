@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +43,7 @@ class SupplierApprovalTest {
     private FutTransferClient client;
     private CredentialVaultService vault;
     private OrderRepository orders;
+    private SupplierDispatchClaim claim;
     private SupplierFulfilmentService service;
 
     @BeforeEach
@@ -49,6 +51,9 @@ class SupplierApprovalTest {
         client = mock(FutTransferClient.class);
         vault = mock(CredentialVaultService.class);
         orders = mock(OrderRepository.class);
+        claim = mock(SupplierDispatchClaim.class);
+        // Won by default; the tests that care about losing it say so.
+        when(claim.tryClaim(anyLong(), anyInt())).thenReturn(true);
 
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(
@@ -57,7 +62,7 @@ class SupplierApprovalTest {
                 java.time.Duration.ofSeconds(15), 3));
 
         when(client.isEnabled()).thenReturn(true);
-        service = new SupplierFulfilmentService(client, vault, orders, props);
+        service = new SupplierFulfilmentService(client, vault, orders, props, claim);
     }
 
     private static OrderEntity readyOrder() {

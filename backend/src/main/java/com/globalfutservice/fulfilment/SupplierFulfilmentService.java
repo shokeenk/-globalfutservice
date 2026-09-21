@@ -34,13 +34,16 @@ public class SupplierFulfilmentService {
     private final CredentialVaultService vault;
     private final OrderRepository orders;
     private final AppProperties props;
+    private final SupplierDispatchClaim claim;
 
     public SupplierFulfilmentService(FutTransferClient client, CredentialVaultService vault,
-                                     OrderRepository orders, AppProperties props) {
+                                     OrderRepository orders, AppProperties props,
+                                     SupplierDispatchClaim claim) {
         this.client = client;
         this.vault = vault;
         this.orders = orders;
         this.props = props;
+        this.claim = claim;
     }
 
     public boolean isEnabled() {
@@ -92,11 +95,22 @@ public class SupplierFulfilmentService {
         if (order.getSupplierOrderId() != null) {
             return order.getSupplierOrderId(); // already sent; never submit twice
         }
-        if (order.getSupplierDispatchAttempts() >= props.futTransfer().maxDispatchAttempts()) {
-            return null;                       // parked; an operator owns it now
+
+        /*
+         * Take the dispatch before calling anybody.
+         *
+         * The read above is not a guard on its own. Two operator clicks land while the
+         * first submission is still in flight, both see a null supplier id, and the
+         * customer's coins are sent twice -- the window is as wide as the HTTP call
+         * below. The claim is one conditional UPDATE, committed in its own transaction,
+         * so the database decides which caller proceeds. It also carries the attempt
+         * ceiling, which is why the separate parked check above it is gone: both
+         * conditions now live in the statement that enforces them.
+         */
+        if (!claim.tryClaim(order.getId(), props.futTransfer().maxDispatchAttempts())) {
+            return notClaimed(order, propagate);
         }
 
-        order.recordDispatchAttempt();
         try {
             /*
              * Opened as the system rather than an operator. The vault counts and attributes
@@ -113,8 +127,14 @@ public class SupplierFulfilmentService {
                     amountK,
                     creds);
 
+            /*
+             * Written through a targeted update, not by saving this entity: the claim
+             * changed the row outside this persistence context, so the copy in hand has
+             * a stale attempt count and a stale version. Callers that need the moved
+             * order re-read it -- AdminOrderController already does, and says why.
+             */
+            claim.recordAccepted(order.getId(), accepted.supplierOrderId());
             order.setSupplierOrderId(accepted.supplierOrderId());
-            orders.save(order);
             log.info("Order {} dispatched to supplier as {}",
                     order.getPublicRef(), accepted.supplierOrderId());
             return accepted.supplierOrderId();
@@ -125,9 +145,8 @@ public class SupplierFulfilmentService {
              * password, and a stack trace from a serialisation layer can quote the value
              * that failed.
              */
-            log.error("Could not dispatch order {} to supplier (attempt {}): {}",
-                    order.getPublicRef(), order.getSupplierDispatchAttempts(), e.getMessage());
-            orders.save(order);
+            log.error("Could not dispatch order {} to supplier: {}",
+                    order.getPublicRef(), e.getMessage());
 
             if (propagate) {
                 /*
@@ -146,7 +165,16 @@ public class SupplierFulfilmentService {
                                 + ": " + reason + " The order has not moved.");
             }
 
-            if (order.getSupplierDispatchAttempts() >= props.futTransfer().maxDispatchAttempts()) {
+            /*
+             * Re-read to decide whether that was the last attempt. The count in hand is
+             * the one from before the claim, which incremented the column rather than
+             * this copy of it -- trusting it here would under-report by one and the order
+             * would go quiet without ever saying it had been parked.
+             */
+            int attempts = orders.findById(order.getId())
+                    .map(OrderEntity::getSupplierDispatchAttempts)
+                    .orElse(order.getSupplierDispatchAttempts());
+            if (attempts >= props.futTransfer().maxDispatchAttempts()) {
                 /*
                  * Parked rather than retried forever. The order is paid and has a sign-in
                  * on file, so it is fulfillable by hand — and an unbounded retry against a
@@ -155,10 +183,61 @@ public class SupplierFulfilmentService {
                  * already works.
                  */
                 log.error("Order {} parked after {} failed dispatches — needs manual fulfilment",
-                        order.getPublicRef(), order.getSupplierDispatchAttempts());
+                        order.getPublicRef(), attempts);
             }
             return null;
         }
+    }
+
+    /**
+     * The claim went to somebody else, or there was nothing left to claim.
+     *
+     * <p>Three different situations arrive here and an operator needs them told apart.
+     * The row is re-read because the winning caller may have finished in the meantime,
+     * and "it is already done" is a success, not a failure.
+     */
+    private String notClaimed(OrderEntity order, boolean propagate) {
+        OrderEntity fresh = orders.findById(order.getId()).orElse(order);
+
+        if (fresh.getSupplierOrderId() != null) {
+            // Somebody else got there and finished. The caller's intent is satisfied.
+            log.info("Order {} was released concurrently as {}",
+                    fresh.getPublicRef(), fresh.getSupplierOrderId());
+            return fresh.getSupplierOrderId();
+        }
+
+        if (fresh.getSupplierDispatchAttempts() >= props.futTransfer().maxDispatchAttempts()) {
+            /*
+             * Parked rather than retried forever. The order is paid and has a sign-in on
+             * file, so it is fulfillable by hand -- and an unbounded retry against a
+             * supplier rejecting our credentials is how an API account gets locked. It
+             * stays at READY_FOR_DELIVERY, the queue an operator already works.
+             */
+            log.error("Order {} parked after {} dispatch attempts — needs manual fulfilment",
+                    fresh.getPublicRef(), fresh.getSupplierDispatchAttempts());
+            if (propagate) {
+                throw new FutTransferClient.FutTransferException(
+                        "Order " + fresh.getPublicRef() + " has already been tried "
+                                + fresh.getSupplierDispatchAttempts() + " times and will not "
+                                + "be sent again automatically. Work it by hand and mark it "
+                                + "in progress.");
+            }
+            return null;
+        }
+
+        /*
+         * Still in flight elsewhere -- almost always the same operator clicking twice on
+         * a button that takes a few seconds. Saying "refused" would be a lie, and saying
+         * nothing would invite a third click.
+         */
+        log.info("Order {} is already being released by another request",
+                fresh.getPublicRef());
+        if (propagate) {
+            throw new FutTransferClient.FutTransferException(
+                    "Order " + fresh.getPublicRef() + " is already being released. Give it "
+                            + "a moment and refresh — it has not been sent twice.");
+        }
+        return null;
     }
 
     // --------------------------------------------------------------- approval ---
