@@ -4,6 +4,7 @@ import com.globalfutservice.domain.orders.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -76,6 +77,53 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
               and o.createdAt < :cutoff
             """)
     List<OrderEntity> findStaleUnpaid(@Param("cutoff") Instant cutoff);
+
+    /**
+     * Take ownership of one order's dispatch, atomically.
+     *
+     * <p><b>This is what stops a customer's coins being sent twice.</b> Reading
+     * {@code supplierOrderId}, finding it null and then calling the supplier is a race
+     * with a window as wide as the HTTP call: two operator clicks both read null, both
+     * submit, and the partner fulfils both. Making the check and the increment one
+     * conditional UPDATE means the database picks a winner — exactly the guard
+     * {@code CampaignRepository.claimForSending} uses for the same reason.
+     *
+     * <p>The attempt counter is incremented <i>by</i> the claim rather than after it, so
+     * the count is the number of times a dispatch was actually begun. A caller whose
+     * submission then fails does not release the claim: the next attempt re-claims on its
+     * own merits while the count is still under the ceiling, which bounds the retries.
+     *
+     * @return 1 if this caller now owns the dispatch, 0 if the order is already with the
+     *         supplier, already being sent, or has exhausted its attempts
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update OrderEntity o
+               set o.supplierDispatchAttempts = o.supplierDispatchAttempts + 1
+             where o.id = :id
+               and o.supplierOrderId is null
+               and o.supplierDispatchAttempts < :maxAttempts
+            """)
+    int claimForDispatch(@Param("id") Long id, @Param("maxAttempts") int maxAttempts);
+
+    /**
+     * Write the partner's order id, once.
+     *
+     * <p>A targeted update rather than saving the entity the caller is holding: the claim
+     * above changed the row behind the persistence context's back, so that copy carries a
+     * stale attempt count and a stale version, and saving it would either lose the
+     * increment or fail the optimistic lock. The {@code is null} predicate makes this
+     * idempotent for its own sake.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update OrderEntity o
+               set o.supplierOrderId = :supplierOrderId
+             where o.id = :id
+               and o.supplierOrderId is null
+            """)
+    int recordSupplierOrderId(@Param("id") Long id,
+                              @Param("supplierOrderId") String supplierOrderId);
 
     @Query("select count(o) from OrderEntity o where o.status = :status")
     long countByStatus(@Param("status") OrderStatus status);
