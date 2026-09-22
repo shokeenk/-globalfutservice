@@ -118,14 +118,16 @@ public class BootstrapRunner implements ApplicationRunner {
         if (props.security().corsAllowedOrigins().stream().anyMatch(o -> o.contains("*"))) {
             warnings.append("  - A CORS origin contains a wildcard. Use exact origins.\n");
         }
-        // The relay authenticates one account, and it decides what that account may
-        // claim to be. A From it has not verified is rewritten or refused, so a sender
-        // that looks right in configuration can still reach nobody.
+        // Two ways for mail to be enabled and still reach nobody: a relay that is not
+        // there, and a relay that will not let this account be the sender it claims.
+        // Both are caught and logged per message, never thrown, so neither is visible
+        // without going looking.
         EmailSenderCheck.problem(
                 props.notifications().emailEnabled(),
                 props.notifications().emailFrom(),
                 mail.getUsername(),
-                mail.getHost()).ifPresent(warnings::append);
+                mail.getHost(),
+                props.publicUrl()).ifPresent(warnings::append);
         // A currency in the picker is a promise the gateway has to be able to keep. The
         // rate cards can be authored long before Razorpay international is activated, and
         // the failure mode is invisible until a customer in Madrid reaches checkout and
