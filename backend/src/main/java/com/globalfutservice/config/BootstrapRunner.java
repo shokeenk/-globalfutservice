@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.mail.MailProperties;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,13 +35,16 @@ public class BootstrapRunner implements ApplicationRunner {
     private final PasswordEncoder passwordEncoder;
     private final PaymentGateway gateway;
     private final AppProperties props;
+    /** Spring's own mail binding, for the relay account the app actually signs in as. */
+    private final MailProperties mail;
 
     public BootstrapRunner(AccountRepository accounts, PasswordEncoder passwordEncoder,
-                           PaymentGateway gateway, AppProperties props) {
+                           PaymentGateway gateway, AppProperties props, MailProperties mail) {
         this.accounts = accounts;
         this.passwordEncoder = passwordEncoder;
         this.gateway = gateway;
         this.props = props;
+        this.mail = mail;
     }
 
     @Override
@@ -114,6 +118,14 @@ public class BootstrapRunner implements ApplicationRunner {
         if (props.security().corsAllowedOrigins().stream().anyMatch(o -> o.contains("*"))) {
             warnings.append("  - A CORS origin contains a wildcard. Use exact origins.\n");
         }
+        // The relay authenticates one account, and it decides what that account may
+        // claim to be. A From it has not verified is rewritten or refused, so a sender
+        // that looks right in configuration can still reach nobody.
+        EmailSenderCheck.problem(
+                props.notifications().emailEnabled(),
+                props.notifications().emailFrom(),
+                mail.getUsername(),
+                mail.getHost()).ifPresent(warnings::append);
         // A currency in the picker is a promise the gateway has to be able to keep. The
         // rate cards can be authored long before Razorpay international is activated, and
         // the failure mode is invisible until a customer in Madrid reaches checkout and
