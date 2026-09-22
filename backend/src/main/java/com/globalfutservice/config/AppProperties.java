@@ -525,7 +525,13 @@ public record AppProperties(
              * and do the work.
              */
             String operatorEmails,
-            @DefaultValue("orders@globalfutservices.com") String emailFrom,
+            /**
+             * The address customers see, which must be one the relay is authorised
+             * to send as — see {@link EmailSenderCheck}. Not the domain address:
+             * globalfutservices.com has no MX and no SPF under DMARC p=quarantine,
+             * so mail from it bounces on reply and lands in spam.
+             */
+            @DefaultValue("globalfutservices@gmail.com") String emailFrom,
             @DefaultValue("Global FUT Services") String emailFromName) {
     }
 

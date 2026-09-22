@@ -376,7 +376,12 @@ gfs:
     email-enabled: ${GFS_EMAIL_ENABLED:false}
     # Who is on shift. Comma-separated. Blank means nobody gets order alerts.
     operator-emails: ${GFS_OPERATOR_EMAILS:}
-    email-from: ${GFS_EMAIL_FROM:orders@globalfutservices.com}
+    # Defaults to the mailbox that exists rather than the one that reads better.
+    # globalfutservices.com publishes no MX and no SPF under DMARC p=quarantine, so
+    # orders@ there cannot receive a reply and is filed as spam when sent from. It
+    # becomes a sane default once that domain has SPF and DKIM for whichever relay
+    # sends; BootstrapRunner warns when this and the relay account disagree.
+    email-from: ${GFS_EMAIL_FROM:globalfutservices@gmail.com}
     email-from-name: Global FUT Services
 
   rate-limit:
