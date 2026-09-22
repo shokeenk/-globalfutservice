@@ -37,6 +37,7 @@ const AdminOrder = lazy(() => import('./pages/admin/AdminOrder'))
 const AdminCoupons = lazy(() => import('./pages/admin/AdminCoupons'))
 const AdminRates = lazy(() => import('./pages/admin/AdminRates'))
 const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
+const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
@@ -121,6 +122,11 @@ export default function App() {
                 customer at once and cannot be recalled, so ADMIN rather than staff. */}
             <Route path="/admin/campaigns"
                    element={<RequireAdmin><AdminCampaigns /></RequireAdmin>} />
+            {/* Operator, not admin: marking who turned up is fulfilment work. Setting
+                the weekly hours on the same screen is the exception the endpoint itself
+                guards — that call is ADMIN and refuses an operator. */}
+            <Route path="/admin/coaching"
+                   element={<RequireStaff><AdminCoaching /></RequireStaff>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

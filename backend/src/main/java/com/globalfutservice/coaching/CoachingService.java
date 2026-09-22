@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Booking, rescheduling and settling coaching sessions.
@@ -59,6 +60,11 @@ public class CoachingService {
     private final SessionCreditRepository credits;
     private final CoachingPolicy policy;
     private final Clock clock;
+    /**
+     * Telling people. Deliberately the last thing every path does, and deliberately
+     * incapable of failing one: see {@link CoachingAnnouncer}.
+     */
+    private final CoachingAnnouncer announcer;
 
     public CoachingService(CoachRepository coaches,
                            CoachAvailabilityRepository availability,
@@ -67,7 +73,8 @@ public class CoachingService {
                            CoachingSessionEventRepository events,
                            SessionCreditRepository credits,
                            CoachingPolicy policy,
-                           Clock clock) {
+                           Clock clock,
+                           CoachingAnnouncer announcer) {
         this.coaches = coaches;
         this.availability = availability;
         this.timeOff = timeOff;
@@ -76,6 +83,7 @@ public class CoachingService {
         this.credits = credits;
         this.policy = policy;
         this.clock = clock;
+        this.announcer = announcer;
     }
 
     public CoachingPolicy policy() {
@@ -176,8 +184,21 @@ public class CoachingService {
                     "That time is no longer available. Please pick another slot.");
         }
 
+        /*
+         * Linked to the order whose credits are paying for it.
+         *
+         * The column has always been here and was always null. Which grant a booking
+         * spends is already decided by sessionLengthFor's oldest-first walk, so the order
+         * behind that grant is the order behind this session -- no new rule, just the
+         * existing one written down. It is what lets a notification say which order a
+         * session belongs to, and which of six it is.
+         */
+        Long fundingOrderId = fundingGrant(accountId)
+                .map(SessionCreditEntity::getOrderId)
+                .orElse(null);
+
         CoachingSessionEntity session = new CoachingSessionEntity(
-                SecureIds.sessionRef(), accountId, coach.getId(), null,
+                SecureIds.sessionRef(), accountId, coach.getId(), fundingOrderId,
                 startsAt, startsAt.plus(length), customerTimezone);
         session.setCustomerNote(note);
 
@@ -197,6 +218,7 @@ public class CoachingService {
 
         log.info("Session {} booked with coach {} at {}",
                 session.getPublicRef(), coach.getPublicId(), startsAt);
+        announcer.booked(session);
         return session;
     }
 
@@ -257,14 +279,23 @@ public class CoachingService {
         }
         events.save(CoachingSessionEventEntity.rescheduled(
                 session.getId(), was, newStart, SessionActor.CUSTOMER, accountId));
+        announcer.rescheduled(session, was);
         return session;
     }
 
     @Transactional
     public CoachingSessionEntity cancelByCustomer(Long accountId, String publicRef) {
         CoachingSessionEntity session = requireOwnSession(accountId, publicRef);
-        return transition(session, SessionStatus.CANCELLED_BY_CUSTOMER,
-                SessionActor.CUSTOMER, accountId, null);
+        CoachingSessionEntity cancelled = transition(session,
+                SessionStatus.CANCELLED_BY_CUSTOMER, SessionActor.CUSTOMER, accountId, null);
+        /*
+         * Announced here rather than inside transition(), which is also the path an
+         * operator marking a no-show or a completion takes. Those are not news the coach
+         * needs pushed at them -- they are usually the person who just did it. A customer
+         * dropping a session, on the other hand, frees a slot somebody should know about.
+         */
+        announcer.cancelled(cancelled);
+        return cancelled;
     }
 
     @Transactional(readOnly = true)
@@ -373,16 +404,36 @@ public class CoachingService {
         if (accountId == null) {
             return policy.sessionLength();
         }
+        return fundingGrant(accountId)
+                // Null minutes means a grant from before the column, which falls through
+                // to the default exactly as it did when this walk was written inline.
+                .map(SessionCreditEntity::getSessionMinutes)
+                .map(Duration::ofMinutes)
+                .orElse(policy.sessionLength());
+    }
+
+    /**
+     * The grant the next booking will spend.
+     *
+     * <p>Oldest first, skipping whatever has already been consumed: the packs a customer
+     * bought are used in the order they bought them. Two things read this — how long the
+     * session is, and which order it belongs to — and they must agree, which is why it is
+     * one method rather than the same loop written twice.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SessionCreditEntity> fundingGrant(Long accountId) {
+        if (accountId == null) {
+            return Optional.empty();
+        }
         int alreadySpent = credits.netConsumedBy(accountId);
         int seen = 0;
         for (SessionCreditEntity grant : credits.grantsOldestFirst(accountId)) {
             seen += grant.getAmount();
             if (seen > alreadySpent) {
-                Integer minutes = grant.getSessionMinutes();
-                return minutes == null ? policy.sessionLength() : Duration.ofMinutes(minutes);
+                return Optional.of(grant);
             }
         }
-        return policy.sessionLength();
+        return Optional.empty();
     }
 
     /**

@@ -54,18 +54,39 @@ public class DiscordNotifier implements Notifier {
     private static final int GREEN = 0x22C55E;
     private static final int SLATE = 0x64748B;
 
+    /**
+     * The zone the coaching is actually delivered in, so the coach never does arithmetic.
+     *
+     * <p>Matches {@code OrderTicketService}'s: an operator reading a ticket and a coach
+     * reading a booking are usually the same person, and two business zones would be one
+     * too many.
+     */
+    private static final java.time.ZoneId BUSINESS_ZONE = java.time.ZoneId.of("Asia/Kolkata");
+
+    private static final java.time.format.DateTimeFormatter SESSION_TIME =
+            java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, HH:mm");
+
     private final AppProperties props;
     private final ObjectMapper mapper;
     private final HttpClient http;
     /** Null when no bot is configured; the webhook then carries everything. */
     private final OrderTicketService tickets;
+    /**
+     * Also null without a bot. Held directly, not through {@link OrderTicketService},
+     * because coaching posts into channels that are not order tickets — the staff
+     * calendar channel is nobody's ticket.
+     */
+    private final DiscordBotClient bot;
 
     public DiscordNotifier(AppProperties props, ObjectMapper mapper,
                            @org.springframework.beans.factory.annotation.Autowired(required = false)
-                           OrderTicketService tickets) {
+                           OrderTicketService tickets,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false)
+                           DiscordBotClient bot) {
         this.props = props;
         this.mapper = mapper;
         this.tickets = tickets;
+        this.bot = bot;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -216,6 +237,117 @@ public class DiscordNotifier implements Notifier {
             return "";
         }
         return "<@" + id.trim() + "> ";
+    }
+
+    /* --------------------------------------------------------------- coaching --- */
+
+    @Override
+    public void coachingBooked(CoachingBookingNotification n) {
+        announceSession("Coaching session booked", GREEN, n,
+                "A session has been booked.");
+    }
+
+    @Override
+    public void coachingRescheduled(CoachingBookingNotification n) {
+        announceSession("Coaching session moved", AMBER, n,
+                "A session has been moved.");
+    }
+
+    @Override
+    public void coachingCancelled(CoachingBookingNotification n) {
+        announceSession("Coaching session cancelled", SLATE, n,
+                "A session has been cancelled. The slot is free again.");
+    }
+
+    /**
+     * Two audiences, one embed.
+     *
+     * <p>The staff channel is where whoever coaches keeps their calendar. The order's own
+     * ticket is where the customer already is, so the same facts land in front of both
+     * without either having to be told to look somewhere else.
+     *
+     * <p>Every step is independent and every step can be skipped. No coaching channel
+     * configured, no bot, no ticket for this order — each is a reason to post less, never
+     * a reason to fail. The booking is committed before any of this runs.
+     */
+    private void announceSession(String title, int colour,
+                                 CoachingBookingNotification n, String lead) {
+        if (bot == null || !bot.isEnabled()) {
+            log.debug("No Discord bot; not announcing session {}", n.sessionRef());
+            return;
+        }
+
+        List<Map<String, Object>> fields = new ArrayList<>();
+        fields.add(field("Session", n.sessionLabel(), true));
+        fields.add(field("Coach", n.coachName(), true));
+        fields.add(field("Order", n.orderRef() == null ? "—" : "`" + n.orderRef() + "`", true));
+        /*
+         * Both zones, always. IST is the zone the coach works in and the only one they
+         * should have to think in; the customer's zone is the one the customer will quote
+         * back on the day. Printing one and leaving the other to be worked out is how a
+         * session gets missed by exactly the offset between them.
+         */
+        fields.add(field("Starts (IST)", inZone(n.startsAt(), BUSINESS_ZONE), false));
+        fields.add(field("Starts (customer)", inCustomerZone(n), false));
+        if (n.previousStartsAt() != null) {
+            fields.add(field("Moved from (IST)",
+                    inZone(n.previousStartsAt(), BUSINESS_ZONE), false));
+        }
+        fields.add(field("Customer", contactLine(n.customerEmail(), n.customerName()), false));
+        fields.add(field("Payment", n.paymentStatus(), true));
+
+        Map<String, Object> embed = embed(title, colour, fields, null, n.startsAt());
+
+        String coachingChannel = props.notifications().discordCoachingChannelId();
+        if (coachingChannel != null && !coachingChannel.isBlank()) {
+            postQuietly(coachingChannel, lead, embed, n.sessionRef(), "coaching channel");
+        }
+
+        // The customer's own ticket, when the order has one. Looked up rather than
+        // carried on the notification, so the coaching service stays free of Discord.
+        if (n.orderRef() == null) {
+            return;
+        }
+        try {
+            bot.findTicketChannel(n.orderRef()).ifPresent(ticketChannel ->
+                    postQuietly(ticketChannel, lead, embed, n.sessionRef(), "order ticket"));
+        } catch (RuntimeException e) {
+            log.warn("Could not find the ticket for order {} while announcing session {}: {}",
+                    n.orderRef(), n.sessionRef(), e.getMessage());
+        }
+    }
+
+    /** One post, one failure, no consequences beyond a log line. */
+    private void postQuietly(String channelId, String lead, Map<String, Object> embed,
+                             String sessionRef, String where) {
+        try {
+            bot.postEmbed(channelId, lead, embed);
+        } catch (RuntimeException e) {
+            log.warn("Could not announce session {} in the {}: {}",
+                    sessionRef, where, e.getMessage());
+        }
+    }
+
+    private static String inZone(java.time.Instant at, java.time.ZoneId zone) {
+        if (at == null) {
+            return "—";
+        }
+        return SESSION_TIME.format(at.atZone(zone)) + " (" + zone.getId() + ")";
+    }
+
+    /** Falls back to the business zone, labelled, rather than silently printing IST. */
+    private static String inCustomerZone(CoachingBookingNotification n) {
+        String zone = n.customerTimezone();
+        if (zone == null || zone.isBlank()) {
+            return "not recorded";
+        }
+        try {
+            return inZone(n.startsAt(), java.time.ZoneId.of(zone));
+        } catch (RuntimeException badZone) {
+            // A zone string from a browser that we cannot parse. Saying so beats
+            // printing a time in the wrong zone with no warning.
+            return "unrecognised zone (" + zone + ")";
+        }
     }
 
     private static Map<String, Object> field(String name, String value, boolean inline) {

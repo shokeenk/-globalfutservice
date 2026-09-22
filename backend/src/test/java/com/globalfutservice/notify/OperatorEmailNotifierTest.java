@@ -44,6 +44,7 @@ class OperatorEmailNotifierTest {
                 false, null, null, null, "gfs_new_order", "https://graph.facebook.com/v20.0",
                 false, null, null, "https://api.telegram.org",
                 false, null, null, null, null, null,
+                null,
                 null, null, null,
                 emailEnabled, recipients, "orders@globalfutservices.com", "Global FUT Services");
     }

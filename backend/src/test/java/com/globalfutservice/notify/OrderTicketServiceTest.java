@@ -43,6 +43,7 @@ class OrderTicketServiceTest {
                 false, null, null, "https://api.telegram.org",
                 true, "https://discord.test/webhook", ADMIN_ID,
                 botToken, "guild-1", "category-1",
+                null,
                 null, null, null,
                 false, null, "orders@globalfutservices.com", "Global FUT Services");
     }

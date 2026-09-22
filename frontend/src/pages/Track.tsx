@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CredentialForm } from '../components/CredentialForm'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Button, Field, Input, Section, Skeleton } from '../components/ui'
+import { Alert, Badge, Button, ButtonLink, Field, Input, Section, Skeleton } from '../components/ui'
 import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
@@ -10,7 +10,7 @@ import { ApiError, api } from '../lib/api'
 import { ticketLink } from '../lib/discordTicket'
 import { dateTime } from '../lib/format'
 import { useSeo } from '../lib/seo'
-import type { Order, OrderSummary } from '../lib/types'
+import type { MyCoaching, Order, OrderSummary } from '../lib/types'
 import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
 
@@ -306,6 +306,105 @@ export default function Track() {
  * it. Sending the rest to a channel they cannot see would read as the site being broken,
  * which is what the old shared-channel fallback was working around.
  */
+/**
+ * The sessions this coaching order paid for.
+ *
+ * <p>Scoped to the order being looked at, not the account. A customer with two packs
+ * open would otherwise see one order's page listing the other order's sessions — which
+ * is why the session carries its order reference at all.
+ *
+ * <p><b>Signed-in only, and that is not a gap.</b> The endpoint behind this is
+ * account-scoped: it answers "your sessions" and has no guest form, because a booking
+ * belongs to a person rather than to a reference somebody could have read off a
+ * screenshot. A guest tracking by reference and email sees the rest of the page as
+ * before, and the sessions once they sign in.
+ *
+ * <p>Times render in the zone the session was booked in, named. "19:00" without saying
+ * whose 19:00 is worse than no time at all: the reader cannot tell whether it has been
+ * converted for them, and the failure is somebody missing a session they meant to attend.
+ */
+function BookedSessions({ order, signedIn }: { order: Order; signedIn: boolean }) {
+  const t = useT()
+  const [mine, setMine] = useState<MyCoaching | null>(null)
+
+  useEffect(() => {
+    if (!signedIn || order.sku !== 'COACHING') return
+    let stop = false
+    api.get<MyCoaching>('/api/v1/coaching/me')
+      .then((found) => { if (!stop) setMine(found) })
+      // Silent: the sessions are a bonus on this page, and the order itself is the
+      // thing the customer came for.
+      .catch(() => { if (!stop) setMine(null) })
+    return () => { stop = true }
+  }, [signedIn, order.sku, order.publicRef])
+
+  if (order.sku !== 'COACHING' || !signedIn || !mine) return null
+
+  const forThisOrder = mine.upcoming.filter((s) => s.orderRef === order.publicRef)
+  const booked = forThisOrder.length
+  const total = booked + mine.creditBalance
+
+  if (booked === 0 && mine.creditBalance === 0) return null
+
+  return (
+    <div className="rounded-panel border border-ink-400 bg-ink-700/30 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[13.5px] font-semibold text-chalk">{t.track.sessionsTitle}</p>
+        <p className="text-[12.5px] text-chalk-faint">
+          {t.track.sessionsBooked(booked, total)}
+        </p>
+      </div>
+
+      {booked === 0 ? (
+        <p className="mt-2 text-[12.5px] leading-relaxed text-chalk-muted">
+          {t.track.sessionsNoneYet}
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-1.5">
+          {[...forThisOrder]
+            .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+            .map((s) => (
+              <li key={s.ref}
+                  className="flex flex-wrap items-baseline justify-between gap-2
+                             border-t border-ink-400 pt-2 first:border-t-0 first:pt-0">
+                <span className="tnum text-[13px] text-chalk">
+                  {sessionWhen(s.startsAt, s.customerTimezone)}
+                </span>
+                <span className="text-[12px] text-chalk-faint">{s.coachName}</span>
+              </li>
+            ))}
+        </ul>
+      )}
+
+      {mine.creditBalance > 0 && (
+        <ButtonLink to="/coaching" variant="secondary" full size="md" className="mt-4">
+          {t.track.sessionsBookMore}
+        </ButtonLink>
+      )}
+    </div>
+  )
+}
+
+/** The session time, in the zone it was booked in, with that zone named. */
+function sessionWhen(iso: string, zone: string | null): string {
+  const target = zone && zone.trim() !== '' ? zone : undefined
+  try {
+    const when = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+      ...(target ? { timeZone: target } : {}),
+    }).format(new Date(iso))
+    return target ? `${when} (${target})` : when
+  } catch {
+    // An unrecognised zone string. Falling back to the browser's is better than
+    // rendering nothing, and it is labelled so nobody assumes otherwise.
+    return new Intl.DateTimeFormat('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(iso))
+  }
+}
+
 function DiscordTicket({ order }: { order: Order }) {
   const t = useT()
   const [copied, setCopied] = useState(false)
@@ -542,6 +641,8 @@ export function OrderView({
         <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} />
 
         <DiscordTicket order={order} />
+
+        <BookedSessions order={order} signedIn={signedIn} />
 
         <SupplierProgress order={order} />
 

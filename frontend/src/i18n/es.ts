@@ -473,6 +473,12 @@ const es: Dictionary = {
       'Iniciaste sesión con Discord, así que ya conocemos tu cuenta. En cuanto se envíe '
       + 'tu pago, tu ticket aparecerá en el servidor: no tienes que hacer nada.',
     discordOpenTicket: 'Abrir tu ticket',
+    sessionsTitle: 'Tus sesiones',
+    sessionsBooked: (booked: number, total: number) => `${booked} de ${total} reservadas`,
+    sessionsNoneYet:
+      'Aún no has reservado ninguna. Elige las horas que te vengan bien: puedes '
+      + 'cambiar una sesión más adelante si lo necesitas.',
+    sessionsBookMore: 'Reservar una sesión',
     seoTitle: 'Seguir tu pedido',
     eyebrow: 'Estado del pedido',
     title: '¿Dónde está mi pedido?',

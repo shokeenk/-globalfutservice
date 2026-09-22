@@ -9,6 +9,11 @@ import com.globalfutservice.coaching.CoachTimeOffRepository;
 import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.coaching.CoachingSessionEntity;
 import com.globalfutservice.coaching.CoachingSessionRepository;
+import com.globalfutservice.coaching.SessionCreditEntity;
+import com.globalfutservice.coaching.SessionCreditRepository;
+import com.globalfutservice.identity.AccountRepository;
+import com.globalfutservice.orders.OrderEntity;
+import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.domain.coaching.SessionActor;
 import com.globalfutservice.domain.coaching.SessionStateMachine;
 import com.globalfutservice.domain.coaching.SessionStatus;
@@ -41,6 +46,7 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -67,17 +73,27 @@ public class AdminCoachingController {
     private final CoachTimeOffRepository timeOff;
     private final CoachingSessionRepository sessions;
     private final CoachingService coaching;
+    /* Only for enriching the diary: who the customer is, and what they paid for. */
+    private final SessionCreditRepository credits;
+    private final OrderRepository orders;
+    private final AccountRepository accounts;
 
     public AdminCoachingController(CoachRepository coaches,
                                    CoachAvailabilityRepository availability,
                                    CoachTimeOffRepository timeOff,
                                    CoachingSessionRepository sessions,
-                                   CoachingService coaching) {
+                                   CoachingService coaching,
+                                   SessionCreditRepository credits,
+                                   OrderRepository orders,
+                                   AccountRepository accounts) {
         this.coaches = coaches;
         this.availability = availability;
         this.timeOff = timeOff;
         this.sessions = sessions;
         this.coaching = coaching;
+        this.credits = credits;
+        this.orders = orders;
+        this.accounts = accounts;
     }
 
     // ------------------------------------------------------------------- records ------
@@ -119,11 +135,20 @@ public class AdminCoachingController {
             boolean active, int sortOrder, List<AvailabilityWindow> availability) {
     }
 
+    /**
+     * One row of the diary.
+     *
+     * <p>The last four fields are what turn a list of times into something an operator
+     * can act on: who it is, which order paid, where it sits in their pack, and whether
+     * the money arrived. Without them a coach looking at a busy week cannot tell a
+     * confirmed session from one on an unpaid order.
+     */
     public record SessionAdminView(
             String ref, String coachName, String customerTimezone,
             Instant startsAt, Instant endsAt, String status,
             boolean creditReturned, int rescheduleCount,
-            String customerNote, String meetingUrl, List<String> allowedTransitions) {
+            String customerNote, String meetingUrl, List<String> allowedTransitions,
+            String customerEmail, String orderRef, String sessionLabel, String paymentStatus) {
     }
 
     // -------------------------------------------------------------------- coaches -----
@@ -241,9 +266,85 @@ public class AdminCoachingController {
         CoachEntity coach = requireCoach(coachId);
         Instant start = from != null ? from : Instant.now().minus(Duration.ofDays(7));
         Instant end = to != null ? to : start.plus(Duration.ofDays(30));
-        return sessions.forCoachBetween(coach.getId(), start, end).stream()
-                .map(s -> toSessionView(s, coach.getDisplayName()))
-                .toList();
+        List<CoachingSessionEntity> found = sessions.forCoachBetween(coach.getId(), start, end);
+        return enrich(found, coach.getDisplayName());
+    }
+
+    /**
+     * Adds the customer, order and pack position to every row, in a fixed number of
+     * queries.
+     *
+     * <p>Four extra reads for the whole window rather than four per session. A coach's
+     * diary is a screen whose entire job is to show a lot of rows at once, so resolving
+     * each one individually is the difference between a page and a page that times out.
+     */
+    private List<SessionAdminView> enrich(List<CoachingSessionEntity> found, String coachName) {
+        Set<Long> orderIds = found.stream()
+                .map(CoachingSessionEntity::getOrderId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Long> accountIds = found.stream()
+                .map(CoachingSessionEntity::getAccountId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+
+        Map<Long, OrderEntity> ordersById = orderIds.isEmpty() ? Map.of()
+                : orders.findAllById(orderIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(OrderEntity::getId, o -> o));
+        Map<Long, String> emailsById = accountIds.isEmpty() ? Map.of()
+                : accounts.findAllById(accountIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                a -> a.getId(), a -> a.getEmail()));
+        Map<Long, Integer> packByOrder = orderIds.isEmpty() ? Map.of()
+                : credits.findGrantsForOrders(orderIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                SessionCreditEntity::getOrderId,
+                                SessionCreditEntity::getAmount,
+                                (first, second) -> first));
+
+        /*
+         * Position is counted from the order's own sessions in creation order, matching
+         * CoachingAnnouncer. Numbering from the credit ledger instead would renumber a
+         * session whenever a sibling was cancelled and its credit came back.
+         */
+        Map<Long, List<Long>> sessionIdsByOrder = orderIds.isEmpty() ? Map.of()
+                : sessions.findByOrderIdInOrderByIdAsc(orderIds).stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                CoachingSessionEntity::getOrderId,
+                                java.util.stream.Collectors.mapping(
+                                        CoachingSessionEntity::getId,
+                                        java.util.stream.Collectors.toList())));
+
+        List<SessionAdminView> out = new java.util.ArrayList<>(found.size());
+        for (CoachingSessionEntity s : found) {
+            OrderEntity order = s.getOrderId() == null ? null : ordersById.get(s.getOrderId());
+            int position = s.getOrderId() == null ? 0
+                    : sessionIdsByOrder.getOrDefault(s.getOrderId(), List.of())
+                            .indexOf(s.getId()) + 1;
+            int pack = s.getOrderId() == null ? 0
+                    : packByOrder.getOrDefault(s.getOrderId(), 0);
+
+            out.add(new SessionAdminView(
+                    s.getPublicRef(), coachName, s.getCustomerTimezone(),
+                    s.getStartsAt(), s.getEndsAt(), s.getStatus().name(),
+                    s.isCreditReturned(), s.getRescheduleCount(),
+                    s.getCustomerNote(), s.getMeetingUrl(),
+                    SessionStateMachine.nextStates(s.getStatus()).stream()
+                            .map(Enum::name).sorted().toList(),
+                    emailsById.get(s.getAccountId()),
+                    order == null ? null : order.getPublicRef(),
+                    label(position, pack),
+                    order == null ? null : order.getStatus().name()));
+        }
+        return out;
+    }
+
+    /** "3 of 6", "3" where the pack size is unknown, or nothing at all. */
+    private static String label(int position, int pack) {
+        if (position <= 0) {
+            return null;
+        }
+        return pack > 0 ? position + " of " + pack : String.valueOf(position);
     }
 
     /**
@@ -285,7 +386,9 @@ public class AdminCoachingController {
 
         String coachName = coaches.findById(session.getCoachId())
                 .map(CoachEntity::getDisplayName).orElse("—");
-        return toSessionView(session, coachName);
+        // Same enrichment as the diary, so a row does not lose its customer and order
+        // the moment an operator acts on it.
+        return enrich(List.of(session), coachName).get(0);
     }
 
     // -------------------------------------------------------------------- helpers -----
@@ -328,12 +431,4 @@ public class AdminCoachingController {
                 coach.getTimezone(), coach.isActive(), coach.getSortOrder(), windows);
     }
 
-    private static SessionAdminView toSessionView(CoachingSessionEntity s, String coachName) {
-        return new SessionAdminView(
-                s.getPublicRef(), coachName, s.getCustomerTimezone(),
-                s.getStartsAt(), s.getEndsAt(), s.getStatus().name(),
-                s.isCreditReturned(), s.getRescheduleCount(),
-                s.getCustomerNote(), s.getMeetingUrl(),
-                SessionStateMachine.nextStates(s.getStatus()).stream().map(Enum::name).sorted().toList());
-    }
 }

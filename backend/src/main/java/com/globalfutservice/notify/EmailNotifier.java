@@ -1,6 +1,8 @@
 package com.globalfutservice.notify;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.notify.email.CalendarInvite;
+import com.globalfutservice.notify.email.CoachingEmails;
 import com.globalfutservice.notify.email.EmailTemplate;
 import com.globalfutservice.notify.email.TransactionalEmails;
 import jakarta.mail.internet.MimeMessage;
@@ -142,6 +144,83 @@ public class EmailNotifier implements Notifier {
 
     private String publicUrl() {
         return props.publicUrl();
+    }
+
+    @Override
+    public void coachingBooked(CoachingBookingNotification n) {
+        sendSessionEmail(n, "booked", "REQUEST");
+    }
+
+    @Override
+    public void coachingRescheduled(CoachingBookingNotification n) {
+        sendSessionEmail(n, "moved", "REQUEST");
+    }
+
+    @Override
+    public void coachingCancelled(CoachingBookingNotification n) {
+        sendSessionEmail(n, "cancelled", "CANCEL");
+    }
+
+    /**
+     * The customer's copy, with the session attached as a calendar entry.
+     *
+     * <p>Rendered in the zone they booked in and nowhere else. The staff channel gets IST
+     * as well because a coach needs it; putting two times in front of a customer is how
+     * one of them turns up at the wrong one.
+     *
+     * @param method the iCalendar method — a cancellation carries the same UID so the
+     *               calendar removes the entry it has rather than adding a second
+     */
+    private void sendSessionEmail(CoachingBookingNotification n, String what, String method) {
+        if (!isEnabled()) {
+            log.debug("Email disabled; would have told {} a session was {}",
+                    n.customerEmail(), what);
+            return;
+        }
+        if (n.customerEmail() == null || n.customerEmail().isBlank()) {
+            log.warn("No email address for session {}", n.sessionRef());
+            return;
+        }
+
+        ZoneId zone = resolveZone(n.customerTimezone());
+        String manageUrl = publicUrl() + "/coaching";
+        TransactionalEmails.Rendered rendered = switch (what) {
+            case "moved" -> CoachingEmails.rescheduled(n, brand(), zone, manageUrl);
+            case "cancelled" -> CoachingEmails.cancelled(n, brand(), zone, manageUrl);
+            default -> CoachingEmails.booked(n, brand(), zone, manageUrl);
+        };
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message, MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name());
+            helper.setFrom(props.notifications().emailFrom(),
+                    props.notifications().emailFromName());
+            helper.setTo(n.customerEmail());
+            helper.setSubject(rendered.subject());
+            helper.setText(rendered.text(), rendered.html());
+
+            /*
+             * Attached, not inlined as a text/calendar alternative part. An alternative
+             * part makes some clients render the invite *instead of* the message, which
+             * loses everything the email says; an attachment is offered alongside it and
+             * ignored harmlessly by clients that do not understand it.
+             */
+            helper.addAttachment("gfs-coaching-" + n.sessionRef() + ".ics",
+                    new org.springframework.core.io.ByteArrayResource(
+                            CalendarInvite.forSession(n, method, publicUrl())),
+                    "text/calendar; charset=UTF-8; method=" + method);
+
+            mailSender.send(message);
+            log.info("Told {} their session {} was {}", n.customerEmail(), n.sessionRef(), what);
+        } catch (UnsupportedEncodingException e) {
+            log.error("Sender name is not encodable: {}", e.getMessage());
+        } catch (Exception e) {
+            // Never rethrown. The session is already booked and the credit already spent;
+            // an email that did not send must not undo either.
+            log.warn("Session email for {} failed: {}", n.sessionRef(), e.getMessage());
+        }
     }
 
     /**

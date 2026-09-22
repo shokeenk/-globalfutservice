@@ -166,6 +166,28 @@ public class DiscordBotClient {
     }
 
     /**
+     * Posts an embed into a channel the bot can see.
+     *
+     * <p>The webhook in {@link DiscordNotifier} can only ever reach the one channel it was
+     * created for. Coaching bookings go to a staff channel and to the order's own ticket,
+     * neither of which is that channel, so they go through the bot instead.
+     *
+     * @param mention text above the embed, or null. Mentions in it are inert: the
+     *                allow-list below is empty, so a customer name containing "@everyone"
+     *                cannot notify a server
+     */
+    public void postEmbed(String channelId, String mention, Map<String, Object> embed) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (mention != null && !mention.isBlank()) {
+            body.put("content", clamp(mention, CONTENT_LIMIT));
+        }
+        body.put("embeds", java.util.List.of(embed));
+        body.put("allowed_mentions", Map.of("parse", java.util.List.of()));
+
+        post(API + "/channels/" + channelId + "/messages", body, "post embed to " + channelId);
+    }
+
+    /**
      * Posts the payment screenshot into the ticket.
      *
      * <p>Uploaded as an attachment rather than linked, because a link to the admin console
