@@ -410,6 +410,14 @@ export interface CoachingSession {
   /** Server-computed, from the same rule the cancel endpoint applies. */
   cancelRefundsCredit: boolean
   canReschedule: boolean
+  /**
+   * The order whose credits paid for this session.
+   *
+   * <p>Lets an order's tracking page list the sessions that belong to that order rather
+   * than every session on the account. Null for a manual adjustment, and for anything
+   * booked before sessions carried the link.
+   */
+  orderRef: string | null
 }
 
 export interface MyCoaching {

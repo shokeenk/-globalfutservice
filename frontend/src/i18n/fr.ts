@@ -476,6 +476,12 @@ const fr: Dictionary = {
       'Tu t’es connecté avec Discord, donc on connaît déjà ton compte. Dès que ton '
       + 'paiement est envoyé, ton ticket apparaît sur le serveur : rien à faire.',
     discordOpenTicket: 'Ouvrir ton ticket',
+    sessionsTitle: 'Tes séances',
+    sessionsBooked: (booked: number, total: number) => `${booked} sur ${total} réservées`,
+    sessionsNoneYet:
+      'Aucune réservée pour l’instant. Choisis les horaires qui te conviennent — '
+      + 'tu pourras déplacer une séance plus tard si besoin.',
+    sessionsBookMore: 'Réserver une séance',
     seoTitle: 'Suivre ta commande',
     eyebrow: 'Statut de la commande',
     title: 'Où en est ma commande ?',

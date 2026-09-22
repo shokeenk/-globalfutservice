@@ -58,7 +58,20 @@ public final class CoachingDtos {
              * actually happens when they do.
              */
             boolean cancelRefundsCredit,
-            boolean canReschedule) {
+            boolean canReschedule,
+
+            /**
+             * The order whose credits paid for this session.
+             *
+             * <p>So an order's tracking page can show the sessions that belong to
+             * <i>that</i> order rather than every session on the account. A customer with
+             * two coaching packs open would otherwise see one order's page listing the
+             * other order's sessions.
+             *
+             * <p>Null for a session booked from a manual adjustment, and for anything
+             * booked before sessions carried the link.
+             */
+            String orderRef) {
     }
 
     /** Everything the account page needs about coaching, in one round trip. */

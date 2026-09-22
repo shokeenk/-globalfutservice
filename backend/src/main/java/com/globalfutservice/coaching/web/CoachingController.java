@@ -2,6 +2,8 @@ package com.globalfutservice.coaching.web;
 
 import com.globalfutservice.coaching.CoachEntity;
 import com.globalfutservice.coaching.CoachRepository;
+import com.globalfutservice.orders.OrderEntity;
+import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.coaching.CoachingSessionEntity;
 import com.globalfutservice.domain.coaching.CoachingPolicy;
@@ -46,11 +48,15 @@ public class CoachingController {
     private final CoachingService coaching;
     private final CoachRepository coaches;
     private final Clock clock;
+    /** Only to turn a session's order id into the reference the customer sees. */
+    private final OrderRepository orders;
 
-    public CoachingController(CoachingService coaching, CoachRepository coaches, Clock clock) {
+    public CoachingController(CoachingService coaching, CoachRepository coaches, Clock clock,
+                              OrderRepository orders) {
         this.coaching = coaching;
         this.coaches = coaches;
         this.clock = clock;
+        this.orders = orders;
     }
 
     // ------------------------------------------------------------------- public -------
@@ -254,6 +260,9 @@ public class CoachingController {
                 // The same method the cancellation path uses, so the warning shown before
                 // confirming cannot disagree with what confirming actually does.
                 scheduled && policy.refundsCreditOnCustomerCancel(now, s.getStartsAt()),
-                scheduled && policy.canReschedule(now, s.getStartsAt(), s.getRescheduleCount()));
+                scheduled && policy.canReschedule(now, s.getStartsAt(), s.getRescheduleCount()),
+                s.getOrderId() == null ? null
+                        : orders.findById(s.getOrderId())
+                                .map(OrderEntity::getPublicRef).orElse(null));
     }
 }

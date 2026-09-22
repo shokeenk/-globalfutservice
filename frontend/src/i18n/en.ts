@@ -557,6 +557,12 @@ const en = {
       'You signed in with Discord, so we already know your account. As soon as your '
       + 'payment is submitted, your ticket appears in our server — nothing to do.',
     discordOpenTicket: 'Open your ticket',
+    sessionsTitle: 'Your sessions',
+    sessionsBooked: (booked: number, total: number) => `${booked} of ${total} booked`,
+    sessionsNoneYet:
+      'None booked yet. Pick times that suit you — you can move a session later if '
+      + 'you need to.',
+    sessionsBookMore: 'Book a session',
     seoTitle: 'Track your order',
     eyebrow: 'Order status',
     title: 'Where is my order?',
