@@ -32,6 +32,14 @@ public interface CoachingSessionRepository extends JpaRepository<CoachingSession
      */
     List<CoachingSessionEntity> findByOrderIdOrderByIdAsc(Long orderId);
 
+    /**
+     * The same, for several orders at once.
+     *
+     * <p>The admin diary numbers every row in its window. One query per row would be one
+     * query per session on a screen whose whole job is to show a lot of them.
+     */
+    List<CoachingSessionEntity> findByOrderIdInOrderByIdAsc(java.util.Collection<Long> orderIds);
+
     Page<CoachingSessionEntity> findByAccountIdOrderByStartsAtDesc(Long accountId,
                                                                   Pageable pageable);
 

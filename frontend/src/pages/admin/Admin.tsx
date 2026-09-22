@@ -187,6 +187,7 @@ export default function Admin() {
           be advertising a door they cannot open.
         */}
         <ButtonLink to="/admin/coupons" variant="primary" size="md">Coupons</ButtonLink>
+        <ButtonLink to="/admin/coaching" variant="primary" size="md">Coaching</ButtonLink>
         {account?.role === 'ADMIN' && (
           <>
             <ButtonLink to="/admin/rates" variant="primary" size="md">Coin rates</ButtonLink>

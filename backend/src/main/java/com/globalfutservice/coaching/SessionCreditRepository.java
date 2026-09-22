@@ -61,6 +61,13 @@ public interface SessionCreditRepository extends JpaRepository<SessionCreditEnti
             + "and c.entryType = com.globalfutservice.domain.coaching.SessionCreditType.GRANTED")
     java.util.Optional<SessionCreditEntity> findGrantForOrder(@Param("orderId") Long orderId);
 
+    /** Grants for several orders at once, so the admin diary stays a fixed query count. */
+    @Query("select c from SessionCreditEntity c "
+            + "where c.orderId in :orderIds "
+            + "and c.entryType = com.globalfutservice.domain.coaching.SessionCreditType.GRANTED")
+    List<SessionCreditEntity> findGrantsForOrders(
+            @Param("orderIds") java.util.Collection<Long> orderIds);
+
     /** The soonest expiry still ahead, for the "use them by" line on the account page. */
     @Query("select min(c.expiresAt) from SessionCreditEntity c "
             + "where c.accountId = :accountId and c.expiresAt is not null "

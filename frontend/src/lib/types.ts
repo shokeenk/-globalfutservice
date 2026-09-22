@@ -309,6 +309,57 @@ export interface LoyaltyStatus {
   dailyBonusPoints: number
 }
 
+/** One weekday window a coach works, in the coach's own zone. */
+export interface AvailabilityWindow {
+  /** ISO-8601: Monday is 1, Sunday is 7. */
+  dayOfWeek: number
+  start: string
+  end: string
+}
+
+/** A coach as the admin console sees them, schedule included. */
+export interface CoachAdmin {
+  id: string
+  displayName: string
+  headline: string | null
+  timezone: string
+  active: boolean
+  sortOrder: number
+  availability: AvailabilityWindow[]
+}
+
+export interface CoachTimeOff {
+  id: number
+  startsAt: string
+  endsAt: string
+  reason: string | null
+}
+
+/**
+ * One row of the coach's diary.
+ *
+ * <p>`sessionLabel`, `orderRef` and `paymentStatus` are what make the row actionable —
+ * without them a busy week is a list of times with no way to tell a confirmed session
+ * from one sitting on an unpaid order.
+ */
+export interface AdminSession {
+  ref: string
+  coachName: string
+  customerTimezone: string | null
+  startsAt: string
+  endsAt: string
+  status: string
+  creditReturned: boolean
+  rescheduleCount: number
+  customerNote: string | null
+  meetingUrl: string | null
+  allowedTransitions: string[]
+  customerEmail: string | null
+  orderRef: string | null
+  sessionLabel: string | null
+  paymentStatus: string | null
+}
+
 export interface Coach {
   id: string
   displayName: string
