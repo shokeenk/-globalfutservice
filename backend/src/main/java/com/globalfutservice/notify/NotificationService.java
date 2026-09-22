@@ -107,6 +107,29 @@ public class NotificationService {
         each(notifier -> notifier.coachingReminder(n));
     }
 
+    /**
+     * A session was booked, moved, or called off.
+     *
+     * <p>{@code @Async} like the rest, so a slow Discord call cannot hold the booking
+     * transaction open, and {@link #each} swallows a failing channel — a booking is
+     * already committed by the time any of this runs and must never be undone by a
+     * notification that did not send.
+     */
+    @Async
+    public void coachingBooked(CoachingBookingNotification n) {
+        each(notifier -> notifier.coachingBooked(n));
+    }
+
+    @Async
+    public void coachingRescheduled(CoachingBookingNotification n) {
+        each(notifier -> notifier.coachingRescheduled(n));
+    }
+
+    @Async
+    public void coachingCancelled(CoachingBookingNotification n) {
+        each(notifier -> notifier.coachingCancelled(n));
+    }
+
     private void each(java.util.function.Consumer<Notifier> action) {
         for (Notifier notifier : notifiers) {
             try {

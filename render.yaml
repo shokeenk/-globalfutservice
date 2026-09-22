@@ -220,6 +220,12 @@ services:
       - key: GFS_DISCORD_ORDER_CATEGORY_ID
         value: "1547158509509148702"
 
+      # The staff channel coaching bookings are announced in. Optional: unset
+      # skips the announcement and nothing else — the booking still happens and
+      # the order's own ticket still gets the times.
+      - key: GFS_DISCORD_COACHING_CHANNEL_ID
+        sync: false
+
       # ---- /verify, the post-join ticket claim ------------------------------
       # Customers who signed in with Google are not known to Discord at checkout,
       # so they join the server and claim their order with a slash command. All

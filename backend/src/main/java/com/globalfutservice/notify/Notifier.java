@@ -91,6 +91,23 @@ public interface Notifier {
         // Channels opt in by overriding.
     }
 
+    /*
+     * The booking lifecycle, addressed to whoever runs the coaching. Three methods
+     * rather than one with an event field: a channel that wants to announce a booking
+     * and stay quiet about a reschedule can say so by overriding one of them.
+     */
+    default void coachingBooked(CoachingBookingNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    default void coachingRescheduled(CoachingBookingNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    default void coachingCancelled(CoachingBookingNotification notification) {
+        // Channels opt in by overriding.
+    }
+
     /** Whether this channel is configured; used to keep startup logs honest. */
     boolean isEnabled();
 

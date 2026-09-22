@@ -70,6 +70,7 @@ class DiscordNotifierTest {
                 false, null, null, "https://api.telegram.org",
                 enabled, url, adminId,
                 null, null, null,
+                null,
                 null, null, null,
                 false, null, "orders@globalfutservices.com", "Global FUT Services");
     }
@@ -79,7 +80,7 @@ class DiscordNotifierTest {
         when(props.notifications()).thenReturn(n);
         // Null tickets: these tests cover the webhook path, which is what runs when no
         // bot is configured -- and is the fallback when one is configured and fails.
-        return new DiscordNotifier(props, MAPPER, null);
+        return new DiscordNotifier(props, MAPPER, null, null);
     }
 
     private DiscordNotifier enabled() {

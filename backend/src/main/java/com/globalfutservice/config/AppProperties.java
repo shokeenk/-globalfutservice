@@ -483,6 +483,18 @@ public record AppProperties(
             String discordOrderCategoryId,
 
             /**
+             * The staff channel coaching bookings are announced in.
+             *
+             * <p>Separate from the order webhook, which reaches one fixed channel and is
+             * already busy with payments. Whoever coaches wants a calendar, not a feed of
+             * coin orders with sessions buried in it.
+             *
+             * <p>Optional. Unset means the announcements are skipped and the booking is
+             * unaffected — the ticket post and the customer's email still happen.
+             */
+            String discordCoachingChannelId,
+
+            /**
              * The application's Ed25519 public key, from the Discord developer portal.
              *
              * <p>Not a secret -- it verifies rather than authenticates, and Discord prints

@@ -23,6 +23,15 @@ public interface CoachingSessionRepository extends JpaRepository<CoachingSession
 
     Optional<CoachingSessionEntity> findByPublicRefAndAccountId(String publicRef, Long accountId);
 
+    /**
+     * Every session bought by one order, in the order they were booked.
+     *
+     * <p>Ordered by id rather than by start time on purpose: this is what numbers a
+     * session within its pack, and a customer who books week four before week three
+     * should not see the two swap numbers. Creation order is stable; start time is not.
+     */
+    List<CoachingSessionEntity> findByOrderIdOrderByIdAsc(Long orderId);
+
     Page<CoachingSessionEntity> findByAccountIdOrderByStartsAtDesc(Long accountId,
                                                                   Pageable pageable);
 
