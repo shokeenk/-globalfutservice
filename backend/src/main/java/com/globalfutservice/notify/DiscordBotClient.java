@@ -32,8 +32,10 @@ import java.util.Optional;
  * Telegram -- are all hand-rolled on the JDK client for the same reason, and each says so.
  * Switching to JDA later is contained to this file.
  *
- * <p><b>Nothing here logs a response body.</b> Discord echoes the request back in some
- * errors, and the request carries a customer's name, email and payment reference.
+ * <p><b>Response bodies are withheld from logs by default.</b> Discord echoes the
+ * request back in some errors, and most requests here carry a customer's name, email and
+ * payment reference. The one exception is registering the slash command, whose payload is
+ * a fixed command definition with nothing customer-specific in it; see {@link Detail}.
  */
 @Component
 public class DiscordBotClient {
@@ -56,6 +58,26 @@ public class DiscordBotClient {
 
     /** 0 is GUILD_TEXT. */
     private static final int TYPE_TEXT = 0;
+
+    /** Enough for any Discord error object, short of a log flood if one is not. */
+    private static final int ERROR_BODY_LIMIT = 1000;
+
+    /**
+     * How much of a refusal is safe to put in a log.
+     *
+     * <p>The question is never about the endpoint, it is about what was sent to it.
+     * Discord quotes the offending request back inside some errors, so echoing a body is
+     * echoing whatever that request carried — an order reference, a customer's name, the
+     * caption on a payment screenshot. Hence {@link #STATUS_ONLY} as the default.
+     *
+     * <p>{@link #WITH_BODY} is for requests whose payload is fixed at compile time and
+     * cannot contain anything about a customer. It is decided at the call site, because
+     * the call site is the only place that knows what it is sending.
+     */
+    enum Detail {
+        STATUS_ONLY,
+        WITH_BODY
+    }
 
     private final AppProperties props;
     private final ObjectMapper mapper;
@@ -280,9 +302,19 @@ public class DiscordBotClient {
      * per boot would leave a pile of identical commands.
      */
     public void registerGuildCommands(String applicationId, List<Map<String, Object>> commands) {
+        /*
+         * The only call in this class that logs Discord's refusal in full. Everything it
+         * sends is a literal from DiscordCommandRegistrar -- the command name, its
+         * description, one option -- so there is no customer in the payload for Discord to
+         * quote back, and the reason a registration was refused is the whole content of
+         * the body. A 403 here is one of two things and they are indistinguishable by
+         * status alone: code 50001 means the application is in the guild without the
+         * applications.commands scope, code 20012 means this application id does not own
+         * this bot token.
+         */
         putArray(API + "/applications/" + applicationId
                         + "/guilds/" + props.notifications().discordGuildId() + "/commands",
-                commands, "register slash commands");
+                commands, "register slash commands", Detail.WITH_BODY);
     }
 
     /* -------------------------------------------------------------- transport --- */
@@ -340,7 +372,8 @@ public class DiscordBotClient {
     }
 
     /** As {@link #put}, for the endpoints whose body is a JSON array rather than an object. */
-    private JsonNode putArray(String url, List<Map<String, Object>> body, String what) {
+    private JsonNode putArray(String url, List<Map<String, Object>> body, String what,
+                              Detail detail) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -350,7 +383,7 @@ public class DiscordBotClient {
                     .PUT(HttpRequest.BodyPublishers.ofString(
                             mapper.writeValueAsString(body), StandardCharsets.UTF_8))
                     .build();
-            return send(request, what);
+            return send(request, what, detail);
         } catch (DiscordException e) {
             throw e;
         } catch (Exception e) {
@@ -375,21 +408,14 @@ public class DiscordBotClient {
     }
 
     private JsonNode send(HttpRequest request, String what) throws Exception {
+        return send(request, what, Detail.STATUS_ONLY);
+    }
+
+    private JsonNode send(HttpRequest request, String what, Detail detail) throws Exception {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 300) {
-            /*
-             * Status only, never the body. Discord echoes the offending request back in
-             * some errors, and this request carries a customer's name, email and payment
-             * reference.
-             *
-             * A 403 says which permission is missing by which call failed: creating the
-             * channel wants Manage Channels, posting wants Send Messages, the screenshot
-             * wants Attach Files, and finding the channel again wants View Channel. All
-             * four are granted in Discord and none of them in this repository, so `what`
-             * is worth reading before anyone goes looking at the code.
-             */
-            throw new DiscordException("Discord refused to " + what
-                    + ": HTTP " + response.statusCode());
+            throw new DiscordException(
+                    failureMessage(what, response.statusCode(), response.body(), detail));
         }
         /*
          * A permission overwrite answers 204 with nothing in it. Asking Jackson to parse
@@ -400,6 +426,30 @@ public class DiscordBotClient {
             return mapper.createObjectNode();
         }
         return mapper.readTree(body);
+    }
+
+    /**
+     * What a refusal is allowed to say.
+     *
+     * <p>Split out from the send path so the rule can be tested without standing up an
+     * HTTP server: the base URL here is a constant, so there is no seam to point a stub
+     * at, and the decision worth pinning is this one rather than the transport.
+     *
+     * <p>Under {@link Detail#STATUS_ONLY} the status carries the diagnosis on its own,
+     * because which call failed says which permission is missing: creating the channel
+     * wants Manage Channels, posting wants Send Messages, the screenshot wants Attach
+     * Files, finding the channel again wants View Channel. All four are granted in
+     * Discord and none of them in this repository, so {@code what} is worth reading
+     * before anyone goes looking at the code.
+     */
+    static String failureMessage(String what, int status, String body, Detail detail) {
+        String message = "Discord refused to " + what + ": HTTP " + status;
+        if (detail != Detail.WITH_BODY) {
+            return message;
+        }
+        return message + (body == null || body.isBlank()
+                ? " (no body)"
+                : " " + clamp(body.strip(), ERROR_BODY_LIMIT));
     }
 
     private static boolean present(String value) {
