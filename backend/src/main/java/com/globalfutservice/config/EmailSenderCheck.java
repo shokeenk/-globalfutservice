@@ -4,21 +4,23 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Is the address customers will see one this deployment is allowed to send from?
+ * Can this deployment actually send mail, and as whom?
  *
- * <p>An SMTP relay authenticates one account, and it will not let that account claim to
- * be somebody else. Gmail rewrites a {@code From} it has not verified to whichever
- * account signed in; stricter relays reject the message outright. Either way the address
- * configured here is not the address that arrives — and nothing in the send path notices.
- * The send succeeds, the log line says the mail went out, and the customer receives a
- * message from a stranger, or nothing at all.
+ * <p>Two failures hide here, and both are quiet. The first is a relay that is not there:
+ * the development defaults point at a mail catcher on the loopback interface, and left in
+ * place on a deployment they mean every send fails at connect. The second is a relay that
+ * is there but will not let this account be the sender it claims — an SMTP relay
+ * authenticates one account and decides what that account may claim to be. Gmail rewrites
+ * a {@code From} it has not verified to whichever account signed in; stricter relays
+ * refuse the message.
  *
- * <p>That is the shape of failure {@link BootstrapRunner} exists to shout about: not a
- * crash, but a silent divergence between what the configuration says and what the world
- * does. It is checked at startup rather than on first send because the first send is a
- * real customer's order confirmation.
+ * <p>Neither surfaces as a crash. Each send is attempted, caught and logged as one line
+ * among thousands, so a shop can run for months believing its customers are being emailed.
+ * That is the shape of failure {@link BootstrapRunner} exists to shout about, and it is
+ * checked at startup rather than on first send because the first send is a real
+ * customer's order confirmation.
  *
- * <p>Kept apart from the runner so the rule can be tested without a Spring context.
+ * <p>Kept apart from the runner so the rules can be tested without a Spring context.
  */
 public final class EmailSenderCheck {
 
@@ -26,15 +28,18 @@ public final class EmailSenderCheck {
     }
 
     /**
-     * The warning to print at startup, or empty when the sender is coherent.
+     * The warning to print at startup, or empty when the configuration is coherent.
      *
      * @param emailEnabled {@code gfs.notifications.email-enabled}
      * @param from         {@code GFS_EMAIL_FROM}, the address customers see
      * @param smtpUser     {@code GFS_SMTP_USER}, the account that authenticates
      * @param smtpHost     {@code GFS_SMTP_HOST}, the relay
+     * @param publicUrl    {@code GFS_PUBLIC_URL} — what tells a deployment apart from a
+     *                     laptop, and so whether a loopback relay is plausible
      */
     public static Optional<String> problem(boolean emailEnabled, String from,
-                                           String smtpUser, String smtpHost) {
+                                           String smtpUser, String smtpHost,
+                                           String publicUrl) {
         if (!emailEnabled) {
             return Optional.empty();
         }
@@ -42,9 +47,21 @@ public final class EmailSenderCheck {
             return Optional.of("  - Email is enabled but GFS_SMTP_HOST is empty. Every "
                     + "message is dropped before it reaches a relay.\n");
         }
+        if (isLoopback(smtpHost) && !isLocal(publicUrl)) {
+            return Optional.of("""
+                      - Email is enabled, but the relay is %s — the loopback address — on \
+                    a deployment serving %s. Nothing is listening there. Every message \
+                    fails at connect, so no customer has received an order email and no \
+                    operator has received an alert.
+                        These are the local-development defaults. Point GFS_SMTP_HOST, \
+                    GFS_SMTP_PORT, GFS_SMTP_USER, GFS_SMTP_PASSWORD, GFS_SMTP_AUTH and \
+                    GFS_SMTP_TLS at a real relay, or set GFS_EMAIL_ENABLED=false so the \
+                    system stops claiming mail goes out.
+                    """.formatted(smtpHost, publicUrl));
+        }
         if (isBlank(from) || isBlank(smtpUser)) {
-            // Nothing to compare. An unauthenticated relay is how local development
-            // talks to Mailpit, and is not worth a warning.
+            // Nothing left to compare. An unauthenticated relay that is not loopback is a
+            // deliberate choice — an internal smarthost — and is not worth a warning.
             return Optional.empty();
         }
 
@@ -56,7 +73,7 @@ public final class EmailSenderCheck {
         if (userDomain == null || fromDomain.equals(userDomain)) {
             // A username without a domain is normal for a transactional provider —
             // SendGrid authenticates as the literal "apikey", Resend as "resend" — and
-            // there the sending domain is proved by DNS, not by the login. Nothing to say.
+            // there the right to send as a domain is proved in DNS, not by the login.
             return Optional.empty();
         }
 
@@ -86,5 +103,28 @@ public final class EmailSenderCheck {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    /** Whether a relay host only ever resolves back to the machine asking. */
+    private static boolean isLoopback(String host) {
+        String h = host.trim().toLowerCase(Locale.ROOT);
+        return h.equals("localhost") || h.startsWith("127.") || h.equals("::1")
+                || h.equals("[::1]") || h.equals("0.0.0.0");
+    }
+
+    /**
+     * Whether this instance is a laptop rather than a deployment.
+     *
+     * <p>Read from the storefront origin, because that is the one setting nobody can
+     * leave at its default and still have a working site: the links inside every email
+     * are built from it. A blank one counts as local, so a half-configured checkout does
+     * not also raise a false alarm about mail.
+     */
+    private static boolean isLocal(String publicUrl) {
+        if (isBlank(publicUrl)) {
+            return true;
+        }
+        String u = publicUrl.toLowerCase(Locale.ROOT);
+        return u.contains("localhost") || u.contains("127.0.0.1") || u.contains("[::1]");
     }
 }
