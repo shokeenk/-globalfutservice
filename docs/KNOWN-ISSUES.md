@@ -68,23 +68,40 @@ boundary, or drop the annotation and say plainly that each read stands alone.
 
 ---
 
-## 3. Confirm the Resend SMTP password is the API key
+## 3. A campaign recipient that fails once is never retried
 
-**Where:** deployment configuration, not code.
+**Where:** `backend/src/main/java/com/globalfutservice/marketing/CampaignSender.java`
 
-Nothing in this codebase speaks to Resend's HTTP API; the only mail path is SMTP
-through `JavaMailSender`. For Resend's SMTP endpoint the username is the literal
-string `resend` and **the password is the API key**. There is no separate API-key
-setting to configure and none is read.
+`sendOne` catches everything the send can throw and calls `row.markFailed(...)`.
+The send loop in `CampaignService.dispatch` then pulls the next batch of rows
+`where status = 'PENDING'` — so a row marked `FAILED` is not picked up again, by
+this run or any later one. There is no retry, and no endpoint that moves a row
+back to `PENDING`.
 
-So if `GFS_SMTP_PASSWORD` holds anything other than a Resend API key,
-authentication fails and no mail is sent. This is worth confirming directly
-rather than inferring from a message that happened to arrive.
+That is the right shape for a permanent failure, such as an address that does not
+exist. It is the wrong shape for a transient one, and the transient case is the
+likely one: a provider rate limit. Resend's free tier allows 100 messages a day
+and 3,000 a month. An audience larger than the daily allowance does not queue —
+the overflow is refused, marked `FAILED`, and silently excluded from every
+subsequent attempt.
 
-Note also that `EmailSenderCheck` deliberately stays silent when the SMTP
-username is not an email address, because a provider proves its right to send in
-DNS rather than by the login. That silence is correct, and it means this
-particular mistake will not be caught at startup.
+**When it bites:** the first campaign sent to an audience larger than the
+provider's allowance, which is the first campaign that matters. Nothing warns
+beforehand; the audience count is shown next to the Send button but is not
+compared against anything.
+
+**What it would take:** distinguish a refusal from a deferral, and leave the
+deferred rows `PENDING` so the next pass picks them up. Failing that, an operator
+action that resets `FAILED` rows for one campaign would at least make it
+recoverable without SQL.
+
+*Resolved while investigating this: whether `GFS_SMTP_PASSWORD` holds a genuine
+Resend API key is no longer open. `CampaignSender` and `EmailNotifier` are given
+the same `JavaMailSender` singleton with the same credentials, and transactional
+mail is being delivered, so the credentials authenticate. Worth recording because
+`EmailSenderCheck` deliberately stays silent when the SMTP username is not an
+email address — a provider proves its right to send in DNS, not by its login — so
+a bad key would never have been caught at startup.*
 
 ---
 
@@ -98,8 +115,8 @@ gate campaigns. A campaign sent while the flag is off still hands every message 
 recorded as `FAILED` against its recipient row.
 
 **When it bites:** any campaign sent while the flag is off burns its recipient
-rows — they are marked `FAILED`, not left `PENDING`, so a later re-send does not
-retry them.
+rows, by way of the defect in 3 above — they are marked `FAILED`, not left
+`PENDING`, so no later re-send retries them.
 
 **What it would take:** decide what the flag means. Either it is a master switch
 for all outbound mail, in which case campaigns must respect it and refuse to

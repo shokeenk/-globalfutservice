@@ -527,11 +527,14 @@ public record AppProperties(
             String operatorEmails,
             /**
              * The address customers see, which must be one the relay is authorised
-             * to send as — see {@link EmailSenderCheck}. Not the domain address:
-             * globalfutservices.com has no MX and no SPF under DMARC p=quarantine,
-             * so mail from it bounces on reply and lands in spam.
+             * to send as — see {@link EmailSenderCheck}.
+             *
+             * <p>The domain address, now that globalfutservices.com publishes a
+             * Resend DKIM key and MX. A transactional provider will only send as a
+             * domain it has verified, so this is not a free choice: a personal
+             * address here is refused rather than rewritten.
              */
-            @DefaultValue("globalfutservices@gmail.com") String emailFrom,
+            @DefaultValue("orders@globalfutservices.com") String emailFrom,
             @DefaultValue("Global FUT Services") String emailFromName) {
     }
 
