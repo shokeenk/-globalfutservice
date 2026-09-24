@@ -176,17 +176,34 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiExceptions.UpstreamException.class)
     public ResponseEntity<ApiError> upstream(ApiExceptions.UpstreamException e) {
         String trace = traceId();
-        log.error("[{}] Upstream failure", trace, e);
+        log.error("[{}] Upstream failure: {}: {}", trace,
+                e.getClass().getName(), e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ApiError.of(
                 "upstream_unavailable",
                 "We could not reach the payment provider. No money has moved — please try again.",
                 trace));
     }
 
+    /**
+     * Everything nothing above claimed.
+     *
+     * <p>The exception type and its message are put in the message text as well as being
+     * handed to the logger. The logger has always been given the throwable — the trailing
+     * argument with no placeholder is how SLF4J is told to print a stack trace — but that
+     * trace arrives as a run of continuation lines carrying no timestamp and no logger
+     * name, and a log viewer that groups by line, or truncates, or is simply scrolled
+     * past, leaves an operator holding "[dbb07681] Unhandled exception" and nothing else.
+     *
+     * <p>Repeating the type and message on the first line costs one line and makes that
+     * line answer the question on its own. It leaks nothing further: the stack trace
+     * beneath it already carries the message of every exception in the chain, and none of
+     * this reaches the response, which still gets the reference and nothing more.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> unexpected(Exception e) {
         String trace = traceId();
-        log.error("[{}] Unhandled exception", trace, e);
+        log.error("[{}] Unhandled {}: {}", trace,
+                e.getClass().getName(), e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiError.of(
                 "internal_error",
                 "Something went wrong on our side. Quote this reference to support: " + trace,
