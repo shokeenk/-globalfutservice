@@ -31,14 +31,27 @@ public interface CampaignRecipientRepository
      * <p>Opens and clicks are counts of <i>distinct recipients observed</i>, not events:
      * the entity records only the first of each, so a mail client that pre-fetches an
      * image five times still counts once.
+     *
+     * <p><b>Every sum is wrapped in {@code coalesce}, and must stay that way.</b> An
+     * aggregate query with no {@code group by} always returns exactly one row, even when
+     * nothing matches — and in that row {@code count} is 0 while every {@code sum} is
+     * NULL, because the sum of no values is not zero in SQL, it is unknown. The record
+     * this projects into takes primitive {@code long}s, so a NULL arriving there fails
+     * inside Hibernate's instantiation with an unboxing error rather than anything that
+     * names the column.
+     *
+     * <p>That is not an edge case: it is every campaign that has no recipient rows, which
+     * means every draft that has never been sent. It made creating a campaign return 500
+     * after the row had already been committed, so the draft existed and the admin was
+     * told the server had broken.
      */
     @Query("""
             select new com.globalfutservice.marketing.CampaignStats(
                        count(r),
-                       sum(case when r.status = 'SENT'   then 1L else 0L end),
-                       sum(case when r.status = 'FAILED' then 1L else 0L end),
-                       sum(case when r.openedAt  is not null then 1L else 0L end),
-                       sum(case when r.clickedAt is not null then 1L else 0L end))
+                       coalesce(sum(case when r.status = 'SENT'   then 1L else 0L end), 0L),
+                       coalesce(sum(case when r.status = 'FAILED' then 1L else 0L end), 0L),
+                       coalesce(sum(case when r.openedAt  is not null then 1L else 0L end), 0L),
+                       coalesce(sum(case when r.clickedAt is not null then 1L else 0L end), 0L))
               from CampaignRecipientEntity r
              where r.campaignId = :campaignId
             """)
