@@ -147,14 +147,15 @@ services:
         value: "true"
       - key: GFS_OPERATOR_EMAILS
         sync: false
-      # The address customers see. It has to be one GFS_SMTP_USER is authorised to
-      # send as — Gmail rewrites a From it has not verified to the account that
-      # signed in, so setting the domain address here does not make mail come from
-      # it. globalfutservices.com currently publishes no MX and no SPF, under a
-      # DMARC policy of p=quarantine: mail claiming to be from it cannot be
-      # replied to and is filed as spam. Sending as the domain means publishing
-      # SPF and DKIM for whichever provider sends; until then this must be the
-      # relay account's own address. The app warns at startup when it is not.
+      # The address customers see, which must be one the relay is authorised to
+      # send as. globalfutservices.com is now verified with Resend — a DKIM key at
+      # resend._domainkey, Resend's IPs and return path under send.*, and MX at
+      # ImprovMX so replies land somewhere — so an address on the domain aligns
+      # under DMARC adkim=r and is delivered rather than quarantined.
+      #
+      # It must stay an address on that domain: a provider will not send as a
+      # domain it has not verified, so a personal address here fails the send
+      # outright. The app warns at startup when this and GFS_SMTP_USER disagree.
       - key: GFS_EMAIL_FROM
         sync: false
       - key: GFS_SMTP_HOST
