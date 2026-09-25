@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -56,5 +57,17 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 700,
+  },
+  /*
+   * Component and unit tests. jsdom rather than a real browser: these check what a
+   * component renders and how it validates, which a DOM answers in milliseconds.
+   * Nothing here talks to the API — `api` is mocked per test — so a failing test is
+   * about this code and never about whether a server happened to be running.
+   */
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    css: false,
   },
 })
