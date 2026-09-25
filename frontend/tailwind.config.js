@@ -184,6 +184,38 @@ export default {
           ea:    '#FF4747',
           epic:  '#2F2F2F',
         },
+
+        /*
+         * The admin console, and nothing else.
+         *
+         * Namespaced rather than folded into the ramps above because the console follows
+         * a different reference design from the storefront: a dark sidebar, a cooler
+         * page and a brighter red. Keeping it under one prefix means the public site
+         * cannot pick any of it up by accident, and the console can be restyled without
+         * touching a single storefront class.
+         *
+         * Fills and text use different reds on purpose. The reference's #DB1825 carries
+         * white at 5.04:1, so it is used for fills. As text on its own pink tints it
+         * measures 4.19-4.34:1, under AA at the 13px the navigation is set in, so red
+         * text on pink uses the site's #C1281B, which holds 5.04:1 on the same ground.
+         */
+        admin: {
+          sidebar:        '#111518',   // sampled from the reference
+          'sidebar-raise':'#171B21',   // the brand card at the foot of the sidebar
+          'sidebar-line': '#262B33',   // guide line and card border
+          'sidebar-text': '#D4D6DA',   // 12.61:1 on the sidebar
+          'sidebar-muted':'#8B909A',   // 5.39:1 on the raised card
+          page:           '#F4F6FA',   // sampled
+          line:           '#E7E9EE',   // card and control borders
+          ink:            '#111318',   // titles
+          muted:          '#5B606A',   // descriptions, 5.84:1 on the page
+          faint:          '#6B7079',   // eyebrows and helper text, 4.60:1 on the page
+          red:            '#DB1825',   // fills: buttons, filled step, badges
+          'red-text':     '#C1281B',   // red text on a pink tint
+          pink:           '#FEE9EC',   // active parent item
+          'pink-sub':     '#FBE6E8',   // active sub-item
+          'pink-card':    '#FEE4E8',   // selected tile
+        },
       },
 
       /*
@@ -234,6 +266,15 @@ export default {
         'body':    ['0.9375rem', { lineHeight: '1.65', letterSpacing: '0' }],
         'body-sm': ['0.8438rem', { lineHeight: '1.6',  letterSpacing: '0.004em' }],
         'micro':   ['0.75rem',   { lineHeight: '1.5',  letterSpacing: '0.01em' }],
+
+        // The console's page title and the uppercase label above it, measured from
+        // the reference at 1344px wide.
+        'admin-title':   ['1.875rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
+        'admin-eyebrow': ['0.6875rem', { lineHeight: '1.4', letterSpacing: '0.16em' }],
+        // 12.5px, not the reference's 13px: the reference's face is narrower than
+        // Poppins, and "Email Marketing" at 13px (107px wide) overflows the 197px column
+        // where at 12.5px (103px) it fits the reference's exact geometry.
+        'admin-nav':     ['0.78125rem', { lineHeight: '1.3', letterSpacing: '0' }],
       },
 
       /*
@@ -273,6 +314,10 @@ export default {
         media: 'inset 0 1px 0 0 rgb(255 255 255 / 0.22), 0 2px 6px rgb(0 0 0 / 0.32), 0 24px 60px -14px rgb(0 0 0 / 0.62)',
         'media-lg': 'inset 0 1px 0 0 rgb(255 255 255 / 0.28), 0 4px 12px rgb(0 0 0 / 0.38), 0 40px 90px -20px rgb(0 0 0 / 0.72)',
         card: '0 1px 3px rgba(17,17,20,0.09), 0 4px 12px rgba(17,17,20,0.06)',
+        // The console's cards sit on a hairline, not on a shadow: the reference reads
+        // as flat panels on a cool grey, and a lift here would make every card look
+        // pressable.
+        'admin-card': '0 1px 2px rgba(17,19,24,0.04)',
         lift: '0 4px 10px rgba(17,17,20,0.12), 0 24px 56px rgba(17,17,20,0.16)',
       },
 
@@ -349,6 +394,8 @@ export default {
         edge: '4px',      // data surfaces, table shells, HUD plates
         panel: '10px',    // cards, dialogs, media
         press: '12px',    // buttons and other pressables
+        'admin-card': '12px',     // console cards
+        'admin-control': '8px',   // console inputs, buttons, nav pills
       },
 
       keyframes: {

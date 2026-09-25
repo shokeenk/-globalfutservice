@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { PageHeader } from '../../components/PageHeader'
 import {
-  Alert, Badge, Button, Card, Field, Section, Skeleton, Textarea,
+  Alert, Badge, Button, Card, Field, Skeleton, Textarea,
 } from '../../components/ui'
 import { ApiError, api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { Order } from '../../lib/types'
 import { statusTone } from '../Track'
+import { AdminPage } from './shell/AdminPage'
 
 type Revealed = {
   eaEmail: string
@@ -125,9 +125,9 @@ export default function AdminOrder() {
 
   if (!order) {
     return (
-      <Section className="rhythm-section">
+      <AdminPage eyebrow="Orders" title={<span className="tnum">{publicRef}</span>}>
         {error ? <Alert tone="warn">{error}</Alert> : <Skeleton className="h-72 w-full" />}
-      </Section>
+      </AdminPage>
     )
   }
 
@@ -141,21 +141,18 @@ export default function AdminOrder() {
         Putting it in the masthead rather than in the first card also means it is
         what the browser tab and the back-button history show.
       */}
-      <PageHeader
-        eyebrow="Operations · Order"
+      <AdminPage
+        eyebrow="Orders"
         title={<span className="tnum">{order.publicRef}</span>}
-        lead={order.serviceLabel}
-        intensity={0.3}
-        aside={
+        description={order.serviceLabel}
+        action={
           <div className="flex flex-col items-start gap-3 lg:items-end">
             <Badge tone={statusTone(order.status)}>{order.statusLabel}</Badge>
             <p className="tnum display text-display-md text-chalk">{order.totalFormatted}</p>
           </div>
         }
-      />
-
-    <Section className="rhythm-section">
-      <Link to="/admin" className="group mb-6 inline-flex items-center gap-2 text-[13px] link-quiet">
+      >
+      <Link to="/admin/orders" className="group mb-6 inline-flex items-center gap-2 text-[13px] link-quiet">
         <span aria-hidden="true" className="transition-transform duration-300 ease-out-expo group-hover:-translate-x-1">
           &larr;
         </span>
@@ -388,7 +385,7 @@ export default function AdminOrder() {
           )}
         </div>
       </div>
-    </Section>
+      </AdminPage>
     </>
   )
 }

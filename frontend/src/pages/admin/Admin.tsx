@@ -1,7 +1,6 @@
-import { PageHeader } from '../../components/PageHeader'
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Alert, Badge, Button, ButtonLink, EmptyState, Input, Section, Select, Skeleton } from '../../components/ui'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Alert, Badge, Button, ButtonLink, EmptyState, Input, Select, Skeleton } from '../../components/ui'
 import { api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
@@ -10,6 +9,7 @@ import type { AdminStats, OrderSummary } from '../../lib/types'
 import { ServiceTag, statusTone } from '../Track'
 import { Announcements } from './Announcements'
 import { PaymentClaims } from './PaymentClaims'
+import { AdminPage } from './shell/AdminPage'
 
 /**
  * Every status an order can be in, in lifecycle order.
@@ -60,7 +60,17 @@ export default function Admin() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [orders, setOrders] = useState<OrderSummary[] | null>(null)
   const [status, setStatus] = useState('')
-  const [search, setSearch] = useState('')
+  /*
+   * Seeded from the address, so the console's top-bar search can open this page already
+   * filtered. Typed into here it behaves exactly as before; the parameter only sets the
+   * starting value, and a later search from the top bar replaces it.
+   */
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
+  useEffect(() => {
+    const fromBar = searchParams.get('search')
+    if (fromBar !== null) setSearch(fromBar)
+  }, [searchParams])
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -94,15 +104,18 @@ export default function Admin() {
 
   return (
     <>
-      <PageHeader eyebrow="Operations" title="Order queue" intensity={0.3} />
+      <AdminPage
+        eyebrow="Orders"
+        title="Order queue"
+        description="Payments to check, the work queue, and every order placed."
+      >
       {/*
-        The wide measure, which this page should always have had.
-        `max-w-6xl` is the reading width for prose. This is a seven-column queue an
-        operator scans sideways, and at the narrower measure the table overflowed its
-        own wrapper by ~190px — so the two columns that answer "what is it" and "when"
-        sat permanently off the right edge behind a scrollbar.
+        No max-width here, and there must not be one. This is a seven-column queue an
+        operator scans sideways; at the old prose measure the table overflowed its own
+        wrapper by ~190px, so the two columns that answer "what is it" and "when" sat
+        permanently off the right edge behind a scrollbar. The console's content area
+        now spans the full width beside the sidebar, which is what the table needs.
       */}
-      <Section wide className="rhythm-section">
       {error && <Alert tone="warn">{error}</Alert>}
 
       {/*
@@ -186,12 +199,12 @@ export default function Admin() {
           it are admin-only. Showing an operator a link that bounces them back here would
           be advertising a door they cannot open.
         */}
-        <ButtonLink to="/admin/coupons" variant="primary" size="md">Coupons</ButtonLink>
-        <ButtonLink to="/admin/coaching" variant="primary" size="md">Coaching</ButtonLink>
+        <ButtonLink to="/admin/promotions" variant="primary" size="md">Coupons</ButtonLink>
+        <ButtonLink to="/admin/services/coaching" variant="primary" size="md">Coaching</ButtonLink>
         {account?.role === 'ADMIN' && (
           <>
-            <ButtonLink to="/admin/rates" variant="primary" size="md">Coin rates</ButtonLink>
-            <ButtonLink to="/admin/campaigns" variant="primary" size="md">Campaigns</ButtonLink>
+            <ButtonLink to="/admin/services/rates" variant="primary" size="md">Coin rates</ButtonLink>
+            <ButtonLink to="/admin/email/send" variant="primary" size="md">Campaigns</ButtonLink>
           </>
         )}
       </div>
@@ -311,7 +324,7 @@ export default function Admin() {
           </table>
         </div>
       )}
-      </Section>
+      </AdminPage>
     </>
   )
 }

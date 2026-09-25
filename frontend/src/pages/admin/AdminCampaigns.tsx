@@ -1,12 +1,14 @@
-import { PageHeader } from '../../components/PageHeader'
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { LuHistory } from 'react-icons/lu'
 import {
-  Alert, Badge, Button, Field, Input, Section, Select, Skeleton, Textarea,
+  Alert, Badge, Button, Field, Input, Select, Skeleton, Textarea,
 } from '../../components/ui'
 import { ApiError, api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { Campaign, CampaignOptions } from '../../lib/types'
+import { AdminPage } from './shell/AdminPage'
 
 type Tab = 'compose' | 'DRAFT' | 'SCHEDULED' | 'FINISHED'
 
@@ -30,10 +32,21 @@ const TABS: [Tab, string][] = [
  * at once and there is no recall. A typed URL in that position is four hundred people
  * landing on a 404.
  */
-export default function AdminCampaigns() {
-  useSeo({ title: 'Campaigns', noindex: true })
+export default function AdminCampaigns({ view = 'send' }: {
+  /**
+   * Which sidebar entry opened this screen. "Send Campaign" starts on the compose tab and
+   * "Campaign History" on the drafts; the tabs themselves are unchanged and still move
+   * freely between all four.
+   */
+  view?: 'send' | 'history'
+}) {
+  useSeo({ title: view === 'history' ? 'Campaign history' : 'Send campaign', noindex: true })
 
-  const [tab, setTab] = useState<Tab>('compose')
+  const [tab, setTab] = useState<Tab>(view === 'history' ? 'DRAFT' : 'compose')
+  // The two sidebar entries render this same component, so moving between them updates
+  // the prop on a mounted screen rather than mounting a new one. Without this the tab
+  // would stay wherever it was.
+  useEffect(() => { setTab(view === 'history' ? 'DRAFT' : 'compose') }, [view])
   const [options, setOptions] = useState<CampaignOptions | null>(null)
   const [list, setList] = useState<Campaign[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -64,8 +77,25 @@ export default function AdminCampaigns() {
 
   return (
     <>
-      <PageHeader eyebrow="Operations" title="Campaigns" intensity={0.3} />
-      <Section wide className="rhythm-section">
+      <AdminPage
+        eyebrow="Email Marketing"
+        title={view === 'history' ? 'Campaign History' : 'Send Promotional Email'}
+        description={view === 'history'
+          ? 'Drafts, scheduled campaigns and everything already sent.'
+          : 'Create and send promotional emails to your customers. Announce new promos, discounts, events and more.'}
+        action={view === 'send' && (
+          <Link
+            to="/admin/email/history"
+            className="inline-flex h-[34px] items-center gap-2 rounded-admin-control border border-admin-line
+                       bg-white px-4 text-[12.5px] font-medium text-admin-ink shadow-admin-card
+                       hover:bg-admin-page focus-visible:outline-none focus-visible:ring-2
+                       focus-visible:ring-admin-red"
+          >
+            <LuHistory aria-hidden="true" className="h-4 w-4" />
+            Campaign History
+          </Link>
+        )}
+      >
         {error && <Alert tone="warn">{error}</Alert>}
         {notice && <Alert tone="ok">{notice}</Alert>}
 
@@ -104,7 +134,7 @@ export default function AdminCampaigns() {
             onError={setError}
           />
         )}
-      </Section>
+      </AdminPage>
     </>
   )
 }
