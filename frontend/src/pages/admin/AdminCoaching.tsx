@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PageHeader } from '../../components/PageHeader'
-import { Alert, Badge, Button, Field, Input, Section, Select, Skeleton } from '../../components/ui'
+import { Alert, Badge, Button, Field, Input, Select, Skeleton } from '../../components/ui'
+import { AdminPage } from './shell/AdminPage'
 import type { BadgeTone } from '../../components/ui'
 import { ApiError, api } from '../../lib/api'
 import { useSeo } from '../../lib/seo'
@@ -133,8 +133,7 @@ export default function AdminCoaching() {
 
   return (
     <>
-      <PageHeader eyebrow="Admin" title="Coaching" lead="The diary, and the rules behind it." />
-      <Section className="rhythm-section">
+      <AdminPage eyebrow="Services" title="Coaching" description="The diary, and the rules behind it.">
         {notice && <div className="mb-4"><Alert tone="ok">{notice}</Alert></div>}
         {error && <div className="mb-4"><Alert tone="warn">{error}</Alert></div>}
 
@@ -195,7 +194,7 @@ export default function AdminCoaching() {
                      onError={setError} onNotice={setNotice} />
           </>
         )}
-      </Section>
+      </AdminPage>
     </>
   )
 }

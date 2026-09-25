@@ -1,9 +1,9 @@
-import { PageHeader } from '../../components/PageHeader'
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Alert, Badge, Button, EmptyState, Field, Input, Section, Skeleton,
+  Alert, Badge, Button, EmptyState, Field, Input, Skeleton,
 } from '../../components/ui'
 import { ApiError, api } from '../../lib/api'
+import { AdminPage } from './shell/AdminPage'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { Coupon } from '../../lib/types'
@@ -41,8 +41,11 @@ export default function AdminCoupons() {
 
   return (
     <>
-      <PageHeader eyebrow="Operations" title="Coupon codes" intensity={0.3} />
-      <Section className="rhythm-section">
+      <AdminPage
+        eyebrow="Promotions"
+        title="Coupon codes"
+        description="Discount codes customers can apply at checkout."
+      >
       {error && <Alert tone="warn">{error}</Alert>}
 
       <CreateCoupon onCreated={load} />
@@ -81,7 +84,7 @@ export default function AdminCoupons() {
           </table>
         </div>
       )}
-      </Section>
+      </AdminPage>
     </>
   )
 }

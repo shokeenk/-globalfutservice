@@ -1,6 +1,6 @@
-import { PageHeader } from '../../components/PageHeader'
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Button, Field, Input, Section, Skeleton } from '../../components/ui'
+import { Alert, Button, Field, Input, Skeleton } from '../../components/ui'
+import { AdminPage } from './shell/AdminPage'
 import { ApiError, api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
@@ -90,8 +90,11 @@ export default function AdminRates() {
 
   return (
     <>
-      <PageHeader eyebrow="Operations" title="Coin rates" intensity={0.3} />
-      <Section className="rhythm-section">
+      <AdminPage
+        eyebrow="Services"
+        title="Coin rates"
+        description="What customers are charged for coins."
+      >
         {error && <Alert tone="warn">{error}</Alert>}
         {saved && <Alert tone="ok">{saved}</Alert>}
 
@@ -188,7 +191,7 @@ export default function AdminRates() {
             </p>
           </>
         )}
-      </Section>
+      </AdminPage>
     </>
   )
 }
