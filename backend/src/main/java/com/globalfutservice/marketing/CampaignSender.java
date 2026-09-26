@@ -76,33 +76,42 @@ public class CampaignSender {
     }
 
     /**
-     * Write one row per person, once.
+     * Write one row per person, the first time a campaign is claimed, and never again.
      *
-     * <p>Idempotent by construction: the unique constraint on (campaign, account) means a
-     * re-run after a crash adds only the people not already listed. Rows are inserted one
-     * at a time on the retry path for exactly that reason — a bulk insert fails whole.
+     * <p>The list is fixed when the send starts. A campaign that is claimed again -- to
+     * retry the people it failed to reach -- keeps the list it already has and adds
+     * nobody, so a customer who opted in since does not receive a promotion that went out
+     * days before they joined. It also means the (campaign, account) unique constraint is
+     * a backstop that should never fire, not a mechanism this method leans on.
+     *
+     * <p>Why it does not try to "top up" an existing list instead: that was the original
+     * design, and it could not work. The rows are inserted immediately (the id is an
+     * identity column), so the first duplicate throws inside the insert. Postgres then
+     * refuses every further statement in the transaction and Hibernate refuses to flush the
+     * session, so neither inserting the rest one by one nor counting them afterwards can
+     * succeed. Reproduced against Postgres: the count failed with Hibernate's "don't flush
+     * the Session after an exception occurs" and the one person not already listed was
+     * never added.
+     *
+     * <p>A list is written whole or not at all, in this one transaction, so "has rows"
+     * reliably means "was completely listed". If the insert does clash, the exception
+     * propagates and the caller marks the send FAILED -- loudly, rather than swallowing it
+     * and carrying on with a list nobody has checked.
+     *
+     * @return how many people the campaign is going to
      */
     @Transactional
     public int buildRecipients(Long campaignId, List<AccountEntity> people) {
+        long existing = recipients.countByCampaignId(campaignId);
+        if (existing > 0) {
+            return (int) existing;
+        }
         List<CampaignRecipientEntity> fresh = new ArrayList<>(people.size());
         for (AccountEntity a : people) {
             fresh.add(new CampaignRecipientEntity(campaignId, a.getId(), a.getEmail()));
         }
-        try {
-            recipients.saveAll(fresh);
-        } catch (RuntimeException e) {
-            log.warn("Bulk recipient insert clashed for campaign {}; inserting individually",
-                    campaignId);
-            for (CampaignRecipientEntity row : fresh) {
-                try {
-                    recipients.save(row);
-                } catch (RuntimeException ignored) {
-                    // Already listed from a previous run. That is the constraint doing
-                    // its job, not a failure.
-                }
-            }
-        }
-        return (int) recipients.countByCampaignId(campaignId);
+        recipients.saveAll(fresh);
+        return fresh.size();
     }
 
     /**
