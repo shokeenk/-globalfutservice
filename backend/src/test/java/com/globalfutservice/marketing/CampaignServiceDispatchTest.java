@@ -90,4 +90,60 @@ class CampaignServiceDispatchTest {
             verify(sender, never()).sendOne(anyLong(), anyLong());
         }
     }
+
+    @Nested
+    class Outcome {
+
+        @BeforeEach
+        void claimed() {
+            when(sender.claim(ID)).thenReturn(true);
+            when(recipients.findByCampaignIdAndStatus(eq(ID), eq("PENDING"), any())).thenReturn(List.of());
+        }
+
+        private void rows(long sent, long failed) {
+            when(recipients.countByCampaignIdAndStatus(ID, "SENT")).thenReturn(sent);
+            when(recipients.countByCampaignIdAndStatus(ID, "FAILED")).thenReturn(failed);
+        }
+
+        @Test
+        @DisplayName("a campaign that reached nobody because every message was refused is FAILED")
+        void reachedNobody() {
+            rows(0, 2);
+
+            service.dispatch(ID);
+
+            verify(sender).complete(ID, CampaignStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("a campaign that reached some people is SENT, failures and all")
+        void reachedSome() {
+            rows(1, 1);
+
+            service.dispatch(ID);
+
+            verify(sender).complete(ID, CampaignStatus.SENT);
+        }
+
+        @Test
+        @DisplayName("a retry that fails again does not undo an earlier run's successes")
+        void earlierSuccessCounts() {
+            // Nothing is accepted in this run, but three were in the first.
+            rows(3, 2);
+
+            service.dispatch(ID);
+
+            verify(sender).complete(ID, CampaignStatus.SENT);
+        }
+
+        @Test
+        @DisplayName("a campaign whose recipients all opted out before sending is SENT, not FAILED")
+        void allSkipped() {
+            rows(0, 0);
+
+            service.dispatch(ID);
+
+            verify(sender).complete(ID, CampaignStatus.SENT);
+        }
+    }
 }

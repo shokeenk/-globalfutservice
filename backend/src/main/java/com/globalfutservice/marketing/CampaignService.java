@@ -494,14 +494,32 @@ public class CampaignService {
                     }
                 }
             }
-            sender.complete(campaignId, CampaignStatus.SENT);
-            log.info("Campaign {} finished: {} sent", campaign.getPublicId(), sent);
+            CampaignStatus outcome = outcome(campaignId);
+            sender.complete(campaignId, outcome);
+            log.info("Campaign {} finished {}: {} sent in this run",
+                    campaign.getPublicId(), outcome, sent);
             return sent;
         } catch (RuntimeException e) {
             log.error("Campaign {} failed mid-send", campaign.getPublicId(), e);
             sender.complete(campaignId, CampaignStatus.FAILED);
             throw e;
         }
+    }
+
+    /**
+     * How a send that reached the end of its list ended.
+     *
+     * <p>FAILED when the relay refused every message the campaign tried and accepted none,
+     * counted across every run so a retry that fails again does not undo an earlier
+     * success. Marking that SENT put a campaign that reached nobody under "Sent" with a
+     * green badge -- reproduced locally, with both of two recipients refused. A campaign
+     * that reached some people is SENT, and its failures show in its numbers and in the
+     * retry button beside them.
+     */
+    private CampaignStatus outcome(Long campaignId) {
+        boolean reachedNobody = recipients.countByCampaignIdAndStatus(campaignId, "SENT") == 0
+                && recipients.countByCampaignIdAndStatus(campaignId, "FAILED") > 0;
+        return reachedNobody ? CampaignStatus.FAILED : CampaignStatus.SENT;
     }
 
     // ---- consent and tracking ----------------------------------------------

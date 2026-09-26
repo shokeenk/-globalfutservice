@@ -18,7 +18,10 @@ public enum CampaignStatus {
     SENT,
     /** Withdrawn before sending. Kept, never deleted — see the repository. */
     CANCELLED,
-    /** The send itself broke, as opposed to individual recipients failing. */
+    /**
+     * The send broke part-way, or it reached nobody: the relay refused every message it
+     * tried. Individual failures in a send that reached somebody leave it SENT.
+     */
     FAILED;
 
     /** Content is frozen the moment a campaign is queued to go out. */
