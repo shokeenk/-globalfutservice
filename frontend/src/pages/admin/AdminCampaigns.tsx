@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { LuHistory } from 'react-icons/lu'
 import {
   Alert, Badge, Button, Field, Input, Select, Skeleton, Textarea,
@@ -50,7 +50,10 @@ export default function AdminCampaigns({ view = 'send' }: {
   const [options, setOptions] = useState<CampaignOptions | null>(null)
   const [list, setList] = useState<Campaign[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  // The campaign builder hands over a "draft saved" message when it sends an admin here.
+  const location = useLocation()
+  const [notice, setNotice] = useState<string | null>(
+    () => (location.state as { notice?: string } | null)?.notice ?? null)
 
   const loadOptions = useCallback(async () => {
     try {

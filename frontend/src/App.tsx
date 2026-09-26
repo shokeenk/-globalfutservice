@@ -38,6 +38,7 @@ const AdminOrder = lazy(() => import('./pages/admin/AdminOrder'))
 const AdminCoupons = lazy(() => import('./pages/admin/AdminCoupons'))
 const AdminRates = lazy(() => import('./pages/admin/AdminRates'))
 const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
+const SendCampaign = lazy(() => import('./pages/admin/campaigns/SendCampaign'))
 const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
@@ -91,7 +92,7 @@ export default function App() {
           />
           {/* Same reasoning as the rate card: a campaign reaches every opted-in
               customer at once and cannot be recalled, so ADMIN rather than staff. */}
-          <Route path="email/send" element={<RequireAdmin><AdminCampaigns view="send" /></RequireAdmin>} />
+          <Route path="email/send" element={<RequireAdmin><SendCampaign /></RequireAdmin>} />
           <Route
             path="email/history"
             element={<RequireAdmin><AdminCampaigns view="history" /></RequireAdmin>}

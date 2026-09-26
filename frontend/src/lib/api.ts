@@ -265,11 +265,36 @@ async function blobUrl(path: string): Promise<string> {
   return URL.createObjectURL(await response.blob())
 }
 
+/**
+ * A rendered HTML page from the API — the campaign builder's live preview.
+ *
+ * <p>Asks for HTML specifically. The endpoint produces nothing else, and a request that
+ * accepts only JSON is refused before it reaches the controller.
+ */
+async function html(path: string, body: unknown, signal?: AbortSignal): Promise<string> {
+  const response = await raw(path, { method: 'POST', body, accept: 'text/html', signal })
+  if (response.status === 401) {
+    const refreshed = await refresh()
+    if (refreshed) {
+      return html(path, body, signal)
+    }
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, {
+      error: 'preview_failed',
+      message: 'The preview could not be rendered.',
+    })
+  }
+  return response.text()
+}
+
 export const api = {
   get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   upload,
   blobUrl,
+  html,
+  put: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   del: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
   baseUrl: BASE_URL,
 }

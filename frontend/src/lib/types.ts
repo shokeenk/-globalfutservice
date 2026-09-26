@@ -552,6 +552,17 @@ export interface Campaign {
   completedAt: string | null
   updatedAt: string
   stats: CampaignStats
+  /*
+   * From the campaign builder's first step. Optional because the server leaves a null
+   * field out of the response entirely rather than sending it as null.
+   */
+  type?: 'COINS' | 'BOOSTING' | 'COACHING' | 'GENERAL'
+  offerText?: string
+  /** YYYY-MM-DD, the offer's last day in India. */
+  offerValidUntil?: string
+  showButton?: boolean
+  showPromoCode?: boolean
+  trackingEnabled?: boolean
 }
 
 /** The fixed segments and buttons a campaign may use, with live audience counts. */
