@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -73,6 +74,36 @@ public class CampaignSender {
     @Transactional
     public boolean claim(Long campaignId) {
         return campaigns.claimForSending(campaignId, Instant.now()) == 1;
+    }
+
+    /**
+     * Take over a send that stopped without finishing.
+     *
+     * @return true if this caller now owns the send
+     */
+    @Transactional
+    public boolean reclaimStalled(Long campaignId, Instant now, Instant staleBefore) {
+        return campaigns.reclaimStalled(campaignId, now, staleBefore) == 1;
+    }
+
+    /**
+     * Say this send is still alive. Its own short transaction, before each message, so
+     * the campaign row is never held locked across an SMTP round trip.
+     */
+    @Transactional
+    public void heartbeat(Long campaignId) {
+        campaigns.heartbeat(campaignId, Instant.now());
+    }
+
+    /**
+     * Withdraw a due campaign whose offer ended before it could go out.
+     *
+     * @param today the business's today, in which an offer's last day is counted
+     * @return true if the campaign was withdrawn and must not be sent
+     */
+    @Transactional
+    public boolean withdrawIfOfferEnded(Long campaignId, LocalDate today) {
+        return campaigns.withdrawIfOfferEnded(campaignId, today, Instant.now()) == 1;
     }
 
     /**

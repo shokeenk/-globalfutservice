@@ -297,7 +297,7 @@ describe('Send Campaign, later steps', () => {
     expect(await screen.findByRole('heading', { name: 'Review & Send' })).toBeInTheDocument()
   })
 
-  it('step 5 lets a campaign that fits the allowance be sent, queued a minute ahead', async () => {
+  it('step 5 lets a campaign that fits the allowance be sent, queued by the server', async () => {
     serve({ dailyCap: 100, sentLast24h: 3, remaining: 97 })
     api.post.mockResolvedValue({})
     renderPage('/admin/email/send?draft=camp_abc&step=5')
@@ -305,15 +305,26 @@ describe('Send Campaign, later steps', () => {
     expect(screen.queryByRole('alert')).toBeNull()
 
     await user().click(screen.getByRole('button', { name: 'Send now' }))
-    const before = Date.now()
     await user().click(screen.getByRole('button', { name: 'Send to 42 people' }))
 
-    const [path, body] = api.post.mock.calls[0]!
-    expect(path).toBe('/api/v1/admin/campaigns/camp_abc/schedule')
-    const lead = new Date((body as { sendAt: string }).sendAt).getTime() - before
-    expect(lead).toBeGreaterThan(50_000)
-    expect(lead).toBeLessThan(70_000)
+    // No time from this computer's clock: the server queues it for its own now.
+    expect(api.post).toHaveBeenCalledTimes(1)
+    expect(api.post).toHaveBeenCalledWith('/api/v1/admin/campaigns/camp_abc/send', {})
     expect(await screen.findByTestId('history')).toHaveTextContent('goes out to 42 people')
+  })
+
+  it('step 5 schedules for the chosen time, which is the one place the admin\'s clock belongs', async () => {
+    serve({ dailyCap: 100, sentLast24h: 3, remaining: 97 })
+    api.post.mockResolvedValue({})
+    renderPage('/admin/email/send?draft=camp_abc&step=5')
+    expect(await screen.findByText('97')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Your local time'), { target: { value: '2026-10-01T18:00' } })
+    await user().click(screen.getByRole('button', { name: 'Schedule' }))
+
+    expect(api.post).toHaveBeenCalledWith('/api/v1/admin/campaigns/camp_abc/schedule',
+      { sendAt: new Date('2026-10-01T18:00').toISOString() })
+    expect(await screen.findByTestId('history')).toHaveTextContent('is scheduled for')
   })
 
   it('step 5 warns when the audience is over what is left, and locks Send until acknowledged', async () => {
@@ -322,7 +333,8 @@ describe('Send Campaign, later steps', () => {
 
     const warning = await screen.findByRole('alert')
     expect(warning).toHaveTextContent('32 people are over')
-    expect(warning).toHaveTextContent('never retried')
+    expect(warning).toHaveTextContent('not retried automatically')
+    expect(warning).toHaveTextContent('retry them from Campaign History')
     const send = screen.getByRole('button', { name: 'Send now' })
     expect(send).toBeDisabled()
 

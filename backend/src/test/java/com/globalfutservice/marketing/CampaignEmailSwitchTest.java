@@ -114,6 +114,36 @@ class CampaignEmailSwitchTest {
     }
 
     @Test
+    @DisplayName("the job resumes a send that stopped, before sending anything newly due")
+    void jobResumesStalled() {
+        CampaignService jobService = mock(CampaignService.class);
+        CampaignEntity stalled = new CampaignEntity("s", "Subject", "Heading", "Body",
+                CampaignAudience.ALL_OPTED_IN, 1L);
+        when(campaigns.findStalled(any())).thenReturn(List.of(stalled));
+        when(campaigns.findDue(any())).thenReturn(List.of(draft));
+        when(props.notifications().emailEnabled()).thenReturn(true);
+
+        new CampaignScheduleJob(campaigns, jobService, props).sendDueCampaigns();
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(jobService);
+        order.verify(jobService).resumeStalled(stalled.getId());
+        order.verify(jobService).dispatch(draft.getId());
+    }
+
+    @Test
+    @DisplayName("the job leaves a stopped send alone while email is off")
+    void jobHoldsStalled() {
+        CampaignService jobService = mock(CampaignService.class);
+        CampaignEntity stalled = new CampaignEntity("s", "Subject", "Heading", "Body",
+                CampaignAudience.ALL_OPTED_IN, 1L);
+        when(campaigns.findStalled(any())).thenReturn(List.of(stalled));
+
+        new CampaignScheduleJob(campaigns, jobService, props).sendDueCampaigns();
+
+        verifyNoInteractions(jobService);
+    }
+
+    @Test
     @DisplayName("an empty tick dispatches nothing")
     void emptyTick() {
         CampaignService jobService = mock(CampaignService.class);

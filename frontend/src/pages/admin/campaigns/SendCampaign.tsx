@@ -268,16 +268,21 @@ export default function SendCampaign() {
   /**
    * Hand the campaign to the background job rather than send it in this request.
    *
-   * <p>"Send now" is scheduled a minute ahead: the job that runs scheduled campaigns
-   * picks it up and sends it. Sending inside the request would hold it open for as long
-   * as the relay takes, and the proxy in front of the API gives up after 60 seconds —
-   * the admin would be told it failed while it carried on sending.
+   * <p>Both buttons only queue it; the job that runs scheduled campaigns does the sending.
+   * Sending inside the request would hold it open for as long as the relay takes, and the
+   * proxy in front of the API gives up after 60 seconds — the admin would be told it
+   * failed while it carried on sending.
+   *
+   * <p>"Send now" asks the server to queue it for the server's own now. It used to
+   * schedule the browser's clock plus a minute, which a computer whose clock is slow
+   * had refused as "in the past", and one whose clock is fast scheduled that much later
+   * while this screen promised about a minute.
    */
-  const schedule = async (whenIso: string, notice: string) => {
+  const queue = async (request: () => Promise<unknown>, notice: string) => {
     if (!campaign) return
     setSaving(true)
     try {
-      await api.post(`/api/v1/admin/campaigns/${campaign.publicId}/schedule`, { sendAt: whenIso })
+      await request()
       navigate('/admin/email/history', { state: { notice } })
     } catch (e) {
       fail(e, 'The campaign could not be scheduled.')
@@ -359,10 +364,12 @@ export default function SendCampaign() {
             audienceLabel={chosen?.label ?? audience} audienceCount={chosen?.count ?? null}
             quota={quota} today={today} onEdit={(n) => void goTo(n)} onBack={() => void goTo(4)}
             busy={saving}
-            onSendNow={() => void schedule(new Date(Date.now() + 60_000).toISOString(),
+            onSendNow={() => void queue(
+              () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/send`, {}),
               `"${fields.title}" is queued and goes out to ${chosen?.count ?? 'its'} `
                 + `${chosen?.count === 1 ? 'person' : 'people'} within about a minute.`)}
-            onSchedule={(whenIso) => void schedule(whenIso,
+            onSchedule={(whenIso) => void queue(
+              () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/schedule`, { sendAt: whenIso }),
               `"${fields.title}" is scheduled for ${new Date(whenIso).toLocaleString()}.`)}
           />
         )}

@@ -14,103 +14,50 @@ Delete an entry when it is fixed; do not delete one because it has gone quiet.
 
 ---
 
-## 1. A campaign interrupted mid-send stays SENDING forever
+## 1. Resuming or retrying a send can give one person a second copy
 
-**Where:** `CampaignService.dispatch`, `CampaignRepository.claimForSending`
+**Where:** `CampaignService.resumeStalled`, `CampaignService.retryFailed`
 
-A send claims its campaign by moving it to `SENDING` in one short transaction,
-and only moves it on to `SENT` or `FAILED` when the whole list has been worked
-through. If the process stops in between -- a deploy, a crash, Render restarting
-the service -- nothing ever moves it again. The claim only takes `DRAFT` or
-`SCHEDULED`; the schedule job only looks for `SCHEDULED`; cancel and retry both
-refuse `SENDING`, deliberately, because they cannot tell a send that died from
-one that is still running.
+A row is marked `SENT` only once the relay has said it accepted the message. If
+the connection drops after the relay has the whole message but before its reply
+arrives -- the process is killed, or the network fails -- the row stays `PENDING`
+(or becomes `FAILED`) although the message may already be on its way. Resuming the
+send, or retrying its failures, sends that person the campaign again.
 
-The recipients already sent to stay `SENT`, and the rest stay `PENDING`, so
-nothing is lost -- but nobody else gets the campaign, and there is no way to
-resume it without SQL.
+At most one message per interruption is affected: the one in flight at the time.
 
-**When it bites:** a deploy or restart that lands while a campaign is going out.
-The window is as long as the send, which is one SMTP round trip per recipient.
+**When it bites:** a deploy or crash in the middle of a send, followed by the
+automatic resume; or a retry after a failure that was really a lost reply.
 
-**What it would take:** a way to tell a dead send from a live one. The simplest
-is a sweep at startup that moves `SENDING` campaigns to `FAILED`, after which
-"Resume send" on Campaign History picks up the `PENDING` rows. That is only safe
-while the backend runs as a single instance, and a message in flight at the
-moment of the crash may have been delivered while its row still says `PENDING`,
-so a resume can give that one person a second copy.
+**What it would take:** a way of sending that the provider can de-duplicate.
+SMTP has none. An HTTP sending API that accepts an idempotency key per message
+would, if the provider offers one; that is a change of transport, not a fix to
+this code.
 
-**Evidence:** read in the code, not reproduced.
+**Evidence:** observed locally. The backend was killed two seconds into a send
+to a local SMTP sink; the sink received the complete first message after the
+backend had died, and that recipient's row was still `PENDING`. Whether a real
+relay delivers a message whose acceptance was never acknowledged depends on the
+relay; that part has not been tested.
 
 ---
 
-## 2. A campaign in which every recipient failed is marked SENT
+## 2. A campaign withdrawn automatically looks like one an admin cancelled
 
-**Where:** `CampaignService.dispatch`
+**Where:** `CampaignService.dispatch`, `CampaignRepository.withdrawIfOfferEnded`
 
-`dispatch` marks a campaign `SENT` whenever it gets to the end of its list,
-however many messages the relay actually accepted. `FAILED` is reserved for the
-send itself breaking. A campaign whose every message was refused therefore
-appears under "Sent" with a green badge.
+A scheduled campaign that comes due after its offer has ended is withdrawn rather
+than sent, and is recorded as `CANCELLED`. Campaign History shows it as cancelled,
+exactly as if an admin had pressed Cancel. The reason -- the offer ended before it
+could go out -- is written only to the server log.
 
-The analytics beneath it show the failures, and Campaign History now offers
-"Retry N failed" on it, so the problem is visible to someone who looks -- but the
-status says the opposite of what happened.
+**When it bites:** an admin looking at Campaign History after a campaign was held
+back past its offer's end, by downtime or with email switched off, and wondering
+who cancelled it.
 
-**When it bites:** whenever the relay refuses everything: bad credentials, a
-provider's daily limit already spent, a relay that is down.
+**What it would take:** somewhere on the campaign to record why it ended the way it
+did -- a short reason column, which needs a migration -- shown beside the status.
 
-**What it would take:** decide what the status should say for a campaign that
-reached nobody, or only some people. Marking a campaign that reached nobody as
-`FAILED` is the smallest change; a separate state for a partial send is the more
-honest one, and needs a migration for the status check constraint.
-
-**Evidence:** reproduced locally. A campaign sent to two people with nothing
-listening on the relay's port finished `SENT` with both rows `FAILED` and
-`finished: 0 sent` in the log.
-
----
-
-## 3. A campaign that goes out late can go out after its offer ended
-
-**Where:** `CampaignService.dispatch`, `CampaignScheduleJob`
-
-Scheduling refuses a send time after the offer's last day, and "Send now" and
-retry refuse an offer that has already ended. `dispatch` checks neither: it sends
-whatever the job hands it. A campaign that is due but does not go out on time is
-sent whenever it finally does, whether or not its offer is still running.
-
-Two things delay a due campaign. The service being down is one. The other is new
-and deliberate: while `GFS_EMAIL_ENABLED` is false, the job leaves due campaigns
-`SCHEDULED` so they go out once email is switched back on -- which may be after
-the offer they announce has closed.
-
-**When it bites:** a campaign scheduled close to its offer's last day, held back
-past that day by downtime or by email being switched off.
-
-**What it would take:** check the offer's end in `dispatch` before claiming, and
-decide what happens to a campaign that fails the check -- `CANCELLED` with a
-logged reason is the obvious candidate, since it can no longer be sent as
-written.
-
-**Evidence:** read in the code, not reproduced.
-
----
-
-## 4. The campaign builder's "Send now" trusts the admin's clock
-
-**Where:** `frontend/src/pages/admin/campaigns/SendCampaign.tsx`
-
-The builder's final step implements "Send now" as a schedule for the browser's
-current time plus one minute. The server checks that time only against its own
-clock. An admin's computer whose clock is more than a minute slow is refused
-with "Pick a time in the future"; one that is fast schedules the campaign that
-far ahead, while the screen promises it goes out within about a minute.
-
-**When it bites:** an admin on a machine whose clock has drifted. Rare, but the
-failure is silent in the fast direction.
-
-**What it would take:** have the builder call `POST /campaigns/{id}/send`, which
-now queues the campaign for the server's own "now" and returns straight away.
-
-**Evidence:** read in the code, not reproduced.
+**Evidence:** observed locally. A campaign seeded as due with an offer that ended
+the day before was withdrawn on the first tick; it showed only `CANCELLED`, and the
+reason appeared in the log alone.
