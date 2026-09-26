@@ -355,26 +355,41 @@ public class CampaignService {
         return c;
     }
 
-    /** Validate and hand to {@link #dispatch}. Not transactional: the send is not one. */
-    public int sendNow(String publicId) {
+    /**
+     * Queue a campaign to go out now, and return at once.
+     *
+     * <p>It does not send. It makes the campaign due this minute and leaves the sending to
+     * {@link CampaignScheduleJob}, which picks it up within about a minute. The send used
+     * to run here, on the request thread, and the storefront's nginx gives an API request
+     * 60 seconds ({@code proxy_read_timeout} in {@code frontend/nginx.conf.template}): a
+     * campaign that took longer showed the admin a 504 while the backend carried on
+     * sending, and a retry was then refused because the campaign was no longer a draft.
+     * Queued, the request is a single UPDATE and no proxy can cut a send off halfway.
+     *
+     * <p>A campaign cancelled in the meantime is simply not claimed: the job's conditional
+     * claim only takes a campaign that is still SCHEDULED.
+     */
+    @Transactional
+    public CampaignEntity sendNow(String publicId) {
         requireEmailEnabled();
-        CampaignEntity c = readForSend(publicId);
-        return dispatch(c.getId());
-    }
-
-    @Transactional(readOnly = true)
-    protected CampaignEntity readForSend(String publicId) {
         CampaignEntity c = require(publicId);
         if (c.getStatus() != CampaignStatus.DRAFT && c.getStatus() != CampaignStatus.SCHEDULED) {
             throw new ApiExceptions.BadRequestException(
                     "Only a draft or scheduled campaign can be sent.");
         }
         requireSendable(c);
+        c.setScheduledAt(clock.instant());
+        c.setStatus(CampaignStatus.SCHEDULED);
+        c.touch();
+        log.info("Campaign {} queued to send now", c.getPublicId());
         return c;
     }
 
     /**
      * Claim a campaign, materialise its audience, and work through it.
+     *
+     * <p>Called by {@link CampaignScheduleJob} only, never on a request thread -- see
+     * {@link #sendNow} for why.
      *
      * <p>Deliberately not {@code @Transactional}. A send takes as long as it takes, and
      * holding one transaction across hundreds of SMTP round trips would pin a connection

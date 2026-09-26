@@ -307,7 +307,7 @@ function CampaignCard({ campaign, options, showAnalytics, onChanged, onError }: 
 
   const send = () => act(
     () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/send`, {}),
-    'Campaign sent.')
+    'Campaign queued. It goes out within about a minute.')
 
   const schedule = () => act(
     () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/schedule`, {
