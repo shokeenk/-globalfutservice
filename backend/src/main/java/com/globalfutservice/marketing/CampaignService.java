@@ -11,8 +11,13 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,25 +41,38 @@ public class CampaignService {
     /** Rows pulled per pass, so one campaign cannot exhaust memory. */
     private static final int BATCH = 100;
 
+    /**
+     * The calendar an offer's last day is counted in. The business runs on Indian time,
+     * and "valid till 10 Feb" means until the end of 10 Feb there — not in UTC, where it
+     * would end at 05:30 the next morning for a customer reading it in Mumbai.
+     */
+    public static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Kolkata");
+
+    private static final DateTimeFormatter DAY =
+            DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH);
+
     private final CampaignRepository campaigns;
     private final CampaignRecipientRepository recipients;
     private final MarketingAudienceRepository audience;
     private final AccountRepository accounts;
     private final CampaignSender sender;
     private final CampaignRenderer renderer;
+    private final Clock clock;
 
     public CampaignService(CampaignRepository campaigns,
                            CampaignRecipientRepository recipients,
                            MarketingAudienceRepository audience,
                            AccountRepository accounts,
                            CampaignSender sender,
-                           CampaignRenderer renderer) {
+                           CampaignRenderer renderer,
+                           Clock clock) {
         this.campaigns = campaigns;
         this.recipients = recipients;
         this.audience = audience;
         this.accounts = accounts;
         this.sender = sender;
         this.renderer = renderer;
+        this.clock = clock;
     }
 
     // ---- composing ---------------------------------------------------------
@@ -63,6 +81,55 @@ public class CampaignService {
     public CampaignEntity create(String title, String subject, String heading, String body,
                                  CampaignAudience segment, Long adminId) {
         return campaigns.save(new CampaignEntity(title, subject, heading, body, segment, adminId));
+    }
+
+    /**
+     * A new draft from the campaign builder's first step.
+     *
+     * <p>Every audience is consent-only and this does not choose one: the draft starts on
+     * everyone who opted in, and the audience is picked in its own step.
+     */
+    @Transactional
+    public CampaignEntity createDraft(CampaignDetails details, Long adminId) {
+        CampaignEntity c = new CampaignEntity(details.title(), details.subject(),
+                details.promoTitle(), details.description(), CampaignAudience.ALL_OPTED_IN, adminId);
+        apply(c, details);
+        return campaigns.save(c);
+    }
+
+    /** Replace the first step's fields on a draft, whole. */
+    @Transactional
+    public CampaignEntity replaceDetails(String publicId, CampaignDetails details) {
+        CampaignEntity c = requireEditable(publicId);
+        apply(c, details);
+        c.touch();
+        return c;
+    }
+
+    private void apply(CampaignEntity c, CampaignDetails d) {
+        if (d.offerValidUntil() != null && d.offerValidUntil().isBefore(today())) {
+            throw new ApiExceptions.BadRequestException(
+                    "The offer's last day has already passed. Pick today or a later date.");
+        }
+        c.setTitle(d.title().trim());
+        c.setSubject(d.subject().trim());
+        c.setType(d.type());
+        c.setHeading(d.promoTitle().trim());
+        c.setBody(d.description().strip());
+        c.setOfferText(blankToNull(d.offerText()));
+        c.setPromoCode(blankToNull(d.promoCode()));
+        c.setOfferValidUntil(d.offerValidUntil());
+        c.setShowPromoCode(d.showPromoCode());
+        c.setTrackingEnabled(d.trackingEnabled());
+        if (d.showButton()) {
+            // The label is the reference's; the destination is the type's, and always one
+            // of the fixed site pages, so the button cannot point somewhere that 404s.
+            c.setCtaText(CampaignType.BUTTON_TEXT);
+            c.setCtaPath(d.type().buttonPath());
+        } else {
+            c.setCtaText(null);
+            c.setCtaPath(null);
+        }
     }
 
     @Transactional
@@ -172,10 +239,19 @@ public class CampaignService {
     @Transactional
     public CampaignEntity schedule(String publicId, Instant when) {
         CampaignEntity c = requireEditable(publicId);
-        if (when == null || !when.isAfter(Instant.now())) {
+        if (when == null || !when.isAfter(clock.instant())) {
             throw new ApiExceptions.BadRequestException("Pick a time in the future.");
         }
         requireSendable(c);
+        LocalDate sendDay = when.atZone(BUSINESS_ZONE).toLocalDate();
+        if (c.getOfferValidUntil() != null && sendDay.isAfter(c.getOfferValidUntil())) {
+            // Refused rather than allowed: a campaign that lands after its own offer has
+            // ended tells every recipient about a code that no longer works.
+            throw new ApiExceptions.BadRequestException(
+                    "This would go out after the offer ends on "
+                            + DAY.format(c.getOfferValidUntil())
+                            + ". Pick an earlier time or change the offer's last day.");
+        }
         c.setScheduledAt(when);
         c.setStatus(CampaignStatus.SCHEDULED);
         c.touch();
@@ -321,12 +397,22 @@ public class CampaignService {
             throw new ApiExceptions.BadRequestException(
                     "A campaign needs a subject, a heading and a message before it can go out.");
         }
+        if (c.getOfferValidUntil() != null && c.getOfferValidUntil().isBefore(today())) {
+            throw new ApiExceptions.BadRequestException(
+                    "This offer ended on " + DAY.format(c.getOfferValidUntil())
+                            + ". Change the date or clear it before sending.");
+        }
         if (audienceSize(c.getAudience()) == 0) {
             // Not silently succeeding on an empty list: an admin who schedules a campaign
             // to nobody should be told now, not discover it in the analytics afterwards.
             throw new ApiExceptions.BadRequestException(
                     "No opted-in customers match this audience, so there is nobody to send to.");
         }
+    }
+
+    /** Today, in the business's calendar. */
+    LocalDate today() {
+        return clock.instant().atZone(BUSINESS_ZONE).toLocalDate();
     }
 
     private static boolean isBlank(String s) {

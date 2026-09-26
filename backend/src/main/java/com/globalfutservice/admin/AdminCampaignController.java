@@ -1,10 +1,12 @@
 package com.globalfutservice.admin;
 
 import com.globalfutservice.marketing.CampaignAudience;
+import com.globalfutservice.marketing.CampaignDetails;
 import com.globalfutservice.marketing.CampaignEntity;
 import com.globalfutservice.marketing.CampaignService;
 import com.globalfutservice.marketing.CampaignStats;
 import com.globalfutservice.marketing.CampaignStatus;
+import com.globalfutservice.marketing.CampaignType;
 import com.globalfutservice.marketing.CtaPreset;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
@@ -13,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -68,7 +73,41 @@ public class AdminCampaignController {
                               String body, String promoCode, String ctaText, String ctaPath,
                               boolean hasBanner, String audience, String audienceLabel,
                               String status, Instant scheduledAt, Instant completedAt,
-                              Instant updatedAt, CampaignStats stats) {
+                              Instant updatedAt, CampaignStats stats,
+                              String type, String offerText, LocalDate offerValidUntil,
+                              boolean showButton, boolean showPromoCode,
+                              boolean trackingEnabled) {
+    }
+
+    /**
+     * The campaign builder's first step, whole.
+     *
+     * <p>The limits are the reference design's: its subject counter reads out of 100 and
+     * its description counter out of 500. They apply to this path only. The older editor
+     * keeps its own, looser limits, so drafts written before this existed can still be
+     * opened and saved there without being truncated.
+     */
+    public record DetailsRequest(
+            @NotBlank(message = "Give the campaign a name")
+            @Size(max = 120, message = "Keep the name to 120 characters") String title,
+            @NotBlank(message = "An email subject is required")
+            @Size(max = 100, message = "Keep the subject to 100 characters") String subject,
+            @NotNull(message = "Choose a campaign type") CampaignType type,
+            @NotBlank(message = "A promo title is required")
+            @Size(max = 200, message = "Keep the promo title to 200 characters") String promoTitle,
+            @Size(max = 40, message = "Keep the offer to 40 characters") String offerText,
+            @Size(max = 40, message = "Keep the code to 40 characters") String promoCode,
+            LocalDate offerValidUntil,
+            @NotBlank(message = "Describe the offer")
+            @Size(max = 500, message = "Keep the description to 500 characters") String description,
+            boolean showButton,
+            boolean showPromoCode,
+            boolean trackingEnabled) {
+
+        CampaignDetails toDetails() {
+            return new CampaignDetails(title, subject, type, promoTitle, offerText, promoCode,
+                    offerValidUntil, description, showButton, showPromoCode, trackingEnabled);
+        }
     }
 
     public record CreateRequest(
@@ -151,6 +190,20 @@ public class AdminCampaignController {
                 request.heading(), request.body(), segment, admin.id())));
     }
 
+    @PostMapping("/drafts")
+    @Operation(summary = "Create a draft from the builder's first step")
+    public ResponseEntity<CampaignDto> createDraft(@Valid @RequestBody DetailsRequest request,
+                                                   @CurrentAccount AccountPrincipal admin) {
+        return ResponseEntity.ok(toDto(campaigns.createDraft(request.toDetails(), admin.id())));
+    }
+
+    @PutMapping("/{publicId}/details")
+    @Operation(summary = "Replace the builder's first step on a draft")
+    public ResponseEntity<CampaignDto> replaceDetails(@PathVariable String publicId,
+                                                      @Valid @RequestBody DetailsRequest request) {
+        return ResponseEntity.ok(toDto(campaigns.replaceDetails(publicId, request.toDetails())));
+    }
+
     @PostMapping("/{publicId}")
     @Operation(summary = "Edit a draft")
     public ResponseEntity<CampaignDto> update(@PathVariable String publicId,
@@ -218,7 +271,9 @@ public class AdminCampaignController {
                 c.getBody(), c.getPromoCode(), c.getCtaText(), c.getCtaPath(), c.hasBanner(),
                 c.getAudience().name(), c.getAudience().label(), c.getStatus().name(),
                 c.getScheduledAt(), c.getCompletedAt(), c.getUpdatedAt(),
-                campaigns.stats(c.getId()));
+                campaigns.stats(c.getId()),
+                c.getType().name(), c.getOfferText(), c.getOfferValidUntil(),
+                c.getCtaPath() != null, c.isShowPromoCode(), c.isTrackingEnabled());
     }
 
     private static <E extends Enum<E>> E parse(Class<E> type, String raw) {
