@@ -256,6 +256,16 @@ class PromotionalEmailTest {
         }
 
         @Test
+        @DisplayName("is 600px for Outlook but shrinks to a phone everywhere else")
+        void fluidContainer() {
+            String h = html(toty());
+            // The attribute is Outlook's width; the style lets every other client shrink it.
+            assertThat(h).contains("width=\"600\"").contains("width:100%;max-width:600px;")
+                    // Not a bare substring check: "max-width:600px;" contains "width:600px;".
+                    .doesNotContain("style=\"width:600px");
+        }
+
+        @Test
         @DisplayName("is laid out in tables, which is what Outlook can render")
         void tableLayout() {
             String h = html(toty());

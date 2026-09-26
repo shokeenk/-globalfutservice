@@ -114,9 +114,12 @@ public final class PromotionalEmail {
 
         b.append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" ")
          .append("border=\"0\" style=\"background:").append(PAGE).append(";\"><tr>")
-         .append("<td align=\"center\" style=\"padding:24px 12px;\">\n")
+         .append("<td align=\"center\" class=\"gfs-outer\" style=\"padding:24px 12px;\">\n")
+         // width="600" (below) is the width Outlook reads; the style is what every other
+         // client reads. A fixed width:600px made the email 624px wide inside a 375px
+         // phone, so it had to be scrolled sideways or shrunk to fit.
          .append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" ")
-         .append("border=\"0\" style=\"width:600px;max-width:600px;background:#FFFFFF;")
+         .append("border=\"0\" style=\"width:100%;max-width:600px;background:#FFFFFF;")
          .append("border:1px solid ").append(LINE).append(";border-radius:12px;\">\n");
 
         header(b, assets);
@@ -157,6 +160,11 @@ public final class PromotionalEmail {
          .append("  .gfs-pad{padding-left:20px !important;padding-right:20px !important;}\n")
          .append("  .gfs-hide{display:none !important;}\n")
          .append("  .gfs-h1{font-size:34px !important;line-height:38px !important;}\n")
+         .append("  .gfs-outer{padding:12px 6px !important;}\n")
+         // Three badges have to fit a column about 310px wide on a small phone.
+         .append("  .gfs-badge-icon{padding-right:4px !important;}\n")
+         .append("  .gfs-badge-icon img{width:18px !important;height:18px !important;}\n")
+         .append("  .gfs-badge-label{font-size:9px !important;padding-right:8px !important;}\n")
          .append("}\n</style>\n</head>\n");
     }
 
@@ -233,11 +241,11 @@ public final class PromotionalEmail {
         b.append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" ")
          .append("style=\"margin-top:20px;\"><tr>\n");
         for (String[] badge : BADGES) {
-            b.append("<td valign=\"middle\" style=\"padding-right:7px;\">")
+            b.append("<td valign=\"middle\" class=\"gfs-badge-icon\" style=\"padding-right:7px;\">")
              .append("<img src=\"").append(EmailTemplate.esc(assets)).append("/email/").append(badge[0])
              .append("\" width=\"22\" height=\"22\" alt=\"\" style=\"display:block;border:0;")
              .append("width:22px;height:22px;\"/></td>\n")
-             .append("<td valign=\"middle\" style=\"font-family:").append(FONT)
+             .append("<td valign=\"middle\" class=\"gfs-badge-label\" style=\"font-family:").append(FONT)
              .append(";font-size:10px;line-height:13px;font-weight:700;color:").append(INK)
              .append(";padding-right:14px;white-space:nowrap;\">")
              .append(upper(badge[1])).append("<br/>").append(upper(badge[2])).append("</td>\n");
