@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** A promotional campaign, as composed in the admin panel. */
@@ -68,6 +69,30 @@ public class CampaignEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    /** What the campaign is about; see {@link CampaignType}. Not who receives it. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "campaign_type", nullable = false)
+    private CampaignType type = CampaignType.GENERAL;
+
+    @Column(name = "offer_text")
+    private String offerText;
+
+    /** Last day the offer can be used, in the business's calendar. */
+    @Column(name = "offer_valid_until")
+    private LocalDate offerValidUntil;
+
+    @Column(name = "show_promo_code", nullable = false)
+    private boolean showPromoCode = true;
+
+    @Column(name = "tracking_enabled", nullable = false)
+    private boolean trackingEnabled = true;
+
+    @Column(name = "hero_kicker")
+    private String heroKicker;
+
+    @Column(name = "hero_subline")
+    private String heroSubline;
 
     @Column(name = "created_by", nullable = false, updatable = false)
     private Long createdBy;
@@ -134,6 +159,20 @@ public class CampaignEntity {
     public void setStartedAt(Instant v) { this.startedAt = v; }
     public Instant getCompletedAt() { return completedAt; }
     public void setCompletedAt(Instant v) { this.completedAt = v; }
+    public CampaignType getType() { return type; }
+    public void setType(CampaignType v) { this.type = v; }
+    public String getOfferText() { return offerText; }
+    public void setOfferText(String v) { this.offerText = v; }
+    public LocalDate getOfferValidUntil() { return offerValidUntil; }
+    public void setOfferValidUntil(LocalDate v) { this.offerValidUntil = v; }
+    public boolean isShowPromoCode() { return showPromoCode; }
+    public void setShowPromoCode(boolean v) { this.showPromoCode = v; }
+    public boolean isTrackingEnabled() { return trackingEnabled; }
+    public void setTrackingEnabled(boolean v) { this.trackingEnabled = v; }
+    public String getHeroKicker() { return heroKicker; }
+    public void setHeroKicker(String v) { this.heroKicker = v; }
+    public String getHeroSubline() { return heroSubline; }
+    public void setHeroSubline(String v) { this.heroSubline = v; }
     public Long getCreatedBy() { return createdBy; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

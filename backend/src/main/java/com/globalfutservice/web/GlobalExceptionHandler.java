@@ -7,9 +7,11 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -147,6 +149,33 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiError.of("invalid_request",
                 "This request is missing " + field + ", or sent it in a form we cannot read.",
                 traceId()));
+    }
+
+    /**
+     * The endpoint exists, but not in any format the request said it would take.
+     *
+     * <p>Unmapped, this fell to the catch-all and read as a server fault. It is not one:
+     * it is thrown while choosing a handler, before any controller runs, because the
+     * request's Accept header and the endpoint's declared media type have nothing in
+     * common. That is how the campaign preview failed on every attempt — the page asked
+     * for JSON from an endpoint that only produces HTML — and it was logged as an
+     * unhandled 500 with a stack trace into Spring's handler mapping.
+     *
+     * <p>The body is written as JSON with the type set explicitly. Left to negotiation it
+     * would be refused by the same Accept header that caused this, and a 406 whose own
+     * error cannot be written is a 500 again.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ApiError> notAcceptable(HttpMediaTypeNotAcceptableException e) {
+        String trace = traceId();
+        // Warn, not error: the server is fine. But a 406 from our own frontend means a
+        // page and an endpoint disagree, and that should be findable.
+        log.warn("[{}] Not acceptable: {} (supported: {})", trace, e.getMessage(),
+                e.getSupportedMediaTypes());
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ApiError.of("not_acceptable",
+                        "This can't be returned in the format the request asked for.", trace));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

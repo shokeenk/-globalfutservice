@@ -35,10 +35,29 @@ public class CampaignRenderer {
                                                String pixelUrl, UUID recipientToken) {
         String ctaUrl = ctaUrl(c, recipientToken);
         return PromotionalEmail.render(
-                new PromotionalEmail.Campaign(c.getSubject(), c.getHeading(), c.getBody(),
-                        c.getPromoCode(), c.getCtaText(), ctaUrl, bannerUrl(c)),
+                new PromotionalEmail.Campaign(c.getSubject(), c.getHeroKicker(), c.getHeading(),
+                        c.getHeroSubline(), c.getBody(), c.getOfferText(),
+                        // Kept on the campaign but left out of the email when switched off.
+                        c.isShowPromoCode() ? c.getPromoCode() : null,
+                        c.getOfferValidUntil(), c.getCtaText(), ctaUrl, bannerUrl(c)),
                 brand(),
                 new PromotionalEmail.Delivery(unsubscribeUrl, pixelUrl));
+    }
+
+    /**
+     * The copy one recipient receives, with the campaign's tracking switch applied.
+     *
+     * <p>The one place that decision is made. With tracking on, the message carries the
+     * recipient's open pixel and its button goes through the click counter; with it off,
+     * neither — the button links straight to the page and nothing reports back. Deciding
+     * it here rather than at the call site means a new caller cannot forget the switch.
+     */
+    public TransactionalEmails.Rendered forRecipient(CampaignEntity c, String unsubscribeUrl,
+                                                     UUID recipientToken) {
+        boolean track = c.isTrackingEnabled();
+        return render(c, unsubscribeUrl,
+                track ? pixelUrl(recipientToken) : null,
+                track ? recipientToken : null);
     }
 
     /**
@@ -49,6 +68,40 @@ public class CampaignRenderer {
      */
     public TransactionalEmails.Rendered preview(CampaignEntity c) {
         return render(c, props.publicUrl() + "/unsubscribe?preview=1", null, null);
+    }
+
+    /**
+     * The builder's live preview: what the fields currently on screen would send.
+     *
+     * <p>Rendered through the same template as a real send, so the preview cannot drift
+     * from what goes out. Inert in the same ways {@link #preview} is — no pixel, the button
+     * links straight to the page, the unsubscribe link is a dummy — because a preview must
+     * never record anything against a real recipient.
+     *
+     * <p>Rendered while the admin is still typing, so an empty headline shows a
+     * placeholder rather than an empty hero; every other empty field is simply absent,
+     * exactly as it would be in the sent email.
+     *
+     * @param bannerUrl the draft's banner, if it has one yet, or null
+     */
+    public TransactionalEmails.Rendered previewOf(CampaignDetails d, String bannerUrl) {
+        CampaignType type = d.type() == null ? CampaignType.GENERAL : d.type();
+        String heading = d.promoTitle() == null || d.promoTitle().isBlank()
+                ? "Your promo title" : d.promoTitle();
+        return PromotionalEmail.render(
+                new PromotionalEmail.Campaign(nz(d.subject()), null, heading, null,
+                        d.description(), d.offerText(),
+                        d.showPromoCode() ? d.promoCode() : null,
+                        d.offerValidUntil(),
+                        d.showButton() ? CampaignType.BUTTON_TEXT : null,
+                        d.showButton() ? props.publicUrl() + type.buttonPath() : null,
+                        bannerUrl),
+                brand(),
+                new PromotionalEmail.Delivery(props.publicUrl() + "/unsubscribe?preview=1", null));
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     public String unsubscribeUrl(UUID accountToken, String campaignPublicId) {
@@ -82,9 +135,19 @@ public class CampaignRenderer {
         return props.publicUrl() + "/api/v1/marketing/c/" + recipientToken;
     }
 
+    /**
+     * The banner's address, versioned by the campaign's last edit.
+     *
+     * <p>The banner endpoint is cached for 30 days, and it used to be addressed by the
+     * campaign alone — so replacing a banner left every cache, including the admin's own
+     * preview, showing the old one for a month. The version changes whenever the campaign
+     * is edited, which is more often than the banner changes; a spare re-fetch is cheap and
+     * a stale banner in a sent campaign is not.
+     */
     public String bannerUrl(CampaignEntity c) {
         return c.hasBanner()
                 ? props.publicUrl() + "/api/v1/marketing/campaigns/" + c.getPublicId() + "/banner"
+                        + "?v=" + c.getUpdatedAt().toEpochMilli()
                 : null;
     }
 
