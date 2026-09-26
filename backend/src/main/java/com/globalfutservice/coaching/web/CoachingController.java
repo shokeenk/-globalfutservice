@@ -81,9 +81,19 @@ public class CoachingController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            /*
+             * The rate-card variant being bought, when the slots are for a checkout: a
+             * six-pack session is forty minutes, and laying the calendar out in hours
+             * would hide forty-minute slots that fit. Absent, the single-session length,
+             * as before.
+             */
+            @RequestParam(required = false) String variant) {
 
         CoachEntity coach = coaching.requireCoach(coachId);
+        Duration length = variant == null || variant.isBlank()
+                ? coaching.policy().sessionLength()
+                : coaching.sessionLengthForVariant(variant.trim());
         Instant now = clock.instant();
         Instant start = from != null ? from : now;
         Instant end = to != null ? to : start.plus(Duration.ofDays(14));
@@ -91,7 +101,7 @@ public class CoachingController {
             throw new ApiExceptions.BadRequestException("The end of the range must follow its start.");
         }
 
-        List<Instant> slots = coaching.availableSlots(coach, start, end);
+        List<Instant> slots = coaching.availableSlots(coach, start, end, length);
         return ResponseEntity.ok()
                 // Availability goes stale the moment somebody books. A minute is enough to
                 // absorb a burst of calendar paging without showing a taken slot.
@@ -115,7 +125,7 @@ public class CoachingController {
                          * Booking re-derives legality against the length actually bought,
                          * so this number is a display hint, never the authority.
                          */
-                        (int) coaching.policy().sessionLength().toMinutes(),
+                        (int) length.toMinutes(),
                         slots));
     }
 

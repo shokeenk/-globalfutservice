@@ -491,7 +491,7 @@ public class OrderService {
             // last point at which the variant is known -- booking happens later and sees
             // only a pool of credits.
             coachingService.grantCredits(paid.getAccountId(), paid.getId(), sessions,
-                    paid.getPublicRef(), props.coaching().sessionLengthFor(paid.getVariant()));
+                    paid.getPublicRef(), coachingService.sessionLengthForVariant(paid.getVariant()));
 
             // The customer's next step is Discord, so the invite goes out the moment the
             // money is confirmed -- by whichever path confirmed it, gateway or operator.
