@@ -2,6 +2,7 @@ package com.globalfutservice.marketing;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,6 +22,23 @@ public interface CampaignRecipientRepository
     long countByCampaignId(Long campaignId);
 
     long countByCampaignIdAndStatus(Long campaignId, String status);
+
+    /**
+     * Put a campaign's failed rows back in the send queue.
+     *
+     * <p>SKIPPED rows -- people who opted out before their message went -- are left alone:
+     * that is a decision the customer made, not a delivery that went wrong.
+     *
+     * @return how many rows were requeued
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update CampaignRecipientEntity r
+               set r.status = 'PENDING', r.failedAt = null, r.error = null
+             where r.campaignId = :campaignId
+               and r.status = 'FAILED'
+            """)
+    int requeueFailed(@Param("campaignId") Long campaignId);
 
     /** Campaign messages the provider accepted since a moment, across every campaign. */
     long countByStatusAndSentAtAfter(String status, java.time.Instant since);

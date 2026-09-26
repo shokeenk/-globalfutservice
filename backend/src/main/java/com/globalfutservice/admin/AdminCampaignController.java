@@ -366,6 +366,14 @@ public class AdminCampaignController {
         return ResponseEntity.ok(toDto(campaigns.sendNow(publicId)));
     }
 
+    @PostMapping("/" + ID + "/retry")
+    @Operation(summary = "Retry the recipients a finished campaign failed to reach",
+            description = "Moves the campaign's FAILED recipients back to the queue and queues the "
+                    + "campaign for the background job. Nobody new is added to the list.")
+    public ResponseEntity<CampaignDto> retry(@PathVariable String publicId) {
+        return ResponseEntity.ok(toDto(campaigns.retryFailed(publicId)));
+    }
+
     @PostMapping("/" + ID + "/cancel")
     @Operation(summary = "Withdraw a draft or scheduled campaign")
     public ResponseEntity<CampaignDto> cancel(@PathVariable String publicId) {

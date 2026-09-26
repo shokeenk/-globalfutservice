@@ -80,6 +80,17 @@ class CampaignEmailSwitchTest {
     }
 
     @Test
+    @DisplayName("a retry is refused before any row is requeued")
+    void retryRefused() {
+        draft.setStatus(CampaignStatus.SENT);
+
+        assertThatThrownBy(() -> service.retryFailed(draft.getPublicId()))
+                .isInstanceOf(ApiExceptions.BadRequestException.class)
+                .hasMessageContaining("Email is switched off");
+        assertThat(draft.getStatus()).isEqualTo(CampaignStatus.SENT);
+    }
+
+    @Test
     @DisplayName("the job leaves due campaigns scheduled rather than claiming them")
     void jobHoldsBack() {
         CampaignService jobService = mock(CampaignService.class);
