@@ -88,6 +88,47 @@ class CampaignRendererSwitchesTest {
         assertThat(c.getPromoCode()).isEqualTo("HUNTER10");
     }
 
+    private static CampaignDetails typed(CampaignType type, String promoTitle, boolean button,
+                                         boolean showCode) {
+        return new CampaignDetails("n", "Subject", type, promoTitle, "15% OFF", "HUNTER10",
+                null, "Body", button, showCode, true);
+    }
+
+    @Test
+    @DisplayName("the live preview is inert: no pixel, no counter, a dummy unsubscribe")
+    void livePreviewIsInert() {
+        String html = renderer.previewOf(typed(CampaignType.COINS, "Coins sale", true, true), null).html();
+
+        assertThat(html)
+                .doesNotContain("/api/v1/marketing/o/")
+                .doesNotContain("/api/v1/marketing/c/")
+                .contains("/unsubscribe?preview=1")
+                .contains("href=\"" + SITE + "/order?service=TRADING_SERVICE\"");
+    }
+
+    @Test
+    @DisplayName("the live preview's button follows the type chosen on screen")
+    void livePreviewButtonFollowsType() {
+        assertThat(renderer.previewOf(typed(CampaignType.BOOSTING, "Boost", true, true), null).html())
+                .contains("href=\"" + SITE + "/boosting\"");
+        assertThat(renderer.previewOf(typed(CampaignType.COACHING, "Coach", false, true), null).html())
+                .doesNotContain("&rarr;");
+    }
+
+    @Test
+    @DisplayName("an empty headline previews as a placeholder rather than an empty hero")
+    void livePreviewPlaceholder() {
+        assertThat(renderer.previewOf(typed(CampaignType.GENERAL, "  ", true, true), null).html())
+                .contains("YOUR PROMO <span style=\"color:#DB1825;\">TITLE</span>");
+    }
+
+    @Test
+    @DisplayName("the live preview hides the code when the switch is off")
+    void livePreviewHidesCode() {
+        assertThat(renderer.previewOf(typed(CampaignType.COINS, "Sale", true, false), null).html())
+                .doesNotContain("HUNTER10");
+    }
+
     @Test
     @DisplayName("the banner address changes when the campaign does, so a replaced banner is not served stale")
     void bannerIsVersioned() {

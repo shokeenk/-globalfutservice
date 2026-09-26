@@ -70,6 +70,40 @@ public class CampaignRenderer {
         return render(c, props.publicUrl() + "/unsubscribe?preview=1", null, null);
     }
 
+    /**
+     * The builder's live preview: what the fields currently on screen would send.
+     *
+     * <p>Rendered through the same template as a real send, so the preview cannot drift
+     * from what goes out. Inert in the same ways {@link #preview} is — no pixel, the button
+     * links straight to the page, the unsubscribe link is a dummy — because a preview must
+     * never record anything against a real recipient.
+     *
+     * <p>Rendered while the admin is still typing, so an empty headline shows a
+     * placeholder rather than an empty hero; every other empty field is simply absent,
+     * exactly as it would be in the sent email.
+     *
+     * @param bannerUrl the draft's banner, if it has one yet, or null
+     */
+    public TransactionalEmails.Rendered previewOf(CampaignDetails d, String bannerUrl) {
+        CampaignType type = d.type() == null ? CampaignType.GENERAL : d.type();
+        String heading = d.promoTitle() == null || d.promoTitle().isBlank()
+                ? "Your promo title" : d.promoTitle();
+        return PromotionalEmail.render(
+                new PromotionalEmail.Campaign(nz(d.subject()), null, heading, null,
+                        d.description(), d.offerText(),
+                        d.showPromoCode() ? d.promoCode() : null,
+                        d.offerValidUntil(),
+                        d.showButton() ? CampaignType.BUTTON_TEXT : null,
+                        d.showButton() ? props.publicUrl() + type.buttonPath() : null,
+                        bannerUrl),
+                brand(),
+                new PromotionalEmail.Delivery(props.publicUrl() + "/unsubscribe?preview=1", null));
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
+    }
+
     public String unsubscribeUrl(UUID accountToken, String campaignPublicId) {
         return props.publicUrl() + "/unsubscribe?t=" + accountToken + "&c=" + campaignPublicId;
     }

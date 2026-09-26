@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -55,6 +56,17 @@ import java.util.Locale;
 @Tag(name = "Admin — campaigns", description = "Promotional mailing")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminCampaignController {
+
+    /**
+     * A campaign's id in a path, constrained to what an id actually looks like.
+     *
+     * <p>Unconstrained, {@code POST /{publicId}} (edit a draft) also matched
+     * {@code POST /preview} and {@code POST /drafts} whenever their own mappings declined
+     * the request — a preview asked for as JSON was routed to "edit the campaign called
+     * preview". Every id this application issues is {@code camp_} and 16 hex characters,
+     * so the literal routes can no longer be mistaken for one.
+     */
+    private static final String ID = "{publicId:camp_[A-Za-z0-9]+}";
 
     /** Banners are decorative; a multi-megabyte one just slows every inbox down. */
     private static final long MAX_BANNER_BYTES = 2L * 1024 * 1024;
@@ -159,7 +171,7 @@ public class AdminCampaignController {
         return ResponseEntity.ok(found.stream().map(this::toDto).toList());
     }
 
-    @GetMapping("/{publicId}")
+    @GetMapping("/" + ID)
     public ResponseEntity<CampaignDto> one(@PathVariable String publicId) {
         return ResponseEntity.ok(toDto(campaigns.get(publicId)));
     }
@@ -171,7 +183,7 @@ public class AdminCampaignController {
      * iframe. It is the same renderer the send uses, so what is approved here is what goes
      * out.
      */
-    @GetMapping(value = "/{publicId}/preview", produces = MediaType.TEXT_HTML_VALUE)
+    @GetMapping(value = "/" + ID + "/preview", produces = MediaType.TEXT_HTML_VALUE)
     @Operation(summary = "Rendered preview")
     public ResponseEntity<String> preview(@PathVariable String publicId) {
         return ResponseEntity.ok(campaigns.preview(publicId).html());
@@ -190,6 +202,43 @@ public class AdminCampaignController {
                 request.heading(), request.body(), segment, admin.id())));
     }
 
+    /**
+     * The builder's first step as the fields stand on screen, unsaved, as the email.
+     *
+     * <p>Deliberately looser than {@link DetailsRequest}: it renders while the admin is
+     * still typing, so an over-long subject or an empty headline must still produce a
+     * preview rather than an error. The caps here only bound the work a request can ask
+     * for. Nothing is stored and nothing is tracked.
+     */
+    public record PreviewRequest(
+            @Size(max = 1000) String subject,
+            CampaignType type,
+            @Size(max = 1000) String promoTitle,
+            @Size(max = 200) String offerText,
+            @Size(max = 200) String promoCode,
+            LocalDate offerValidUntil,
+            @Size(max = 4000) String description,
+            boolean showButton,
+            boolean showPromoCode,
+            /** The draft being edited, for its banner, or null before the first save. */
+            @Size(max = 64) String campaignId) {
+
+        CampaignDetails toDetails() {
+            return new CampaignDetails(null, subject, type, promoTitle, offerText, promoCode,
+                    offerValidUntil, description, showButton, showPromoCode, false);
+        }
+    }
+
+    @PostMapping(value = "/preview", produces = MediaType.TEXT_HTML_VALUE)
+    @Operation(summary = "Render unsaved builder fields as the email")
+    public ResponseEntity<String> livePreview(@Valid @RequestBody PreviewRequest request) {
+        return ResponseEntity.ok()
+                // It is the admin's work in progress; nothing between here and the browser
+                // should keep a copy.
+                .cacheControl(CacheControl.noStore())
+                .body(campaigns.previewDetails(request.toDetails(), request.campaignId()).html());
+    }
+
     @PostMapping("/drafts")
     @Operation(summary = "Create a draft from the builder's first step")
     public ResponseEntity<CampaignDto> createDraft(@Valid @RequestBody DetailsRequest request,
@@ -197,14 +246,14 @@ public class AdminCampaignController {
         return ResponseEntity.ok(toDto(campaigns.createDraft(request.toDetails(), admin.id())));
     }
 
-    @PutMapping("/{publicId}/details")
+    @PutMapping("/" + ID + "/details")
     @Operation(summary = "Replace the builder's first step on a draft")
     public ResponseEntity<CampaignDto> replaceDetails(@PathVariable String publicId,
                                                       @Valid @RequestBody DetailsRequest request) {
         return ResponseEntity.ok(toDto(campaigns.replaceDetails(publicId, request.toDetails())));
     }
 
-    @PostMapping("/{publicId}")
+    @PostMapping("/" + ID)
     @Operation(summary = "Edit a draft")
     public ResponseEntity<CampaignDto> update(@PathVariable String publicId,
                                               @Valid @RequestBody UpdateRequest request) {
@@ -219,7 +268,7 @@ public class AdminCampaignController {
                 cta, segment)));
     }
 
-    @PostMapping(value = "/{publicId}/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/" + ID + "/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload the campaign banner")
     public ResponseEntity<CampaignDto> banner(@PathVariable String publicId,
                                               @RequestPart("file") MultipartFile file) {
@@ -243,14 +292,14 @@ public class AdminCampaignController {
 
     // ---- sending -----------------------------------------------------------
 
-    @PostMapping("/{publicId}/schedule")
+    @PostMapping("/" + ID + "/schedule")
     @Operation(summary = "Schedule for a future time")
     public ResponseEntity<CampaignDto> schedule(@PathVariable String publicId,
                                                 @RequestBody ScheduleRequest request) {
         return ResponseEntity.ok(toDto(campaigns.schedule(publicId, request.sendAt())));
     }
 
-    @PostMapping("/{publicId}/send")
+    @PostMapping("/" + ID + "/send")
     @Operation(summary = "Send now",
             description = "Resolves the audience, writes a row per recipient, then sends.")
     public ResponseEntity<CampaignDto> send(@PathVariable String publicId) {
@@ -258,7 +307,7 @@ public class AdminCampaignController {
         return ResponseEntity.ok(toDto(campaigns.get(publicId)));
     }
 
-    @PostMapping("/{publicId}/cancel")
+    @PostMapping("/" + ID + "/cancel")
     @Operation(summary = "Withdraw a draft or scheduled campaign")
     public ResponseEntity<CampaignDto> cancel(@PathVariable String publicId) {
         return ResponseEntity.ok(toDto(campaigns.cancel(publicId)));

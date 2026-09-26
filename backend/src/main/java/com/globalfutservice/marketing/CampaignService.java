@@ -234,6 +234,19 @@ public class CampaignService {
         return renderer.preview(require(publicId));
     }
 
+    /**
+     * The builder's live preview of fields not yet saved.
+     *
+     * @param publicId the draft being edited, whose banner the preview should show, or
+     *                 null before the first save
+     */
+    @Transactional(readOnly = true)
+    public TransactionalEmails.Rendered previewDetails(CampaignDetails details, String publicId) {
+        String banner = publicId == null || publicId.isBlank() ? null
+                : campaigns.findByPublicId(publicId).map(renderer::bannerUrl).orElse(null);
+        return renderer.previewOf(details, banner);
+    }
+
     // ---- sending -----------------------------------------------------------
 
     @Transactional
