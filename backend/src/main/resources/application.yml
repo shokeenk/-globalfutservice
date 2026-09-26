@@ -388,6 +388,11 @@ gfs:
     email-from: ${GFS_EMAIL_FROM:orders@globalfutservices.com}
     email-from-name: Global FUT Services
 
+  campaigns:
+    # How many messages the mail provider accepts in a day (Resend's free tier: 100).
+    # Read out on the builder's review step; the provider is what enforces it.
+    daily-cap: ${GFS_EMAIL_DAILY_CAP:100}
+
   rate-limit:
     enabled: true
     quotes-per-minute: 30          # the price-scraping surface

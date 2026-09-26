@@ -5,6 +5,7 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.pricing.GatewayFeeMode;
 import com.globalfutservice.domain.pricing.MarketTaxMode;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -65,7 +66,8 @@ public record AppProperties(
         @Valid @NotNull Loyalty loyalty,
         @Valid @NotNull Coaching coaching,
         @Valid @NotNull ManualPayments manualPayments,
-        @Valid @NotNull FutTransfer futTransfer) {
+        @Valid @NotNull FutTransfer futTransfer,
+        @Valid @NotNull Campaigns campaigns) {
 
     public record Security(
             /** HS256 signing key for access tokens. Minimum 32 bytes. */
@@ -389,6 +391,19 @@ public record AppProperties(
         private static String blankToNull(String value) {
             return value == null || value.isBlank() ? null : value;
         }
+    }
+
+    /**
+     * Promotional campaigns.
+     *
+     * @param dailyCap how many messages the mail provider will accept in a day. Resend's
+     *                 free tier is 100. Not enforced here -- the provider enforces it -- but
+     *                 read out before a send, because a recipient the provider refuses is
+     *                 marked failed and never retried, so a campaign larger than what is
+     *                 left of the day loses the overflow for good.
+     */
+    public record Campaigns(
+            @DefaultValue("100") @Min(1) int dailyCap) {
     }
 
     public record FutTransfer(

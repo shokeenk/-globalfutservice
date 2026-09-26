@@ -85,11 +85,17 @@ public class CampaignRenderer {
      * @param bannerUrl the draft's banner, if it has one yet, or null
      */
     public TransactionalEmails.Rendered previewOf(CampaignDetails d, String bannerUrl) {
+        return previewOf(d, null, null, bannerUrl);
+    }
+
+    /** As above, with the second step's optional lines above and below the headline. */
+    public TransactionalEmails.Rendered previewOf(CampaignDetails d, String kicker,
+                                                  String subline, String bannerUrl) {
         CampaignType type = d.type() == null ? CampaignType.GENERAL : d.type();
         String heading = d.promoTitle() == null || d.promoTitle().isBlank()
                 ? "Your promo title" : d.promoTitle();
         return PromotionalEmail.render(
-                new PromotionalEmail.Campaign(nz(d.subject()), null, heading, null,
+                new PromotionalEmail.Campaign(nz(d.subject()), kicker, heading, subline,
                         d.description(), d.offerText(),
                         d.showPromoCode() ? d.promoCode() : null,
                         d.offerValidUntil(),

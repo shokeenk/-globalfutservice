@@ -50,7 +50,8 @@ class CampaignServiceDetailsTest {
         sender = mock(CampaignSender.class);
         service = new CampaignService(campaigns, mock(CampaignRecipientRepository.class), audience,
                 mock(AccountRepository.class), sender,
-                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC),
+                mock(com.globalfutservice.config.AppProperties.class));
         when(campaigns.save(any(CampaignEntity.class))).thenAnswer(i -> i.getArgument(0));
     }
 
