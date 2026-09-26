@@ -26,6 +26,10 @@ vi.mock('../../../lib/api', () => ({
   },
 }))
 
+vi.mock('../../../state/AuthContext', () => ({
+  useAuth: () => ({ account: { email: 'admin@example.test', role: 'ADMIN' } }),
+}))
+
 // Imported after the mock is declared, so the page picks up the mocked module.
 const { default: SendCampaign } = await import('./SendCampaign')
 
@@ -153,8 +157,8 @@ describe('Send Campaign', () => {
     expect(await screen.findByTitle('Email preview')).toBeInTheDocument()
   })
 
-  it('saves a valid step as a draft and hands over to Campaign History', async () => {
-    api.post.mockResolvedValue({ publicId: 'camp_abc', title: 'TOTY', status: 'DRAFT' })
+  it('saves a valid first step as a draft and moves on to Email Content', async () => {
+    api.post.mockResolvedValue({ publicId: 'camp_abc', title: 'TOTY', status: 'DRAFT', hasBanner: false })
     renderPage()
     fireEvent.change(screen.getByLabelText(/^Campaign Name/), { target: { value: 'TOTY' } })
     fireEvent.change(screen.getByLabelText(/^Email Subject/), { target: { value: 'TOTY is here' } })
@@ -168,7 +172,7 @@ describe('Send Campaign', () => {
       title: 'TOTY', subject: 'TOTY is here', type: 'COINS', promoTitle: 'Coins Sale',
       offerText: '15% OFF', promoCode: null, showButton: true, trackingEnabled: true,
     }))
-    expect(await screen.findByTestId('history')).toHaveTextContent('Draft "TOTY" saved')
+    expect(await screen.findByRole('heading', { name: 'Email Content' })).toBeInTheDocument()
   })
 
   it('reopens a saved draft from the address and saves it in place', async () => {
@@ -198,5 +202,146 @@ describe('Send Campaign', () => {
     expect(await screen.findByText('Use a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument()
     expect(api.upload).not.toHaveBeenCalled()
     expect(api.post).not.toHaveBeenCalled()
+  })
+})
+
+// ---- the later steps ------------------------------------------------------------------
+
+const DRAFT = {
+  publicId: 'camp_abc', title: 'TOTY', subject: 'TOTY is here', heading: 'Coins Sale', body: 'B',
+  status: 'DRAFT', type: 'COINS', offerText: '15% OFF', promoCode: 'HUNTER10', showButton: true,
+  showPromoCode: true, trackingEnabled: true, hasBanner: false, audience: 'ALL_OPTED_IN',
+  audienceLabel: 'Everyone opted in', updatedAt: '2026-09-26T10:00:00Z',
+}
+const OPTIONS = {
+  audiences: [
+    { value: 'ALL_OPTED_IN', label: 'Everyone opted in', detail: '42 opted in', count: 42 },
+    { value: 'COINS_BUYERS', label: 'Bought coins before', detail: '30 opted in', count: 30 },
+    { value: 'BOOSTING_BUYERS', label: 'Bought boosting before', detail: '9 opted in', count: 9 },
+    { value: 'COACHING_BUYERS', label: 'Bought coaching before', detail: '0 opted in', count: 0 },
+  ],
+  ctas: [],
+}
+
+function serve(quota = { dailyCap: 100, sentLast24h: 3, remaining: 97 }, audience = 'ALL_OPTED_IN') {
+  api.get.mockImplementation(async (path: string) => {
+    if (path.endsWith('/options')) return OPTIONS
+    if (path.endsWith('/quota')) return quota
+    return { ...DRAFT, audience }
+  })
+}
+
+describe('Send Campaign, later steps', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    Object.values(api).forEach((fn) => fn.mockReset())
+    api.html.mockResolvedValue('<html><head></head><body>email</body></html>')
+  })
+  afterEach(() => vi.useRealTimers())
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+  it('step 2 counts both lines and refuses one over its limit before saving', async () => {
+    serve()
+    renderPage('/admin/email/send?draft=camp_abc&step=2')
+    const kicker = await screen.findByLabelText(/^Line above the headline/)
+    expect(screen.getByText('0/40')).toBeInTheDocument()
+    expect(screen.getByText('0/60')).toBeInTheDocument()
+
+    fireEvent.change(kicker, { target: { value: 'k'.repeat(41) } })
+    await user().click(screen.getByRole('button', { name: /Next Step/ }))
+
+    expect(screen.getByText('Keep the line above the headline to 40 characters.')).toBeInTheDocument()
+    expect(kicker).toHaveFocus()
+    expect(api.put).not.toHaveBeenCalled()
+  })
+
+  it('step 2 saves both lines and moves on to Design & Preview', async () => {
+    serve()
+    api.put.mockResolvedValue(DRAFT)
+    renderPage('/admin/email/send?draft=camp_abc&step=2')
+    fireEvent.change(await screen.findByLabelText(/^Line above the headline/),
+      { target: { value: 'Team of the Year' } })
+    fireEvent.change(screen.getByLabelText(/^Line below the headline/),
+      { target: { value: 'Build your dream squad' } })
+    await user().click(screen.getByRole('button', { name: /Next Step/ }))
+
+    expect(api.put).toHaveBeenCalledWith('/api/v1/admin/campaigns/camp_abc/content',
+      { kicker: 'Team of the Year', subline: 'Build your dream squad' })
+    expect(await screen.findByRole('heading', { name: 'Design & Preview' })).toBeInTheDocument()
+  })
+
+  it('step 3 sends a test to the signed-in admin and says where it went', async () => {
+    serve()
+    api.post.mockResolvedValue({ sentTo: 'admin@example.test' })
+    renderPage('/admin/email/send?draft=camp_abc&step=3')
+    await user().click(await screen.findByRole('button', { name: 'Send test to me' }))
+
+    expect(api.post).toHaveBeenCalledWith('/api/v1/admin/campaigns/camp_abc/test')
+    expect(await screen.findByText(/Sent to admin@example.test/)).toBeInTheDocument()
+  })
+
+  it('step 4 shows how many each audience reaches, and saves the one chosen', async () => {
+    serve()
+    api.put.mockResolvedValue({ ...DRAFT, audience: 'COINS_BUYERS' })
+    renderPage('/admin/email/send?draft=camp_abc&step=4')
+    const coins = await screen.findByRole('radio', { name: /Bought coins before/ })
+    expect(coins).toHaveTextContent('30')
+    expect(screen.getByRole('radio', { name: /Everyone opted in/ })).toHaveAttribute('aria-checked', 'true')
+
+    await user().click(coins)
+    expect(coins).toHaveAttribute('aria-checked', 'true')
+    await user().click(screen.getByRole('button', { name: /Next Step/ }))
+
+    expect(api.put).toHaveBeenCalledWith('/api/v1/admin/campaigns/camp_abc/audience',
+      { audience: 'COINS_BUYERS' })
+    expect(await screen.findByRole('heading', { name: 'Review & Send' })).toBeInTheDocument()
+  })
+
+  it('step 5 lets a campaign that fits the allowance be sent, queued a minute ahead', async () => {
+    serve({ dailyCap: 100, sentLast24h: 3, remaining: 97 })
+    api.post.mockResolvedValue({})
+    renderPage('/admin/email/send?draft=camp_abc&step=5')
+    expect(await screen.findByText('97')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    await user().click(screen.getByRole('button', { name: 'Send now' }))
+    const before = Date.now()
+    await user().click(screen.getByRole('button', { name: 'Send to 42 people' }))
+
+    const [path, body] = api.post.mock.calls[0]!
+    expect(path).toBe('/api/v1/admin/campaigns/camp_abc/schedule')
+    const lead = new Date((body as { sendAt: string }).sendAt).getTime() - before
+    expect(lead).toBeGreaterThan(50_000)
+    expect(lead).toBeLessThan(70_000)
+    expect(await screen.findByTestId('history')).toHaveTextContent('goes out to 42 people')
+  })
+
+  it('step 5 warns when the audience is over what is left, and locks Send until acknowledged', async () => {
+    serve({ dailyCap: 100, sentLast24h: 90, remaining: 10 })
+    renderPage('/admin/email/send?draft=camp_abc&step=5')
+
+    const warning = await screen.findByRole('alert')
+    expect(warning).toHaveTextContent('32 people are over')
+    expect(warning).toHaveTextContent('never retried')
+    const send = screen.getByRole('button', { name: 'Send now' })
+    expect(send).toBeDisabled()
+
+    await user().click(screen.getByLabelText(/I understand 32 people may not receive/))
+    expect(send).toBeEnabled()
+  })
+
+  it('step 5 will not send to an audience with nobody in it', async () => {
+    serve({ dailyCap: 100, sentLast24h: 0, remaining: 100 }, 'COACHING_BUYERS')
+    renderPage('/admin/email/send?draft=camp_abc&step=5')
+
+    expect(await screen.findByText(/Nobody who has opted in matches this audience/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send now' })).toBeDisabled()
+  })
+
+  it('without a draft, only the first step exists, whatever the address asks for', async () => {
+    renderPage('/admin/email/send?step=4')
+    expect(await screen.findByRole('heading', { name: 'Campaign Details' })).toBeInTheDocument()
+    // The later steps are listed but are not doors until a draft exists.
+    expect(screen.queryByRole('button', { name: /Step 4/ })).toBeNull()
   })
 })

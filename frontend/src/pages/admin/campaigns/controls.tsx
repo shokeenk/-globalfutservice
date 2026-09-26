@@ -137,8 +137,22 @@ const STEPS: [string, string][] = [
   ['Review & Send', 'Confirm and send'],
 ]
 
-/** The five-step progress strip. Only the current step is marked; the rest are ahead. */
-export function StepIndicator({ current }: { current: number }) {
+/**
+ * The five-step progress strip.
+ *
+ * <p>Steps that can be reached are buttons, so the strip doubles as navigation; the
+ * current step is marked with aria-current="step"; steps not yet reachable are plain
+ * text, so nothing offers a door that will not open. Moving saves the step being left,
+ * which is the page's job, not this component's.
+ */
+export function StepIndicator({
+  current, reachable = current, onSelect,
+}: {
+  current: number
+  /** The furthest step that can be opened. */
+  reachable?: number
+  onSelect?: (step: number) => void
+}) {
   return (
     <nav aria-label="Campaign steps" className="mb-4 rounded-[10px] border border-admin-line bg-white
                                                shadow-admin-card">
@@ -146,12 +160,8 @@ export function StepIndicator({ current }: { current: number }) {
         {STEPS.map(([title, detail], i) => {
           const n = i + 1
           const active = n === current
-          return (
-            <li
-              key={title}
-              aria-current={active ? 'step' : undefined}
-              className="flex items-center gap-3 px-4 py-2.5 sm:my-2.5 sm:py-0"
-            >
+          const inner = (
+            <>
               <span
                 aria-hidden="true"
                 className={`grid h-[37px] w-[37px] shrink-0 place-items-center rounded-full text-[14px]
@@ -167,6 +177,23 @@ export function StepIndicator({ current }: { current: number }) {
                 </span>
                 <span className="mt-0.5 block truncate text-[11px] text-admin-muted">{detail}</span>
               </span>
+            </>
+          )
+          const layout = 'flex w-full items-center gap-3 px-4 py-2.5 text-left sm:my-2.5 sm:py-0'
+          return (
+            <li key={title} aria-current={active ? 'step' : undefined}>
+              {!active && onSelect && n <= reachable ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(n)}
+                  className={`${layout} rounded-admin-control focus-visible:outline-none focus-visible:ring-2
+                              focus-visible:ring-admin-red hover:[&_span]:text-admin-red-text`}
+                >
+                  {inner}
+                </button>
+              ) : (
+                <div className={`${layout} ${!active && n > reachable ? 'opacity-60' : ''}`}>{inner}</div>
+              )}
             </li>
           )
         })}
