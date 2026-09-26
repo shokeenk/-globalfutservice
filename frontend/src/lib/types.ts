@@ -503,10 +503,15 @@ export interface CoinRate {
   currency: string
   symbol: string
   perMillionMinor: number
+  /*
+   * Both prices are Java BigDecimals, which arrive as JSON numbers, sometimes in exponent
+   * form (`1.6E+3`), not as strings. Typing them as strings let the Coin rates page call
+   * `.trim()` on one and crash. Read them through `toRows` in AdminRates, never as text.
+   */
   /** Price of 100,000 coins, in major units. */
-  per100k: string
+  per100k: number | string
   /** Price of one 10,000-coin slider step. May carry a fraction of a minor unit. */
-  per10k: string
+  per10k: number | string
   /** False when a 10,000-coin step is not a whole cent/paisa — see the note on screen. */
   stepIsWholeMinorUnit: boolean
   validFrom: string

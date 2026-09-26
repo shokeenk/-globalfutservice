@@ -26,25 +26,42 @@ import type { CoinRate } from '../../lib/types'
 export default function AdminRates() {
   useSeo({ title: 'Coin rates', noindex: true })
 
-  const [rates, setRates] = useState<CoinRate[] | null>(null)
+  const [rates, setRates] = useState<RateRow[] | null>(null)
   const [draft, setDraft] = useState<Record<string, string>>({})
+  /* Kept apart: a failed load has nothing to show and offers a retry; a failed save
+     leaves the prices on screen and says nothing was changed. */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
+    setLoadError(null)
+    let body: unknown
     try {
-      const next = await api.get<CoinRate[]>('/api/v1/admin/rates/coin-rates')
-      setRates(next)
-      // The draft is seeded from the server every load, so an abandoned edit never
-      // survives a refresh and get saved later by accident.
-      setDraft(Object.fromEntries(next.map((r) => [r.currency, r.per100k])))
-      setError(null)
+      body = await api.get<unknown>('/api/v1/admin/rates/coin-rates')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not load the coin rates.')
-      setRates([])
+      setLoadError(e instanceof ApiError ? e.message : 'Could not load the coin rates.')
+      setRates(null)
+      return
     }
+    const next = toRows(body)
+    if (!next) {
+      setLoadError('The server sent the coin rates in a form this page does not recognise, '
+        + 'so nothing is shown rather than a wrong price. Nothing has been changed.')
+      setRates(null)
+      return
+    }
+    setRates(next)
+    // The draft is seeded from the server every load, so an abandoned edit never
+    // survives a refresh and get saved later by accident.
+    setDraft(Object.fromEntries(next.map((r) => [r.currency, r.per100k])))
   }, [])
+
+  const retry = () => {
+    setRates(null)
+    void load()
+  }
 
   useEffect(() => {
     void load()
@@ -103,9 +120,16 @@ export default function AdminRates() {
           price, so changing one leaves the other three untouched.
         </Alert>
 
-        {!rates && <Skeleton className="mt-6 h-64 w-full" />}
+        {!rates && !loadError && <Skeleton className="mt-6 h-64 w-full" />}
 
-        {rates && rates.length === 0 && !error && (
+        {loadError && (
+          <div className="mt-6 space-y-3">
+            <Alert tone="warn" title="The coin rates did not load">{loadError}</Alert>
+            <Button variant="secondary" onClick={retry}>Try again</Button>
+          </div>
+        )}
+
+        {rates && rates.length === 0 && (
           <Alert tone="warn">
             No live coin rates were found. Check that the currency is enabled and that the
             rate card has a row for it.
@@ -196,12 +220,68 @@ export default function AdminRates() {
   )
 }
 
+/** One currency's rate as this page works with it: prices as the text the inputs hold. */
+export interface RateRow {
+  currency: string
+  symbol: string
+  perMillionMinor: number
+  per100k: string
+  per10k: string
+  stepIsWholeMinorUnit: boolean
+  validFrom: string | null
+}
+
+/**
+ * The server's coin rates, in the shape this page works with, or null if they are not
+ * in a shape it recognises.
+ *
+ * <p><b>Why the prices are converted here.</b> `per100k` and `per10k` are Java
+ * BigDecimals, which Jackson writes as JSON numbers -- `"per100k":1.6E+3` in the
+ * response, exponent and all. The page's type said they were strings, and the render
+ * called `.trim()` on the draft seeded from them: with any live rate at all, that threw
+ * "trim is not a function" and the console's error boundary replaced the whole page. So
+ * the conversion happens once, here, and nothing below depends on which of the two the
+ * server sends.
+ *
+ * <p>A body that is not a list of rows, or a row without a currency or a price, is refused
+ * rather than guessed at: a price screen showing a wrong number is worse than one that
+ * says it could not load.
+ */
+export function toRows(body: unknown): RateRow[] | null {
+  if (!Array.isArray(body)) return null
+  const rows: RateRow[] = []
+  for (const raw of body as CoinRate[]) {
+    if (!raw || typeof raw.currency !== 'string') return null
+    const per100k = decimalText(raw.per100k)
+    if (per100k === null) return null
+    rows.push({
+      currency: raw.currency,
+      symbol: typeof raw.symbol === 'string' ? raw.symbol : '',
+      perMillionMinor: Number(raw.perMillionMinor),
+      per100k,
+      per10k: decimalText(raw.per10k) ?? '',
+      stepIsWholeMinorUnit: raw.stepIsWholeMinorUnit !== false,
+      validFrom: typeof raw.validFrom === 'string' ? raw.validFrom : null,
+    })
+  }
+  return rows
+}
+
+/** A price as plain decimal text, from a JSON number or string; null if it is neither. */
+function decimalText(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+    return String(Number(value))
+  }
+  return null
+}
+
 /** What one step costs, and what a million costs, at the rate currently stored. */
-function hintFor(rate: CoinRate): string {
+function hintFor(rate: RateRow): string {
   return `${rate.symbol}${rate.per10k} per 10,000 · ${rate.symbol}${perMillion(rate)} per 1,000,000`
 }
 
-function perMillion(rate: CoinRate): string {
+function perMillion(rate: RateRow): string {
   const value = rate.perMillionMinor / 100
   return value.toFixed(2)
 }
