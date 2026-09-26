@@ -168,6 +168,35 @@ public class CampaignSender {
         }
     }
 
+    /**
+     * One copy of a campaign to the admin who asked for it, and nobody else.
+     *
+     * <p>Not a recipient: no row is written, nothing is counted, and the copy is the
+     * inert preview -- no pixel, no click counter, a dummy unsubscribe link -- so testing
+     * a campaign cannot skew its numbers or unsubscribe the person testing it. The
+     * address is the signed-in account's own, looked up on the server; there is no way
+     * to name another, which is what keeps this from being a way round consent.
+     *
+     * @throws IllegalStateException carrying the mail server's refusal, so the admin sees
+     *         why a test did not arrive rather than a generic failure
+     */
+    public void sendTest(String to, TransactionalEmails.Rendered copy) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message, MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name());
+            helper.setFrom(props.notifications().emailFrom(),
+                    props.notifications().emailFromName());
+            helper.setTo(to);
+            helper.setSubject("[TEST] " + copy.subject());
+            helper.setText(copy.text(), copy.html());
+            mailSender.send(message);
+        } catch (Exception e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
     @Transactional
     public void complete(Long campaignId, CampaignStatus status) {
         campaigns.findById(campaignId).ifPresent(c -> {

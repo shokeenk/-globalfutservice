@@ -563,11 +563,14 @@ export interface Campaign {
   showButton?: boolean
   showPromoCode?: boolean
   trackingEnabled?: boolean
+  heroKicker?: string
+  heroSubline?: string
 }
 
 /** The fixed segments and buttons a campaign may use, with live audience counts. */
 export interface CampaignOptions {
-  audiences: { value: string; label: string; detail: string }[]
+  /** `count` is the opted-in total as a number; `detail` says the same in words. */
+  audiences: { value: string; label: string; detail: string; count?: number }[]
   ctas: { value: string; label: string; detail: string }[]
 }
 

@@ -144,11 +144,48 @@ export function toDetailsRequest(f: StepOneFields) {
   }
 }
 
+// ---- step 2: the lines above and below the headline ---------------------------------
+
+export interface StepTwoFields {
+  kicker: string
+  subline: string
+}
+
+/** Kept to one line of the hero each; the server enforces the same numbers. */
+export const CONTENT_LIMITS = { kicker: 40, subline: 60 } as const
+
+export type ContentErrors = Partial<Record<keyof StepTwoFields, string>>
+
+export function validateStepTwo(f: StepTwoFields): ContentErrors {
+  const errors: ContentErrors = {}
+  if (lengthOf(f.kicker) > CONTENT_LIMITS.kicker) {
+    errors.kicker = `Keep the line above the headline to ${CONTENT_LIMITS.kicker} characters.`
+  }
+  if (lengthOf(f.subline) > CONTENT_LIMITS.subline) {
+    errors.subline = `Keep the line below the headline to ${CONTENT_LIMITS.subline} characters.`
+  }
+  return errors
+}
+
+// ---- step 5: whether a send fits what is left of the day ------------------------------
+
+/**
+ * How a campaign's audience compares with the provider's remaining allowance.
+ *
+ * <p>Worth being exact about, because the consequence is permanent: a recipient the
+ * provider refuses is marked failed and never retried, so every recipient past the
+ * allowance misses the campaign for good.
+ */
+export function quotaCheck(audience: number, remaining: number) {
+  const over = Math.max(0, audience - remaining)
+  return { over, fits: over === 0 }
+}
+
 /**
  * The request body for the live preview: the same fields, sent as they stand. Nothing is
  * trimmed or checked, because the preview has to render while the admin is mid-word.
  */
-export function toPreviewRequest(f: StepOneFields, campaignId: string | null) {
+export function toPreviewRequest(f: StepOneFields & Partial<StepTwoFields>, campaignId: string | null) {
   return {
     subject: f.subject,
     type: f.type,
@@ -159,6 +196,8 @@ export function toPreviewRequest(f: StepOneFields, campaignId: string | null) {
     description: f.description,
     showButton: f.showButton,
     showPromoCode: f.showPromoCode,
+    kicker: f.kicker || null,
+    subline: f.subline || null,
     campaignId,
   }
 }

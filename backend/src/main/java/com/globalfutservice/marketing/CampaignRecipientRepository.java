@@ -22,6 +22,9 @@ public interface CampaignRecipientRepository
 
     long countByCampaignIdAndStatus(Long campaignId, String status);
 
+    /** Campaign messages the provider accepted since a moment, across every campaign. */
+    long countByStatusAndSentAtAfter(String status, java.time.Instant since);
+
     /**
      * The analytics row for one campaign, in a single pass.
      *

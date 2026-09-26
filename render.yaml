@@ -158,6 +158,10 @@ services:
       # outright. The app warns at startup when this and GFS_SMTP_USER disagree.
       - key: GFS_EMAIL_FROM
         sync: false
+      # The mail provider's daily allowance, read out before a campaign is sent.
+      # Resend's free tier is 100; raise it when the plan changes.
+      - key: GFS_EMAIL_DAILY_CAP
+        value: "100"
       - key: GFS_SMTP_HOST
         value: smtp.gmail.com
       - key: GFS_SMTP_PORT

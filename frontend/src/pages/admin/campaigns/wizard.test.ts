@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LIMITS, emptyStepOne, firstInvalid, lengthOf, toDetailsRequest, toPreviewRequest, todayInIndia,
-  validateStepOne, type StepOneFields,
+  LIMITS, emptyStepOne, firstInvalid, lengthOf, quotaCheck, toDetailsRequest, toPreviewRequest,
+  todayInIndia, validateStepOne, validateStepTwo, type StepOneFields,
 } from './wizard'
 
 const TODAY = '2026-09-26'
@@ -103,5 +103,26 @@ describe('request bodies', () => {
     expect(body.subject).toBe(' spaced ')
     expect(body.offerValidUntil).toBeNull()
     expect(body.campaignId).toBe('camp_x')
+  })
+})
+
+describe('step 2 and the allowance', () => {
+  it('holds the lines to 40 and 60', () => {
+    expect(validateStepTwo({ kicker: 'k'.repeat(40), subline: 's'.repeat(60) })).toEqual({})
+    const errors = validateStepTwo({ kicker: 'k'.repeat(41), subline: 's'.repeat(61) })
+    expect(errors.kicker).toBeDefined()
+    expect(errors.subline).toBeDefined()
+  })
+
+  it('says exactly how many are over, and never a negative number', () => {
+    expect(quotaCheck(42, 97)).toEqual({ over: 0, fits: true })
+    expect(quotaCheck(42, 42)).toEqual({ over: 0, fits: true })
+    expect(quotaCheck(42, 10)).toEqual({ over: 32, fits: false })
+    expect(quotaCheck(5, 0)).toEqual({ over: 5, fits: false })
+  })
+
+  it('sends the hero lines to the preview, and an empty one as absent', () => {
+    expect(toPreviewRequest({ ...filled(), kicker: 'TOTY', subline: '' }, null))
+      .toMatchObject({ kicker: 'TOTY', subline: null })
   })
 })

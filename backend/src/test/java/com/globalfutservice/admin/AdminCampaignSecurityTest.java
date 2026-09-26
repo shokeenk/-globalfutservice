@@ -81,8 +81,12 @@ class AdminCampaignSecurityTest {
                 CampaignAudience.ALL_OPTED_IN, 1L);
         when(campaigns.createDraft(any(), anyLong())).thenReturn(draft);
         when(campaigns.replaceDetails(anyString(), any())).thenReturn(draft);
-        when(campaigns.previewDetails(any(), isNull()))
+        when(campaigns.previewDetails(any(), any(), any(), isNull()))
                 .thenReturn(new TransactionalEmails.Rendered("s", "<html>preview</html>", "t"));
+        when(campaigns.replaceContent(anyString(), any(), any())).thenReturn(draft);
+        when(campaigns.chooseAudience(anyString(), any())).thenReturn(draft);
+        when(campaigns.sendTest(anyString(), anyLong())).thenReturn("t@example.test");
+        when(campaigns.quota()).thenReturn(new CampaignService.SendQuota(100, 3, 97));
     }
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -90,18 +94,23 @@ class AdminCampaignSecurityTest {
         return new UsernamePasswordAuthenticationToken(p, null, p.authorities());
     }
 
+    /** Every endpoint the builder added, each with a body that is valid for it. */
     static Stream<Arguments> newEndpoints() {
         return Stream.of(
-                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/drafts"),
-                Arguments.of(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/details"),
-                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/preview"));
+                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/drafts", DETAILS),
+                Arguments.of(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/details", DETAILS),
+                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/preview", DETAILS),
+                Arguments.of(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/content",
+                        "{\"kicker\":\"Team of the Year\",\"subline\":\"Build your dream squad\"}"),
+                Arguments.of(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/audience",
+                        "{\"audience\":\"COINS_BUYERS\"}"),
+                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/camp_x/test", ""),
+                Arguments.of(HttpMethod.GET, "/api/v1/admin/campaigns/quota", ""));
     }
 
-    private static MockHttpServletRequestBuilder call(HttpMethod method, String path) {
-        return request(method, path)
-                .contentType(MediaType.APPLICATION_JSON)
-                .accept(MediaType.ALL)
-                .content(DETAILS);
+    private static MockHttpServletRequestBuilder call(HttpMethod method, String path, String body) {
+        MockHttpServletRequestBuilder r = request(method, path).accept(MediaType.ALL);
+        return body.isEmpty() ? r : r.contentType(MediaType.APPLICATION_JSON).content(body);
     }
 
     @Nested
@@ -110,31 +119,31 @@ class AdminCampaignSecurityTest {
         @ParameterizedTest(name = "{0} {1}")
         @MethodSource("com.globalfutservice.admin.AdminCampaignSecurityTest#newEndpoints")
         @DisplayName("refuses a caller who is not signed in")
-        void anonymous(HttpMethod method, String path) throws Exception {
-            mvc.perform(call(method, path)).andExpect(status().isUnauthorized());
+        void anonymous(HttpMethod method, String path, String body) throws Exception {
+            mvc.perform(call(method, path, body)).andExpect(status().isUnauthorized());
         }
 
         @ParameterizedTest(name = "{0} {1}")
         @MethodSource("com.globalfutservice.admin.AdminCampaignSecurityTest#newEndpoints")
         @DisplayName("refuses a customer")
-        void customer(HttpMethod method, String path) throws Exception {
-            mvc.perform(call(method, path).with(authentication(as(AccountRole.CUSTOMER))))
+        void customer(HttpMethod method, String path, String body) throws Exception {
+            mvc.perform(call(method, path, body).with(authentication(as(AccountRole.CUSTOMER))))
                     .andExpect(status().isForbidden());
         }
 
         @ParameterizedTest(name = "{0} {1}")
         @MethodSource("com.globalfutservice.admin.AdminCampaignSecurityTest#newEndpoints")
         @DisplayName("refuses an operator: campaigns are admin-only, though the console is not")
-        void operator(HttpMethod method, String path) throws Exception {
-            mvc.perform(call(method, path).with(authentication(as(AccountRole.OPERATOR))))
+        void operator(HttpMethod method, String path, String body) throws Exception {
+            mvc.perform(call(method, path, body).with(authentication(as(AccountRole.OPERATOR))))
                     .andExpect(status().isForbidden());
         }
 
         @ParameterizedTest(name = "{0} {1}")
         @MethodSource("com.globalfutservice.admin.AdminCampaignSecurityTest#newEndpoints")
         @DisplayName("admits an admin")
-        void admin(HttpMethod method, String path) throws Exception {
-            mvc.perform(call(method, path).with(authentication(as(AccountRole.ADMIN))))
+        void admin(HttpMethod method, String path, String body) throws Exception {
+            mvc.perform(call(method, path, body).with(authentication(as(AccountRole.ADMIN))))
                     .andExpect(status().isOk());
         }
     }
@@ -188,6 +197,48 @@ class AdminCampaignSecurityTest {
 
     @Nested
     class Validation {
+
+        @Test
+        @DisplayName("the hero lines are held to one line each: 40 above, 60 below")
+        void heroLineLimits() throws Exception {
+            mvc.perform(request(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/content")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"kicker\":\"" + "k".repeat(41) + "\"}")
+                            .with(authentication(as(AccountRole.ADMIN))))
+                    .andExpect(status().isBadRequest());
+            mvc.perform(request(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/content")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"subline\":\"" + "s".repeat(61) + "\"}")
+                            .with(authentication(as(AccountRole.ADMIN))))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("an audience outside the fixed segments is refused, not stored")
+        void unknownAudience() throws Exception {
+            mvc.perform(request(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/audience")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"audience\":\"EVERYONE\"}")
+                            .with(authentication(as(AccountRole.ADMIN))))
+                    .andExpect(status().isBadRequest());
+            mvc.perform(request(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/audience")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}")
+                            .with(authentication(as(AccountRole.ADMIN))))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("a test send takes no address: any address in the body is ignored")
+        void testSendTakesNoAddress() throws Exception {
+            mvc.perform(request(HttpMethod.POST, "/api/v1/admin/campaigns/camp_x/test")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"to\":\"stranger@example.test\"}")
+                            .with(authentication(as(AccountRole.ADMIN))))
+                    .andExpect(status().isOk());
+            // The caller's own account id, never an address from the request.
+            org.mockito.Mockito.verify(campaigns).sendTest("camp_x", 1L);
+        }
 
         @Test
         @DisplayName("saving the step enforces the design's limits")

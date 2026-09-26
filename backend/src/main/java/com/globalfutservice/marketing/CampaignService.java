@@ -1,5 +1,6 @@
 package com.globalfutservice.marketing;
 
+import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -58,6 +60,7 @@ public class CampaignService {
     private final CampaignSender sender;
     private final CampaignRenderer renderer;
     private final Clock clock;
+    private final AppProperties props;
 
     public CampaignService(CampaignRepository campaigns,
                            CampaignRecipientRepository recipients,
@@ -65,7 +68,8 @@ public class CampaignService {
                            AccountRepository accounts,
                            CampaignSender sender,
                            CampaignRenderer renderer,
-                           Clock clock) {
+                           Clock clock,
+                           AppProperties props) {
         this.campaigns = campaigns;
         this.recipients = recipients;
         this.audience = audience;
@@ -73,6 +77,7 @@ public class CampaignService {
         this.sender = sender;
         this.renderer = renderer;
         this.clock = clock;
+        this.props = props;
     }
 
     // ---- composing ---------------------------------------------------------
@@ -130,6 +135,75 @@ public class CampaignService {
             c.setCtaText(null);
             c.setCtaPath(null);
         }
+    }
+
+    /**
+     * The builder's second step: the optional lines above and below the headline.
+     * Replaced whole, so clearing a line removes it.
+     */
+    @Transactional
+    public CampaignEntity replaceContent(String publicId, String kicker, String subline) {
+        CampaignEntity c = requireEditable(publicId);
+        c.setHeroKicker(blankToNull(kicker));
+        c.setHeroSubline(blankToNull(subline));
+        c.touch();
+        return c;
+    }
+
+    /**
+     * The builder's fourth step. Only ever one of the fixed segments, every one of which
+     * is intersected with marketing consent in the only query that can resolve it.
+     */
+    @Transactional
+    public CampaignEntity chooseAudience(String publicId, CampaignAudience segment) {
+        CampaignEntity c = requireEditable(publicId);
+        c.setAudience(segment);
+        c.touch();
+        return c;
+    }
+
+    /**
+     * How much of the provider's daily allowance campaigns have already used.
+     *
+     * <p>A rolling 24 hours rather than a calendar day, because the provider's day may
+     * not be ours and this must not under-count. Only campaign messages are counted:
+     * order emails go through the same account and spend the same allowance, but nothing
+     * records them, so the true remainder can be lower than this says.
+     */
+    @Transactional(readOnly = true)
+    public SendQuota quota() {
+        int cap = props.campaigns().dailyCap();
+        long sent = recipients.countByStatusAndSentAtAfter("SENT",
+                clock.instant().minus(Duration.ofHours(24)));
+        return new SendQuota(cap, sent, (int) Math.max(0, cap - sent));
+    }
+
+    public record SendQuota(int dailyCap, long sentLast24h, int remaining) {
+    }
+
+    /**
+     * Send one copy to the signed-in admin.
+     *
+     * @param adminAccountId the caller's own account; the address is looked up from it
+     */
+    @Transactional(readOnly = true)
+    public String sendTest(String publicId, Long adminAccountId) {
+        CampaignEntity c = require(publicId);
+        String to = accounts.findById(adminAccountId)
+                .map(AccountEntity::getEmail)
+                .filter(e -> e != null && !e.isBlank())
+                .orElseThrow(() -> new ApiExceptions.BadRequestException(
+                        "Your account has no email address to send a test to."));
+        try {
+            sender.sendTest(to, renderer.preview(c));
+        } catch (IllegalStateException e) {
+            // The admin asked for this and is looking at the screen: the relay's own
+            // reason is the most useful thing to show them.
+            throw new ApiExceptions.BadRequestException(
+                    "The test email could not be sent: " + e.getMessage());
+        }
+        log.info("Test copy of campaign {} sent to account {}", c.getPublicId(), adminAccountId);
+        return to;
     }
 
     @Transactional
@@ -242,9 +316,16 @@ public class CampaignService {
      */
     @Transactional(readOnly = true)
     public TransactionalEmails.Rendered previewDetails(CampaignDetails details, String publicId) {
+        return previewDetails(details, null, null, publicId);
+    }
+
+    /** As above, with the second step's lines above and below the headline. */
+    @Transactional(readOnly = true)
+    public TransactionalEmails.Rendered previewDetails(CampaignDetails details, String kicker,
+                                                       String subline, String publicId) {
         String banner = publicId == null || publicId.isBlank() ? null
                 : campaigns.findByPublicId(publicId).map(renderer::bannerUrl).orElse(null);
-        return renderer.previewOf(details, banner);
+        return renderer.previewOf(details, kicker, subline, banner);
     }
 
     // ---- sending -----------------------------------------------------------

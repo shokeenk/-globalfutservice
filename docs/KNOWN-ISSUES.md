@@ -122,3 +122,29 @@ rows, by way of the defect in 3 above — they are marked `FAILED`, not left
 for all outbound mail, in which case campaigns must respect it and refuse to
 start; or it governs transactional mail only, in which case say so where it is
 defined, because the current name does not suggest it.
+
+---
+
+## 5. "Send now" on Campaign History runs inside the request that started it
+
+**Where:** `CampaignService.sendNow` / `dispatch`, reached from
+`POST /api/v1/admin/campaigns/{id}/send`
+
+The send loop runs on the request thread: the HTTP request stays open until every
+recipient has been tried. In production the storefront's nginx sits in front of the
+API with `proxy_read_timeout 60s` (`frontend/nginx.conf.template`). A campaign that
+takes longer than a minute to send is cut off at the proxy: the admin sees a 504
+while the backend carries on sending. Nothing is sent twice -- the claim guards
+that -- but the admin is told a send failed that did not, and a retry is refused
+as "only a draft or scheduled campaign can be sent", which reads like a second
+fault.
+
+**When it bites:** a campaign larger than roughly what the relay can take in 60
+seconds, from the old Campaign History screen. The campaign builder does not use
+this path: its "Send now" schedules the campaign a minute ahead and lets the
+background job send it, which no proxy can time out.
+
+**What it would take:** have `POST /send` do what the builder does -- mark the
+campaign due now and return -- so every send runs in the background job, and the
+endpoint answers in milliseconds.
+

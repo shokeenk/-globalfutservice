@@ -88,7 +88,17 @@ public class AdminCampaignController {
                               Instant updatedAt, CampaignStats stats,
                               String type, String offerText, LocalDate offerValidUntil,
                               boolean showButton, boolean showPromoCode,
-                              boolean trackingEnabled) {
+                              boolean trackingEnabled, String heroKicker, String heroSubline) {
+    }
+
+    /** The builder's second step. The limits keep both lines on one line of the hero. */
+    public record ContentRequest(
+            @Size(max = 40, message = "Keep the line above the headline to 40 characters") String kicker,
+            @Size(max = 60, message = "Keep the line below the headline to 60 characters") String subline) {
+    }
+
+    /** The builder's fourth step: one of the fixed, consent-only segments. */
+    public record AudienceRequest(@NotNull(message = "Choose an audience") CampaignAudience audience) {
     }
 
     /**
@@ -142,7 +152,12 @@ public class AdminCampaignController {
     }
 
     public record OptionsDto(List<Option> audiences, List<Option> ctas) {
-        public record Option(String value, String label, String detail) {
+        /**
+         * @param count opted-in customers in this segment right now; null for a CTA. The
+         *              same number as {@code detail} carries in words, as a number the
+         *              review step can compare with the sending cap.
+         */
+        public record Option(String value, String label, String detail, Integer count) {
         }
     }
 
@@ -152,11 +167,13 @@ public class AdminCampaignController {
     @Operation(summary = "The fixed audience segments and CTA buttons, with live counts")
     public ResponseEntity<OptionsDto> options() {
         List<OptionsDto.Option> audiences = Arrays.stream(CampaignAudience.values())
-                .map(a -> new OptionsDto.Option(a.name(), a.label(),
-                        campaigns.audienceSize(a) + " opted in"))
+                .map(a -> {
+                    int size = campaigns.audienceSize(a);
+                    return new OptionsDto.Option(a.name(), a.label(), size + " opted in", size);
+                })
                 .toList();
         List<OptionsDto.Option> ctas = Arrays.stream(CtaPreset.values())
-                .map(c -> new OptionsDto.Option(c.name(), c.text(), c.path()))
+                .map(c -> new OptionsDto.Option(c.name(), c.text(), c.path(), null))
                 .toList();
         return ResponseEntity.ok(new OptionsDto(audiences, ctas));
     }
@@ -218,6 +235,8 @@ public class AdminCampaignController {
             @Size(max = 200) String promoCode,
             LocalDate offerValidUntil,
             @Size(max = 4000) String description,
+            @Size(max = 200) String kicker,
+            @Size(max = 200) String subline,
             boolean showButton,
             boolean showPromoCode,
             /** The draft being edited, for its banner, or null before the first save. */
@@ -236,7 +255,47 @@ public class AdminCampaignController {
                 // It is the admin's work in progress; nothing between here and the browser
                 // should keep a copy.
                 .cacheControl(CacheControl.noStore())
-                .body(campaigns.previewDetails(request.toDetails(), request.campaignId()).html());
+                .body(campaigns.previewDetails(request.toDetails(), request.kicker(),
+                        request.subline(), request.campaignId()).html());
+    }
+
+    @PutMapping("/" + ID + "/content")
+    @Operation(summary = "Replace the builder's second step on a draft")
+    public ResponseEntity<CampaignDto> replaceContent(@PathVariable String publicId,
+                                                      @Valid @RequestBody ContentRequest request) {
+        return ResponseEntity.ok(toDto(campaigns.replaceContent(
+                publicId, request.kicker(), request.subline())));
+    }
+
+    @PutMapping("/" + ID + "/audience")
+    @Operation(summary = "Choose a draft's audience from the fixed segments")
+    public ResponseEntity<CampaignDto> chooseAudience(@PathVariable String publicId,
+                                                      @Valid @RequestBody AudienceRequest request) {
+        return ResponseEntity.ok(toDto(campaigns.chooseAudience(publicId, request.audience())));
+    }
+
+    /**
+     * One copy to the signed-in admin.
+     *
+     * <p>Takes no address. The recipient is always the caller's own account, looked up on
+     * the server, so this cannot be used to mail somebody who never opted in.
+     */
+    @PostMapping("/" + ID + "/test")
+    @Operation(summary = "Send a test copy to yourself")
+    public ResponseEntity<TestSent> sendTest(@PathVariable String publicId,
+                                             @CurrentAccount AccountPrincipal admin) {
+        return ResponseEntity.ok(new TestSent(campaigns.sendTest(publicId, admin.id())));
+    }
+
+    public record TestSent(String sentTo) {
+    }
+
+    @GetMapping("/quota")
+    @Operation(summary = "The mail provider's daily allowance, and how much campaigns have used")
+    public ResponseEntity<CampaignService.SendQuota> quota() {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(campaigns.quota());
     }
 
     @PostMapping("/drafts")
@@ -322,7 +381,8 @@ public class AdminCampaignController {
                 c.getScheduledAt(), c.getCompletedAt(), c.getUpdatedAt(),
                 campaigns.stats(c.getId()),
                 c.getType().name(), c.getOfferText(), c.getOfferValidUntil(),
-                c.getCtaPath() != null, c.isShowPromoCode(), c.isTrackingEnabled());
+                c.getCtaPath() != null, c.isShowPromoCode(), c.isTrackingEnabled(),
+                c.getHeroKicker(), c.getHeroSubline());
     }
 
     private static <E extends Enum<E>> E parse(Class<E> type, String raw) {
