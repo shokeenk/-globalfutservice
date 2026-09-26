@@ -63,6 +63,20 @@ public final class OrderDtos {
             String improvementFocus,
 
             /*
+             * Coaching only: the slot picked at checkout, held for this order until the
+             * payment is verified. All three absent for an order placed without a slot,
+             * which behaves exactly as before. The start is an instant; the time zone is
+             * the customer's, kept so reminders and emails can say "19:00 your time".
+             */
+            @Size(max = 64)
+            String coachingCoachId,
+
+            java.time.Instant coachingStartsAt,
+
+            @Size(max = 64)
+            String coachingTimezone,
+
+            /*
              * Boosting only, and ignored on every other service. Both are refused by
              * OrderService rather than by annotation, for the same reason as the coaching
              * fields above: one request type places every kind of order, so "required"

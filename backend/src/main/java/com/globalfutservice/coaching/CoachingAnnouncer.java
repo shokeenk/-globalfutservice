@@ -54,17 +54,49 @@ public class CoachingAnnouncer {
 
     @Transactional(readOnly = true)
     public void booked(CoachingSessionEntity session) {
-        describe(session, null).ifPresent(notifications::coachingBooked);
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingBooked(n)));
     }
 
     @Transactional(readOnly = true)
     public void rescheduled(CoachingSessionEntity session, Instant previousStart) {
-        describe(session, previousStart).ifPresent(notifications::coachingRescheduled);
+        describe(session, previousStart)
+                .ifPresent(n -> afterCommit(() -> notifications.coachingRescheduled(n)));
     }
 
     @Transactional(readOnly = true)
     public void cancelled(CoachingSessionEntity session) {
-        describe(session, null).ifPresent(notifications::coachingCancelled);
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingCancelled(n)));
+    }
+
+    /** A slot picked at checkout: a new booking, payment not yet verified. */
+    @Transactional(readOnly = true)
+    public void held(CoachingSessionEntity session) {
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingBooked(n)));
+    }
+
+    /** A checkout hold became a booking because the payment was verified. */
+    @Transactional(readOnly = true)
+    public void confirmed(CoachingSessionEntity session) {
+        describe(session, null)
+                .ifPresent(n -> afterCommit(() -> notifications.coachingSessionConfirmed(n)));
+    }
+
+    /** A checkout hold let go of its slot: expired, payment rejected, or released by hand. */
+    @Transactional(readOnly = true)
+    public void released(CoachingSessionEntity session, String why) {
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingCancelled(n)));
+    }
+
+    /**
+     * Hand the notification over once the change is committed, never before.
+     *
+     * <p>The notifications are asynchronous, so sent from inside the transaction they could
+     * reach Discord before the commit -- and for a hold taken during checkout, the order can
+     * still roll back after the hold is saved, which would announce a booking that never
+     * existed. Outside a transaction (a test, a job with none) it sends straight away.
+     */
+    private static void afterCommit(Runnable send) {
+        AfterCommit.run("hand a coaching notification over", send);
     }
 
     /**

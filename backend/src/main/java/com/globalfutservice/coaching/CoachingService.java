@@ -355,6 +355,147 @@ public class CoachingService {
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("We could not find that session."));
     }
 
+    // ------------------------------------------------------------------------- holds ---
+
+    /**
+     * Hold a slot for a coaching order being placed, until its payment is verified.
+     *
+     * <p>Runs inside order creation, so a slot that cannot be held fails the whole order:
+     * nothing is charged, no coupon or points are spent, and the customer picks again. The
+     * hold spends no credit -- the customer has not paid -- and lasts the admin's hold
+     * length; submitting payment proof extends it until the proof is reviewed.
+     *
+     * <p>The slot is re-derived at the length of the product being bought, exactly as a
+     * booking is, and the overlap constraint settles the race between two customers who
+     * picked the same slot at once: one order goes through, the other is told the slot was
+     * just taken.
+     */
+    @Transactional
+    public CoachingSessionEntity holdForOrder(Long accountId, Long orderId, String variant,
+                                              String coachPublicId, Instant startsAt,
+                                              String customerTimezone) {
+        if (accountId == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in to book a session.");
+        }
+        if (startsAt == null || coachPublicId == null || coachPublicId.isBlank()) {
+            throw new ApiExceptions.BadRequestException("Pick a date and time for your session.");
+        }
+        String zone = validZone(customerTimezone);
+        CoachEntity coach = requireCoach(coachPublicId);
+        CoachingPolicy p = policy();
+        Instant now = clock.instant();
+        TimeRange window = new TimeRange(p.earliestBookableStart(now), p.latestBookableStart(now));
+        Duration length = settings.sessionLengthFor(variant);
+        boolean legal = SlotPlanner.isBookable(startsAt, coach.zone(), rulesFor(coach.getId()),
+                extrasFor(coach.getId(), window), busyFor(coach.getId(), window, null),
+                window, p, length);
+        if (!legal) {
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "That slot was just taken, please pick another.");
+        }
+        CoachingSessionEntity hold = CoachingSessionEntity.hold(SecureIds.sessionRef(), accountId,
+                coach.getId(), orderId, startsAt, startsAt.plus(length), zone,
+                now.plus(settings.current().hold()));
+        try {
+            sessions.saveAndFlush(hold);
+        } catch (DataIntegrityViolationException raced) {
+            // The overlap constraint caught two checkouts for the same slot. This order is
+            // rolled back with the exception; the other one keeps the slot.
+            log.info("Checkout hold race lost for coach {} at {}", coach.getPublicId(), startsAt);
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "That slot was just taken, please pick another.");
+        }
+        events.save(CoachingSessionEventEntity.held(hold.getId(), accountId, now));
+        log.info("Session {} held for order {} with coach {} at {} until {}", hold.getPublicRef(),
+                orderId, coach.getPublicId(), startsAt, hold.getHoldExpiresAt());
+        announcer.held(hold);
+        return hold;
+    }
+
+    /**
+     * The order has been paid: its hold becomes a booking, spending one of the credits the
+     * payment has just granted.
+     *
+     * <p>Nothing to do when the order holds no slot -- it was bought without one, or the
+     * hold had already expired, in which case the customer books with their credit like
+     * any other.
+     */
+    @Transactional
+    public Optional<CoachingSessionEntity> confirmHoldForOrder(Long orderId, SessionActor actor,
+                                                             Long actorId) {
+        Optional<CoachingSessionEntity> found =
+                sessions.findFirstByOrderIdAndStatus(orderId, SessionStatus.PENDING);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        CoachingSessionEntity hold = found.get();
+        if (credits.balanceOf(hold.getAccountId()) <= 0) {
+            // The payment path grants before it confirms, so this means the grant failed;
+            // leave the hold for an admin rather than book a session nobody paid for.
+            log.warn("Order {} is paid but account {} has no credit to confirm session {}",
+                    orderId, hold.getAccountId(), hold.getPublicRef());
+            return Optional.empty();
+        }
+        transition(hold, SessionStatus.SCHEDULED, actor, actorId, "payment verified");
+        credits.save(SessionCreditEntity.consumed(hold.getAccountId(), hold.getId(),
+                hold.getPublicRef()));
+        announcer.confirmed(hold);
+        return Optional.of(hold);
+    }
+
+    /**
+     * Let an order's hold go: the payment was rejected, the order was abandoned, or an
+     * admin released it. The slot is free again the moment this commits.
+     */
+    @Transactional
+    public Optional<CoachingSessionEntity> releaseHoldForOrder(Long orderId, SessionActor actor,
+                                                             Long actorId, String why) {
+        Optional<CoachingSessionEntity> found =
+                sessions.findFirstByOrderIdAndStatus(orderId, SessionStatus.PENDING);
+        found.ifPresent(hold -> release(hold, actor, actorId, why));
+        return found;
+    }
+
+    /**
+     * Payment proof is in: keep the slot until someone has looked at it. Only ever
+     * lengthens a hold, so a second submission cannot shorten the first.
+     */
+    @Transactional
+    public void extendHoldForOrder(Long orderId, Instant until) {
+        sessions.findFirstByOrderIdAndStatus(orderId, SessionStatus.PENDING).ifPresent(hold -> {
+            if (hold.getHoldExpiresAt() == null || until.isAfter(hold.getHoldExpiresAt())) {
+                hold.extendHold(until, clock.instant());
+                sessions.save(hold);
+                log.info("Hold {} for order {} extended to {} while the payment is reviewed",
+                        hold.getPublicRef(), orderId, until);
+            }
+        });
+    }
+
+    /** Release every hold whose time is up. Run by the scheduler. */
+    @Transactional
+    public int releaseExpiredHolds() {
+        List<CoachingSessionEntity> expired = sessions.expiredHolds(clock.instant());
+        expired.forEach(hold -> release(hold, SessionActor.SYSTEM, null, "hold expired"));
+        return expired.size();
+    }
+
+    private void release(CoachingSessionEntity hold, SessionActor actor, Long actorId, String why) {
+        transition(hold, SessionStatus.RELEASED, actor, actorId, why);
+        announcer.released(hold, why);
+    }
+
+    private static String validZone(String zone) {
+        if (zone == null || zone.isBlank()) {
+            return null;
+        }
+        try {
+            return ZoneId.of(zone.trim()).getId();
+        } catch (RuntimeException e) {
+            throw new ApiExceptions.BadRequestException("That time zone was not recognised.");
+        }
+    }
+
     // ------------------------------------------------------------------- transitions ---
 
     /**
@@ -389,7 +530,11 @@ public class CoachingService {
             case SCHEDULED, PENDING, RELEASED -> false;
         };
 
-        session.applyTransition(to, refund, now);
+        if (from == SessionStatus.PENDING && to == SessionStatus.SCHEDULED) {
+            session.applyConfirmation(now);
+        } else {
+            session.applyTransition(to, refund, now);
+        }
         sessions.save(session);
 
         if (refund) {

@@ -71,6 +71,28 @@ public class CoachingLifecycleJobs {
      * one governs when a <i>coach</i> may mark an absence, this one governs when the system
      * gives up waiting for anybody to say anything at all.
      */
+    /**
+     * Let go of checkout holds whose time is up, so an abandoned checkout does not keep a
+     * slot from everybody else.
+     *
+     * <p>Every minute, because a hold is two hours by default and a slot that stays blocked
+     * for most of an hour after its hold ended is a slot somebody else could not book. A
+     * hold being confirmed by a payment at the same moment is safe: the session row is
+     * versioned, so whichever change commits second fails and is not applied, and a sweep
+     * that loses simply tries again next minute -- by which time the hold is a booking.
+     */
+    @Scheduled(fixedDelayString = "PT1M", initialDelayString = "PT45S")
+    public void releaseExpiredHolds() {
+        try {
+            int released = coaching.releaseExpiredHolds();
+            if (released > 0) {
+                log.info("Released {} expired coaching hold(s)", released);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Could not release expired coaching holds: {}", e.toString());
+        }
+    }
+
     @Scheduled(cron = "0 25 * * * *")
     @Transactional
     public void settleUnrecordedSessions() {

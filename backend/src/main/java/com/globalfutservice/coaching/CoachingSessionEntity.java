@@ -153,6 +153,15 @@ public class CoachingSessionEntity {
         this.updatedAt = at;
     }
 
+    /**
+     * Package-private: a hold becomes a booking. Not a settlement -- the session has not
+     * happened yet -- so {@code settledAt} is left alone.
+     */
+    void applyConfirmation(Instant at) {
+        this.status = SessionStatus.SCHEDULED;
+        this.updatedAt = at;
+    }
+
     /** Package-private: only {@code CoachingService} extends a hold. */
     void extendHold(Instant until, Instant at) {
         this.holdExpiresAt = until;

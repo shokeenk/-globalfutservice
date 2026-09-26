@@ -108,6 +108,10 @@ public interface Notifier {
         // Channels opt in by overriding.
     }
 
+    /** A slot held at checkout is now a booking, because the payment was verified. */
+    default void coachingSessionConfirmed(CoachingBookingNotification notification) {
+    }
+
     /** Whether this channel is configured; used to keep startup logs honest. */
     boolean isEnabled();
 

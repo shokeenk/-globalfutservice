@@ -130,6 +130,12 @@ public class NotificationService {
         each(notifier -> notifier.coachingCancelled(n));
     }
 
+    /** A checkout hold became a booking: the payment was verified. */
+    @Async
+    public void coachingSessionConfirmed(CoachingBookingNotification n) {
+        each(notifier -> notifier.coachingSessionConfirmed(n));
+    }
+
     private void each(java.util.function.Consumer<Notifier> action) {
         for (Notifier notifier : notifiers) {
             try {

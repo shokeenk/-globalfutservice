@@ -76,6 +76,18 @@ public class CoachingSessionEventEntity {
         return e;
     }
 
+    /** A slot picked at checkout and held for an order awaiting payment. */
+    public static CoachingSessionEventEntity held(Long sessionId, Long actorId, Instant at) {
+        CoachingSessionEventEntity e = new CoachingSessionEventEntity();
+        e.sessionId = sessionId;
+        e.eventType = "HELD";
+        e.toStatus = SessionStatus.PENDING;
+        e.toTime = at;
+        e.actor = SessionActor.CUSTOMER;
+        e.actorId = actorId;
+        return e;
+    }
+
     public static CoachingSessionEventEntity transitioned(Long sessionId, SessionStatus from,
                                                           SessionStatus to, SessionActor actor,
                                                           Long actorId, String detail) {

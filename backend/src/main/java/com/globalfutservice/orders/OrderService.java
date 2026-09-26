@@ -1,5 +1,7 @@
 package com.globalfutservice.orders;
 
+import com.globalfutservice.coaching.AfterCommit;
+import com.globalfutservice.domain.coaching.SessionActor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.affiliate.AffiliateService;
 import com.globalfutservice.coaching.CoachingService;
@@ -189,6 +191,18 @@ public class OrderService {
                 account == null ? null : account.getId(), request.email(), "Order created");
 
         /*
+         * The slot picked at checkout, held for this order until it is paid. In this
+         * transaction on purpose: a slot that was just taken fails the whole order, so the
+         * customer is never charged -- nor spends a coupon or points -- for a session that
+         * has no time. Orders placed without a slot are untouched.
+         */
+        if (quote.sku() == Sku.COACHING && request.coachingStartsAt() != null) {
+            coachingService.holdForOrder(order.getAccountId(), order.getId(), order.getVariant(),
+                    request.coachingCoachId(), request.coachingStartsAt(),
+                    request.coachingTimezone());
+        }
+
+        /*
          * Claim the coupon inside the same transaction, re-checking the live limit.
          *
          * The quote priced the coupon; it did not reserve it. Between minting that price
@@ -344,6 +358,11 @@ public class OrderService {
                 // campaign would otherwise drain on carts nobody ever completed.
                 couponService.release(order.getId());
                 vaultService.purge(order.getId(), "checkout abandoned");
+                // And the slot it was holding, if it picked one.
+                final Long abandonedId = order.getId();
+                AfterCommit.run("release the coaching hold for order " + order.getPublicRef(),
+                        () -> coachingService.releaseHoldForOrder(abandonedId, SessionActor.SYSTEM,
+                                null, "order abandoned"));
             }
             default -> {
                 // No side effects for the intermediate states.
@@ -492,6 +511,13 @@ public class OrderService {
             // only a pool of credits.
             coachingService.grantCredits(paid.getAccountId(), paid.getId(), sessions,
                     paid.getPublicRef(), coachingService.sessionLengthForVariant(paid.getVariant()));
+            // The slot picked at checkout becomes a booking, spending one of those credits --
+            // once the payment has committed, so a hold that cannot be confirmed never undoes
+            // the payment (see AfterCommit). Nothing happens for an order that holds no slot,
+            // or whose hold has expired: that customer books with the credit, as before.
+            final Long paidOrderId = paid.getId();
+            AfterCommit.run("confirm the coaching hold for order " + paid.getPublicRef(),
+                    () -> coachingService.confirmHoldForOrder(paidOrderId, SessionActor.SYSTEM, null));
 
             // The customer's next step is Discord, so the invite goes out the moment the
             // money is confirmed -- by whichever path confirmed it, gateway or operator.
