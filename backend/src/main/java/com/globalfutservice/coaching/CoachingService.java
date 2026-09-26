@@ -338,7 +338,8 @@ public class CoachingService {
             case CANCELLED_BY_CUSTOMER ->
                     policy.refundsCreditOnCustomerCancel(now, session.getStartsAt());
             case COMPLETED, NO_SHOW -> false;
-            case SCHEDULED -> false;
+            // A hold spent nothing, so confirming or releasing one has nothing to return.
+            case SCHEDULED, PENDING, RELEASED -> false;
         };
 
         session.applyTransition(to, refund, now);

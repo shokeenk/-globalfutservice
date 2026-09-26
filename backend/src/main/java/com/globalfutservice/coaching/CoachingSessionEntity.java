@@ -71,6 +71,13 @@ public class CoachingSessionEntity {
      * re-deriving it later against a policy that has since changed would silently rewrite
      * what the customer was told when they cancelled.
      */
+    /**
+     * When a PENDING hold lets go of its slot if the payment is still unverified. Null for
+     * a session that was booked directly with a credit.
+     */
+    @Column(name = "hold_expires_at")
+    private Instant holdExpiresAt;
+
     @Column(name = "credit_returned", nullable = false)
     private boolean creditReturned = false;
 
@@ -113,6 +120,21 @@ public class CoachingSessionEntity {
         this.customerTimezone = customerTimezone;
     }
 
+    /**
+     * A slot picked at checkout, held for an order whose payment is not verified yet.
+     * Spends no credit; {@code CoachingService} turns it into a booking when the order is
+     * paid.
+     */
+    public static CoachingSessionEntity hold(String publicRef, Long accountId, Long coachId,
+                                             Long orderId, Instant startsAt, Instant endsAt,
+                                             String customerTimezone, Instant expiresAt) {
+        CoachingSessionEntity s = new CoachingSessionEntity(publicRef, accountId, coachId,
+                orderId, startsAt, endsAt, customerTimezone);
+        s.status = SessionStatus.PENDING;
+        s.holdExpiresAt = expiresAt;
+        return s;
+    }
+
     public TimeRange toRange() {
         return new TimeRange(startsAt, endsAt);
     }
@@ -128,6 +150,12 @@ public class CoachingSessionEntity {
         this.status = to;
         this.creditReturned = creditReturned;
         this.settledAt = at;
+        this.updatedAt = at;
+    }
+
+    /** Package-private: only {@code CoachingService} extends a hold. */
+    void extendHold(Instant until, Instant at) {
+        this.holdExpiresAt = until;
         this.updatedAt = at;
     }
 
@@ -188,6 +216,10 @@ public class CoachingSessionEntity {
 
     public String getCustomerTimezone() {
         return customerTimezone;
+    }
+
+    public Instant getHoldExpiresAt() {
+        return holdExpiresAt;
     }
 
     public SessionStatus getStatus() {

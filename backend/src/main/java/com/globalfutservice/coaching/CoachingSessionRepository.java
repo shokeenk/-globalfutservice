@@ -53,8 +53,12 @@ public interface CoachingSessionRepository extends JpaRepository<CoachingSession
      * it as busy would slowly starve the calendar of exactly the evening times people most
      * want to book.
      */
+    // Holds count: a slot picked at checkout is taken, exactly as the overlap constraint
+    // in V30 says it is. Leaving PENDING out would offer a held slot to the next customer
+    // and fail them only at the database.
     @Query("select s from CoachingSessionEntity s where s.coachId = :coachId "
-            + "and s.status = com.globalfutservice.domain.coaching.SessionStatus.SCHEDULED "
+            + "and s.status in (com.globalfutservice.domain.coaching.SessionStatus.PENDING, "
+            + "com.globalfutservice.domain.coaching.SessionStatus.SCHEDULED) "
             + "and s.startsAt < :to and s.endsAt > :from")
     List<CoachingSessionEntity> busyBetween(@Param("coachId") Long coachId,
                                             @Param("from") Instant from,
