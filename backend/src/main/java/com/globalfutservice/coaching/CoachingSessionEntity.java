@@ -168,6 +168,16 @@ public class CoachingSessionEntity {
         this.updatedAt = at;
     }
 
+    /**
+     * Package-private: an admin moves a session. Unlike a customer's reschedule it does not
+     * count against the customer's allowance of moves -- the business moved it, not them.
+     */
+    void applyMove(Instant newStart, Instant newEnd, Instant at) {
+        this.startsAt = newStart;
+        this.endsAt = newEnd;
+        this.updatedAt = at;
+    }
+
     /** Package-private: only {@code CoachingService} moves a session. */
     void applyReschedule(Instant newStart, Instant newEnd, String timezone, Instant at) {
         this.startsAt = newStart;

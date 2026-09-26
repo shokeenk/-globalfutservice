@@ -496,6 +496,73 @@ public class CoachingService {
         }
     }
 
+    // ------------------------------------------------------------------ admin actions ---
+
+    /**
+     * An admin moves a session or hold to another free slot.
+     *
+     * <p>Not bound by the customer's rules: no minimum notice, no change cut-off, and it does
+     * not use up one of the customer's own moves. It is bound by everything that makes a slot
+     * real -- the coach's hours or an extra window, nothing booked or held in the way, no
+     * blocked time -- and by the overlap constraint underneath.
+     */
+    @Transactional
+    public CoachingSessionEntity rescheduleByAdmin(CoachingSessionEntity session, Instant newStart,
+                                                   Long actorId) {
+        if (session.getStatus() != SessionStatus.PENDING
+                && session.getStatus() != SessionStatus.SCHEDULED) {
+            throw new ApiExceptions.ConflictException("session_not_movable",
+                    "Only a pending or confirmed session can be moved.");
+        }
+        CoachEntity coach = coaches.findById(session.getCoachId())
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("That coach no longer exists."));
+        CoachingPolicy p = policy();
+        Instant now = clock.instant();
+        TimeRange window = new TimeRange(now, p.latestBookableStart(now));
+        Duration length = Duration.between(session.getStartsAt(), session.getEndsAt());
+        if (!SlotPlanner.isBookable(newStart, coach.zone(), rulesFor(coach.getId()),
+                extrasFor(coach.getId(), window), busyFor(coach.getId(), window, session.getId()),
+                window, p, length)) {
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "That time is not free. Pick another slot.");
+        }
+        Instant was = session.getStartsAt();
+        session.applyMove(newStart, newStart.plus(length), now);
+        try {
+            sessions.saveAndFlush(session);
+        } catch (DataIntegrityViolationException raced) {
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "Someone just took that slot. Pick another.");
+        }
+        events.save(CoachingSessionEventEntity.rescheduled(
+                session.getId(), was, newStart, SessionActor.OPERATOR, actorId));
+        log.info("Session {} moved from {} to {} by account {}", session.getPublicRef(), was,
+                newStart, actorId);
+        announcer.rescheduled(session, was);
+        return session;
+    }
+
+    /**
+     * An admin cancels: a hold is released, a booking is cancelled by the coach and its
+     * credit returned -- the customer did nothing wrong.
+     */
+    @Transactional
+    public CoachingSessionEntity cancelByAdmin(CoachingSessionEntity session, Long actorId,
+                                               String note) {
+        String why = note == null || note.isBlank() ? "cancelled by an admin" : note.trim();
+        switch (session.getStatus()) {
+            case PENDING -> release(session, SessionActor.OPERATOR, actorId, why);
+            case SCHEDULED -> {
+                transition(session, SessionStatus.CANCELLED_BY_COACH, SessionActor.OPERATOR,
+                        actorId, why);
+                announcer.cancelled(session);
+            }
+            default -> throw new ApiExceptions.ConflictException("session_not_cancellable",
+                    "That session has already finished or been cancelled.");
+        }
+        return session;
+    }
+
     // ------------------------------------------------------------------- transitions ---
 
     /**

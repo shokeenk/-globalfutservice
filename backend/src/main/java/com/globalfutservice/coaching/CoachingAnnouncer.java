@@ -150,8 +150,12 @@ public class CoachingAnnouncer {
         if (session.getOrderId() == null) {
             return 0;
         }
+        // A released hold was never one of the order's sessions, so it takes no number.
         List<CoachingSessionEntity> forOrder =
-                sessions.findByOrderIdOrderByIdAsc(session.getOrderId());
+                sessions.findByOrderIdOrderByIdAsc(session.getOrderId()).stream()
+                        .filter(s -> s.getStatus() != com.globalfutservice.domain.coaching.SessionStatus.RELEASED
+                                || s.getId().equals(session.getId()))
+                        .toList();
         for (int i = 0; i < forOrder.size(); i++) {
             if (forOrder.get(i).getId().equals(session.getId())) {
                 return i + 1;

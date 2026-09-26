@@ -148,6 +148,11 @@ public class CoachingSessionEventEntity {
         return actor;
     }
 
+    /** Who made the change; null for the system. */
+    public Long getActorId() {
+        return actorId;
+    }
+
     public String getDetail() {
         return detail;
     }
