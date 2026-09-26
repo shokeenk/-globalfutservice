@@ -188,6 +188,7 @@ public class CampaignService {
      */
     @Transactional(readOnly = true)
     public String sendTest(String publicId, Long adminAccountId) {
+        requireEmailEnabled();
         CampaignEntity c = require(publicId);
         String to = accounts.findById(adminAccountId)
                 .map(AccountEntity::getEmail)
@@ -332,6 +333,7 @@ public class CampaignService {
 
     @Transactional
     public CampaignEntity schedule(String publicId, Instant when) {
+        requireEmailEnabled();
         CampaignEntity c = requireEditable(publicId);
         if (when == null || !when.isAfter(clock.instant())) {
             throw new ApiExceptions.BadRequestException("Pick a time in the future.");
@@ -353,25 +355,102 @@ public class CampaignService {
         return c;
     }
 
-    /** Validate and hand to {@link #dispatch}. Not transactional: the send is not one. */
-    public int sendNow(String publicId) {
-        CampaignEntity c = readForSend(publicId);
-        return dispatch(c.getId());
-    }
-
-    @Transactional(readOnly = true)
-    protected CampaignEntity readForSend(String publicId) {
+    /**
+     * Queue a campaign to go out now, and return at once.
+     *
+     * <p>It does not send. It makes the campaign due this minute and leaves the sending to
+     * {@link CampaignScheduleJob}, which picks it up within about a minute. The send used
+     * to run here, on the request thread, and the storefront's nginx gives an API request
+     * 60 seconds ({@code proxy_read_timeout} in {@code frontend/nginx.conf.template}): a
+     * campaign that took longer showed the admin a 504 while the backend carried on
+     * sending, and a retry was then refused because the campaign was no longer a draft.
+     * Queued, the request is a single UPDATE and no proxy can cut a send off halfway.
+     *
+     * <p>A campaign cancelled in the meantime is simply not claimed: the job's conditional
+     * claim only takes a campaign that is still SCHEDULED.
+     */
+    @Transactional
+    public CampaignEntity sendNow(String publicId) {
+        requireEmailEnabled();
         CampaignEntity c = require(publicId);
         if (c.getStatus() != CampaignStatus.DRAFT && c.getStatus() != CampaignStatus.SCHEDULED) {
             throw new ApiExceptions.BadRequestException(
                     "Only a draft or scheduled campaign can be sent.");
         }
         requireSendable(c);
+        c.setScheduledAt(clock.instant());
+        c.setStatus(CampaignStatus.SCHEDULED);
+        c.touch();
+        log.info("Campaign {} queued to send now", c.getPublicId());
+        return c;
+    }
+
+    /**
+     * Try again for the people a finished campaign did not reach, and return at once.
+     *
+     * <p>A recipient the relay refuses is marked FAILED, and the send loop only ever takes
+     * PENDING rows, so without this a refusal is final -- including a temporary one, such
+     * as a provider's daily limit, which is the likely kind. This moves the campaign's
+     * FAILED rows back to PENDING and queues the campaign the same way {@link #sendNow}
+     * does; the job then claims it and works through the queue. It is an admin's action
+     * rather than automatic because nothing here can tell a limit that resets tomorrow from
+     * an address that will never work, and guessing wrong in the automatic direction means
+     * mailing a dead address over and over.
+     *
+     * <p>The list is not rebuilt: {@link CampaignSender#buildRecipients} keeps a campaign's
+     * existing list, so nobody who opted in since is added. Rows still PENDING from a send
+     * that broke part-way are picked up too, which makes this the way to resume a FAILED
+     * campaign as well.
+     *
+     * <p>A FAILED row is not proof that nothing arrived -- a connection can drop after the
+     * relay has accepted a message -- so a retry can, rarely, give somebody a second copy.
+     */
+    @Transactional
+    public CampaignEntity retryFailed(String publicId) {
+        requireEmailEnabled();
+        CampaignEntity c = require(publicId);
+        if (c.getStatus() != CampaignStatus.SENT && c.getStatus() != CampaignStatus.FAILED) {
+            throw new ApiExceptions.BadRequestException(
+                    "Only a campaign that has finished sending can be retried.");
+        }
+        if (c.getOfferValidUntil() != null && c.getOfferValidUntil().isBefore(today())) {
+            throw new ApiExceptions.BadRequestException(
+                    "This offer ended on " + DAY.format(c.getOfferValidUntil())
+                            + ", so a retry would send a code that no longer works.");
+        }
+        int requeued = recipients.requeueFailed(c.getId());
+        /*
+         * Read the campaign again. The requeue is a bulk UPDATE that clears the persistence
+         * context when it finishes, which detaches everything loaded before it -- and a
+         * change made to a detached entity is silently never saved. Without this the rows
+         * were requeued but the campaign stayed SENT, the job never picked it up, and the
+         * response still said SCHEDULED because it read the in-memory copy. Observed
+         * locally in Hibernate's SQL log: the recipient UPDATE ran, the campaign UPDATE
+         * never did.
+         */
+        c = require(publicId);
+        // A send that broke before its list was written has nobody PENDING yet, but does
+        // have people to reach: the claim will list them.
+        boolean neverListed = c.getStatus() == CampaignStatus.FAILED
+                && recipients.countByCampaignId(c.getId()) == 0;
+        if (!neverListed && recipients.countByCampaignIdAndStatus(c.getId(), "PENDING") == 0) {
+            throw new ApiExceptions.BadRequestException(
+                    "Everybody on this campaign's list was sent to or opted out;"
+                            + " there is nobody to retry.");
+        }
+        c.setScheduledAt(clock.instant());
+        c.setStatus(CampaignStatus.SCHEDULED);
+        c.touch();
+        log.info("Campaign {} queued for retry; {} failed recipient(s) requeued",
+                c.getPublicId(), requeued);
         return c;
     }
 
     /**
      * Claim a campaign, materialise its audience, and work through it.
+     *
+     * <p>Called by {@link CampaignScheduleJob} only, never on a request thread -- see
+     * {@link #sendNow} for why.
      *
      * <p>Deliberately not {@code @Transactional}. A send takes as long as it takes, and
      * holding one transaction across hundreds of SMTP round trips would pin a connection
@@ -483,6 +562,23 @@ public class CampaignService {
                             + " and can no longer be edited.");
         }
         return c;
+    }
+
+    /**
+     * Refuse to start anything that would put a campaign in the post while email is off.
+     *
+     * <p>{@code GFS_EMAIL_ENABLED} is the switch for everything this server sends,
+     * campaigns and test copies included, not only order mail. Before this check a
+     * campaign sent with it off went to whatever relay was configured anyway, and every
+     * recipient the relay refused was recorded as FAILED. Reproduced locally: with the
+     * flag off, both recipients went to the relay and both were marked FAILED.
+     */
+    private void requireEmailEnabled() {
+        if (!props.notifications().emailEnabled()) {
+            throw new ApiExceptions.BadRequestException(
+                    "Email is switched off on this server, so nothing can be sent or scheduled."
+                            + " Set GFS_EMAIL_ENABLED=true to send campaigns.");
+        }
     }
 
     /** What must hold before anything reaches a customer. */

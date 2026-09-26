@@ -254,6 +254,14 @@ const STATUS_TONE: Record<Campaign['status'], 'ok' | 'warn' | 'neutral' | 'brand
   SENT: 'ok', CANCELLED: 'neutral', FAILED: 'warn',
 }
 
+/**
+ * Whether there is anybody to try again for. A FAILED campaign always qualifies: its send
+ * broke, and whoever it had not reached yet is still waiting.
+ */
+function canRetry(c: Campaign) {
+  return c.status === 'FAILED' || (c.status === 'SENT' && c.stats.failed > 0)
+}
+
 function CampaignCard({ campaign, options, showAnalytics, onChanged, onError }: {
   campaign: Campaign
   options: CampaignOptions | null
@@ -307,7 +315,7 @@ function CampaignCard({ campaign, options, showAnalytics, onChanged, onError }: 
 
   const send = () => act(
     () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/send`, {}),
-    'Campaign sent.')
+    'Campaign queued. It goes out within about a minute.')
 
   const schedule = () => act(
     () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/schedule`, {
@@ -318,6 +326,10 @@ function CampaignCard({ campaign, options, showAnalytics, onChanged, onError }: 
   const cancel = () => act(
     () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/cancel`, {}),
     'Campaign cancelled.')
+
+  const retry = () => act(
+    () => api.post(`/api/v1/admin/campaigns/${campaign.publicId}/retry`, {}),
+    'Retry queued. It goes out within about a minute.')
 
   const uploadBanner = async (file: File) => {
     const form = new FormData()
@@ -445,6 +457,18 @@ function CampaignCard({ campaign, options, showAnalytics, onChanged, onError }: 
           <Button variant="secondary" size="md" onClick={() => void cancel()} disabled={busy}>
             Cancel scheduled send
           </Button>
+        </div>
+      )}
+
+      {canRetry(campaign) && (
+        <div className="mt-4">
+          <Button variant="secondary" size="md" onClick={() => void retry()} disabled={busy}>
+            {busy ? 'Working…'
+              : campaign.stats.failed > 0 ? `Retry ${campaign.stats.failed} failed` : 'Resume send'}
+          </Button>
+          <p className="mt-2 text-[12.5px] text-chalk-faint">
+            Tries again for the people this campaign did not reach. Nobody new is added.
+          </p>
         </div>
       )}
     </div>

@@ -360,10 +360,18 @@ public class AdminCampaignController {
 
     @PostMapping("/" + ID + "/send")
     @Operation(summary = "Send now",
-            description = "Resolves the audience, writes a row per recipient, then sends.")
+            description = "Queues the campaign for the background job, which sends it within "
+                    + "about a minute. Returns at once with the campaign SCHEDULED for now.")
     public ResponseEntity<CampaignDto> send(@PathVariable String publicId) {
-        campaigns.sendNow(publicId);
-        return ResponseEntity.ok(toDto(campaigns.get(publicId)));
+        return ResponseEntity.ok(toDto(campaigns.sendNow(publicId)));
+    }
+
+    @PostMapping("/" + ID + "/retry")
+    @Operation(summary = "Retry the recipients a finished campaign failed to reach",
+            description = "Moves the campaign's FAILED recipients back to the queue and queues the "
+                    + "campaign for the background job. Nobody new is added to the list.")
+    public ResponseEntity<CampaignDto> retry(@PathVariable String publicId) {
+        return ResponseEntity.ok(toDto(campaigns.retryFailed(publicId)));
     }
 
     @PostMapping("/" + ID + "/cancel")

@@ -143,6 +143,7 @@ services:
       # ---- order alerts -----------------------------------------------------
       # Both of the first two are required. Setting one without the other silently
       # notifies nobody — the app logs a WARN at startup when that happens.
+      # GFS_EMAIL_ENABLED also governs promotional campaigns: false stops them too.
       - key: GFS_EMAIL_ENABLED
         value: "true"
       - key: GFS_OPERATOR_EMAILS

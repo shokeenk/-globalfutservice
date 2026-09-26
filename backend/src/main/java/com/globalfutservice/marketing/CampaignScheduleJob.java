@@ -1,5 +1,6 @@
 package com.globalfutservice.marketing;
 
+import com.globalfutservice.config.AppProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,6 +23,11 @@ import java.util.List;
  * every customer the promotion twice, and that is not something an apology fixes.
  * {@link CampaignRepository#claimForSending} is the guard — every instance may see the
  * same due campaign, exactly one wins the conditional update.
+ *
+ * <p>Holds everything back while {@code GFS_EMAIL_ENABLED} is off. A due campaign is left
+ * SCHEDULED rather than claimed, so it goes out once email is switched on, instead of
+ * being claimed and recording every recipient as FAILED against a relay nobody meant to
+ * use.
  */
 @Component
 public class CampaignScheduleJob {
@@ -30,16 +36,24 @@ public class CampaignScheduleJob {
 
     private final CampaignRepository campaigns;
     private final CampaignService service;
+    private final AppProperties props;
 
-    public CampaignScheduleJob(CampaignRepository campaigns, CampaignService service) {
+    public CampaignScheduleJob(CampaignRepository campaigns, CampaignService service,
+                               AppProperties props) {
         this.campaigns = campaigns;
         this.service = service;
+        this.props = props;
     }
 
     @Scheduled(fixedDelayString = "PT1M", initialDelayString = "PT30S")
     public void sendDueCampaigns() {
         List<CampaignEntity> due = campaigns.findDue(Instant.now());
         if (due.isEmpty()) {
+            return;
+        }
+        if (!props.notifications().emailEnabled()) {
+            log.warn("{} campaign(s) due, but GFS_EMAIL_ENABLED is false; leaving them scheduled",
+                    due.size());
             return;
         }
         log.info("{} campaign(s) due", due.size());

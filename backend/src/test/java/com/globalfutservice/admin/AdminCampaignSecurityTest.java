@@ -87,6 +87,8 @@ class AdminCampaignSecurityTest {
         when(campaigns.chooseAudience(anyString(), any())).thenReturn(draft);
         when(campaigns.sendTest(anyString(), anyLong())).thenReturn("t@example.test");
         when(campaigns.quota()).thenReturn(new CampaignService.SendQuota(100, 3, 97));
+        when(campaigns.sendNow(anyString())).thenReturn(draft);
+        when(campaigns.retryFailed(anyString())).thenReturn(draft);
     }
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -94,7 +96,7 @@ class AdminCampaignSecurityTest {
         return new UsernamePasswordAuthenticationToken(p, null, p.authorities());
     }
 
-    /** Every endpoint the builder added, each with a body that is valid for it. */
+    /** Every endpoint the builder added, plus send and retry, each with a valid body. */
     static Stream<Arguments> newEndpoints() {
         return Stream.of(
                 Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/drafts", DETAILS),
@@ -105,7 +107,9 @@ class AdminCampaignSecurityTest {
                 Arguments.of(HttpMethod.PUT, "/api/v1/admin/campaigns/camp_x/audience",
                         "{\"audience\":\"COINS_BUYERS\"}"),
                 Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/camp_x/test", ""),
-                Arguments.of(HttpMethod.GET, "/api/v1/admin/campaigns/quota", ""));
+                Arguments.of(HttpMethod.GET, "/api/v1/admin/campaigns/quota", ""),
+                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/camp_x/send", ""),
+                Arguments.of(HttpMethod.POST, "/api/v1/admin/campaigns/camp_x/retry", ""));
     }
 
     private static MockHttpServletRequestBuilder call(HttpMethod method, String path, String body) {

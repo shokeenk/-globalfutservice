@@ -1,5 +1,6 @@
 package com.globalfutservice.marketing;
 
+import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.web.ApiExceptions;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -48,10 +50,11 @@ class CampaignServiceDetailsTest {
         campaigns = mock(CampaignRepository.class);
         audience = mock(MarketingAudienceRepository.class);
         sender = mock(CampaignSender.class);
+        AppProperties props = mock(AppProperties.class, RETURNS_DEEP_STUBS);
+        when(props.notifications().emailEnabled()).thenReturn(true);
         service = new CampaignService(campaigns, mock(CampaignRecipientRepository.class), audience,
                 mock(AccountRepository.class), sender,
-                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC),
-                mock(com.globalfutservice.config.AppProperties.class));
+                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC), props);
         when(campaigns.save(any(CampaignEntity.class))).thenAnswer(i -> i.getArgument(0));
     }
 
