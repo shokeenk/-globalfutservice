@@ -61,3 +61,28 @@ did -- a short reason column, which needs a migration -- shown beside the status
 **Evidence:** observed locally. A campaign seeded as due with an offer that ended
 the day before was withdrawn on the first tick; it showed only `CANCELLED`, and the
 reason appeared in the log alone.
+
+---
+
+## 3. The 30-day revenue figure adds amounts in different currencies together
+
+**Where:** `OrderRepository.revenueSince`, shown by `AdminAnalyticsController.revenue`
+
+Every order records its own currency, and the rate card can price in INR, USD, EUR,
+GBP or AED. The revenue query sums `total_minor` across every delivered and
+completed order regardless of currency, and the endpoint formats the total as
+rupees. A $10 order adds 1,000 to the sum, which is then shown as ₹10.00 rather
+than the several hundred rupees it is worth; a £10 order does the same. The figure is right only while every order is
+in rupees.
+
+**When it bites:** the first delivered or completed order priced in anything other
+than INR. Whether one exists in production is not known -- it has not been queried.
+
+**What it would take:** decide what the figure should mean -- rupees only, one total
+per currency, or everything converted at some rate -- and change the query to match.
+Deliberately not changed when the card moved to Analytics, where the instruction
+was to keep what counts as revenue exactly as it was.
+
+**Evidence:** read in the code. The local dev database does hold a GBP order, so
+non-INR orders are not hypothetical, but that one is abandoned and so is not
+counted; no mixed total has been observed.
