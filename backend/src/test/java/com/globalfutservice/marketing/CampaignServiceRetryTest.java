@@ -75,6 +75,29 @@ class CampaignServiceRetryTest {
     }
 
     @Test
+    @DisplayName("queues the campaign as read after the requeue, which detached the earlier copy")
+    void changesTheReReadCampaign() {
+        CampaignEntity before = new CampaignEntity("n", "Subject", "Heading", "Body",
+                CampaignAudience.ALL_OPTED_IN, 1L);
+        before.setStatus(CampaignStatus.SENT);
+        // What the database hands back once the bulk UPDATE has cleared the context: a
+        // different instance, and the only one whose changes are saved.
+        CampaignEntity after = new CampaignEntity("n", "Subject", "Heading", "Body",
+                CampaignAudience.ALL_OPTED_IN, 1L);
+        after.setStatus(CampaignStatus.SENT);
+        when(campaigns.findByPublicId("camp_x"))
+                .thenReturn(Optional.of(before), Optional.of(after));
+        when(recipients.countByCampaignId(any())).thenReturn(2L);
+        when(recipients.countByCampaignIdAndStatus(any(), any())).thenReturn(2L);
+
+        CampaignEntity queued = service.retryFailed("camp_x");
+
+        assertThat(queued).isSameAs(after);
+        assertThat(after.getStatus()).isEqualTo(CampaignStatus.SCHEDULED);
+        assertThat(after.getScheduledAt()).isEqualTo(NOW);
+    }
+
+    @Test
     @DisplayName("resumes a send that broke part-way, whose rest is still PENDING")
     void resumesABrokenSend() {
         CampaignEntity c = campaignIn(CampaignStatus.FAILED);

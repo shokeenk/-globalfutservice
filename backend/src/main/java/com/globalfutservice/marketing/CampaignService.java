@@ -419,6 +419,16 @@ public class CampaignService {
                             + ", so a retry would send a code that no longer works.");
         }
         int requeued = recipients.requeueFailed(c.getId());
+        /*
+         * Read the campaign again. The requeue is a bulk UPDATE that clears the persistence
+         * context when it finishes, which detaches everything loaded before it -- and a
+         * change made to a detached entity is silently never saved. Without this the rows
+         * were requeued but the campaign stayed SENT, the job never picked it up, and the
+         * response still said SCHEDULED because it read the in-memory copy. Observed
+         * locally in Hibernate's SQL log: the recipient UPDATE ran, the campaign UPDATE
+         * never did.
+         */
+        c = require(publicId);
         // A send that broke before its list was written has nobody PENDING yet, but does
         // have people to reach: the claim will list them.
         boolean neverListed = c.getStatus() == CampaignStatus.FAILED
