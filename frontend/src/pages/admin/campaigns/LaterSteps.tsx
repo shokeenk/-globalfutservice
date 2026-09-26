@@ -361,8 +361,9 @@ export function StepReview({
             {check.over} {check.over === 1 ? 'person is' : 'people are'} over what is left of today's allowance.
           </p>
           <p className="mt-1.5 text-[12.5px] leading-relaxed text-admin-ink">
-            The provider will refuse the rest, and a refused recipient is never retried — they will not get
-            this campaign at all. Schedule it for tomorrow, or choose a smaller audience.
+            The provider will refuse the rest. A refused recipient is not retried automatically — they miss
+            this campaign unless you retry them from Campaign History once the allowance resets. Schedule it
+            for tomorrow, or choose a smaller audience.
           </p>
           <label htmlFor={ackId} className="mt-2.5 flex items-start gap-2 text-[12.5px] text-admin-ink">
             <input id={ackId} type="checkbox" checked={acknowledged}

@@ -333,7 +333,8 @@ describe('Send Campaign, later steps', () => {
 
     const warning = await screen.findByRole('alert')
     expect(warning).toHaveTextContent('32 people are over')
-    expect(warning).toHaveTextContent('never retried')
+    expect(warning).toHaveTextContent('not retried automatically')
+    expect(warning).toHaveTextContent('retry them from Campaign History')
     const send = screen.getByRole('button', { name: 'Send now' })
     expect(send).toBeDisabled()
 

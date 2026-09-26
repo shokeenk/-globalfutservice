@@ -172,9 +172,9 @@ export function validateStepTwo(f: StepTwoFields): ContentErrors {
 /**
  * How a campaign's audience compares with the provider's remaining allowance.
  *
- * <p>Worth being exact about, because the consequence is permanent: a recipient the
- * provider refuses is marked failed and never retried, so every recipient past the
- * allowance misses the campaign for good.
+ * <p>Worth being exact about, because the consequence lasts: a recipient the provider
+ * refuses is marked failed and is not retried unless an admin asks from Campaign History,
+ * so every recipient past the allowance misses the campaign until somebody does.
  */
 export function quotaCheck(audience: number, remaining: number) {
   const over = Math.max(0, audience - remaining)
