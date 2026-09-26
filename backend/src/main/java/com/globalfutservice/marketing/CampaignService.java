@@ -188,6 +188,7 @@ public class CampaignService {
      */
     @Transactional(readOnly = true)
     public String sendTest(String publicId, Long adminAccountId) {
+        requireEmailEnabled();
         CampaignEntity c = require(publicId);
         String to = accounts.findById(adminAccountId)
                 .map(AccountEntity::getEmail)
@@ -332,6 +333,7 @@ public class CampaignService {
 
     @Transactional
     public CampaignEntity schedule(String publicId, Instant when) {
+        requireEmailEnabled();
         CampaignEntity c = requireEditable(publicId);
         if (when == null || !when.isAfter(clock.instant())) {
             throw new ApiExceptions.BadRequestException("Pick a time in the future.");
@@ -355,6 +357,7 @@ public class CampaignService {
 
     /** Validate and hand to {@link #dispatch}. Not transactional: the send is not one. */
     public int sendNow(String publicId) {
+        requireEmailEnabled();
         CampaignEntity c = readForSend(publicId);
         return dispatch(c.getId());
     }
@@ -483,6 +486,23 @@ public class CampaignService {
                             + " and can no longer be edited.");
         }
         return c;
+    }
+
+    /**
+     * Refuse to start anything that would put a campaign in the post while email is off.
+     *
+     * <p>{@code GFS_EMAIL_ENABLED} is the switch for everything this server sends,
+     * campaigns and test copies included, not only order mail. Before this check a
+     * campaign sent with it off went to whatever relay was configured anyway, and every
+     * recipient the relay refused was recorded as FAILED. Reproduced locally: with the
+     * flag off, both recipients went to the relay and both were marked FAILED.
+     */
+    private void requireEmailEnabled() {
+        if (!props.notifications().emailEnabled()) {
+            throw new ApiExceptions.BadRequestException(
+                    "Email is switched off on this server, so nothing can be sent or scheduled."
+                            + " Set GFS_EMAIL_ENABLED=true to send campaigns.");
+        }
     }
 
     /** What must hold before anything reaches a customer. */

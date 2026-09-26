@@ -531,6 +531,11 @@ public record AppProperties(
              */
             String discordVerifyChannelId,
 
+            /**
+             * The switch for every email this server sends: order mail, operator alerts,
+             * campaigns and campaign test copies. Off, the campaign screens refuse to send
+             * or schedule and the campaign job leaves due campaigns waiting.
+             */
             @DefaultValue("false") boolean emailEnabled,
             /**
              * Who gets the order alerts. Comma-separated; blank disables the channel.
