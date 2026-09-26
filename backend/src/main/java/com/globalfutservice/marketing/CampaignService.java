@@ -44,6 +44,14 @@ public class CampaignService {
     private static final int BATCH = 100;
 
     /**
+     * How long a SENDING campaign may show no sign of life before it is taken to have
+     * stopped. A live send gives one before every message, and one message is bounded by
+     * the SMTP timeouts in application.yml -- five seconds each to connect, read and
+     * write -- so ten minutes is far longer than a live send can go quiet.
+     */
+    public static final Duration STALLED_AFTER = Duration.ofMinutes(10);
+
+    /**
      * The calendar an offer's last day is counted in. The business runs on Indian time,
      * and "valid till 10 Feb" means until the end of 10 Feb there — not in UTC, where it
      * would end at 05:30 the next morning for a customer reading it in Mumbai.
@@ -476,10 +484,60 @@ public class CampaignService {
             log.debug("Campaign {} is already being sent elsewhere", campaignId);
             return 0;
         }
+        return work(campaignId, "claimed");
+    }
+
+    /**
+     * Finish a send that stopped part-way, and return how many messages went out.
+     *
+     * <p>A send moves its campaign to SENDING when it starts and on to SENT or FAILED when
+     * it reaches the end of the list. A process that stops in between -- a deploy, a
+     * crash, the host restarting it -- used to leave the campaign SENDING for good: the
+     * claim, the job, cancel and retry all pass SENDING by. Reproduced locally by killing
+     * the backend two seconds into a send: after a restart and three ticks of the job the
+     * campaign was still SENDING with both its rows PENDING, and there was no way on
+     * without SQL.
+     *
+     * <p>Called by {@link CampaignScheduleJob} for campaigns that have been SENDING with no
+     * sign of life for {@link #STALLED_AFTER}. Not decided at startup, because a
+     * zero-downtime deploy starts the new instance while the old one may still be sending:
+     * silence, not a restart, is what shows a send has stopped.
+     *
+     * <p>The list is kept and the PENDING rows are sent. The one message that was in
+     * flight when the process stopped may already have reached its recipient while its row
+     * still says PENDING -- observed locally, where the relay had the whole message though
+     * the backend died before hearing it was accepted -- so a resume can give that one
+     * person a second copy.
+     *
+     * <p>A campaign whose offer has ended in the meantime is marked FAILED rather than
+     * resumed, for the reason {@link #dispatch} withdraws one.
+     *
+     * @return how many messages the mail server accepted in this run
+     */
+    public int resumeStalled(Long campaignId) {
+        Instant now = clock.instant();
+        if (!sender.reclaimStalled(campaignId, now, now.minus(STALLED_AFTER))) {
+            // It showed a sign of life, or another instance took it. Either way, not ours.
+            return 0;
+        }
+        CampaignEntity campaign = campaigns.findById(campaignId).orElseThrow();
+        if (campaign.getOfferValidUntil() != null && campaign.getOfferValidUntil().isBefore(today())) {
+            log.warn("Campaign {} stopped mid-send and its offer has since ended;"
+                    + " marked FAILED, not resumed", campaign.getPublicId());
+            sender.complete(campaignId, CampaignStatus.FAILED);
+            return 0;
+        }
+        log.warn("Campaign {} stopped mid-send with no sign of life for {}; resuming",
+                campaign.getPublicId(), STALLED_AFTER);
+        return work(campaignId, "resumed");
+    }
+
+    /** List the recipients if that has not been done, then send to everyone PENDING. */
+    private int work(Long campaignId, String how) {
         CampaignEntity campaign = campaigns.findById(campaignId).orElseThrow();
         try {
             int listed = sender.buildRecipients(campaignId, resolve(campaign.getAudience()));
-            log.info("Campaign {} claimed; {} recipients listed", campaign.getPublicId(), listed);
+            log.info("Campaign {} {}; {} recipients listed", campaign.getPublicId(), how, listed);
 
             int sent = 0;
             while (true) {
@@ -489,6 +547,7 @@ public class CampaignService {
                     break;
                 }
                 for (CampaignRecipientEntity r : batch) {
+                    sender.heartbeat(campaignId);
                     if (sender.sendOne(campaignId, r.getId())) {
                         sent++;
                     }

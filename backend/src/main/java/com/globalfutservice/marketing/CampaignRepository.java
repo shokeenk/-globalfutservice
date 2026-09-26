@@ -58,6 +58,53 @@ public interface CampaignRepository extends JpaRepository<CampaignEntity, Long> 
     int claimForSending(@Param("id") Long id, @Param("now") Instant now);
 
     /**
+     * A sign of life from a send in progress, given before every message.
+     *
+     * <p>Moves {@code updatedAt} forward, which nothing else touches while a campaign is
+     * SENDING -- its content is frozen. A SENDING campaign whose {@code updatedAt} stops
+     * moving has stopped being sent: see {@link #reclaimStalled}.
+     */
+    @Modifying
+    @Query("""
+            update CampaignEntity c
+               set c.updatedAt = :now
+             where c.id = :id
+               and c.status = com.globalfutservice.marketing.CampaignStatus.SENDING
+            """)
+    int heartbeat(@Param("id") Long id, @Param("now") Instant now);
+
+    /** SENDING campaigns that have shown no sign of life since a moment, oldest first. */
+    @Query("""
+            select c from CampaignEntity c
+            where c.status = com.globalfutservice.marketing.CampaignStatus.SENDING
+              and c.updatedAt < :staleBefore
+            order by c.startedAt asc
+            """)
+    List<CampaignEntity> findStalled(@Param("staleBefore") Instant staleBefore);
+
+    /**
+     * Take over a send that stopped without finishing, atomically.
+     *
+     * <p>The same guard as {@link #claimForSending}, for a campaign already SENDING: of
+     * every instance that sees it stalled, exactly one gets 1 back. A send that is in fact
+     * still running has moved {@code updatedAt} past {@code staleBefore}, so it is left
+     * alone.
+     *
+     * @return 1 if this caller now owns the send
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update CampaignEntity c
+               set c.startedAt = :now,
+                   c.updatedAt = :now
+             where c.id = :id
+               and c.status = com.globalfutservice.marketing.CampaignStatus.SENDING
+               and c.updatedAt < :staleBefore
+            """)
+    int reclaimStalled(@Param("id") Long id, @Param("now") Instant now,
+                       @Param("staleBefore") Instant staleBefore);
+
+    /**
      * Withdraw a scheduled campaign whose offer has already ended, instead of sending it.
      *
      * <p>Conditional, like the claim, so it cannot race an admin who is changing the

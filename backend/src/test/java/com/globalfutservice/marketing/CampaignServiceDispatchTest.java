@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -19,6 +20,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,6 +41,7 @@ class CampaignServiceDispatchTest {
     private CampaignRecipientRepository recipients;
     private CampaignSender sender;
     private CampaignService service;
+    private CampaignEntity campaign;
 
     @BeforeEach
     void setUp() {
@@ -49,9 +53,13 @@ class CampaignServiceDispatchTest {
         service = new CampaignService(campaigns, recipients, mock(MarketingAudienceRepository.class),
                 mock(AccountRepository.class), sender, mock(CampaignRenderer.class),
                 Clock.fixed(NOW, ZoneOffset.UTC), props);
-        CampaignEntity c = new CampaignEntity("n", "Subject", "Heading", "Body",
+        campaign = new CampaignEntity("n", "Subject", "Heading", "Body",
                 CampaignAudience.ALL_OPTED_IN, 1L);
-        when(campaigns.findById(ID)).thenReturn(Optional.of(c));
+        when(campaigns.findById(ID)).thenReturn(Optional.of(campaign));
+    }
+
+    private static CampaignRecipientEntity row() {
+        return new CampaignRecipientEntity(ID, 12L, "a@example.test");
     }
 
     @Nested
@@ -88,6 +96,85 @@ class CampaignServiceDispatchTest {
             verify(sender).claim(ID);
             verify(sender).buildRecipients(eq(ID), any());
             verify(sender, never()).sendOne(anyLong(), anyLong());
+        }
+    }
+
+    @Nested
+    class Heartbeat {
+
+        @Test
+        @DisplayName("says the send is alive before every message, not once per batch")
+        void beforeEachMessage() {
+            when(sender.claim(ID)).thenReturn(true);
+            when(recipients.findByCampaignIdAndStatus(eq(ID), eq("PENDING"), any()))
+                    .thenReturn(List.of(row(), row()), List.of());
+
+            service.dispatch(ID);
+
+            InOrder order = inOrder(sender);
+            order.verify(sender).heartbeat(ID);
+            order.verify(sender).sendOne(eq(ID), any());
+            order.verify(sender).heartbeat(ID);
+            order.verify(sender).sendOne(eq(ID), any());
+        }
+    }
+
+    @Nested
+    class Resume {
+
+        @Test
+        @DisplayName("takes over only a send silent for ten minutes, and sends what is PENDING")
+        void resumes() {
+            when(sender.reclaimStalled(ID, NOW, NOW.minusSeconds(600))).thenReturn(true);
+            when(recipients.findByCampaignIdAndStatus(eq(ID), eq("PENDING"), any()))
+                    .thenReturn(List.of(row()), List.of());
+            when(sender.sendOne(eq(ID), any())).thenReturn(true);
+            when(recipients.countByCampaignIdAndStatus(ID, "SENT")).thenReturn(1L);
+
+            int sent = service.resumeStalled(ID);
+
+            assertThat(sent).isEqualTo(1);
+            // The list is kept, not rebuilt; buildRecipients returns early when rows exist.
+            verify(sender).buildRecipients(eq(ID), any());
+            verify(sender).complete(ID, CampaignStatus.SENT);
+            verify(sender, never()).claim(any());
+        }
+
+        @Test
+        @DisplayName("leaves alone a send that is still alive, or that another instance took")
+        void notOurs() {
+            when(sender.reclaimStalled(eq(ID), any(), any())).thenReturn(false);
+
+            assertThat(service.resumeStalled(ID)).isZero();
+
+            verify(sender, never()).buildRecipients(any(), any());
+            verify(sender, never()).sendOne(any(), any());
+            verify(sender, never()).complete(any(), any());
+        }
+
+        @Test
+        @DisplayName("does not resume once the offer has ended; the campaign is FAILED instead")
+        void offerEndedMeanwhile() {
+            when(sender.reclaimStalled(eq(ID), any(), any())).thenReturn(true);
+            campaign.setOfferValidUntil(TODAY_IN_INDIA.minusDays(1));
+
+            assertThat(service.resumeStalled(ID)).isZero();
+
+            verify(sender).complete(ID, CampaignStatus.FAILED);
+            verify(sender, never()).sendOne(any(), any());
+        }
+
+        @Test
+        @DisplayName("resumes on the offer's last day")
+        void lastDay() {
+            when(sender.reclaimStalled(eq(ID), any(), any())).thenReturn(true);
+            campaign.setOfferValidUntil(TODAY_IN_INDIA);
+            when(recipients.findByCampaignIdAndStatus(eq(ID), eq("PENDING"), any())).thenReturn(List.of());
+
+            service.resumeStalled(ID);
+
+            verify(sender, never()).complete(ID, CampaignStatus.FAILED);
+            verify(sender, times(1)).complete(eq(ID), any());
         }
     }
 

@@ -24,6 +24,10 @@ import java.util.List;
  * {@link CampaignRepository#claimForSending} is the guard — every instance may see the
  * same due campaign, exactly one wins the conditional update.
  *
+ * <p>Also picks up sends that stopped part-way -- SENDING, with no sign of life for
+ * {@link CampaignService#STALLED_AFTER} -- and finishes them. See
+ * {@link CampaignService#resumeStalled}.
+ *
  * <p>Holds everything back while {@code GFS_EMAIL_ENABLED} is off. A due campaign is left
  * SCHEDULED rather than claimed, so it goes out once email is switched on, instead of
  * being claimed and recording every recipient as FAILED against a relay nobody meant to
@@ -47,13 +51,25 @@ public class CampaignScheduleJob {
 
     @Scheduled(fixedDelayString = "PT1M", initialDelayString = "PT30S")
     public void sendDueCampaigns() {
-        List<CampaignEntity> due = campaigns.findDue(Instant.now());
-        if (due.isEmpty()) {
+        Instant now = Instant.now();
+        List<CampaignEntity> stalled = campaigns.findStalled(now.minus(CampaignService.STALLED_AFTER));
+        List<CampaignEntity> due = campaigns.findDue(now);
+        if (stalled.isEmpty() && due.isEmpty()) {
             return;
         }
         if (!props.notifications().emailEnabled()) {
-            log.warn("{} campaign(s) due, but GFS_EMAIL_ENABLED is false; leaving them scheduled",
-                    due.size());
+            log.warn("{} campaign(s) due and {} stopped mid-send, but GFS_EMAIL_ENABLED is false;"
+                    + " leaving them", due.size(), stalled.size());
+            return;
+        }
+        for (CampaignEntity c : stalled) {
+            try {
+                service.resumeStalled(c.getId());
+            } catch (RuntimeException e) {
+                log.error("Campaign {} could not be resumed", c.getPublicId(), e);
+            }
+        }
+        if (due.isEmpty()) {
             return;
         }
         log.info("{} campaign(s) due", due.size());
