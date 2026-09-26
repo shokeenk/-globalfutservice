@@ -95,10 +95,17 @@ type RequestOptions = {
   /** Skip the automatic refresh-and-retry. Used by the refresh call itself. */
   noRetry?: boolean
   signal?: AbortSignal
+  /**
+   * What the caller can take back. JSON unless said otherwise, because nearly every
+   * endpoint answers in it. A caller fetching a file has to say so: an endpoint that
+   * produces only HTML or an image refuses a request that accepts only JSON, before the
+   * controller runs.
+   */
+  accept?: string
 }
 
 async function raw(path: string, options: RequestOptions = {}): Promise<Response> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = { Accept: options.accept ?? 'application/json' }
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
@@ -232,8 +239,17 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
  * <p>Callers own the returned URL and must revoke it, or every refresh of a queue leaks
  * one image's worth of memory.
  */
+/**
+ * A file from the API — a payment screenshot, a rendered email — as an object URL.
+ *
+ * <p>Accepts anything. This used to inherit the JSON-only Accept header every other call
+ * sends, which is harmless against an endpoint that declares no media type and fatal
+ * against one that does: the campaign preview produces only text/html, so Spring found
+ * no handler willing to answer an application/json request and the preview failed with
+ * "That file could not be loaded" on every attempt.
+ */
 async function blobUrl(path: string): Promise<string> {
-  const response = await raw(path, {})
+  const response = await raw(path, { accept: '*/*' })
   if (response.status === 401) {
     const refreshed = await refresh()
     if (refreshed) {
