@@ -274,6 +274,10 @@ export interface AdminStats {
   deliveredAwaitingGuarantee: number
   disputed: number
   credentialsHeld: number
+}
+
+/** GET /api/v1/admin/analytics/revenue. Admin only. */
+export interface AdminRevenue {
   revenueLast30dMinor: number
   revenueLast30dFormatted: string
 }

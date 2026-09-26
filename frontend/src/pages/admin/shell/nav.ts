@@ -72,7 +72,7 @@ export const ADMIN_NAV: NavItem[] = [
     ],
   },
   { label: 'Promotions', to: '/admin/promotions', icon: LuTag },
-  { label: 'Analytics', to: '/admin/analytics', icon: LuChartColumn },
+  { label: 'Analytics', to: '/admin/analytics', icon: LuChartColumn, adminOnly: true },
   { label: 'Support', to: '/admin/support', icon: LuHeadset },
   { label: 'Website Settings', to: '/admin/settings', icon: LuSettings },
 ]

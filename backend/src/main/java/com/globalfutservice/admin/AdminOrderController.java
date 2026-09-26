@@ -2,8 +2,6 @@ package com.globalfutservice.admin;
 
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.web.CredentialDtos;
-import com.globalfutservice.domain.money.Currency;
-import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
@@ -33,8 +31,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 
@@ -98,11 +94,16 @@ public class AdminOrderController {
                 .toList());
     }
 
+    /**
+     * The queue counters.
+     *
+     * <p>Revenue used to ride along here, which put it in front of every operator: this is
+     * polled by the Orders page every twenty seconds. It is on
+     * {@link AdminAnalyticsController#revenue} now, which is ADMIN only.
+     */
     @GetMapping("/stats")
-    @Operation(summary = "Queue counts and recent revenue")
+    @Operation(summary = "Queue counts")
     public ResponseEntity<OrderDtos.AdminStats> stats() {
-        Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
-        long revenue = orders.revenueSince(thirtyDaysAgo);
         return ResponseEntity.ok(new OrderDtos.AdminStats(
                 orders.countByStatus(OrderStatus.AWAITING_PAYMENT),
                 orders.countByStatus(OrderStatus.PAID),
@@ -112,9 +113,7 @@ public class AdminOrderController {
                 orders.countByStatus(OrderStatus.ON_HOLD),
                 orders.countByStatus(OrderStatus.DELIVERED),
                 orders.countByStatus(OrderStatus.DISPUTED),
-                vaultService.countHeld(),
-                revenue,
-                Money.ofMinor(revenue, Currency.INR).format()));
+                vaultService.countHeld()));
     }
 
     @GetMapping("/{publicRef}")

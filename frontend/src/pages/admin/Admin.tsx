@@ -153,29 +153,7 @@ export default function Admin() {
         </dl>
       )}
 
-      {stats && (
-        /*
-         * White, not the recessed plate, and the figure sized like a figure.
-         *
-         * This is the one number on the page a person might actually want to look at,
-         * and it was set two steps down from the six queue counters beside it — a grey
-         * band with small type reads as a caption for the panel above rather than as
-         * the day's revenue. It sits on the same white as the instrument panel now,
-         * with the amount at display-lg so the hierarchy matches the importance.
-         */
-        <div className="surface mb-6 flex flex-wrap items-center justify-between gap-4 p-5">
-          <div>
-            <p className="stamp">Revenue, last 30 days</p>
-            <p className="tnum display mt-2.5 text-display-lg text-chalk">
-              {stats.revenueLast30dFormatted}
-            </p>
-          </div>
-          <p className="max-w-md text-[12px] leading-relaxed text-chalk-faint">
-            Counts delivered and completed orders. Orders inside their guarantee window are
-            included — the money is taken, but the loyalty points have not settled yet.
-          </p>
-        </div>
-      )}
+      {/* The 30-day revenue card that sat here is on the Analytics page now, admin only. */}
 
       <div className="plate mb-5 flex flex-wrap items-center gap-3 p-3">
         <Select value={status} onChange={(e) => setStatus(e.target.value)} className="max-w-[240px]">
