@@ -278,6 +278,12 @@ export interface AdminStats {
   revenueLast30dFormatted: string
 }
 
+/** GET /api/v1/admin/analytics/revenue. Admin only. */
+export interface AdminRevenue {
+  revenueLast30dMinor: number
+  revenueLast30dFormatted: string
+}
+
 export interface WalletEntry {
   type: string
   amount: number

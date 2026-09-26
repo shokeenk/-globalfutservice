@@ -17,6 +17,7 @@ describe('navFor', () => {
     expect(operator).not.toContain('Email Marketing')
     expect(operator).not.toContain('Send Campaign')
     expect(operator).not.toContain('Coin rates')
+    expect(operator).not.toContain('Analytics')
     // ...but not the operator's own work, which shares a group with an admin-only screen.
     expect(operator).toContain('Coaching diary')
   })

@@ -40,6 +40,7 @@ const AdminRates = lazy(() => import('./pages/admin/AdminRates'))
 const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
 const SendCampaign = lazy(() => import('./pages/admin/campaigns/SendCampaign'))
 const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
+const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
 const AdminNotFound = lazy(() =>
@@ -110,7 +111,8 @@ export default function App() {
             element={<RequireAdmin><AdminComingSoon eyebrow="Email Marketing" title="Settings" /></RequireAdmin>}
           />
           <Route path="promotions" element={<AdminCoupons />} />
-          <Route path="analytics" element={<AdminComingSoon eyebrow="Analytics" title="Analytics" />} />
+          {/* RequireAdmin: revenue is an admin's figure, and the endpoint is ADMIN only. */}
+          <Route path="analytics" element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
           <Route path="support" element={<AdminComingSoon eyebrow="Support" title="Support" />} />
           <Route
             path="settings"
