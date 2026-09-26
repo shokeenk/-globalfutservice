@@ -266,8 +266,6 @@ public final class OrderDtos {
             long onHold,
             long deliveredAwaitingGuarantee,
             long disputed,
-            long credentialsHeld,
-            long revenueLast30dMinor,
-            String revenueLast30dFormatted) {
+            long credentialsHeld) {
     }
 }

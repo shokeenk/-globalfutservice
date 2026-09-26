@@ -274,8 +274,6 @@ export interface AdminStats {
   deliveredAwaitingGuarantee: number
   disputed: number
   credentialsHeld: number
-  revenueLast30dMinor: number
-  revenueLast30dFormatted: string
 }
 
 /** GET /api/v1/admin/analytics/revenue. Admin only. */
