@@ -456,9 +456,21 @@ public class CampaignService {
      * holding one transaction across hundreds of SMTP round trips would pin a connection
      * for the duration and roll back every recorded success if the last message failed.
      *
+     * <p>A campaign whose offer has ended by the time it comes due is withdrawn instead
+     * of sent. Scheduling refuses a send time after the offer's last day, but a campaign
+     * can still come due late -- the service was down, or email was switched off and the
+     * job held it back -- and sending it then tells every recipient about a code that no
+     * longer works. Reproduced locally: a campaign whose offer ended on 25 Sep went out
+     * to both its recipients on the 26th.
+     *
      * @return how many messages the mail server accepted
      */
     public int dispatch(Long campaignId) {
+        if (sender.withdrawIfOfferEnded(campaignId, today())) {
+            log.warn("Campaign {} came due after its offer ended; withdrawn (CANCELLED), not sent",
+                    campaignId);
+            return 0;
+        }
         if (!sender.claim(campaignId)) {
             // Somebody else owns this send. Not an error — the guard working.
             log.debug("Campaign {} is already being sent elsewhere", campaignId);

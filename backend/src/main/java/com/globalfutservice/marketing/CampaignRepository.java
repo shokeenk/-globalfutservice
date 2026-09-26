@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,4 +56,24 @@ public interface CampaignRepository extends JpaRepository<CampaignEntity, Long> 
                                 com.globalfutservice.marketing.CampaignStatus.DRAFT)
             """)
     int claimForSending(@Param("id") Long id, @Param("now") Instant now);
+
+    /**
+     * Withdraw a scheduled campaign whose offer has already ended, instead of sending it.
+     *
+     * <p>Conditional, like the claim, so it cannot race an admin who is changing the
+     * campaign at the same moment: it only acts on a campaign that is still SCHEDULED.
+     *
+     * @return 1 if the campaign was withdrawn
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update CampaignEntity c
+               set c.status = com.globalfutservice.marketing.CampaignStatus.CANCELLED,
+                   c.updatedAt = :now
+             where c.id = :id
+               and c.status = com.globalfutservice.marketing.CampaignStatus.SCHEDULED
+               and c.offerValidUntil < :today
+            """)
+    int withdrawIfOfferEnded(@Param("id") Long id, @Param("today") LocalDate today,
+                             @Param("now") Instant now);
 }
