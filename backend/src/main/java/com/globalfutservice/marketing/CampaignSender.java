@@ -132,8 +132,8 @@ public class CampaignSender {
         try {
             String unsubscribe = renderer.unsubscribeUrl(
                     account.get().getMarketingToken(), campaign.getPublicId());
-            TransactionalEmails.Rendered rendered = renderer.render(
-                    campaign, unsubscribe, renderer.pixelUrl(row.getToken()), row.getToken());
+            TransactionalEmails.Rendered rendered = renderer.forRecipient(
+                    campaign, unsubscribe, row.getToken());
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(
