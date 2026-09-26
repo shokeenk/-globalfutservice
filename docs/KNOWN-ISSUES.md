@@ -1,150 +1,116 @@
 # Known issues
 
-Defects found while investigating something else, confirmed by reading the code
-but **not** the cause of whatever was being chased at the time. They are recorded
-here rather than fixed on the spot, because a fix bundled into an unrelated
-change is a fix nobody reviews.
+Defects found while investigating something else, and **not** the cause of
+whatever was being chased at the time. They are recorded here rather than fixed
+on the spot, because a fix bundled into an unrelated change is a fix nobody
+reviews.
 
-Each entry says what is wrong, when it bites, and what it would take to close.
+Each entry says what is wrong, when it bites, what it would take to close, and
+how it was established -- observed, reproduced, or only read in the code. A
+defect read in the code is a defect that *would* behave this way; it has not
+been seen to.
+
 Delete an entry when it is fixed; do not delete one because it has gone quiet.
 
 ---
 
-## 1. `CampaignSender.buildRecipients` cannot recover the way it intends
+## 1. A campaign interrupted mid-send stays SENDING forever
 
-**Where:** `backend/src/main/java/com/globalfutservice/marketing/CampaignSender.java`
+**Where:** `CampaignService.dispatch`, `CampaignRepository.claimForSending`
 
-The method inserts one recipient row per person, and wraps the bulk insert in a
-`try` so that a clash with the `(campaign_id, account_id)` unique constraint can
-fall back to inserting row by row. The intent is right — a bulk insert fails
-whole, so a resumed send would otherwise be unable to add the people it had not
-reached yet.
+A send claims its campaign by moving it to `SENDING` in one short transaction,
+and only moves it on to `SENT` or `FAILED` when the whole list has been worked
+through. If the process stops in between -- a deploy, a crash, Render restarting
+the service -- nothing ever moves it again. The claim only takes `DRAFT` or
+`SCHEDULED`; the schedule job only looks for `SCHEDULED`; cancel and retry both
+refuse `SENDING`, deliberately, because they cannot tell a send that died from
+one that is still running.
 
-The recovery cannot work where it is written. The whole method is one
-`@Transactional`, and JPA defers the INSERTs to flush rather than issuing them
-inside `saveAll`. The constraint violation therefore surfaces at the first thing
-that forces a flush — the `countByCampaignId` call at the end of the method, or
-the commit — and both are outside the `try`. The `catch` is likely never entered
-at all. Worse, once a persistence exception has marked the transaction
-rollback-only, continuing to use that session cannot succeed, so even entering
-the `catch` would not help: the per-row `save` calls and the count would fail,
-and the commit would throw `UnexpectedRollbackException`.
+The recipients already sent to stay `SENT`, and the rest stay `PENDING`, so
+nothing is lost -- but nobody else gets the campaign, and there is no way to
+resume it without SQL.
 
-**When it bites:** only when a campaign is re-sent after a partial run, which is
-the exact situation the fallback exists to handle. A first send has nothing to
-clash with, so the code looks fine until the day it is needed.
+**When it bites:** a deploy or restart that lands while a campaign is going out.
+The window is as long as the send, which is one SMTP round trip per recipient.
 
-**What it would take:** move the per-row insert to its own bean so each row is
-its own transaction, in the same way `sendOne` already is, and let the constraint
-reject duplicates one at a time. `CampaignSender`'s class comment already
-explains why the committed steps live behind a real bean boundary; this method is
-the one that did not follow it.
+**What it would take:** a way to tell a dead send from a live one. The simplest
+is a sweep at startup that moves `SENDING` campaigns to `FAILED`, after which
+"Resume send" on Campaign History picks up the `PENDING` rows. That is only safe
+while the backend runs as a single instance, and a message in flight at the
+moment of the crash may have been delivered while its row still says `PENDING`,
+so a resume can give that one person a second copy.
+
+**Evidence:** read in the code, not reproduced.
 
 ---
 
-## 2. `CampaignService.readForSend` is `@Transactional` but the annotation does nothing
+## 2. A campaign in which every recipient failed is marked SENT
 
-**Where:** `backend/src/main/java/com/globalfutservice/marketing/CampaignService.java`
+**Where:** `CampaignService.dispatch`
 
-`readForSend` is annotated `@Transactional(readOnly = true)` and is neither.
+`dispatch` marks a campaign `SENT` whenever it gets to the end of its list,
+however many messages the relay actually accepted. `FAILED` is reserved for the
+send itself breaking. A campaign whose every message was refused therefore
+appears under "Sent" with a green badge.
 
-It fails twice over. It is `protected`, and Spring's transaction attribute source
-ignores non-public methods, so no advice is ever attached. And it is called from
-`sendNow` on `this`, which bypasses the proxy regardless of visibility — the same
-trap `CampaignSender`'s class comment was written to warn about.
+The analytics beneath it show the failures, and Campaign History now offers
+"Retry N failed" on it, so the problem is visible to someone who looks -- but the
+status says the opposite of what happened.
 
-The method works today only because every repository call it makes opens a
-transaction of its own. What it does not get is a single consistent read: the
-status check, the sendable check and the audience count each see the database at
-a different moment, so a campaign can be cancelled between the check that says it
-is a draft and the dispatch that acts on it.
+**When it bites:** whenever the relay refuses everything: bad credentials, a
+provider's daily limit already spent, a relay that is down.
 
-**When it bites:** a narrow race, and an unlikely one at current volume. It is
-recorded because the annotation reads as a guarantee that is not there, which is
-worse than no annotation — the next person to touch this will trust it.
+**What it would take:** decide what the status should say for a campaign that
+reached nobody, or only some people. Marking a campaign that reached nobody as
+`FAILED` is the smallest change; a separate state for a partial send is the more
+honest one, and needs a migration for the status check constraint.
 
-**What it would take:** make the method public and move it behind a bean
-boundary, or drop the annotation and say plainly that each read stands alone.
-
----
-
-## 3. A campaign recipient that fails once is never retried
-
-**Where:** `backend/src/main/java/com/globalfutservice/marketing/CampaignSender.java`
-
-`sendOne` catches everything the send can throw and calls `row.markFailed(...)`.
-The send loop in `CampaignService.dispatch` then pulls the next batch of rows
-`where status = 'PENDING'` — so a row marked `FAILED` is not picked up again, by
-this run or any later one. There is no retry, and no endpoint that moves a row
-back to `PENDING`.
-
-That is the right shape for a permanent failure, such as an address that does not
-exist. It is the wrong shape for a transient one, and the transient case is the
-likely one: a provider rate limit. Resend's free tier allows 100 messages a day
-and 3,000 a month. An audience larger than the daily allowance does not queue —
-the overflow is refused, marked `FAILED`, and silently excluded from every
-subsequent attempt.
-
-**When it bites:** the first campaign sent to an audience larger than the
-provider's allowance, which is the first campaign that matters. Nothing warns
-beforehand; the audience count is shown next to the Send button but is not
-compared against anything.
-
-**What it would take:** distinguish a refusal from a deferral, and leave the
-deferred rows `PENDING` so the next pass picks them up. Failing that, an operator
-action that resets `FAILED` rows for one campaign would at least make it
-recoverable without SQL.
-
-*Resolved while investigating this: whether `GFS_SMTP_PASSWORD` holds a genuine
-Resend API key is no longer open. `CampaignSender` and `EmailNotifier` are given
-the same `JavaMailSender` singleton with the same credentials, and transactional
-mail is being delivered, so the credentials authenticate. Worth recording because
-`EmailSenderCheck` deliberately stays silent when the SMTP username is not an
-email address — a provider proves its right to send in DNS, not by its login — so
-a bad key would never have been caught at startup.*
+**Evidence:** reproduced locally. A campaign sent to two people with nothing
+listening on the relay's port finished `SENT` with both rows `FAILED` and
+`finished: 0 sent` in the log.
 
 ---
 
-## 4. `CampaignSender` never checks whether email is enabled
+## 3. A campaign that goes out late can go out after its offer ended
 
-**Where:** `backend/src/main/java/com/globalfutservice/marketing/CampaignSender.java`
+**Where:** `CampaignService.dispatch`, `CampaignScheduleJob`
 
-`GFS_EMAIL_ENABLED` gates `EmailNotifier` and `OperatorEmailNotifier`. It does not
-gate campaigns. A campaign sent while the flag is off still hands every message to
-`JavaMailSender`, and each one fails against whatever relay is configured and is
-recorded as `FAILED` against its recipient row.
+Scheduling refuses a send time after the offer's last day, and "Send now" and
+retry refuse an offer that has already ended. `dispatch` checks neither: it sends
+whatever the job hands it. A campaign that is due but does not go out on time is
+sent whenever it finally does, whether or not its offer is still running.
 
-**When it bites:** any campaign sent while the flag is off burns its recipient
-rows, by way of the defect in 3 above — they are marked `FAILED`, not left
-`PENDING`, so no later re-send retries them.
+Two things delay a due campaign. The service being down is one. The other is new
+and deliberate: while `GFS_EMAIL_ENABLED` is false, the job leaves due campaigns
+`SCHEDULED` so they go out once email is switched back on -- which may be after
+the offer they announce has closed.
 
-**What it would take:** decide what the flag means. Either it is a master switch
-for all outbound mail, in which case campaigns must respect it and refuse to
-start; or it governs transactional mail only, in which case say so where it is
-defined, because the current name does not suggest it.
+**When it bites:** a campaign scheduled close to its offer's last day, held back
+past that day by downtime or by email being switched off.
+
+**What it would take:** check the offer's end in `dispatch` before claiming, and
+decide what happens to a campaign that fails the check -- `CANCELLED` with a
+logged reason is the obvious candidate, since it can no longer be sent as
+written.
+
+**Evidence:** read in the code, not reproduced.
 
 ---
 
-## 5. "Send now" on Campaign History runs inside the request that started it
+## 4. The campaign builder's "Send now" trusts the admin's clock
 
-**Where:** `CampaignService.sendNow` / `dispatch`, reached from
-`POST /api/v1/admin/campaigns/{id}/send`
+**Where:** `frontend/src/pages/admin/campaigns/SendCampaign.tsx`
 
-The send loop runs on the request thread: the HTTP request stays open until every
-recipient has been tried. In production the storefront's nginx sits in front of the
-API with `proxy_read_timeout 60s` (`frontend/nginx.conf.template`). A campaign that
-takes longer than a minute to send is cut off at the proxy: the admin sees a 504
-while the backend carries on sending. Nothing is sent twice -- the claim guards
-that -- but the admin is told a send failed that did not, and a retry is refused
-as "only a draft or scheduled campaign can be sent", which reads like a second
-fault.
+The builder's final step implements "Send now" as a schedule for the browser's
+current time plus one minute. The server checks that time only against its own
+clock. An admin's computer whose clock is more than a minute slow is refused
+with "Pick a time in the future"; one that is fast schedules the campaign that
+far ahead, while the screen promises it goes out within about a minute.
 
-**When it bites:** a campaign larger than roughly what the relay can take in 60
-seconds, from the old Campaign History screen. The campaign builder does not use
-this path: its "Send now" schedules the campaign a minute ahead and lets the
-background job send it, which no proxy can time out.
+**When it bites:** an admin on a machine whose clock has drifted. Rare, but the
+failure is silent in the fast direction.
 
-**What it would take:** have `POST /send` do what the builder does -- mark the
-campaign due now and return -- so every send runs in the background job, and the
-endpoint answers in milliseconds.
+**What it would take:** have the builder call `POST /campaigns/{id}/send`, which
+now queues the campaign for the server's own "now" and returns straight away.
 
+**Evidence:** read in the code, not reproduced.
