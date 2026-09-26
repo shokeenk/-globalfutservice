@@ -566,7 +566,8 @@ function Privacy({ policy }: { policy: Policy | null }) {
       <Clause n={3} title="Who else sees your data">
         <p>
           Our payment provider processes your payment and sees what it needs to for that purpose;
-          we never see or store your full card details. Our email provider delivers your receipts.
+          we never see or store your full card details. Our email provider delivers your receipts
+          and, if you have opted in to them, our promotional emails.
           We do not sell data, and we do not share it for advertising.
         </p>
         {/*
@@ -644,6 +645,33 @@ function Privacy({ policy }: { policy: Policy | null }) {
           are not: they last until you close the tab, anything already stored is deleted, and
           only the sign-in cookie above remains. Your answer itself is stored, so that we do
           not ask again on every page.
+        </p>
+      </Clause>
+
+      {/*
+        Added before any campaign was sent, because the campaign emails can record opens and
+        clicks and this policy did not say so. Appended rather than inserted: each clause's
+        anchor is its number, and a new clause in the middle would move every anchor after it.
+
+        Every statement here is what the software does: consent is collected at checkout and
+        on the account page, every promotional email carries an unsubscribe link, and when a
+        campaign is tracked the recipient row records the first open (a 1x1 image) and the
+        first click (a redirect), nothing more. A campaign can be sent with tracking off.
+      */}
+      <Clause n={7} title="Promotional email">
+        <p>
+          We send offers and news by email only if you have opted in, which you can do at
+          checkout or on your account page. Every promotional email has an unsubscribe link,
+          and you can also switch them off on your account page at any time. Switching them off
+          does not affect emails about your orders.
+        </p>
+        <p>
+          A promotional email may contain a small image that tells us whether and when you
+          opened it, and its buttons may pass through a link that records the click before
+          taking you to our site. We keep the first time you open each campaign and the first
+          time you click in it, and use them to see which campaigns are useful. Some email apps
+          load images automatically, which can record an open you did not make; turning off
+          images in your email app prevents it.
         </p>
       </Clause>
     </>
