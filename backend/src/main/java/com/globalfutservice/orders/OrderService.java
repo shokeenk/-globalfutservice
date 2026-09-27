@@ -1,5 +1,7 @@
 package com.globalfutservice.orders;
 
+import com.globalfutservice.coaching.AfterCommit;
+import com.globalfutservice.domain.coaching.SessionActor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.affiliate.AffiliateService;
 import com.globalfutservice.coaching.CoachingService;
@@ -75,6 +77,9 @@ public class OrderService {
     private final AppProperties props;
     private final Clock clock;
 
+    /** Runs the coaching hold's follow-ups once a payment or abandonment has committed. */
+    private final AfterCommit afterCommit;
+
     public OrderService(OrderRepository orders, OrderEventRepository events,
                         PaymentRepository payments, PaymentGateway gateway,
                         QuoteService quoteService, LoyaltyService loyaltyService,
@@ -82,7 +87,9 @@ public class OrderService {
                         NotificationService notifications, AccountRepository accounts,
                         CoachingService coachingService, CouponService couponService,
                         CustomerFeedService feed,
-                        ObjectMapper mapper, AppProperties props, Clock clock) {
+                        ObjectMapper mapper, AppProperties props, Clock clock,
+                        AfterCommit afterCommit) {
+        this.afterCommit = afterCommit;
         this.feed = feed;
         this.coachingService = coachingService;
         this.couponService = couponService;
@@ -187,6 +194,18 @@ public class OrderService {
 
         record(order, null, OrderStatus.DRAFT, Actor.CUSTOMER,
                 account == null ? null : account.getId(), request.email(), "Order created");
+
+        /*
+         * The slot picked at checkout, held for this order until it is paid. In this
+         * transaction on purpose: a slot that was just taken fails the whole order, so the
+         * customer is never charged -- nor spends a coupon or points -- for a session that
+         * has no time. Orders placed without a slot are untouched.
+         */
+        if (quote.sku() == Sku.COACHING && request.coachingStartsAt() != null) {
+            coachingService.holdForOrder(order.getAccountId(), order.getId(), order.getVariant(),
+                    request.coachingCoachId(), request.coachingStartsAt(),
+                    request.coachingTimezone());
+        }
 
         /*
          * Claim the coupon inside the same transaction, re-checking the live limit.
@@ -344,6 +363,11 @@ public class OrderService {
                 // campaign would otherwise drain on carts nobody ever completed.
                 couponService.release(order.getId());
                 vaultService.purge(order.getId(), "checkout abandoned");
+                // And the slot it was holding, if it picked one.
+                final Long abandonedId = order.getId();
+                afterCommit.run("release the coaching hold for order " + order.getPublicRef(),
+                        () -> coachingService.releaseHoldForOrder(abandonedId, SessionActor.SYSTEM,
+                                null, "order abandoned"));
             }
             default -> {
                 // No side effects for the intermediate states.
@@ -491,7 +515,14 @@ public class OrderService {
             // last point at which the variant is known -- booking happens later and sees
             // only a pool of credits.
             coachingService.grantCredits(paid.getAccountId(), paid.getId(), sessions,
-                    paid.getPublicRef(), props.coaching().sessionLengthFor(paid.getVariant()));
+                    paid.getPublicRef(), coachingService.sessionLengthForVariant(paid.getVariant()));
+            // The slot picked at checkout becomes a booking, spending one of those credits --
+            // once the payment has committed, so a hold that cannot be confirmed never undoes
+            // the payment (see AfterCommit). Nothing happens for an order that holds no slot,
+            // or whose hold has expired: that customer books with the credit, as before.
+            final Long paidOrderId = paid.getId();
+            afterCommit.run("confirm the coaching hold for order " + paid.getPublicRef(),
+                    () -> coachingService.confirmHoldForOrder(paidOrderId, SessionActor.SYSTEM, null));
 
             // The customer's next step is Discord, so the invite goes out the moment the
             // money is confirmed -- by whichever path confirmed it, gateway or operator.
@@ -652,6 +683,9 @@ public class OrderService {
      * of what an order looks like to a notification channel, rather than two that drift.
      */
     public OrderNotification notificationFor(OrderEntity order) {
+        var session = order.getSku() == Sku.COACHING && order.getId() != null
+                ? coachingService.activeSessionForOrder(order.getId())
+                : java.util.Optional.<com.globalfutservice.coaching.CoachingSessionEntity>empty();
         return new OrderNotification(
                 order.getPublicRef(),
                 order.getStatus().name(),
@@ -663,7 +697,9 @@ public class OrderService {
                 order.getSku() == null ? null : order.getSku().name(),
                 order.getPlatform() == null ? null : order.getPlatform().displayName(),
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef(),
-                coachingSummary(order));
+                coachingSummary(order),
+                session.map(s -> s.getStartsAt()).orElse(null),
+                session.map(s -> s.getCustomerTimezone()).orElse(null));
     }
 
     /**

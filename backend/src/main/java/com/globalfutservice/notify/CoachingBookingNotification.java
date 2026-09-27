@@ -45,7 +45,24 @@ public record CoachingBookingNotification(
         int sessionNumber,
         int sessionsInPack,
         String orderRef,
-        String paymentStatus) {
+        String paymentStatus,
+        /* From the order: the customer's in-game ID, platform and rank, for the coach. */
+        String inGameId,
+        String platform,
+        String rank,
+        /* The session's status: PENDING for a slot held at checkout, RELEASED for a hold
+           that let go. Decides what the customer is told -- a hold is not yet a booking. */
+        String sessionStatus) {
+
+    /** A slot picked at checkout whose payment is not verified yet. */
+    public boolean isHold() {
+        return "PENDING".equals(sessionStatus);
+    }
+
+    /** A hold that let go of its slot without ever becoming a booking. */
+    public boolean isReleasedHold() {
+        return "RELEASED".equals(sessionStatus);
+    }
 
     /** "3 of 6", or just "3" where the pack size is not known. */
     public String sessionLabel() {

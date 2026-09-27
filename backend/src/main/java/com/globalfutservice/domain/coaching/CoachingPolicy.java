@@ -107,6 +107,16 @@ public record CoachingPolicy(
      * storefront calls this to decide whether to warn "you will lose this session" before
      * the customer confirms — the same method, so the warning is never wrong.
      */
+    /**
+     * This policy with the three rules an admin sets from the Coaching diary replaced:
+     * the minimum notice and the two session lengths. Everything else is kept.
+     */
+    public CoachingPolicy withSettings(Duration minLeadTime, Duration sessionLength,
+                                       Duration blockSessionLength) {
+        return new CoachingPolicy(sessionLength, blockSessionLength, slotStep, minLeadTime,
+                maxAdvance, changeCutoff, maxReschedules, noShowGrace, creditValidity);
+    }
+
     public boolean refundsCreditOnCustomerCancel(Instant now, Instant sessionStart) {
         return !now.isAfter(sessionStart.minus(changeCutoff));
     }

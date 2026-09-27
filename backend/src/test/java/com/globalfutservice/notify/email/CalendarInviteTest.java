@@ -26,7 +26,7 @@ class CalendarInviteTest {
         return new CoachingBookingNotification(
                 "SES-XYZ", START, START.plusSeconds(40 * 60), previous,
                 "Europe/London", "player@example.com", "Sam", coach,
-                3, 6, "GFS-26-ABCD1234", "PAID");
+                3, 6, "GFS-26-ABCD1234", "PAID", null, null, null, null);
     }
 
     private static String ics(CoachingBookingNotification n, String method) {
@@ -113,7 +113,7 @@ class CalendarInviteTest {
     void unnumberedSessionStillWorks() {
         CoachingBookingNotification manual = new CoachingBookingNotification(
                 "SES-MAN", START, START.plusSeconds(2400), null, null,
-                "player@example.com", null, null, 0, 0, null, null);
+                "player@example.com", null, null, 0, 0, null, null, null, null, null, null);
 
         String out = ics(manual, "REQUEST");
 
@@ -127,7 +127,7 @@ class CalendarInviteTest {
     void missingEndFallsBack() {
         CoachingBookingNotification noEnd = new CoachingBookingNotification(
                 "SES-NE", START, null, null, "Europe/London",
-                "player@example.com", null, null, 1, 6, null, null);
+                "player@example.com", null, null, 1, 6, null, null, null, null, null, null);
 
         assertThat(ics(noEnd, "REQUEST")).contains("DTEND:20261001T141000Z");
     }

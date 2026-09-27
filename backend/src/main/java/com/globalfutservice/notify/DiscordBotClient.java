@@ -415,7 +415,8 @@ public class DiscordBotClient {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 300) {
             throw new DiscordException(
-                    failureMessage(what, response.statusCode(), response.body(), detail));
+                    failureMessage(what, response.statusCode(), response.body(), detail),
+                    response.statusCode());
         }
         /*
          * A permission overwrite answers 204 with nothing in it. Asking Jackson to parse
@@ -463,8 +464,29 @@ public class DiscordBotClient {
 
     /** Anything Discord refused. Carries a reason safe to log; never a payload. */
     public static class DiscordException extends RuntimeException {
+        /** The HTTP status Discord answered with; 0 when it never answered at all. */
+        private final int status;
+
         public DiscordException(String message) {
+            this(message, 0);
+        }
+
+        public DiscordException(String message, int status) {
             super(message);
+            this.status = status;
+        }
+
+        public int status() {
+            return status;
+        }
+
+        /**
+         * Whether trying again could work: no answer, rate-limited, or Discord's own
+         * failure. A 4xx other than 429 -- no access to the channel, a bad channel id --
+         * will fail the same way every time.
+         */
+        public boolean isRetryable() {
+            return status == 0 || status == 429 || status >= 500;
         }
     }
 }

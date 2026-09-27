@@ -15,6 +15,11 @@ package com.globalfutservice.domain.coaching;
  * cancellation depends on <i>when</i> they cancelled — see {@link CoachingPolicy}.
  */
 public enum SessionStatus {
+    /**
+     * Picked at checkout; the payment has not been verified yet. Takes the slot and spends
+     * no credit. Becomes SCHEDULED when the order is paid, or RELEASED if it is not.
+     */
+    PENDING(false),
 
     /** Booked and in the future, or in progress right now. */
     SCHEDULED(false),
@@ -35,7 +40,12 @@ public enum SessionStatus {
      * The customer did not turn up and did not cancel. The credit is consumed — the coach
      * held the slot and turned away other bookings for it.
      */
-    NO_SHOW(true);
+    NO_SHOW(true),
+    /**
+     * A hold that ended without becoming a booking: it expired, the payment was rejected,
+     * or an admin let it go. Frees the slot; no credit was ever spent on it.
+     */
+    RELEASED(true);
 
     private final boolean terminal;
 
@@ -49,6 +59,6 @@ public enum SessionStatus {
 
     /** True where the slot no longer occupies the coach's calendar. */
     public boolean releasesSlot() {
-        return this == CANCELLED_BY_CUSTOMER || this == CANCELLED_BY_COACH;
+        return this == CANCELLED_BY_CUSTOMER || this == CANCELLED_BY_COACH || this == RELEASED;
     }
 }

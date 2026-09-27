@@ -1,5 +1,9 @@
 package com.globalfutservice.admin;
 
+import org.springframework.web.bind.annotation.PutMapping;
+import com.globalfutservice.coaching.CoachExtraSlotRepository;
+import com.globalfutservice.coaching.CoachExtraSlotEntity;
+import com.globalfutservice.coaching.CoachingSettingsService;
 import com.globalfutservice.coaching.CoachAvailabilityEntity;
 import com.globalfutservice.coaching.CoachAvailabilityRepository;
 import com.globalfutservice.coaching.CoachEntity;
@@ -77,6 +81,8 @@ public class AdminCoachingController {
     private final SessionCreditRepository credits;
     private final OrderRepository orders;
     private final AccountRepository accounts;
+    private final CoachingSettingsService settings;
+    private final CoachExtraSlotRepository extraSlots;
 
     public AdminCoachingController(CoachRepository coaches,
                                    CoachAvailabilityRepository availability,
@@ -85,7 +91,9 @@ public class AdminCoachingController {
                                    CoachingService coaching,
                                    SessionCreditRepository credits,
                                    OrderRepository orders,
-                                   AccountRepository accounts) {
+                                   AccountRepository accounts,
+                                   CoachingSettingsService settings,
+                                   CoachExtraSlotRepository extraSlots) {
         this.coaches = coaches;
         this.availability = availability;
         this.timeOff = timeOff;
@@ -94,6 +102,8 @@ public class AdminCoachingController {
         this.credits = credits;
         this.orders = orders;
         this.accounts = accounts;
+        this.settings = settings;
+        this.extraSlots = extraSlots;
     }
 
     // ------------------------------------------------------------------- records ------
@@ -130,6 +140,33 @@ public class AdminCoachingController {
     public record OutcomeRequest(@NotBlank String status, String note) {
     }
 
+    public record RescheduleRequest(@NotNull Instant startsAt) {
+    }
+
+    public record CancelRequest(String note) {
+    }
+
+    /** The booking settings, in minutes. */
+    public record SettingsView(
+            @NotNull Integer minNoticeMinutes,
+            @NotNull Integer bufferMinutes,
+            @NotNull Integer holdMinutes,
+            @NotNull Integer singleSessionMinutes,
+            @NotNull Integer blockSessionMinutes) {
+    }
+
+    public record ExtraSlotRequest(@NotNull Instant startsAt, @NotNull Instant endsAt, String reason) {
+    }
+
+    public record ExtraSlotView(Long id, Instant startsAt, Instant endsAt, String reason) {
+    }
+
+    /** One line of a session's history: what changed, who changed it, and when. */
+    public record SessionEventView(
+            String type, String fromStatus, String toStatus, Instant fromTime, Instant toTime,
+            String actor, String actorEmail, String detail, Instant at) {
+    }
+
     public record CoachAdminView(
             String id, String displayName, String headline, String timezone,
             boolean active, int sortOrder, List<AvailabilityWindow> availability) {
@@ -148,7 +185,12 @@ public class AdminCoachingController {
             Instant startsAt, Instant endsAt, String status,
             boolean creditReturned, int rescheduleCount,
             String customerNote, String meetingUrl, List<String> allowedTransitions,
-            String customerEmail, String orderRef, String sessionLabel, String paymentStatus) {
+            String customerEmail, String orderRef, String sessionLabel, String paymentStatus,
+            /* From the order the session was bought with: who to look for in game, on
+               what, at what level, and what they want to work on. */
+            String inGameId, String platform, String rank, String improvementFocus,
+            /* When a PENDING hold lets go if the payment is still unverified. */
+            Instant holdExpiresAt) {
     }
 
     // -------------------------------------------------------------------- coaches -----
@@ -309,6 +351,7 @@ public class AdminCoachingController {
          */
         Map<Long, List<Long>> sessionIdsByOrder = orderIds.isEmpty() ? Map.of()
                 : sessions.findByOrderIdInOrderByIdAsc(orderIds).stream()
+                        .filter(x -> x.getStatus() != SessionStatus.RELEASED)
                         .collect(java.util.stream.Collectors.groupingBy(
                                 CoachingSessionEntity::getOrderId,
                                 java.util.stream.Collectors.mapping(
@@ -334,7 +377,13 @@ public class AdminCoachingController {
                     emailsById.get(s.getAccountId()),
                     order == null ? null : order.getPublicRef(),
                     label(position, pack),
-                    order == null ? null : order.getStatus().name()));
+                    order == null ? null : order.getStatus().name(),
+                    order == null ? null : order.getEaPlatformHandle(),
+                    order == null || order.getCoachingPlatform() == null ? null
+                            : order.getCoachingPlatform().name(),
+                    order == null ? null : order.getCoachingRank(),
+                    order == null ? null : order.getCoachingFocus(),
+                    s.getHoldExpiresAt()));
         }
         return out;
     }
@@ -382,7 +431,12 @@ public class AdminCoachingController {
                     "Operators may mark a session completed, no-show, or cancelled by the coach.");
         }
 
-        coaching.transition(session, target, SessionActor.OPERATOR, principal.id(), request.note());
+        if (target == SessionStatus.CANCELLED_BY_COACH) {
+            // Through the same path as the Cancel action, so it is announced like one.
+            coaching.cancelByAdmin(session, principal.id(), request.note());
+        } else {
+            coaching.transition(session, target, SessionActor.OPERATOR, principal.id(), request.note());
+        }
 
         String coachName = coaches.findById(session.getCoachId())
                 .map(CoachEntity::getDisplayName).orElse("—");
@@ -429,6 +483,182 @@ public class AdminCoachingController {
                 .toList();
         return new CoachAdminView(coach.getPublicId(), coach.getDisplayName(), coach.getHeadline(),
                 coach.getTimezone(), coach.isActive(), coach.getSortOrder(), windows);
+    }
+
+    // ------------------------------------------------------------- session actions -----
+
+    /**
+     * Confirm a hold whose order is paid. Normally unnecessary -- approving the payment
+     * confirms the hold by itself -- and there for the case where that did not happen: the
+     * slot is still held and the money is in.
+     */
+    @PostMapping("/sessions/{ref}/confirm")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "Confirm a held slot whose order is paid")
+    @Transactional
+    public SessionAdminView confirm(@CurrentAccount AccountPrincipal principal,
+                                    @PathVariable String ref) {
+        CoachingSessionEntity session = requireSession(ref);
+        if (session.getStatus() != SessionStatus.PENDING) {
+            throw new ApiExceptions.ConflictException("session_not_pending",
+                    "Only a pending slot can be confirmed.");
+        }
+        OrderEntity order = session.getOrderId() == null ? null
+                : orders.findById(session.getOrderId()).orElse(null);
+        if (order == null || !isPaid(order.getStatus())) {
+            // Confirming unpaid would book a session nobody has paid for. The payment is
+            // verified where payments are: Payments to check, on the Orders page.
+            throw new ApiExceptions.ConflictException("payment_not_verified",
+                    "Verify the payment first, under Payments to check on the Orders page.");
+        }
+        if (coaching.confirmHoldForOrder(order.getId(), SessionActor.OPERATOR, principal.id())
+                .isEmpty()) {
+            throw new ApiExceptions.ConflictException("no_session_credits",
+                    "The order is paid but has no session left to spend on this slot.");
+        }
+        return view(session);
+    }
+
+    @PostMapping("/sessions/{ref}/reschedule")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "Move a pending or confirmed session to another free slot")
+    @Transactional
+    public SessionAdminView reschedule(@CurrentAccount AccountPrincipal principal,
+                                       @PathVariable String ref,
+                                       @Valid @RequestBody RescheduleRequest request) {
+        return view(coaching.rescheduleByAdmin(requireSession(ref), request.startsAt(),
+                principal.id()));
+    }
+
+    @PostMapping("/sessions/{ref}/cancel")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "Release a hold, or cancel a booking and return its credit")
+    @Transactional
+    public SessionAdminView cancel(@CurrentAccount AccountPrincipal principal,
+                                   @PathVariable String ref,
+                                   @RequestBody(required = false) CancelRequest request) {
+        return view(coaching.cancelByAdmin(requireSession(ref), principal.id(),
+                request == null ? null : request.note()));
+    }
+
+    @GetMapping("/sessions/{ref}/events")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "A session's history: every change, who made it and when")
+    @Transactional(readOnly = true)
+    public List<SessionEventView> events(@PathVariable String ref) {
+        CoachingSessionEntity session = requireSession(ref);
+        var history = coaching.timeline(session.getId());
+        Set<Long> actorIds = history.stream()
+                .map(e -> e.getActorId())
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<Long, String> emails = actorIds.isEmpty() ? Map.of()
+                : accounts.findAllById(actorIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(a -> a.getId(), a -> a.getEmail()));
+        return history.stream()
+                .map(e -> new SessionEventView(e.getEventType(),
+                        e.getFromStatus() == null ? null : e.getFromStatus().name(),
+                        e.getToStatus() == null ? null : e.getToStatus().name(),
+                        e.getFromTime(), e.getToTime(),
+                        e.getActor() == null ? null : e.getActor().name(),
+                        e.getActorId() == null ? null : emails.get(e.getActorId()),
+                        e.getDetail(), e.getCreatedAt()))
+                .toList();
+    }
+
+    // -------------------------------------------------------------------- settings -----
+
+    @GetMapping("/settings")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "Minimum notice, buffer, hold length and session lengths")
+    public SettingsView settings() {
+        return toView(settings.current());
+    }
+
+    @PutMapping("/settings")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Change the booking settings; applies to slots offered from now on")
+    public SettingsView updateSettings(@CurrentAccount AccountPrincipal principal,
+                                       @Valid @RequestBody SettingsView request) {
+        return toView(settings.update(request.minNoticeMinutes(), request.bufferMinutes(),
+                request.holdMinutes(), request.singleSessionMinutes(),
+                request.blockSessionMinutes(), principal.id()));
+    }
+
+    // ------------------------------------------------------------------ extra slots -----
+
+    @GetMapping("/coaches/{coachId}/extra-slots")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "One-off extra availability that has not finished yet")
+    @Transactional(readOnly = true)
+    public List<ExtraSlotView> extraSlots(@PathVariable String coachId) {
+        CoachEntity coach = requireCoach(coachId);
+        return extraSlots.findByCoachIdAndEndsAtAfterOrderByStartsAt(coach.getId(), Instant.now())
+                .stream().map(AdminCoachingController::toView).toList();
+    }
+
+    @PostMapping("/coaches/{coachId}/extra-slots")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Open a one-off window outside the weekly hours")
+    @Transactional
+    public ExtraSlotView addExtraSlot(@CurrentAccount AccountPrincipal principal,
+                                      @PathVariable String coachId,
+                                      @Valid @RequestBody ExtraSlotRequest request) {
+        CoachEntity coach = requireCoach(coachId);
+        if (!request.endsAt().isAfter(request.startsAt())) {
+            throw new ApiExceptions.BadRequestException("An extra slot must end after it starts.");
+        }
+        if (Duration.between(request.startsAt(), request.endsAt()).compareTo(Duration.ofHours(16)) > 0) {
+            throw new ApiExceptions.BadRequestException(
+                    "An extra slot is one stretch of a day. Add weekly hours for anything regular.");
+        }
+        CoachExtraSlotEntity saved = extraSlots.save(new CoachExtraSlotEntity(coach.getId(),
+                request.startsAt(), request.endsAt(), blankToNull(request.reason()), principal.id()));
+        log.info("Extra slot {} for coach {} added by account {}", saved.getId(),
+                coach.getPublicId(), principal.id());
+        return toView(saved);
+    }
+
+    @DeleteMapping("/extra-slots/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Remove a one-off window; sessions already booked in it stay booked")
+    @Transactional
+    public void removeExtraSlot(@PathVariable Long id) {
+        extraSlots.deleteById(id);
+    }
+
+    private CoachingSessionEntity requireSession(String ref) {
+        return sessions.findByPublicRef(ref)
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("No such session."));
+    }
+
+    /** One session as the diary shows it, enriched exactly as in the list. */
+    private SessionAdminView view(CoachingSessionEntity session) {
+        String coachName = coaches.findById(session.getCoachId())
+                .map(CoachEntity::getDisplayName).orElse("—");
+        return enrich(List.of(session), coachName).get(0);
+    }
+
+    /** From PAID on, short of the money having gone back. */
+    private static boolean isPaid(com.globalfutservice.domain.orders.OrderStatus status) {
+        return switch (status) {
+            case DRAFT, AWAITING_PAYMENT, ABANDONED, REFUNDED, CREDITED -> false;
+            default -> true;
+        };
+    }
+
+    private static SettingsView toView(CoachingSettingsService.Settings s) {
+        return new SettingsView((int) s.minNotice().toMinutes(), (int) s.buffer().toMinutes(),
+                (int) s.hold().toMinutes(), (int) s.singleSession().toMinutes(),
+                (int) s.blockSession().toMinutes());
+    }
+
+    private static ExtraSlotView toView(CoachExtraSlotEntity e) {
+        return new ExtraSlotView(e.getId(), e.getStartsAt(), e.getEndsAt(), e.getReason());
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
 }

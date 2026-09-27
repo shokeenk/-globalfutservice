@@ -63,6 +63,20 @@ public final class OrderDtos {
             String improvementFocus,
 
             /*
+             * Coaching only: the slot picked at checkout, held for this order until the
+             * payment is verified. All three absent for an order placed without a slot,
+             * which behaves exactly as before. The start is an instant; the time zone is
+             * the customer's, kept so reminders and emails can say "19:00 your time".
+             */
+            @Size(max = 64)
+            String coachingCoachId,
+
+            java.time.Instant coachingStartsAt,
+
+            @Size(max = 64)
+            String coachingTimezone,
+
+            /*
              * Boosting only, and ignored on every other service. Both are refused by
              * OrderService rather than by annotation, for the same reason as the coaching
              * fields above: one request type places every kind of order, so "required"
@@ -185,7 +199,19 @@ public final class OrderDtos {
              * already hold gets a link straight into their ticket, and everybody else
              * gets an invite and the reference to quote.
              */
-            DiscordAccessDto discordAccess) {
+            DiscordAccessDto discordAccess,
+
+            /** Coaching only: how many of the order's sessions are booked, and the next. */
+            CoachingProgressDto coaching) {
+    }
+
+    /**
+     * "1 of 6 booked". {@code nextStatus} is PENDING while the next session is a slot held
+     * at checkout awaiting payment, SCHEDULED once it is booked; the next fields are null
+     * when nothing is booked yet.
+     */
+    public record CoachingProgressDto(int booked, int total, Instant nextStartsAt,
+                                      Instant nextEndsAt, String nextStatus, String nextTimezone) {
     }
 
     /**

@@ -37,34 +37,69 @@ public class CoachingAnnouncer {
     private final OrderRepository orders;
     private final AccountRepository accounts;
     private final NotificationService notifications;
+    private final AfterCommit afterCommit;
 
     public CoachingAnnouncer(CoachingSessionRepository sessions,
                              SessionCreditRepository credits,
                              CoachRepository coaches,
                              OrderRepository orders,
                              AccountRepository accounts,
-                             NotificationService notifications) {
+                             NotificationService notifications,
+                             AfterCommit afterCommit) {
         this.sessions = sessions;
         this.credits = credits;
         this.coaches = coaches;
         this.orders = orders;
         this.accounts = accounts;
         this.notifications = notifications;
+        this.afterCommit = afterCommit;
     }
 
     @Transactional(readOnly = true)
     public void booked(CoachingSessionEntity session) {
-        describe(session, null).ifPresent(notifications::coachingBooked);
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingBooked(n)));
     }
 
     @Transactional(readOnly = true)
     public void rescheduled(CoachingSessionEntity session, Instant previousStart) {
-        describe(session, previousStart).ifPresent(notifications::coachingRescheduled);
+        describe(session, previousStart)
+                .ifPresent(n -> afterCommit(() -> notifications.coachingRescheduled(n)));
     }
 
     @Transactional(readOnly = true)
     public void cancelled(CoachingSessionEntity session) {
-        describe(session, null).ifPresent(notifications::coachingCancelled);
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingCancelled(n)));
+    }
+
+    /** A slot picked at checkout: a new booking, payment not yet verified. */
+    @Transactional(readOnly = true)
+    public void held(CoachingSessionEntity session) {
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingBooked(n)));
+    }
+
+    /** A checkout hold became a booking because the payment was verified. */
+    @Transactional(readOnly = true)
+    public void confirmed(CoachingSessionEntity session) {
+        describe(session, null)
+                .ifPresent(n -> afterCommit(() -> notifications.coachingSessionConfirmed(n)));
+    }
+
+    /** A checkout hold let go of its slot: expired, payment rejected, or released by hand. */
+    @Transactional(readOnly = true)
+    public void released(CoachingSessionEntity session, String why) {
+        describe(session, null).ifPresent(n -> afterCommit(() -> notifications.coachingCancelled(n)));
+    }
+
+    /**
+     * Hand the notification over once the change is committed, never before.
+     *
+     * <p>The notifications are asynchronous, so sent from inside the transaction they could
+     * reach Discord before the commit -- and for a hold taken during checkout, the order can
+     * still roll back after the hold is saved, which would announce a booking that never
+     * existed. Outside a transaction (a test, a job with none) it sends straight away.
+     */
+    private void afterCommit(Runnable send) {
+        afterCommit.run("hand a coaching notification over", send);
     }
 
     /**
@@ -94,7 +129,13 @@ public class CoachingAnnouncer {
                     positionInPack(session),
                     packSize(order),
                     order == null ? null : order.getPublicRef(),
-                    order == null ? null : order.getStatus().name()));
+                    order == null ? null : order.getStatus().name(),
+                    order == null ? null : order.getEaPlatformHandle(),
+                    order == null || order.getCoachingPlatform() == null ? null
+                            : order.getCoachingPlatform().displayName(),
+                    order == null ? null : order.getCoachingRank(),
+                    // Null-safe: a missing status must not cost the whole message.
+                    session.getStatus() == null ? null : session.getStatus().name()));
         } catch (RuntimeException e) {
             log.warn("Could not describe session {} for notification: {}",
                     session.getPublicRef(), e.getMessage());
@@ -118,8 +159,12 @@ public class CoachingAnnouncer {
         if (session.getOrderId() == null) {
             return 0;
         }
+        // A released hold was never one of the order's sessions, so it takes no number.
         List<CoachingSessionEntity> forOrder =
-                sessions.findByOrderIdOrderByIdAsc(session.getOrderId());
+                sessions.findByOrderIdOrderByIdAsc(session.getOrderId()).stream()
+                        .filter(s -> s.getStatus() != com.globalfutservice.domain.coaching.SessionStatus.RELEASED
+                                || s.getId().equals(session.getId()))
+                        .toList();
         for (int i = 0; i < forOrder.size(); i++) {
             if (forOrder.get(i).getId().equals(session.getId())) {
                 return i + 1;

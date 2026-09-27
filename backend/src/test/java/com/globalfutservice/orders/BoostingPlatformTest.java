@@ -87,6 +87,6 @@ class BoostingPlatformTest {
     private static OrderDtos.CreateOrderRequest request(String platform, String launcher) {
         return new OrderDtos.CreateOrderRequest(
                 null, "player@example.test", null, null, null, null, null, null,
-                null, null, null, platform, launcher, true);
+                null, null, null, null, null, null, platform, launcher, true);
     }
 }

@@ -12,6 +12,7 @@ import { ApiError, api } from '../lib/api'
 import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { useSeo } from '../lib/seo'
+import { ScheduleStep, formatSlot, type ChosenSlot } from './coaching/ScheduleStep'
 import type {
   CatalogOption, CreateOrderResponse, ManualPaymentMethod, ManualPaymentOption, Order, SignedQuote,
 } from '../lib/types'
@@ -36,12 +37,14 @@ import { useCatalog } from '../state/CatalogContext'
  * it say "submitted" and switch to "confirmed" on their own when that happens.
  */
 
-type Step = 'option' | 'details' | 'review' | 'pay' | 'processing' | 'success' | 'discord' | 'done'
+type Step = 'option' | 'details' | 'schedule' | 'review' | 'pay' | 'processing' | 'success' | 'discord' | 'done'
 type PayChoice = 'ONLINE' | ManualPaymentMethod
 type Variant = 'SINGLE_SESSION' | 'MONTHLY_6_SESSIONS'
 type CoachingPlatform = 'PLAYSTATION' | 'XBOX' | 'PC'
 
 const VARIANTS: Variant[] = ['SINGLE_SESSION', 'MONTHLY_6_SESSIONS']
+/* Sessions each product includes; the pack's name says it. The server grants the credits. */
+const SESSIONS: Record<Variant, number> = { SINGLE_SESSION: 1, MONTHLY_6_SESSIONS: 6 }
 const PLATFORMS: CoachingPlatform[] = ['PLAYSTATION', 'XBOX', 'PC']
 
 /**
@@ -85,6 +88,12 @@ export default function CoachingBook() {
   const [focus, setFocus] = useState('')
   const [detailsTouched, setDetailsTouched] = useState(false)
 
+  /* The slot picked on the Schedule step. Held for the order when it is placed. */
+  const [slot, setSlot] = useState<ChosenSlot | null>(null)
+  /* Why the customer was sent back to Schedule, e.g. the slot was just taken. */
+  const [slotNotice, setSlotNotice] = useState<string | null>(null)
+  const [slotRefresh, setSlotRefresh] = useState(0)
+
   const [methods, setMethods] = useState<ManualPaymentOption[] | null>(null)
   const [payChoice, setPayChoice] = useState<PayChoice | null>(null)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
@@ -98,6 +107,8 @@ export default function CoachingBook() {
   const orderRef = created?.publicRef ?? resumed?.publicRef ?? null
 
   const selected = options.find((o) => o.variant === variant) ?? null
+
+  useEffect(() => { setSlot(null) }, [variant])
 
   /*
    * Where to start. A signed-in customer returning from the sign-in page lands on details,
@@ -176,10 +187,18 @@ export default function CoachingBook() {
     return fresh
   }
 
-  function goToReview() {
+  function goToSchedule() {
     setDetailsTouched(true)
     if (handleMissing || platformMissing) return
     setError(null)
+    setStep('schedule')
+    window.scrollTo({ top: 0 })
+  }
+
+  function goToReview() {
+    if (!slot) return
+    setError(null)
+    setSlotNotice(null)
     setQuote(null)
     setStep('review')
     window.scrollTo({ top: 0 })
@@ -224,6 +243,9 @@ export default function CoachingBook() {
         coachingPlatform: platform,
         currentRank: rank || null,
         improvementFocus: focus.trim() || null,
+        coachingCoachId: slot?.coachId ?? null,
+        coachingStartsAt: slot?.startsAt ?? null,
+        coachingTimezone: slot?.timezone ?? null,
       })
       setCreated(order)
       // A refresh from here resumes this order instead of starting another.
@@ -231,22 +253,34 @@ export default function CoachingBook() {
       await proceedToPayment(order)
     } catch (e) {
       setPlacing(false)
+      // The slot went while the customer was on this screen: nothing was charged, so send
+      // them back to pick another, with the server's message and a fresh calendar.
+      if (e instanceof ApiError && e.code === 'slot_unavailable') {
+        setSlot(null)
+        setSlotNotice(e.message)
+        setSlotRefresh((n) => n + 1)
+        setStep('schedule')
+        window.scrollTo({ top: 0 })
+        return
+      }
       setError(e instanceof ApiError ? e.message : b.placeFailed)
     }
   }
 
-  const indicatorStep = step === 'option' ? 1 : step === 'details' ? 2 : 3
-  const showIndicator = step === 'option' || step === 'details' || step === 'review' || step === 'pay'
+  const indicatorStep = step === 'option' ? 1 : step === 'details' ? 2 : step === 'schedule' ? 3 : 4
+  const showIndicator = step === 'option' || step === 'details' || step === 'schedule'
+    || step === 'review' || step === 'pay'
 
   return (
     <Section className="rhythm-section">
       <div className="mx-auto max-w-4xl">
         {showIndicator && (
           <div className="mb-8 flex items-center justify-between gap-4">
-            {step === 'details' || step === 'review' ? (
+            {step === 'details' || step === 'schedule' || step === 'review' ? (
               <button
                 type="button"
-                onClick={() => setStep(step === 'review' ? 'details' : 'option')}
+                onClick={() => setStep(
+                  step === 'review' ? 'schedule' : step === 'schedule' ? 'details' : 'option')}
                 className="inline-flex items-center gap-1.5 text-body-sm font-semibold text-chalk-muted hover:text-chalk"
               >
                 <span aria-hidden="true">&larr;</span> {b.back}
@@ -256,7 +290,8 @@ export default function CoachingBook() {
                 <span aria-hidden="true">&larr;</span> {b.back}
               </Link>
             )}
-            <StepIndicator current={indicatorStep} labels={[b.stepService, b.stepDetails, b.stepPayment]} />
+            <StepIndicator current={indicatorStep}
+                           labels={[b.stepService, b.stepDetails, b.stepSchedule, b.stepPayment]} />
           </div>
         )}
 
@@ -280,7 +315,18 @@ export default function CoachingBook() {
             rank={rank} onRank={setRank}
             focus={focus} onFocus={setFocus}
             touched={detailsTouched}
+            onContinue={goToSchedule}
+          />
+        )}
+        {step === 'schedule' && (
+          <ScheduleStep
+            variant={variant}
+            sessionsInPack={SESSIONS[variant]}
+            value={slot}
+            onChange={setSlot}
             onContinue={goToReview}
+            notice={slotNotice}
+            refreshKey={slotRefresh}
           />
         )}
 
@@ -292,6 +338,7 @@ export default function CoachingBook() {
             handle={handle}
             rank={rank}
             focus={focus}
+            slot={slot}
             choices={payChoices}
             choice={payChoice}
             onChoice={setPayChoice}
@@ -607,7 +654,7 @@ function DetailsStep({
 /* ---------------------------------------------------------------------- step 4 --- */
 
 function ReviewStep({
-  option, quote, platform, handle, rank, focus, choices, choice, onChoice,
+  option, quote, platform, handle, rank, focus, slot, choices, choice, onChoice,
   acceptedTerms, onAcceptedTerms, touched, placing, onPay,
 }: {
   option: CatalogOption
@@ -616,6 +663,7 @@ function ReviewStep({
   handle: string
   rank: string
   focus: string
+  slot: ChosenSlot | null
   choices: { key: PayChoice; title: string; body: string; icon: CoachIconName }[]
   choice: PayChoice | null
   onChoice: (c: PayChoice) => void
@@ -652,6 +700,12 @@ function ReviewStep({
               <SummaryRow label={b.summaryHandle}>{handle.trim()}</SummaryRow>
               {rank && <SummaryRow label={b.summaryRank}>{rank}</SummaryRow>}
               {focus.trim() && <SummaryRow label={b.summaryFocus}>{focus.trim()}</SummaryRow>}
+              {slot && (
+                <SummaryRow label={b.summarySession}>
+                  <span className="block">{formatSlot(slot.startsAt, slot.timezone)}</span>
+                  <span className="block text-[12px] text-chalk-faint">{b.sessionHeld}</span>
+                </SummaryRow>
+              )}
             </dl>
           </div>
 
@@ -916,6 +970,16 @@ function ConfirmedSteps({
           <SummaryRow label={b.amount}><span className="tnum">{order.totalFormatted}</span></SummaryRow>
           <SummaryRow label={b.summaryPlatform}>{platformLabel}</SummaryRow>
           {order.eaPlatformHandle && <SummaryRow label={b.summaryHandle}>{order.eaPlatformHandle}</SummaryRow>}
+          {order.coaching?.nextStartsAt && (
+            <SummaryRow label={b.summarySession}>
+              <span className="block">
+                {formatSlot(order.coaching.nextStartsAt, order.coaching.nextTimezone ?? undefined)}
+              </span>
+              {order.coaching.nextStatus === 'PENDING' && (
+                <span className="block text-[12px] text-chalk-faint">{b.sessionHeld}</span>
+              )}
+            </SummaryRow>
+          )}
           <SummaryRow label={b.date}>
             {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(order.createdAt))}
           </SummaryRow>

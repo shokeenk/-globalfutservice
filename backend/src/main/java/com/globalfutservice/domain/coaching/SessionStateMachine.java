@@ -24,6 +24,10 @@ public final class SessionStateMachine {
             new EnumMap<>(SessionStatus.class);
 
     static {
+        // A hold either becomes a booking when the payment is verified, or lets go.
+        ALLOWED.put(SessionStatus.PENDING, EnumSet.of(
+                SessionStatus.SCHEDULED,
+                SessionStatus.RELEASED));
         ALLOWED.put(SessionStatus.SCHEDULED, EnumSet.of(
                 SessionStatus.COMPLETED,
                 SessionStatus.CANCELLED_BY_CUSTOMER,
@@ -36,6 +40,7 @@ public final class SessionStateMachine {
         ALLOWED.put(SessionStatus.CANCELLED_BY_CUSTOMER, EnumSet.noneOf(SessionStatus.class));
         ALLOWED.put(SessionStatus.CANCELLED_BY_COACH, EnumSet.noneOf(SessionStatus.class));
         ALLOWED.put(SessionStatus.NO_SHOW, EnumSet.noneOf(SessionStatus.class));
+        ALLOWED.put(SessionStatus.RELEASED, EnumSet.noneOf(SessionStatus.class));
     }
 
     private SessionStateMachine() {

@@ -338,13 +338,22 @@ function BookedSessions({ order, signedIn }: { order: Order; signedIn: boolean }
     return () => { stop = true }
   }, [signedIn, order.sku, order.publicRef])
 
-  if (order.sku !== 'COACHING' || !signedIn || !mine) return null
+  /*
+   * The order's own count when the server sends one: sessions booked against this order
+   * out of what it bought. The fallback -- this order's upcoming sessions plus the
+   * account's whole credit balance -- mixed packs together, and needed a sign-in.
+   */
+  const progress = order.coaching ?? null
+  if (order.sku !== 'COACHING') return null
+  if (!progress && (!signedIn || !mine)) return null
 
-  const forThisOrder = mine.upcoming.filter((s) => s.orderRef === order.publicRef)
-  const booked = forThisOrder.length
-  const total = booked + mine.creditBalance
+  const forThisOrder = mine ? mine.upcoming.filter((s) => s.orderRef === order.publicRef) : []
+  const booked = progress ? progress.booked : forThisOrder.length
+  const total = progress ? progress.total : booked + (mine?.creditBalance ?? 0)
+  // The slot picked at checkout, still waiting on the payment.
+  const held = progress?.nextStatus === 'PENDING' && progress.nextStartsAt ? progress : null
 
-  if (booked === 0 && mine.creditBalance === 0) return null
+  if (booked === 0 && total === 0) return null
 
   return (
     <div className="rounded-panel border border-ink-400 bg-ink-700/30 p-4">
@@ -355,7 +364,16 @@ function BookedSessions({ order, signedIn }: { order: Order; signedIn: boolean }
         </p>
       </div>
 
-      {booked === 0 ? (
+      {held && (
+        <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
+          <span className="tnum text-[13px] text-chalk">
+            {sessionWhen(held.nextStartsAt!, held.nextTimezone)}
+          </span>
+          <span className="text-[12px] text-chalk-faint">{t.coachingBook.sessionHeld}</span>
+        </div>
+      )}
+
+      {held ? null : booked === 0 ? (
         <p className="mt-2 text-[12.5px] leading-relaxed text-chalk-muted">
           {t.track.sessionsNoneYet}
         </p>
@@ -376,7 +394,7 @@ function BookedSessions({ order, signedIn }: { order: Order; signedIn: boolean }
         </ul>
       )}
 
-      {mine.creditBalance > 0 && (
+      {signedIn && mine && mine.creditBalance > 0 && (
         <ButtonLink to="/coaching" variant="secondary" full size="md" className="mt-4">
           {t.track.sessionsBookMore}
         </ButtonLink>

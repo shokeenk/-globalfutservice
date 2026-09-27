@@ -91,15 +91,37 @@ public final class SlotPlanner {
             TimeRange window,
             CoachingPolicy policy,
             Duration length) {
+        return bookableStarts(coachZone, rules, List.of(), busy, window, policy, length);
+    }
 
-        if (coachZone == null || rules == null || busy == null || window == null
-                || policy == null || length == null) {
+    /**
+     * As above, with one-off extra windows added to the weekly hours.
+     *
+     * <p>An extra window is an absolute stretch of time -- a coach working a Tuesday morning
+     * they usually do not. Slots inside it start at its opening and step through it on the
+     * same grid as everywhere else, and every one passes the same two tests: it fits the
+     * booking window and it overlaps nothing busy. Blocked time wins over an extra window
+     * for the same reason it wins over the weekly hours: it is in {@code busy}.
+     *
+     * @param extra one-off windows to offer on top of the weekly rules; may be empty
+     */
+    public static List<Instant> bookableStarts(
+            ZoneId coachZone,
+            Collection<AvailabilityRule> rules,
+            Collection<TimeRange> extra,
+            Collection<TimeRange> busy,
+            TimeRange window,
+            CoachingPolicy policy,
+            Duration length) {
+
+        if (coachZone == null || rules == null || extra == null || busy == null
+                || window == null || policy == null || length == null) {
             throw new IllegalArgumentException("all arguments are required");
         }
         if (length.isZero() || length.isNegative()) {
             throw new IllegalArgumentException("length must be positive");
         }
-        if (rules.isEmpty()) {
+        if (rules.isEmpty() && extra.isEmpty()) {
             return List.of();
         }
 
@@ -119,6 +141,10 @@ public final class SlotPlanner {
                 }
                 collectWindow(date, rule, coachZone, length, step, window, busy, starts);
             }
+        }
+
+        for (TimeRange open : extra) {
+            collectExtra(open, length, step, window, busy, starts);
         }
 
         List<Instant> ordered = new ArrayList<>(starts);
@@ -164,6 +190,23 @@ public final class SlotPlanner {
     }
 
     /** The whole session, not merely its start, must sit inside the bookable window. */
+    private static void collectExtra(
+            TimeRange open,
+            Duration length,
+            Duration step,
+            TimeRange window,
+            Collection<TimeRange> busy,
+            Set<Instant> out) {
+        for (Instant start = open.start();
+             !start.plus(length).isAfter(open.end());
+             start = start.plus(step)) {
+            TimeRange candidate = TimeRange.of(start, length);
+            if (fitsWindow(candidate, window) && isFree(candidate, busy)) {
+                out.add(start);
+            }
+        }
+    }
+
     private static boolean fitsWindow(TimeRange candidate, TimeRange window) {
         return !candidate.start().isBefore(window.start())
                 && !candidate.end().isAfter(window.end());
@@ -207,14 +250,27 @@ public final class SlotPlanner {
             TimeRange window,
             CoachingPolicy policy,
             Duration length) {
+        return isBookable(requestedStart, coachZone, rules, List.of(), busy, window, policy,
+                length);
+    }
 
+    /** As above, with one-off extra windows; see the matching {@code bookableStarts}. */
+    public static boolean isBookable(
+            Instant requestedStart,
+            ZoneId coachZone,
+            Collection<AvailabilityRule> rules,
+            Collection<TimeRange> extra,
+            Collection<TimeRange> busy,
+            TimeRange window,
+            CoachingPolicy policy,
+            Duration length) {
         if (requestedStart == null) {
             return false;
         }
         // Generating the full list and searching it guarantees this answer and the offered
         // list are produced by identical logic. Re-implementing the check separately is how
         // the two drift and a slot becomes offerable but unbookable.
-        return bookableStarts(coachZone, rules, busy, window, policy, length)
+        return bookableStarts(coachZone, rules, extra, busy, window, policy, length)
                 .contains(requestedStart);
     }
 }

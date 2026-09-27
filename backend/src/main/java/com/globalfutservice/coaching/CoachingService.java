@@ -58,7 +58,12 @@ public class CoachingService {
     private final CoachingSessionRepository sessions;
     private final CoachingSessionEventRepository events;
     private final SessionCreditRepository credits;
-    private final CoachingPolicy policy;
+    private final CoachExtraSlotRepository extraSlots;
+    /**
+     * Where the policy comes from. The admin's notice, buffer and session lengths are
+     * read per call, so a change in the Coaching diary applies to the next slot offered.
+     */
+    private final CoachingSettingsService settings;
     private final Clock clock;
     /**
      * Telling people. Deliberately the last thing every path does, and deliberately
@@ -72,7 +77,8 @@ public class CoachingService {
                            CoachingSessionRepository sessions,
                            CoachingSessionEventRepository events,
                            SessionCreditRepository credits,
-                           CoachingPolicy policy,
+                           CoachExtraSlotRepository extraSlots,
+                           CoachingSettingsService settings,
                            Clock clock,
                            CoachingAnnouncer announcer) {
         this.coaches = coaches;
@@ -81,13 +87,61 @@ public class CoachingService {
         this.sessions = sessions;
         this.events = events;
         this.credits = credits;
-        this.policy = policy;
+        this.extraSlots = extraSlots;
+        this.settings = settings;
         this.clock = clock;
         this.announcer = announcer;
     }
 
+    /**
+     * The session an order holds or has booked -- the first one still live -- for telling
+     * the customer when it is. Empty for an order with no slot, or whose hold let go.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CoachingSessionEntity> activeSessionForOrder(Long orderId) {
+        return sessions.findByOrderIdOrderByIdAsc(orderId).stream()
+                .filter(s -> s.getStatus() == SessionStatus.PENDING
+                        || s.getStatus() == SessionStatus.SCHEDULED)
+                .findFirst();
+    }
+
+    /**
+     * Where an order's sessions stand, for "1 of 6 booked" on the customer's order page.
+     *
+     * @param booked sessions that took one of the order's credits, or hold a slot for it:
+     *               held, scheduled, done, missed, or cancelled too late to get it back
+     * @param total  the sessions the order bought
+     * @param next   the earliest session still to come, held or scheduled
+     */
+    public record OrderSessions(int booked, int total, Optional<CoachingSessionEntity> next) {
+    }
+
+    @Transactional(readOnly = true)
+    public OrderSessions sessionsForOrder(Long orderId, int boughtIfUngranted) {
+        List<CoachingSessionEntity> all = sessions.findByOrderIdOrderByIdAsc(orderId);
+        int booked = (int) all.stream().filter(s -> switch (s.getStatus()) {
+            case PENDING, SCHEDULED, COMPLETED, NO_SHOW -> true;
+            case CANCELLED_BY_CUSTOMER -> !s.isCreditReturned();
+            case CANCELLED_BY_COACH, RELEASED -> false;
+        }).count();
+        int total = credits.findGrantForOrder(orderId)
+                .map(SessionCreditEntity::getAmount)
+                .orElse(boughtIfUngranted);
+        Optional<CoachingSessionEntity> next = all.stream()
+                .filter(s -> s.getStatus() == SessionStatus.PENDING
+                        || s.getStatus() == SessionStatus.SCHEDULED)
+                .min(java.util.Comparator.comparing(CoachingSessionEntity::getStartsAt));
+        return new OrderSessions(booked, total, next);
+    }
+
+    /** How long a session bought under a rate-card variant runs, per the admin's settings. */
+    public Duration sessionLengthForVariant(String variant) {
+        return settings.sessionLengthFor(variant);
+    }
+
+    /** The booking rules in force: configuration, with the admin's settings applied. */
     public CoachingPolicy policy() {
-        return policy;
+        return settings.effectivePolicy();
     }
 
     // ---------------------------------------------------------------- availability -----
@@ -115,16 +169,27 @@ public class CoachingService {
      */
     @Transactional(readOnly = true)
     public List<Instant> availableSlots(CoachEntity coach, Instant from, Instant to) {
+        return availableSlots(coach, from, to, policy().sessionLength());
+    }
+
+    /**
+     * Bookable starts for a session of a given length -- the length of the product being
+     * bought, so a checkout for the six-pack lays out forty-minute sessions, not hours.
+     */
+    @Transactional(readOnly = true)
+    public List<Instant> availableSlots(CoachEntity coach, Instant from, Instant to,
+                                        Duration length) {
+        CoachingPolicy p = policy();
         Instant now = clock.instant();
-        Instant windowStart = max(from, policy.earliestBookableStart(now));
-        Instant windowEnd = min(to, policy.latestBookableStart(now));
+        Instant windowStart = max(from, p.earliestBookableStart(now));
+        Instant windowEnd = min(to, p.latestBookableStart(now));
         if (!windowEnd.isAfter(windowStart)) {
             return List.of();
         }
         TimeRange window = new TimeRange(windowStart, windowEnd);
         return SlotPlanner.bookableStarts(
-                coach.zone(), rulesFor(coach.getId()), busyFor(coach.getId(), window),
-                window, policy);
+                coach.zone(), rulesFor(coach.getId()), extrasFor(coach.getId(), window),
+                busyFor(coach.getId(), window, null), window, p, length);
     }
 
     private List<AvailabilityRule> rulesFor(Long coachId) {
@@ -133,11 +198,30 @@ public class CoachingService {
                 .toList();
     }
 
-    /** Booked sessions and declared absences, as one busy set. */
-    private List<TimeRange> busyFor(Long coachId, TimeRange window) {
+    /** One-off extra windows the admin has opened, for slot generation. */
+    private List<TimeRange> extrasFor(Long coachId, TimeRange window) {
+        return extraSlots.overlapping(coachId, window.start(), window.end()).stream()
+                .map(CoachExtraSlotEntity::toRange)
+                .toList();
+    }
+
+    /**
+     * Booked sessions, holds and declared absences, as one busy set.
+     *
+     * <p>Sessions and holds are widened by the buffer on both sides, so a slot cannot start
+     * until the buffer after one session has passed, nor run into the buffer before the
+     * next. Blocked time is not widened: it is already the time the coach is away.
+     *
+     * @param exclude a session to leave out, so a session being moved does not block itself
+     */
+    private List<TimeRange> busyFor(Long coachId, TimeRange window, Long exclude) {
+        Duration buffer = settings.current().buffer();
         List<TimeRange> busy = new ArrayList<>();
-        sessions.busyBetween(coachId, window.start(), window.end())
-                .forEach(s -> busy.add(s.toRange()));
+        sessions.busyBetween(coachId, window.start().minus(buffer), window.end().plus(buffer))
+                .stream()
+                .filter(s -> exclude == null || !exclude.equals(s.getId()))
+                .forEach(s -> busy.add(new TimeRange(
+                        s.getStartsAt().minus(buffer), s.getEndsAt().plus(buffer))));
         timeOff.overlapping(coachId, window.start(), window.end())
                 .forEach(t -> busy.add(t.toRange()));
         return busy;
@@ -168,8 +252,9 @@ public class CoachingService {
         }
 
         Instant now = clock.instant();
+        CoachingPolicy p = policy();
         TimeRange window = new TimeRange(
-                policy.earliestBookableStart(now), policy.latestBookableStart(now));
+                p.earliestBookableStart(now), p.latestBookableStart(now));
 
         // Re-derived, never trusted. The list the browser was shown is a suggestion.
         // The length the customer actually bought, not the configured default. It decides
@@ -178,7 +263,8 @@ public class CoachingService {
         Duration length = sessionLengthFor(accountId);
 
         boolean legal = SlotPlanner.isBookable(startsAt, coach.zone(), rulesFor(coach.getId()),
-                busyFor(coach.getId(), window), window, policy, length);
+                extrasFor(coach.getId(), window), busyFor(coach.getId(), window, null), window,
+                p, length);
         if (!legal) {
             throw new ApiExceptions.ConflictException("slot_unavailable",
                     "That time is no longer available. Please pick another slot.");
@@ -240,25 +326,28 @@ public class CoachingService {
             throw new ApiExceptions.ConflictException("session_not_scheduled",
                     "That session has already finished or been cancelled.");
         }
-        if (!policy.canReschedule(now, session.getStartsAt(), session.getRescheduleCount())) {
+        CoachingPolicy p = policy();
+        if (!p.canReschedule(now, session.getStartsAt(), session.getRescheduleCount())) {
             throw new ApiExceptions.ConflictException("reschedule_not_allowed",
-                    "Sessions can be moved up to " + hours(policy.changeCutoff())
+                    "Sessions can be moved up to " + hours(p.changeCutoff())
                             + " hours before they start, at most "
-                            + policy.maxReschedules() + " times.");
+                            + p.maxReschedules() + " times.");
         }
 
         CoachEntity coach = coaches.findById(session.getCoachId())
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("That coach is no longer available."));
 
         TimeRange window = new TimeRange(
-                policy.earliestBookableStart(now), policy.latestBookableStart(now));
+                p.earliestBookableStart(now), p.latestBookableStart(now));
 
         // Exclude this session from its own busy set, or it blocks its own move.
-        List<TimeRange> busy = busyFor(coach.getId(), window);
-        busy.remove(session.toRange());
+        List<TimeRange> busy = busyFor(coach.getId(), window, session.getId());
 
+        // Checked at the length the session already has. This used the default length, so
+        // a forty-minute package session was tested as if it ran an hour.
+        Duration booked = Duration.between(session.getStartsAt(), session.getEndsAt());
         if (!SlotPlanner.isBookable(newStart, coach.zone(), rulesFor(coach.getId()),
-                busy, window, policy)) {
+                extrasFor(coach.getId(), window), busy, window, p, booked)) {
             throw new ApiExceptions.ConflictException("slot_unavailable",
                     "That time is not available. Please pick another slot.");
         }
@@ -268,7 +357,6 @@ public class CoachingService {
         // customer's current credit batch. Moving a session must not silently change how
         // long it runs -- and by now the credit that paid for it has been consumed, so
         // re-deriving it from the pool would read the wrong batch entirely.
-        Duration booked = Duration.between(session.getStartsAt(), session.getEndsAt());
         session.applyReschedule(newStart, newStart.plus(booked),
                 customerTimezone, now);
         try {
@@ -308,6 +396,214 @@ public class CoachingService {
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("We could not find that session."));
     }
 
+    // ------------------------------------------------------------------------- holds ---
+
+    /**
+     * Hold a slot for a coaching order being placed, until its payment is verified.
+     *
+     * <p>Runs inside order creation, so a slot that cannot be held fails the whole order:
+     * nothing is charged, no coupon or points are spent, and the customer picks again. The
+     * hold spends no credit -- the customer has not paid -- and lasts the admin's hold
+     * length; submitting payment proof extends it until the proof is reviewed.
+     *
+     * <p>The slot is re-derived at the length of the product being bought, exactly as a
+     * booking is, and the overlap constraint settles the race between two customers who
+     * picked the same slot at once: one order goes through, the other is told the slot was
+     * just taken.
+     */
+    @Transactional
+    public CoachingSessionEntity holdForOrder(Long accountId, Long orderId, String variant,
+                                              String coachPublicId, Instant startsAt,
+                                              String customerTimezone) {
+        if (accountId == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in to book a session.");
+        }
+        if (startsAt == null || coachPublicId == null || coachPublicId.isBlank()) {
+            throw new ApiExceptions.BadRequestException("Pick a date and time for your session.");
+        }
+        String zone = validZone(customerTimezone);
+        CoachEntity coach = requireCoach(coachPublicId);
+        CoachingPolicy p = policy();
+        Instant now = clock.instant();
+        TimeRange window = new TimeRange(p.earliestBookableStart(now), p.latestBookableStart(now));
+        Duration length = settings.sessionLengthFor(variant);
+        boolean legal = SlotPlanner.isBookable(startsAt, coach.zone(), rulesFor(coach.getId()),
+                extrasFor(coach.getId(), window), busyFor(coach.getId(), window, null),
+                window, p, length);
+        if (!legal) {
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "That slot was just taken, please pick another.");
+        }
+        CoachingSessionEntity hold = CoachingSessionEntity.hold(SecureIds.sessionRef(), accountId,
+                coach.getId(), orderId, startsAt, startsAt.plus(length), zone,
+                now.plus(settings.current().hold()));
+        try {
+            sessions.saveAndFlush(hold);
+        } catch (DataIntegrityViolationException raced) {
+            // The overlap constraint caught two checkouts for the same slot. This order is
+            // rolled back with the exception; the other one keeps the slot.
+            log.info("Checkout hold race lost for coach {} at {}", coach.getPublicId(), startsAt);
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "That slot was just taken, please pick another.");
+        }
+        events.save(CoachingSessionEventEntity.held(hold.getId(), accountId, now));
+        log.info("Session {} held for order {} with coach {} at {} until {}", hold.getPublicRef(),
+                orderId, coach.getPublicId(), startsAt, hold.getHoldExpiresAt());
+        announcer.held(hold);
+        return hold;
+    }
+
+    /**
+     * The order has been paid: its hold becomes a booking, spending one of the credits the
+     * payment has just granted.
+     *
+     * <p>Nothing to do when the order holds no slot -- it was bought without one, or the
+     * hold had already expired, in which case the customer books with their credit like
+     * any other.
+     */
+    @Transactional
+    public Optional<CoachingSessionEntity> confirmHoldForOrder(Long orderId, SessionActor actor,
+                                                             Long actorId) {
+        Optional<CoachingSessionEntity> found =
+                sessions.findFirstByOrderIdAndStatus(orderId, SessionStatus.PENDING);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        CoachingSessionEntity hold = found.get();
+        if (credits.balanceOf(hold.getAccountId()) <= 0) {
+            // The payment path grants before it confirms, so this means the grant failed;
+            // leave the hold for an admin rather than book a session nobody paid for.
+            log.warn("Order {} is paid but account {} has no credit to confirm session {}",
+                    orderId, hold.getAccountId(), hold.getPublicRef());
+            return Optional.empty();
+        }
+        transition(hold, SessionStatus.SCHEDULED, actor, actorId, "payment verified");
+        credits.save(SessionCreditEntity.consumed(hold.getAccountId(), hold.getId(),
+                hold.getPublicRef()));
+        announcer.confirmed(hold);
+        return Optional.of(hold);
+    }
+
+    /**
+     * Let an order's hold go: the payment was rejected, the order was abandoned, or an
+     * admin released it. The slot is free again the moment this commits.
+     */
+    @Transactional
+    public Optional<CoachingSessionEntity> releaseHoldForOrder(Long orderId, SessionActor actor,
+                                                             Long actorId, String why) {
+        Optional<CoachingSessionEntity> found =
+                sessions.findFirstByOrderIdAndStatus(orderId, SessionStatus.PENDING);
+        found.ifPresent(hold -> release(hold, actor, actorId, why));
+        return found;
+    }
+
+    /**
+     * Payment proof is in: keep the slot until someone has looked at it. Only ever
+     * lengthens a hold, so a second submission cannot shorten the first.
+     */
+    @Transactional
+    public void extendHoldForOrder(Long orderId, Instant until) {
+        sessions.findFirstByOrderIdAndStatus(orderId, SessionStatus.PENDING).ifPresent(hold -> {
+            if (hold.getHoldExpiresAt() == null || until.isAfter(hold.getHoldExpiresAt())) {
+                hold.extendHold(until, clock.instant());
+                sessions.save(hold);
+                log.info("Hold {} for order {} extended to {} while the payment is reviewed",
+                        hold.getPublicRef(), orderId, until);
+            }
+        });
+    }
+
+    /** Release every hold whose time is up. Run by the scheduler. */
+    @Transactional
+    public int releaseExpiredHolds() {
+        List<CoachingSessionEntity> expired = sessions.expiredHolds(clock.instant());
+        expired.forEach(hold -> release(hold, SessionActor.SYSTEM, null, "hold expired"));
+        return expired.size();
+    }
+
+    private void release(CoachingSessionEntity hold, SessionActor actor, Long actorId, String why) {
+        transition(hold, SessionStatus.RELEASED, actor, actorId, why);
+        announcer.released(hold, why);
+    }
+
+    private static String validZone(String zone) {
+        if (zone == null || zone.isBlank()) {
+            return null;
+        }
+        try {
+            return ZoneId.of(zone.trim()).getId();
+        } catch (RuntimeException e) {
+            throw new ApiExceptions.BadRequestException("That time zone was not recognised.");
+        }
+    }
+
+    // ------------------------------------------------------------------ admin actions ---
+
+    /**
+     * An admin moves a session or hold to another free slot.
+     *
+     * <p>Not bound by the customer's rules: no minimum notice, no change cut-off, and it does
+     * not use up one of the customer's own moves. It is bound by everything that makes a slot
+     * real -- the coach's hours or an extra window, nothing booked or held in the way, no
+     * blocked time -- and by the overlap constraint underneath.
+     */
+    @Transactional
+    public CoachingSessionEntity rescheduleByAdmin(CoachingSessionEntity session, Instant newStart,
+                                                   Long actorId) {
+        if (session.getStatus() != SessionStatus.PENDING
+                && session.getStatus() != SessionStatus.SCHEDULED) {
+            throw new ApiExceptions.ConflictException("session_not_movable",
+                    "Only a pending or confirmed session can be moved.");
+        }
+        CoachEntity coach = coaches.findById(session.getCoachId())
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("That coach no longer exists."));
+        CoachingPolicy p = policy();
+        Instant now = clock.instant();
+        TimeRange window = new TimeRange(now, p.latestBookableStart(now));
+        Duration length = Duration.between(session.getStartsAt(), session.getEndsAt());
+        if (!SlotPlanner.isBookable(newStart, coach.zone(), rulesFor(coach.getId()),
+                extrasFor(coach.getId(), window), busyFor(coach.getId(), window, session.getId()),
+                window, p, length)) {
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "That time is not free. Pick another slot.");
+        }
+        Instant was = session.getStartsAt();
+        session.applyMove(newStart, newStart.plus(length), now);
+        try {
+            sessions.saveAndFlush(session);
+        } catch (DataIntegrityViolationException raced) {
+            throw new ApiExceptions.ConflictException("slot_unavailable",
+                    "Someone just took that slot. Pick another.");
+        }
+        events.save(CoachingSessionEventEntity.rescheduled(
+                session.getId(), was, newStart, SessionActor.OPERATOR, actorId));
+        log.info("Session {} moved from {} to {} by account {}", session.getPublicRef(), was,
+                newStart, actorId);
+        announcer.rescheduled(session, was);
+        return session;
+    }
+
+    /**
+     * An admin cancels: a hold is released, a booking is cancelled by the coach and its
+     * credit returned -- the customer did nothing wrong.
+     */
+    @Transactional
+    public CoachingSessionEntity cancelByAdmin(CoachingSessionEntity session, Long actorId,
+                                               String note) {
+        String why = note == null || note.isBlank() ? "cancelled by an admin" : note.trim();
+        switch (session.getStatus()) {
+            case PENDING -> release(session, SessionActor.OPERATOR, actorId, why);
+            case SCHEDULED -> {
+                transition(session, SessionStatus.CANCELLED_BY_COACH, SessionActor.OPERATOR,
+                        actorId, why);
+                announcer.cancelled(session);
+            }
+            default -> throw new ApiExceptions.ConflictException("session_not_cancellable",
+                    "That session has already finished or been cancelled.");
+        }
+        return session;
+    }
+
     // ------------------------------------------------------------------- transitions ---
 
     /**
@@ -336,12 +632,17 @@ public class CoachingService {
         boolean refund = switch (to) {
             case CANCELLED_BY_COACH -> true;
             case CANCELLED_BY_CUSTOMER ->
-                    policy.refundsCreditOnCustomerCancel(now, session.getStartsAt());
+                    policy().refundsCreditOnCustomerCancel(now, session.getStartsAt());
             case COMPLETED, NO_SHOW -> false;
-            case SCHEDULED -> false;
+            // A hold spent nothing, so confirming or releasing one has nothing to return.
+            case SCHEDULED, PENDING, RELEASED -> false;
         };
 
-        session.applyTransition(to, refund, now);
+        if (from == SessionStatus.PENDING && to == SessionStatus.SCHEDULED) {
+            session.applyConfirmation(now);
+        } else {
+            session.applyTransition(to, refund, now);
+        }
         sessions.save(session);
 
         if (refund) {
@@ -402,14 +703,14 @@ public class CoachingService {
     @Transactional(readOnly = true)
     public Duration sessionLengthFor(Long accountId) {
         if (accountId == null) {
-            return policy.sessionLength();
+            return policy().sessionLength();
         }
         return fundingGrant(accountId)
                 // Null minutes means a grant from before the column, which falls through
                 // to the default exactly as it did when this walk was written inline.
                 .map(SessionCreditEntity::getSessionMinutes)
                 .map(Duration::ofMinutes)
-                .orElse(policy.sessionLength());
+                .orElse(policy().sessionLength());
     }
 
     /**
@@ -460,7 +761,7 @@ public class CoachingService {
         }
         try {
             credits.saveAndFlush(SessionCreditEntity.granted(accountId, orderId, sessionCount,
-                    policy.creditsExpireAt(clock.instant()), orderRef,
+                    policy().creditsExpireAt(clock.instant()), orderRef,
                     (int) sessionLength.toMinutes()));
             log.info("Granted {} session credits to account {} from order {}",
                     sessionCount, accountId, orderRef);

@@ -1,5 +1,9 @@
 package com.globalfutservice.payments;
 
+import com.globalfutservice.coaching.AfterCommit;
+import com.globalfutservice.domain.catalog.Sku;
+import com.globalfutservice.domain.coaching.SessionActor;
+import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.notify.NotificationService;
@@ -45,6 +49,9 @@ public class ManualPaymentService {
     private final NotificationService notifications;
     private final CustomerFeedService feed;
     private final AppProperties props;
+    /** Keeps a coaching order's held slot alive while its payment is reviewed. */
+    private final CoachingService coaching;
+    private final AfterCommit afterCommit;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
                                 ManualPaymentProofRepository proofs,
@@ -52,7 +59,11 @@ public class ManualPaymentService {
                                 CredentialVaultService vaultService,
                                 NotificationService notifications,
                                 CustomerFeedService feed,
-                                AppProperties props) {
+                                AppProperties props,
+                                CoachingService coaching,
+                                AfterCommit afterCommit) {
+        this.coaching = coaching;
+        this.afterCommit = afterCommit;
         this.feed = feed;
         this.claims = claims;
         this.proofs = proofs;
@@ -147,6 +158,20 @@ public class ManualPaymentService {
 
         ManualPaymentClaimEntity claim = claims.saveAndFlush(
                 new ManualPaymentClaimEntity(order.getId(), method, destination, cleaned));
+        /*
+         * Proof is in, so the slot this coaching order picked is kept until somebody has
+         * looked at it -- a two-hour hold would otherwise lapse overnight while a paying
+         * customer waited for a bank transfer to be checked. Capped at the point an unpaid
+         * order is abandoned, which releases it anyway.
+         */
+        if (order.getSku() == Sku.COACHING) {
+            // Everything computed inside the action, so nothing about the hold -- not even
+            // working out its new expiry -- can fail the submission itself.
+            final OrderEntity submitted = order;
+            afterCommit.run("extend the coaching hold for order " + order.getPublicRef(),
+                    () -> coaching.extendHoldForOrder(submitted.getId(),
+                            submitted.getCreatedAt().plus(props.fulfilment().deliverySla())));
+        }
 
         // The reference itself is not secret -- it is on the customer's own statement and
         // an operator will read it out of this table anyway -- but it is not logged, so
@@ -367,7 +392,14 @@ public class ManualPaymentService {
         ManualPaymentClaimEntity claim = require(claimId);
         requireUnreviewed(claim);
         claim.review(ClaimStatus.REJECTED, reviewerAccountId, note);
-        return claims.saveAndFlush(claim);
+        ManualPaymentClaimEntity saved = claims.saveAndFlush(claim);
+        // A rejected payment frees the slot the order was holding. An order has one claim
+        // under review at a time, so there is no other proof still waiting on the slot.
+        final Long orderId = claim.getOrderId();
+        afterCommit.run("release the coaching hold for order " + orderId,
+                () -> coaching.releaseHoldForOrder(orderId, SessionActor.OPERATOR,
+                        reviewerAccountId, "payment rejected"));
+        return saved;
     }
 
     private ManualPaymentClaimEntity require(Long claimId) {

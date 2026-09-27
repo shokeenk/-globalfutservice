@@ -1,5 +1,6 @@
 package com.globalfutservice.catalog;
 
+import com.globalfutservice.coaching.CoachingSettingsService;
 import com.globalfutservice.catalog.web.CatalogDtos;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.Platform;
@@ -33,11 +34,16 @@ public class CatalogService {
     private final AppProperties props;
     private final PricingPolicy policy;
 
-    public CatalogService(RateCardRepository repository, AppProperties props, PricingPolicy policy) {
+    public CatalogService(RateCardRepository repository, AppProperties props, PricingPolicy policy,
+                          CoachingSettingsService coachingSettings) {
         this.repository = repository;
         this.props = props;
         this.policy = policy;
+        this.coachingSettings = coachingSettings;
     }
+
+    /** The session lengths the storefront shows are the admin's, not configuration's. */
+    private final CoachingSettingsService coachingSettings;
 
     @Transactional(readOnly = true)
     public CatalogDtos.CatalogResponse catalogue(Currency currency) {
@@ -137,8 +143,8 @@ public class CatalogService {
                         .toList(),
                 policy.tierDiscountEnabled(),
                 props.loyalty().dailyBonusPoints(),
-                (int) props.coaching().sessionLength().toMinutes(),
-                (int) props.coaching().blockSessionLength().toMinutes(),
+                (int) coachingSettings.current().singleSession().toMinutes(),
+                (int) coachingSettings.current().blockSession().toMinutes(),
                 // The same three conditions RazorpayGateway.isEnabled checks.
                 props.razorpay().enabled()
                         && props.razorpay().keyId() != null && !props.razorpay().keyId().isBlank()

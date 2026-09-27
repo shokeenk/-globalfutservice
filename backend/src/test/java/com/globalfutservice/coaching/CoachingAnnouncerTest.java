@@ -61,7 +61,7 @@ class CoachingAnnouncerTest {
         accounts = mock(AccountRepository.class);
         notifications = mock(NotificationService.class);
         announcer = new CoachingAnnouncer(sessions, credits, coaches, orders, accounts,
-                notifications);
+                notifications, com.globalfutservice.coaching.AfterCommit.immediate());
 
         session = session(ORDER_ID);
 

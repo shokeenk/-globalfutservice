@@ -70,7 +70,7 @@ class ManualPaymentServiceTest {
         vault = mock(com.globalfutservice.credentials.CredentialVaultService.class);
         notifications = mock(com.globalfutservice.notify.NotificationService.class);
 
-        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, props);
+        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, props, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate());
     }
 
     private static OrderEntity order(OrderStatus status, Sku sku) {
@@ -154,7 +154,7 @@ class ManualPaymentServiceTest {
             when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, bare);
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, bare, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate());
 
             assertThatThrownBy(() -> noDestinations.submit(
                     order(OrderStatus.AWAITING_PAYMENT, Sku.COACHING),
@@ -232,7 +232,7 @@ class ManualPaymentServiceTest {
             // An account with no link is payable; a link with no account is not. Dropping
             // PayPal here would take away the method over a missing convenience.
             List<ManualPaymentService.PaymentOption> options =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, emailOnly)
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, emailOnly, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate())
                             .optionsFor("COACHING");
 
             assertThat(options).singleElement()
@@ -250,7 +250,7 @@ class ManualPaymentServiceTest {
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, "TWALLET"));
 
-            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, partial)
+            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, partial, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate())
                     .optionsFor("COACHING"))
                     .extracting(ManualPaymentService.PaymentOption::method)
                     .containsExactly(ManualPaymentMethod.CRYPTO);

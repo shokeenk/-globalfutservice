@@ -86,3 +86,71 @@ was to keep what counts as revenue exactly as it was.
 **Evidence:** read in the code. The local dev database does hold a GBP order, so
 non-INR orders are not hypothetical, but that one is abandoned and so is not
 counted; no mixed total has been observed.
+
+---
+
+## 4. Weekly hours are read back shifted when the server's clock is not on UTC
+
+**Where:** `spring.jpa.properties.hibernate.jdbc.time_zone: UTC` in `application.yml`,
+read through `CoachAvailabilityEntity`
+
+`coach_availability.start_time` and `end_time` are `TIME` columns. With Hibernate's JDBC
+time zone set to UTC, it converts a `LocalTime` through the JVM's own time zone on the way
+in and out. On a JVM running in India the coach's 18:00–23:00 comes back as 23:30–04:30:
+the end wraps past midnight, the slot planner refuses the window, and
+`GET /coaching/coaches/{id}/slots` answers 500. The admin's weekly-hours editor shows the
+shifted times, and hours saved from such a server are stored shifted the other way.
+
+**When it bites:** any server whose JVM default time zone is not UTC. Production should not
+be one: the backend image (`eclipse-temurin:21-jre-jammy`) sets no time zone, so its JVM
+runs in UTC. That is inferred from the image, not checked on Render. It does bite a
+developer's machine in India, which is where it was found.
+
+**What it would take:** pin the JVM to UTC (`-Duser.timezone=UTC` in `JAVA_OPTS`, and the
+same for local runs), or map the two columns so Hibernate does not convert them.
+
+**Evidence:** observed locally. The rows hold 18:00–23:00; the admin coaches endpoint
+returned 23:30–04:30 from a JVM in `Asia/Calcutta`, and 18:00–23:00 from the same code
+started with `-Duser.timezone=UTC`, which is how the coaching checkout was then checked.
+
+---
+
+## 5. A Discord announcement being retried is lost if the server restarts
+
+**Where:** `DiscordNotifier.postQuietly`
+
+A coaching announcement that Discord rate-limits, fails on its side or never answers is
+retried twice, after 5 and 30 seconds, on the notification thread. The retries live in
+memory. A deploy or restart during those pauses drops the message; the failure is in the
+log, with Discord's HTTP status, but nothing sends it again.
+
+**When it bites:** a Discord outage or rate limit that coincides with a deploy. The booking
+itself is never affected.
+
+**What it would take:** an outbox table the notifier writes to and a job that sends from,
+so an unsent announcement survives a restart.
+
+**Evidence:** read in the code.
+
+---
+
+## 6. Booking a package's later sessions offers hour-long slots, not forty-minute ones
+
+**Where:** the slot picker on `/coaching` (`SlotPicker` in `Coaching.tsx`), calling
+`GET /coaching/coaches/{id}/slots` without `variant`
+
+The checkout asks for slots at the product's own length, so a six-pack's first session is
+offered on the forty-minute grid. The picker on `/coaching`, where a customer books the
+package's other five, does not say what it is booking for, and the endpoint then lays the
+calendar out for a one-hour session. A forty-minute session that would fit -- the last one
+before a booked session or the end of the coach's hours -- is not offered. Booking checks
+the right length, so nothing wrong can be booked; some right slots are just missing.
+
+**When it bites:** a package customer booking sessions two to six near the edges of the
+coach's day.
+
+**What it would take:** have the endpoint use the signed-in customer's own session length
+when no variant is given -- the length of the credit the booking will spend -- or have the
+picker pass it.
+
+**Evidence:** read in the code.

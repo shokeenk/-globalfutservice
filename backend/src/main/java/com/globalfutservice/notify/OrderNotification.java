@@ -36,5 +36,9 @@ public record OrderNotification(
         String platform,
         String adminDeepLink,
         /** Coaching orders: platform, in-game ID, rank and focus on one line. Null otherwise. */
-        String coachingDetails) {
+        String coachingDetails,
+        /* Coaching: the session this order holds or has booked, and the customer's time
+           zone, so the confirmation can say when in their own time. Both null otherwise. */
+        java.time.Instant sessionStartsAt,
+        String sessionTimezone) {
 }

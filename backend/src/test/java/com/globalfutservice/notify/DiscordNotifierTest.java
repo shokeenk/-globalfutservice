@@ -136,7 +136,7 @@ class DiscordNotifierTest {
                 "₹922.50", "buyer@example.com", "buyer#1234", "PLAYER_AUCTION",
                 null,
                 null,
-                "https://globalfutservices.com/admin/orders/GFS-26-000124", null);
+                "https://globalfutservices.com/admin/orders/GFS-26-000124", null, null, null);
     }
 
     /* ------------------------------------------------------------ the payload --- */

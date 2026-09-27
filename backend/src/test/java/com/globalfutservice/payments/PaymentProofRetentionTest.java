@@ -46,7 +46,7 @@ class PaymentProofRetentionTest {
         service = new ManualPaymentService(
                 mock(ManualPaymentClaimRepository.class), proofs, mock(OrderService.class),
                 mock(CredentialVaultService.class), mock(NotificationService.class),
-                mock(CustomerFeedService.class), props);
+                mock(CustomerFeedService.class), props, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate());
     }
 
     @Test
