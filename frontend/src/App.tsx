@@ -42,6 +42,7 @@ const SendCampaign = lazy(() => import('./pages/admin/campaigns/SendCampaign'))
 const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
 const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
 const AdminNotFound = lazy(() =>
@@ -78,7 +79,7 @@ export default function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="orders" element={<Admin />} />
           <Route path="orders/:publicRef" element={<AdminOrder />} />
-          <Route path="customers" element={<AdminComingSoon eyebrow="Customers" title="Customers" />} />
+          <Route path="customers" element={<AdminCustomers />} />
           {/* RequireAdmin, not RequireStaff: this screen sets what customers are
               charged, and the endpoint behind it is hasRole('ADMIN'). An operator
               reaching it would see a form that 403s on save. */}

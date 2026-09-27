@@ -367,6 +367,50 @@ export interface CurrencyRevenue {
   yesterdayFormatted: string
 }
 
+/**
+ * GET /api/v1/admin/customers: one customer, an account or a guest.
+ *
+ * <p>The server leaves out fields that are null, so every optional one here may simply be
+ * missing. `spent` is only ever present for an admin.
+ */
+export interface AdminCustomer {
+  /** a-<account id> or g-<first order reference>. */
+  key: string
+  kind: 'ACCOUNT' | 'GUEST'
+  /** Never empty: a guest who gave no name is "Guest". */
+  name: string
+  email: string
+  eaHandle?: string | null
+  platform?: string | null
+  orders: number
+  /** Paid and not refunded, one entry per currency, largest first. Admins only. */
+  spent?: { currency: string; minor: number; formatted: string }[] | null
+  lastOrderAt?: string | null
+  joinedAt: string
+  status: 'ACTIVE' | 'DISABLED' | 'LOCKED' | 'GUEST'
+  discordConnected: boolean
+}
+
+export interface AdminCustomerPage {
+  items: AdminCustomer[]
+  total: number
+  page: number
+  size: number
+}
+
+export interface AdminCustomerOverview {
+  total: number
+  newThisMonth: number
+  newLastMonthSoFar: number
+  withOrders: number
+  withOrdersLastMonth: number
+}
+
+export interface AdminCustomerDetail {
+  customer: AdminCustomer
+  recentOrders: { publicRef: string; sku: string; serviceLabel: string; status: string; createdAt: string }[]
+}
+
 /** GET /api/v1/admin/saved-views: one person's named filters on a page. */
 export interface SavedView {
   id: number

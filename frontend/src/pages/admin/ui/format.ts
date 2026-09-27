@@ -18,6 +18,24 @@ export function shortDateTime(iso: string | null | undefined): string {
   return SHORT.format(new Date(iso))
 }
 
+const DATE_ONLY = new Intl.DateTimeFormat('en-US', {
+  month: 'short', day: '2-digit', year: 'numeric', timeZone: BUSINESS_ZONE,
+})
+const DATE_TIME = new Intl.DateTimeFormat('en-US', {
+  month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+  timeZone: BUSINESS_ZONE,
+})
+
+/** "Sep 26, 2026", in India time. */
+export function shortDate(iso: string | null | undefined): string {
+  return iso ? DATE_ONLY.format(new Date(iso)) : '—'
+}
+
+/** "Aug 12, 2026, 03:14 PM", in India time. */
+export function dateAndTime(iso: string | null | undefined): string {
+  return iso ? DATE_TIME.format(new Date(iso)) : '—'
+}
+
 const DAY = new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_ZONE })
 
 /** Today's date in India as YYYY-MM-DD, the value a date input holds. */

@@ -68,6 +68,7 @@ describe('searchFor', () => {
     expect(searchFor('/admin/orders').placeholder).toBe('Search order, customer, email, EA ID…')
     expect(searchFor('/admin/orders/GFS-26-CN43SP05').path).toBe('/admin/orders')
     expect(searchFor('/admin/dashboard').placeholder).toBe('Search orders, customers, or order ID…')
+    expect(searchFor('/admin/customers').path).toBe('/admin/customers')
   })
 
   it('falls back to the order search on pages with no list of their own yet', () => {
