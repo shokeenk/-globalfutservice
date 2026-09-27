@@ -87,7 +87,7 @@ function OrderSearch() {
     <form
       role="search"
       onSubmit={submit}
-      className="min-w-0 flex-1 md:ml-auto md:max-w-[283px] md:flex-none md:basis-[283px] xl:mr-[76px]"
+      className="min-w-0 flex-1 md:ml-auto md:max-w-[340px] md:flex-none md:basis-[320px] xl:mr-[40px] xl:basis-[340px]"
     >
       <label htmlFor="admin-search" className="sr-only">{target.label}</label>
       <div className="flex h-[31px] items-center gap-2 rounded-admin-control border border-admin-line bg-white
@@ -102,7 +102,7 @@ function OrderSearch() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={target.placeholder}
           autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-admin-ink placeholder:text-admin-faint
+          className="min-w-0 flex-1 bg-transparent text-[12.5px] text-admin-ink placeholder:text-admin-faint
                      focus:outline-none"
         />
         <kbd

@@ -28,11 +28,11 @@ export function StatCard({
 }) {
   const body = (
     <>
-      <span aria-hidden="true" className={`grid h-11 w-11 shrink-0 place-items-center rounded-[10px] ${TONE_CLASSES[tone].tile}`}>
-        <Icon className="h-[21px] w-[21px]" />
+      <span aria-hidden="true" className={`grid h-10 w-10 shrink-0 place-items-center rounded-[10px] ${TONE_CLASSES[tone].tile}`}>
+        <Icon className="h-5 w-5" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-admin-ink">{label}</span>
+        <span className="block text-[12.5px] font-medium leading-snug text-admin-ink">{label}</span>
         <span className="mt-1 block text-admin-stat font-bold tabular-nums text-admin-ink">
           {failed ? (
             <>
@@ -45,13 +45,17 @@ export function StatCard({
             value.toLocaleString('en-IN')
           )}
         </span>
-        {sub && <span className="mt-1.5 block truncate text-[11.5px] text-admin-faint">{sub}</span>}
+        {sub && (
+          <span className={`mt-1.5 block text-[11px] leading-snug text-admin-faint ${onClick ? 'pr-4' : ''}`}>{sub}</span>
+        )}
       </span>
-      {onClick && <LuChevronRight aria-hidden="true" className="mt-9 h-4 w-4 shrink-0 text-admin-faint" />}
+      {onClick && (
+        <LuChevronRight aria-hidden="true" className="absolute bottom-3.5 right-3 h-4 w-4 text-admin-faint" />
+      )}
     </>
   )
 
-  const frame = `flex min-w-0 items-start gap-3.5 rounded-admin-card border bg-white p-4 text-left shadow-admin-card
+  const frame = `relative flex min-w-0 items-start gap-3 rounded-admin-card border bg-white p-3.5 text-left shadow-admin-card
                  ${active ? 'border-admin-red ring-1 ring-admin-red' : 'border-admin-line'}`
 
   if (!onClick) return <div className={frame}>{body}</div>

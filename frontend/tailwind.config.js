@@ -306,7 +306,7 @@ export default {
         // uppercase status badges, measured from the reference at 1536px wide.
         'admin-stat':    ['1.625rem', { lineHeight: '1.1', letterSpacing: '-0.01em' }],
         'admin-th':      ['0.6875rem', { lineHeight: '1.3', letterSpacing: '0.06em' }],
-        'admin-cell':    ['0.8125rem', { lineHeight: '1.4', letterSpacing: '0' }],
+        'admin-cell':    ['0.78125rem', { lineHeight: '1.4', letterSpacing: '0' }],
         'admin-badge':   ['0.65625rem', { lineHeight: '1.2', letterSpacing: '0.04em' }],
       },
 

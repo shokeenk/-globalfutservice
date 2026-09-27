@@ -11,7 +11,12 @@ import { AdminButton } from './controls'
 export function TableCard({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-admin-card border border-admin-line bg-white shadow-admin-card">
-      <div className="overflow-x-auto">{children}</div>
+      {/*
+        relative, so the screen-reader-only labels inside the cells are clipped with the
+        table. They are absolutely positioned, and without a positioned scroll container
+        the ones in off-screen columns widen the whole page on a phone.
+      */}
+      <div className="relative overflow-x-auto">{children}</div>
       {footer}
     </div>
   )
@@ -22,7 +27,7 @@ export function Th({ children, className = '' }: { children?: ReactNode; classNa
   return (
     <th
       scope="col"
-      className={`whitespace-nowrap px-4 py-3 text-left text-admin-th font-semibold uppercase text-admin-faint ${className}`}
+      className={`whitespace-nowrap px-3 py-3 text-left text-admin-th font-semibold uppercase text-admin-faint ${className}`}
     >
       {children}
     </th>

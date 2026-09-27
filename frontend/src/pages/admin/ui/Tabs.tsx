@@ -6,6 +6,8 @@ export interface TabItem {
   /** Null while the counts are loading or could not be read: no pill rather than a 0. */
   count: number | null
   icon?: IconType
+  /** The icon's own colour when the tab is not selected, as the reference colours them. */
+  iconClass?: string
 }
 
 /**
@@ -27,7 +29,7 @@ export function TabRow({
   size?: 'lg' | 'md'
 }) {
   return (
-    <div role="group" aria-label={label} className="flex overflow-x-auto">
+    <div role="group" aria-label={label} className="relative flex overflow-x-auto">
       {items.map((item) => {
         const on = item.key === active
         const Icon = item.icon
@@ -39,13 +41,16 @@ export function TabRow({
             onClick={() => onChange(item.key)}
             className={[
               'relative flex shrink-0 items-center gap-2.5 whitespace-nowrap transition-colors',
+              // Equal shares of the row from 1024px, as in the reference; scrolling below.
+              'lg:flex-1 lg:justify-center',
+              size === 'md' ? 'border-l border-admin-line first:border-l-0' : '',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-admin-red',
               size === 'lg' ? 'h-[52px] px-5 text-[14.5px] font-semibold' : 'h-11 px-4 text-[13px] font-medium',
               on ? 'bg-[#FEF5F6] text-admin-red-text' : 'text-admin-ink hover:bg-admin-page',
             ].join(' ')}
           >
             {Icon && (
-              <Icon aria-hidden="true" className={`h-5 w-5 ${on ? 'text-admin-red' : 'text-admin-faint'}`} />
+              <Icon aria-hidden="true" className={`h-5 w-5 ${on ? 'text-admin-red' : item.iconClass ?? 'text-admin-faint'}`} />
             )}
             {item.label}
             {item.count !== null && (
