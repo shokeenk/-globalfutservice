@@ -69,6 +69,8 @@ describe('searchFor', () => {
     expect(searchFor('/admin/orders/GFS-26-CN43SP05').path).toBe('/admin/orders')
     expect(searchFor('/admin/dashboard').placeholder).toBe('Search orders, customers, or order ID…')
     expect(searchFor('/admin/customers').path).toBe('/admin/customers')
+    expect(searchFor('/admin/services/listings/new').placeholder).toBe('Search listings…')
+    expect(searchFor('/admin/payments').path).toBe('/admin/payments')
   })
 
   it('falls back to the order search on pages with no list of their own yet', () => {

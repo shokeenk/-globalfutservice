@@ -44,6 +44,7 @@ const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminListings = lazy(() => import('./pages/admin/AdminListings'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
 const AdminNotFound = lazy(() =>
@@ -85,15 +86,9 @@ export default function App() {
               charged, and the endpoint behind it is hasRole('ADMIN'). An operator
               reaching it would see a form that 403s on save. */}
           <Route path="services/rates" element={<RequireAdmin><AdminRates /></RequireAdmin>} />
-          {/* Listings sets prices, like the rate card: admin only. Built in a later phase. */}
-          <Route
-            path="services/listings"
-            element={<RequireAdmin><AdminComingSoon eyebrow="Listings" title="Service Listings" /></RequireAdmin>}
-          />
-          <Route
-            path="services/listings/new"
-            element={<RequireAdmin><AdminComingSoon eyebrow="Listings" title="Add Listing" /></RequireAdmin>}
-          />
+          {/* Listings sets prices, like the rate card: admin only, as its endpoint is. */}
+          <Route path="services/listings" element={<RequireAdmin><AdminListings /></RequireAdmin>} />
+          <Route path="services/listings/new" element={<RequireAdmin><AdminListings /></RequireAdmin>} />
           {/* Operator, not admin: marking who turned up is fulfilment work. Setting
               the weekly hours on the same screen is the exception the endpoint itself
               guards — that call is ADMIN and refuses an operator. */}

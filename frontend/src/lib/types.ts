@@ -24,6 +24,12 @@ export interface CatalogOption {
    * beside a buy button, which is the one thing this field must not do.
    */
   successRateBps?: number | null
+  /**
+   * Whether this option carries the Best Value tag: the admin's choice on the Listings page,
+   * or without one the last tier. Missing from older servers, which is why the page falls
+   * back to the last tier itself.
+   */
+  bestValue?: boolean
 }
 
 export interface ServiceGroup {
@@ -461,6 +467,36 @@ export interface AdminPaymentOverview {
   thisMonth: PaymentTotal[]
   lastMonthSoFar: PaymentTotal[]
   allTime: Record<AdminPayment['status'], number>
+}
+
+/** GET /api/v1/admin/listings: one boosting tier or coaching package. */
+export interface AdminListing {
+  sku: string
+  variant: string
+  /** The server's own label; the page shows the translated title where there is one. */
+  label: string
+  sortOrder: number
+  active: boolean
+  /** Minor units per currency code: live prices, or the last ones for a hidden listing. */
+  prices: Record<string, { minor: number; formatted: string }>
+  successRateBps?: number | null
+  /** LISTING when set on this page, CONFIGURATION when it still comes from the server's settings. */
+  successRateSource?: 'LISTING' | 'CONFIGURATION' | null
+  bestValue: boolean
+}
+
+export interface AdminListingCategory {
+  sku: 'BOOST_CHAMPS' | 'BOOST_RIVALS' | 'COACHING'
+  name: string
+  listings: AdminListing[]
+  /** Boosting only: DEFAULT (the last tier), CHOSEN, or NONE. */
+  bestValueChoice?: 'DEFAULT' | 'CHOSEN' | 'NONE' | null
+}
+
+export interface AdminListingsOverview {
+  /** The currencies the site sells in, and so the prices a listing can have. */
+  currencies: string[]
+  categories: AdminListingCategory[]
 }
 
 /** GET /api/v1/admin/saved-views: one person's named filters on a page. */
