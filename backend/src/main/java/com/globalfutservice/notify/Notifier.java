@@ -43,6 +43,16 @@ public interface Notifier {
     }
 
     /**
+     * Staff replied to a customer's support ticket, or opened one to them.
+     *
+     * <p>For the customer's own channels only: the operator channels are where the reply
+     * came from.
+     */
+    default void supportReply(SupportReplyNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    /**
      * A customer has reported paying outside the gateway.
      *
      * <p>The most time-critical alert here, and the only one with nothing behind it. Every

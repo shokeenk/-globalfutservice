@@ -100,6 +100,50 @@ public class EmailNotifier implements Notifier {
         send(n, "Reminder: action needed on order " + n.publicRef(), credentialsRequest(n));
     }
 
+    /**
+     * A support reply, in full, with the link to the conversation.
+     *
+     * <p>The message itself is in the email so the customer does not have to click to read
+     * it; the link is for answering, because nothing reads replies sent to this address.
+     */
+    @Override
+    public void supportReply(SupportReplyNotification n) {
+        String subject = (n.opened() ? "" : "Re: ") + n.subject() + " [" + n.ticketRef() + "]";
+        String body = """
+                %s
+
+                %s
+
+                Read the conversation and reply here:
+                %s
+
+                Please reply through that link: answers sent to this email address do not reach us.
+
+                — Global FUT Services
+                """.formatted(n.opened()
+                        ? "We have a message for you about your account or order (" + n.ticketRef() + ")."
+                        : "We've replied to your support request " + n.ticketRef() + ".",
+                n.message(), n.link());
+        if (!isEnabled()) {
+            log.debug("Email disabled; would have sent support reply on {}", n.ticketRef());
+            return;
+        }
+        if (n.email() == null || n.email().isBlank()) {
+            log.warn("No email address on support ticket {}", n.ticketRef());
+            return;
+        }
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(props.notifications().emailFrom());
+            message.setTo(n.email());
+            message.setSubject(subject);
+            message.setText(body);
+            mailSender.send(message);
+        } catch (Exception e) {
+            log.warn("Support reply email on {} failed: {}", n.ticketRef(), e.getMessage());
+        }
+    }
+
     private String credentialsRequest(OrderNotification n) {
         return """
                 Your order is paid and queued. To start, we need a few details from you.

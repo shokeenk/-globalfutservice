@@ -19,5 +19,7 @@ public enum NotificationKind {
     ACTION_NEEDED,
     STATUS_CHANGED,
     DELIVERED,
-    ANNOUNCEMENT
+    ANNOUNCEMENT,
+    /** Staff replied to one of the customer's support tickets. */
+    SUPPORT_REPLY
 }
