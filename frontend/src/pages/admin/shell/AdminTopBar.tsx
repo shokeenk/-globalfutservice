@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { LuBell, LuChevronDown, LuExternalLink, LuLogOut, LuMenu, LuSearch } from 'react-icons/lu'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../state/AuthContext'
+import { searchFor } from './nav'
 
 /**
  * The console's top bar: slogan, search, the bell, and who is signed in.
@@ -45,13 +46,13 @@ export function AdminTopBar({
 }
 
 /**
- * Search, over the one thing the console can search: orders.
+ * Search, worded for the page you are on.
  *
- * <p>The reference draws a general "Search..." box. The only searchable data behind the
- * console is the order queue's reference-or-email filter, so that is what this does: it
- * opens the Orders page with the query applied, exactly as if it had been typed into the
- * filter bar there. The visible placeholder stays as drawn; the label says what it
- * actually searches, because a screen reader has no placeholder to squint at.
+ * <p>The placeholder changes with the page, as the references draw it, but only ever says
+ * what the search really covers: see {@link searchFor}. Submitting opens the page that
+ * lists the results with the query applied, exactly as if it had been typed into that
+ * page's own search box. The label spells the scope out in full, because a screen reader
+ * has no placeholder to squint at.
  *
  * <p>Ctrl+K (Cmd+K on a Mac) focuses it. The storefront binds the same keys to its own
  * search dialog, but that handler lives in the public header, which is not mounted here,
@@ -59,6 +60,8 @@ export function AdminTopBar({
  */
 function OrderSearch() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const target = searchFor(pathname)
   const input = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -77,7 +80,7 @@ function OrderSearch() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const q = query.trim()
-    navigate(q ? `/admin/orders?search=${encodeURIComponent(q)}` : '/admin/orders')
+    navigate(q ? `${target.path}?search=${encodeURIComponent(q)}` : target.path)
   }
 
   return (
@@ -86,7 +89,7 @@ function OrderSearch() {
       onSubmit={submit}
       className="min-w-0 flex-1 md:ml-auto md:max-w-[283px] md:flex-none md:basis-[283px] xl:mr-[76px]"
     >
-      <label htmlFor="admin-search" className="sr-only">Search orders by reference or email</label>
+      <label htmlFor="admin-search" className="sr-only">{target.label}</label>
       <div className="flex h-[31px] items-center gap-2 rounded-admin-control border border-admin-line bg-white
                       px-2.5 transition-shadow focus-within:border-admin-red focus-within:ring-2
                       focus-within:ring-admin-red/20">
@@ -97,7 +100,7 @@ function OrderSearch() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search..."
+          placeholder={target.placeholder}
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent text-[13px] text-admin-ink placeholder:text-admin-faint
                      focus:outline-none"
@@ -121,7 +124,8 @@ function OrderSearch() {
  * the reference's bell needed something to count. Payment claims are the one queue in the
  * console where each item is somebody who has already sent money and cannot be served
  * until a person looks, which is what a bell is for. It reads the same endpoint the
- * "Payments to check" panel does and links to the page that panel is on.
+ * "Payments to check" panel does, and opens the Orders page's Needs Attention view, where
+ * that panel is.
  *
  * <p>A failed read shows no badge rather than a zero: "nothing to check" and "could not
  * find out" must not look the same.
@@ -150,7 +154,7 @@ function Bell() {
 
   return (
     <Link
-      to="/admin/orders"
+      to="/admin/orders?attention=1"
       aria-label={label}
       title={label}
       className="relative grid h-10 w-10 place-items-center rounded-admin-control text-admin-ink

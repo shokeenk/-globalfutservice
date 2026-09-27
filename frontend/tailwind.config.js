@@ -215,6 +215,33 @@ export default {
           pink:           '#FEE9EC',   // active parent item
           'pink-sub':     '#FBE6E8',   // active sub-item
           'pink-card':    '#FEE4E8',   // selected tile
+
+          /*
+           * Status tones, sampled from the reference's badges, tags and action buttons.
+           *
+           * One pair per meaning, used by the shared StatusBadge so a status looks the
+           * same on every page. The text colours are the reference's, darkened where
+           * needed: each holds at least 5:1 on its own tint at the 10.5px badges are set
+           * in (the reference's amber measured 3.7:1 and is the one visibly changed).
+           */
+          'red-ink':      '#A8232A',   'red-tint':    '#FCE8E9',
+          'blue-ink':     '#2749A8',   'blue-tint':   '#E8F0FC',
+          'amber-ink':    '#9C5413',   'amber-tint':  '#FCF0E0',
+          'green-ink':    '#1D6B3C',   'green-tint':  '#E2F7E9',
+          'grey-ink':     '#3B404A',   'grey-tint':   '#EFF0F4',
+          'violet-ink':   '#4A2C9B',   'violet-tint': '#EEE9FD',
+
+          // Icon colours on the stat cards' tiles. Icons need 3:1, not 4.5:1.
+          'red-icon':     '#D11A21',
+          'blue-icon':    '#1461D6',
+          'amber-icon':   '#B85F16',
+          'green-icon':   '#178040',
+          'grey-icon':    '#363C49',
+          'violet-icon':  '#5B1FA6',
+
+          // Trend arrows beside a figure: up is good for the counts they sit on.
+          'up':           '#2F7A4A',
+          'down':         '#BD1F1F',
         },
       },
 
@@ -275,6 +302,12 @@ export default {
         // Poppins, and "Email Marketing" at 13px (107px wide) overflows the 197px column
         // where at 12.5px (103px) it fits the reference's exact geometry.
         'admin-nav':     ['0.78125rem', { lineHeight: '1.3', letterSpacing: '0' }],
+        // The number on a stat card, the table's header row and cells, and the
+        // uppercase status badges, measured from the reference at 1536px wide.
+        'admin-stat':    ['1.625rem', { lineHeight: '1.1', letterSpacing: '-0.01em' }],
+        'admin-th':      ['0.6875rem', { lineHeight: '1.3', letterSpacing: '0.06em' }],
+        'admin-cell':    ['0.8125rem', { lineHeight: '1.4', letterSpacing: '0' }],
+        'admin-badge':   ['0.65625rem', { lineHeight: '1.2', letterSpacing: '0.04em' }],
       },
 
       /*
@@ -318,6 +351,8 @@ export default {
         // as flat panels on a cool grey, and a lift here would make every card look
         // pressable.
         'admin-card': '0 1px 2px rgba(17,19,24,0.04)',
+        // Menus, popovers and drawers that sit over the page.
+        'admin-pop': '0 1px 2px rgba(17,19,24,0.06), 0 12px 32px -8px rgba(17,19,24,0.18)',
         lift: '0 4px 10px rgba(17,17,20,0.12), 0 24px 56px rgba(17,17,20,0.16)',
       },
 
