@@ -152,6 +152,24 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>,
     long revenueSince(@Param("since") Instant since);
 
     /**
+     * Revenue by the same rule as {@link #revenueSince}, over a window and per currency.
+     *
+     * <p>Delivered and completed orders, dated by when they were placed. Grouped by
+     * currency rather than summed across them: there are no exchange rates in the system,
+     * so a rupee total with pounds added into it would be a number nobody can use.
+     *
+     * @return rows of {@code [Currency, Long minor units]}
+     */
+    @Query("""
+            select o.currency, coalesce(sum(o.totalMinor), 0) from OrderEntity o
+            where o.status in (com.globalfutservice.domain.orders.OrderStatus.DELIVERED,
+                               com.globalfutservice.domain.orders.OrderStatus.COMPLETED)
+              and o.createdAt >= :from and o.createdAt < :before
+            group by o.currency
+            """)
+    List<Object[]> revenueByCurrency(@Param("from") Instant from, @Param("before") Instant before);
+
+    /**
      * Orders the supplier is still working.
      *
      * <p>Bounded by status rather than by "has a supplier id", so a delivered or refunded
