@@ -157,6 +157,14 @@ public class SecurityConfig {
                     */
                     .requestMatchers(HttpMethod.POST, "/api/v1/orders/track").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/tickets").permitAll()
+                    /*
+                      A ticket and its replies, for a guest with the private key from our
+                      email. Open at the door; the controller lets through only the
+                      ticket's own account or a matching key, and says "no such ticket"
+                      to everyone else. The list of your tickets stays signed-in only.
+                    */
+                    .requestMatchers(HttpMethod.GET, "/api/v1/support/tickets/*").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/support/tickets/*/messages").permitAll()
 
                     /*
                       Paying without a gateway, and saying you have.
