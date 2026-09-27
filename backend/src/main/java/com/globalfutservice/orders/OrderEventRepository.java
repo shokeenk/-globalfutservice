@@ -33,10 +33,14 @@ public interface OrderEventRepository extends JpaRepository<OrderEventEntity, Lo
     /**
      * The orders whose status changed most recently, newest first: the dashboard's Recent
      * Orders. Rows of {@code [order_id, last_change]}.
+     *
+     * <p>An event that leaves the status where it was, such as a sign-in reminder, is not
+     * a change and does not count; the order's creation does.
      */
     @Query(value = """
             select e.order_id, max(e.created_at) as last_change
               from order_event e
+             where e.from_status is distinct from e.to_status
              group by e.order_id
              order by last_change desc
              limit :limit
