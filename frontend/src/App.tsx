@@ -41,6 +41,7 @@ const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
 const SendCampaign = lazy(() => import('./pages/admin/campaigns/SendCampaign'))
 const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
 const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
 const AdminNotFound = lazy(() =>
@@ -72,9 +73,9 @@ export default function App() {
             </RequireStaff>
           }
         >
-          {/* Orders until there is a dashboard to land on. */}
-          <Route index element={<Navigate to="orders" replace />} />
-          <Route path="dashboard" element={<AdminComingSoon eyebrow="Dashboard" title="Dashboard" />} />
+          {/* The dashboard is the console's front page now that it exists. */}
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="orders" element={<Admin />} />
           <Route path="orders/:publicRef" element={<AdminOrder />} />
           <Route path="customers" element={<AdminComingSoon eyebrow="Customers" title="Customers" />} />

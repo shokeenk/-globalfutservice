@@ -8,9 +8,17 @@ import { AdminButton } from './controls'
  * <p>The table scrolls sideways inside the card rather than pushing the page wider, so on
  * a phone the header, filters and pagination stay put and only the columns move.
  */
-export function TableCard({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+export function TableCard({
+  children, header, footer,
+}: {
+  children: ReactNode
+  /** Above the table and outside its scroll, so a title stays put while columns move. */
+  header?: ReactNode
+  footer?: ReactNode
+}) {
   return (
     <div className="overflow-hidden rounded-admin-card border border-admin-line bg-white shadow-admin-card">
+      {header}
       {/*
         relative, so the screen-reader-only labels inside the cells are clipped with the
         table. They are absolutely positioned, and without a positioned scroll container

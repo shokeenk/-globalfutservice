@@ -343,6 +343,30 @@ export interface AdminOrderOverview {
   credentialsHeld: number
 }
 
+/** GET /api/v1/admin/dashboard: today against yesterday at the same time. No money. */
+export interface AdminDashboard {
+  newToday: number
+  newYesterdaySoFar: number
+  /** Paid and not delivered yet. */
+  pending: number
+  /** Pending at this time yesterday, rebuilt from order history. */
+  pendingYesterday: number
+  deliveredToday: number
+  deliveredYesterdaySoFar: number
+  newest: AdminOrderRow[]
+  /** The orders whose status changed most recently, and when. */
+  recent: { order: AdminOrderRow; changedAt: string }[]
+}
+
+/** GET /api/v1/admin/dashboard/revenue: admin only. One entry per currency, rupees first. */
+export interface CurrencyRevenue {
+  currency: string
+  todayMinor: number
+  todayFormatted: string
+  yesterdayMinor: number
+  yesterdayFormatted: string
+}
+
 /** GET /api/v1/admin/saved-views: one person's named filters on a page. */
 export interface SavedView {
   id: number

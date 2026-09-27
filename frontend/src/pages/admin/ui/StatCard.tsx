@@ -14,26 +14,38 @@ import type { Tone } from './status'
  * counts, with {@code active} marking the filter that is on.
  */
 export function StatCard({
-  icon: Icon, tone, label, value, sub, onClick, active = false, failed = false,
+  icon: Icon, tone, label, value, sub, aside, onClick, active = false, failed = false, size = 'md',
 }: {
   icon: IconType
   tone: Tone
   label: string
-  /** Null while loading. */
-  value: number | null
+  /** Null while loading. A string is shown as it is, e.g. an amount already formatted. */
+  value: number | string | null
   sub?: ReactNode
+  /** Beside the figure, at the right: the dashboard's trend. */
+  aside?: ReactNode
   onClick?: () => void
   active?: boolean
   failed?: boolean
+  /** {@code lg} for the dashboard's four cards, which the reference draws larger. */
+  size?: 'md' | 'lg'
 }) {
+  const lg = size === 'lg'
   const body = (
     <>
-      <span aria-hidden="true" className={`grid h-10 w-10 shrink-0 place-items-center rounded-[10px] ${TONE_CLASSES[tone].tile}`}>
-        <Icon className="h-5 w-5" />
+      <span
+        aria-hidden="true"
+        className={`grid shrink-0 place-items-center ${lg ? 'h-14 w-14 rounded-[12px]' : 'h-10 w-10 rounded-[10px]'}
+                    ${TONE_CLASSES[tone].tile}`}
+      >
+        <Icon className={lg ? 'h-6 w-6' : 'h-5 w-5'} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[12.5px] font-medium leading-snug text-admin-ink">{label}</span>
-        <span className="mt-1 block text-admin-stat font-bold tabular-nums text-admin-ink">
+        <span className={`block font-medium leading-snug text-admin-ink ${lg ? 'text-[13.5px]' : 'text-[12.5px]'}`}>
+          {label}
+        </span>
+        <span className="mt-1 flex items-end justify-between gap-2">
+        <span className={`block font-bold tabular-nums text-admin-ink ${lg ? 'text-[26px] leading-tight' : 'text-admin-stat'}`}>
           {failed ? (
             <>
               <span aria-hidden="true">—</span>
@@ -41,9 +53,13 @@ export function StatCard({
             </>
           ) : value === null ? (
             <span aria-label="Loading" className="inline-block h-6 w-10 animate-pulse rounded bg-admin-grey-tint align-middle" />
-          ) : (
+          ) : typeof value === 'number' ? (
             value.toLocaleString('en-IN')
+          ) : (
+            value
           )}
+        </span>
+        {aside && !failed && value !== null && <span className="shrink-0">{aside}</span>}
         </span>
         {sub && (
           <span className={`mt-1.5 block text-[11px] leading-snug text-admin-faint ${onClick ? 'pr-4' : ''}`}>{sub}</span>
@@ -77,13 +93,21 @@ export function StatCard({
  *
  * <p>Up is green and down is red for the counts it is used with, where more is better.
  */
-export function TrendLine({ current, previous, against }: { current: number; previous: number; against: string }) {
+export function TrendLine({
+  current, previous, against, good = 'up',
+}: {
+  current: number
+  previous: number
+  against: string
+  /** Which way is good news. Down, for a backlog: the reference draws more pending in red. */
+  good?: 'up' | 'down'
+}) {
   const t = trend(current, previous)
   if (t.direction === 'flat') {
     return <span>Same as {against}</span>
   }
   const Arrow = t.direction === 'up' ? LuArrowUpRight : LuArrowDownRight
-  const colour = t.direction === 'up' ? 'text-admin-up' : 'text-admin-down'
+  const colour = t.direction === good ? 'text-admin-up' : 'text-admin-down'
   // From nothing, a percentage would be invented; say how many more instead.
   if (t.percent === null) {
     return (
@@ -104,6 +128,40 @@ export function TrendLine({ current, previous, against }: { current: number; pre
         {t.percent}%
       </span>
       <span>vs {against}</span>
+    </span>
+  )
+}
+
+/**
+ * The dashboard's trend, beside the figure: the change on top, "vs yesterday" beneath.
+ *
+ * <p>Same rules as {@link TrendLine}: no percentage from zero, and colour by whether the
+ * change is good news for this figure.
+ */
+export function TrendBlock({
+  current, previous, against, good = 'up',
+}: {
+  current: number
+  previous: number
+  against: string
+  good?: 'up' | 'down'
+}) {
+  const t = trend(current, previous)
+  if (t.direction === 'flat') {
+    return <span className="block text-right text-[11.5px] leading-snug text-admin-faint">Same as<br />{against}</span>
+  }
+  const Arrow = t.direction === 'up' ? LuArrowUpRight : LuArrowDownRight
+  const colour = t.direction === good ? 'text-admin-up' : 'text-admin-down'
+  return (
+    <span className="block text-right leading-snug">
+      <span className={`inline-flex items-center gap-0.5 text-[14px] font-semibold ${colour}`}>
+        <Arrow aria-hidden="true" className="h-4 w-4" />
+        <span className="sr-only">{t.direction === 'up' ? 'Up' : 'Down'} </span>
+        {t.percent === null ? `${current - previous} more` : `${t.percent}%`}
+      </span>
+      <span className="block text-[11.5px] text-admin-faint">
+        {t.percent === null ? `than ${against}` : `vs ${against}`}
+      </span>
     </span>
   )
 }
