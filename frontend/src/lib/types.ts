@@ -171,6 +171,15 @@ export interface OrderEvent {
   at: string
 }
 
+export interface CoachingProgress {
+  booked: number
+  total: number
+  nextStartsAt: string | null
+  nextEndsAt: string | null
+  nextStatus: 'PENDING' | 'SCHEDULED' | null
+  nextTimezone: string | null
+}
+
 export interface Order {
   publicRef: string
   status: string
@@ -210,6 +219,12 @@ export interface Order {
   pcLauncher: string | null
   /** How this customer reaches their Discord ticket. Decided server-side. */
   discordAccess: DiscordAccess | null
+  /**
+   * Coaching only: how many of the order's sessions are booked out of how many it bought,
+   * and the next one. `nextStatus` is PENDING while the slot picked at checkout is held
+   * awaiting payment, SCHEDULED once it is booked. Absent on every other service.
+   */
+  coaching?: CoachingProgress | null
 }
 
 /**
