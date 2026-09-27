@@ -37,19 +37,22 @@ public class CoachingAnnouncer {
     private final OrderRepository orders;
     private final AccountRepository accounts;
     private final NotificationService notifications;
+    private final AfterCommit afterCommit;
 
     public CoachingAnnouncer(CoachingSessionRepository sessions,
                              SessionCreditRepository credits,
                              CoachRepository coaches,
                              OrderRepository orders,
                              AccountRepository accounts,
-                             NotificationService notifications) {
+                             NotificationService notifications,
+                             AfterCommit afterCommit) {
         this.sessions = sessions;
         this.credits = credits;
         this.coaches = coaches;
         this.orders = orders;
         this.accounts = accounts;
         this.notifications = notifications;
+        this.afterCommit = afterCommit;
     }
 
     @Transactional(readOnly = true)
@@ -95,8 +98,8 @@ public class CoachingAnnouncer {
      * still roll back after the hold is saved, which would announce a booking that never
      * existed. Outside a transaction (a test, a job with none) it sends straight away.
      */
-    private static void afterCommit(Runnable send) {
-        AfterCommit.run("hand a coaching notification over", send);
+    private void afterCommit(Runnable send) {
+        afterCommit.run("hand a coaching notification over", send);
     }
 
     /**

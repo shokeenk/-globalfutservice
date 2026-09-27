@@ -77,6 +77,9 @@ public class OrderService {
     private final AppProperties props;
     private final Clock clock;
 
+    /** Runs the coaching hold's follow-ups once a payment or abandonment has committed. */
+    private final AfterCommit afterCommit;
+
     public OrderService(OrderRepository orders, OrderEventRepository events,
                         PaymentRepository payments, PaymentGateway gateway,
                         QuoteService quoteService, LoyaltyService loyaltyService,
@@ -84,7 +87,9 @@ public class OrderService {
                         NotificationService notifications, AccountRepository accounts,
                         CoachingService coachingService, CouponService couponService,
                         CustomerFeedService feed,
-                        ObjectMapper mapper, AppProperties props, Clock clock) {
+                        ObjectMapper mapper, AppProperties props, Clock clock,
+                        AfterCommit afterCommit) {
+        this.afterCommit = afterCommit;
         this.feed = feed;
         this.coachingService = coachingService;
         this.couponService = couponService;
@@ -360,7 +365,7 @@ public class OrderService {
                 vaultService.purge(order.getId(), "checkout abandoned");
                 // And the slot it was holding, if it picked one.
                 final Long abandonedId = order.getId();
-                AfterCommit.run("release the coaching hold for order " + order.getPublicRef(),
+                afterCommit.run("release the coaching hold for order " + order.getPublicRef(),
                         () -> coachingService.releaseHoldForOrder(abandonedId, SessionActor.SYSTEM,
                                 null, "order abandoned"));
             }
@@ -516,7 +521,7 @@ public class OrderService {
             // the payment (see AfterCommit). Nothing happens for an order that holds no slot,
             // or whose hold has expired: that customer books with the credit, as before.
             final Long paidOrderId = paid.getId();
-            AfterCommit.run("confirm the coaching hold for order " + paid.getPublicRef(),
+            afterCommit.run("confirm the coaching hold for order " + paid.getPublicRef(),
                     () -> coachingService.confirmHoldForOrder(paidOrderId, SessionActor.SYSTEM, null));
 
             // The customer's next step is Discord, so the invite goes out the moment the

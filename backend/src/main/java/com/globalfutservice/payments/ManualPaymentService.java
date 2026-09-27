@@ -51,6 +51,7 @@ public class ManualPaymentService {
     private final AppProperties props;
     /** Keeps a coaching order's held slot alive while its payment is reviewed. */
     private final CoachingService coaching;
+    private final AfterCommit afterCommit;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
                                 ManualPaymentProofRepository proofs,
@@ -59,8 +60,10 @@ public class ManualPaymentService {
                                 NotificationService notifications,
                                 CustomerFeedService feed,
                                 AppProperties props,
-                                CoachingService coaching) {
+                                CoachingService coaching,
+                                AfterCommit afterCommit) {
         this.coaching = coaching;
+        this.afterCommit = afterCommit;
         this.feed = feed;
         this.claims = claims;
         this.proofs = proofs;
@@ -165,7 +168,7 @@ public class ManualPaymentService {
             // Everything computed inside the action, so nothing about the hold -- not even
             // working out its new expiry -- can fail the submission itself.
             final OrderEntity submitted = order;
-            AfterCommit.run("extend the coaching hold for order " + order.getPublicRef(),
+            afterCommit.run("extend the coaching hold for order " + order.getPublicRef(),
                     () -> coaching.extendHoldForOrder(submitted.getId(),
                             submitted.getCreatedAt().plus(props.fulfilment().deliverySla())));
         }
@@ -393,7 +396,7 @@ public class ManualPaymentService {
         // A rejected payment frees the slot the order was holding. An order has one claim
         // under review at a time, so there is no other proof still waiting on the slot.
         final Long orderId = claim.getOrderId();
-        AfterCommit.run("release the coaching hold for order " + orderId,
+        afterCommit.run("release the coaching hold for order " + orderId,
                 () -> coaching.releaseHoldForOrder(orderId, SessionActor.OPERATOR,
                         reviewerAccountId, "payment rejected"));
         return saved;
