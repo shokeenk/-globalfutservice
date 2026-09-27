@@ -32,7 +32,7 @@ class TransactionalEmailsTest {
     private static OrderNotification order(String sku, String serviceLabel, String platform) {
         return new OrderNotification("GFS-26-ABC123", "PAID", serviceLabel, "₹1,640.00",
                 "player@example.test", null, "PLAYER_AUCTION", sku, platform,
-                "https://globalfutservices.com/admin/orders/GFS-26-ABC123", null);
+                "https://globalfutservices.com/admin/orders/GFS-26-ABC123", null, null, null);
     }
 
     private static OrderNotification coins() {

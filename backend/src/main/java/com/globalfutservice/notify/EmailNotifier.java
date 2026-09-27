@@ -148,6 +148,18 @@ public class EmailNotifier implements Notifier {
 
     @Override
     public void coachingBooked(CoachingBookingNotification n) {
+        if (n.isHold()) {
+            // Picked at checkout, not paid for yet: no "booked" email and no calendar
+            // invite until the payment is verified -- see coachingSessionConfirmed. The
+            // order confirmation carries the time too.
+            log.debug("Session {} is held pending payment; not emailing a booking yet", n.sessionRef());
+            return;
+        }
+        sendSessionEmail(n, "booked", "REQUEST");
+    }
+
+    @Override
+    public void coachingSessionConfirmed(CoachingBookingNotification n) {
         sendSessionEmail(n, "booked", "REQUEST");
     }
 
@@ -158,6 +170,13 @@ public class EmailNotifier implements Notifier {
 
     @Override
     public void coachingCancelled(CoachingBookingNotification n) {
+        if (n.isReleasedHold()) {
+            // The customer was never sent a booking or an invite for a hold, so there is
+            // no calendar entry to cancel.
+            log.debug("Hold {} released; nothing was emailed for it, so nothing to cancel",
+                    n.sessionRef());
+            return;
+        }
         sendSessionEmail(n, "cancelled", "CANCEL");
     }
 

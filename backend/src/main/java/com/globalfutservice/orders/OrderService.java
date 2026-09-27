@@ -678,6 +678,9 @@ public class OrderService {
      * of what an order looks like to a notification channel, rather than two that drift.
      */
     public OrderNotification notificationFor(OrderEntity order) {
+        var session = order.getSku() == Sku.COACHING && order.getId() != null
+                ? coachingService.activeSessionForOrder(order.getId())
+                : java.util.Optional.<com.globalfutservice.coaching.CoachingSessionEntity>empty();
         return new OrderNotification(
                 order.getPublicRef(),
                 order.getStatus().name(),
@@ -689,7 +692,9 @@ public class OrderService {
                 order.getSku() == null ? null : order.getSku().name(),
                 order.getPlatform() == null ? null : order.getPlatform().displayName(),
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef(),
-                coachingSummary(order));
+                coachingSummary(order),
+                session.map(s -> s.getStartsAt()).orElse(null),
+                session.map(s -> s.getCustomerTimezone()).orElse(null));
     }
 
     /**

@@ -36,7 +36,7 @@ class OperatorEmailNotifierTest {
             null,
             "PLAYER_AUCTION",
             "TRADING_SERVICE", "PC",
-            "https://globalfutservices.com/admin/orders/GFS-26-BWG6NGG3", null);
+            "https://globalfutservices.com/admin/orders/GFS-26-BWG6NGG3", null, null, null);
 
     /** A notifications block with everything off except the bits a test names. */
     private static AppProperties.Notifications notifications(boolean emailEnabled, String recipients) {

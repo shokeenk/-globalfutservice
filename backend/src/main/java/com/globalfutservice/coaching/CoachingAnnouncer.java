@@ -126,7 +126,13 @@ public class CoachingAnnouncer {
                     positionInPack(session),
                     packSize(order),
                     order == null ? null : order.getPublicRef(),
-                    order == null ? null : order.getStatus().name()));
+                    order == null ? null : order.getStatus().name(),
+                    order == null ? null : order.getEaPlatformHandle(),
+                    order == null || order.getCoachingPlatform() == null ? null
+                            : order.getCoachingPlatform().displayName(),
+                    order == null ? null : order.getCoachingRank(),
+                    // Null-safe: a missing status must not cost the whole message.
+                    session.getStatus() == null ? null : session.getStatus().name()));
         } catch (RuntimeException e) {
             log.warn("Could not describe session {} for notification: {}",
                     session.getPublicRef(), e.getMessage());

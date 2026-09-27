@@ -243,8 +243,19 @@ public class DiscordNotifier implements Notifier {
 
     @Override
     public void coachingBooked(CoachingBookingNotification n) {
+        if (n.isHold()) {
+            announceSession("New coaching booking — payment pending", AMBER, n,
+                    "A slot was picked at checkout. It is held until the payment is verified.");
+            return;
+        }
         announceSession("Coaching session booked", GREEN, n,
                 "A session has been booked.");
+    }
+
+    @Override
+    public void coachingSessionConfirmed(CoachingBookingNotification n) {
+        announceSession("Coaching session confirmed", GREEN, n,
+                "Payment verified — the slot picked at checkout is now booked.");
     }
 
     @Override
@@ -255,6 +266,12 @@ public class DiscordNotifier implements Notifier {
 
     @Override
     public void coachingCancelled(CoachingBookingNotification n) {
+        if (n.isReleasedHold()) {
+            announceSession("Held coaching slot released", SLATE, n,
+                    "A slot held at checkout was released: the payment was not verified in "
+                            + "time, or was rejected. The slot is free again.");
+            return;
+        }
         announceSession("Coaching session cancelled", SLATE, n,
                 "A session has been cancelled. The slot is free again.");
     }
@@ -294,7 +311,10 @@ public class DiscordNotifier implements Notifier {
                     inZone(n.previousStartsAt(), BUSINESS_ZONE), false));
         }
         fields.add(field("Customer", contactLine(n.customerEmail(), n.customerName()), false));
-        fields.add(field("Payment", n.paymentStatus(), true));
+        fields.add(field("In-game ID", blankDash(n.inGameId()), true));
+        fields.add(field("Platform", blankDash(n.platform()), true));
+        fields.add(field("Rank", blankDash(n.rank()), true));
+        fields.add(field("Payment", paymentLabel(n.paymentStatus()), true));
 
         Map<String, Object> embed = embed(title, colour, fields, null, n.startsAt());
 
@@ -318,14 +338,75 @@ public class DiscordNotifier implements Notifier {
     }
 
     /** One post, one failure, no consequences beyond a log line. */
+    /**
+     * Post, and keep trying while trying again could work -- but never fail the booking.
+     *
+     * <p>A booking is committed before any of this runs, and nothing here can undo it.
+     * No answer, a rate limit or Discord's own failure is retried after a pause; a refusal
+     * that will not change (no access to the channel, a bad channel id) is not. Every
+     * failure is logged with Discord's HTTP status, so a missing message can be traced.
+     */
     private void postQuietly(String channelId, String lead, Map<String, Object> embed,
                              String sessionRef, String where) {
-        try {
-            bot.postEmbed(channelId, lead, embed);
-        } catch (RuntimeException e) {
-            log.warn("Could not announce session {} in the {}: {}",
-                    sessionRef, where, e.getMessage());
+        int attempts = retryDelays.size() + 1;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                bot.postEmbed(channelId, lead, embed);
+                if (attempt > 1) {
+                    log.info("Announced session {} in the {} on attempt {}", sessionRef, where, attempt);
+                }
+                return;
+            } catch (DiscordBotClient.DiscordException e) {
+                boolean again = e.isRetryable() && attempt < attempts;
+                log.warn("Could not announce session {} in the {} (HTTP {}, attempt {} of {}{}): {}",
+                        sessionRef, where, e.status(), attempt, attempts,
+                        again ? ", will retry" : "", e.getMessage());
+                if (!again) {
+                    return;
+                }
+                pause(retryDelays.get(attempt - 1));
+            } catch (RuntimeException e) {
+                log.warn("Could not announce session {} in the {}: {}", sessionRef, where, e.toString());
+                return;
+            }
         }
+    }
+
+    /**
+     * How long to wait before each retry of a coaching announcement. Runs on the
+     * notification executor, never on a request, so the pause holds up nobody. Replaced
+     * in tests.
+     */
+    java.util.List<java.time.Duration> retryDelays =
+            java.util.List.of(java.time.Duration.ofSeconds(5), java.time.Duration.ofSeconds(30));
+
+    private static void pause(java.time.Duration d) {
+        if (d.isZero()) {
+            return;
+        }
+        try {
+            Thread.sleep(d.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static String blankDash(String value) {
+        return value == null || value.isBlank() ? "—" : value;
+    }
+
+    /** "Paid", "Awaiting payment": the order's status in words, not an enum. */
+    private static String paymentLabel(String orderStatus) {
+        if (orderStatus == null) {
+            return "—";
+        }
+        return switch (orderStatus) {
+            case "DRAFT", "AWAITING_PAYMENT" -> "Awaiting payment";
+            case "ABANDONED" -> "Not paid";
+            case "REFUNDED" -> "Refunded";
+            case "CREDITED" -> "Credited";
+            default -> "Paid";
+        };
     }
 
     private static String inZone(java.time.Instant at, java.time.ZoneId zone) {

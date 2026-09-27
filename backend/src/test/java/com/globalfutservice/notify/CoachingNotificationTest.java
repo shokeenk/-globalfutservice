@@ -38,7 +38,7 @@ class CoachingNotificationTest {
                 "player@example.com", null, "SCHEDULED_SESSION",
                 "COACHING", "PlayStation",
                 "https://globalfutservices.com/admin/orders/GFS-26-COACH01",
-                "PlayStation · ID VinayFC10");
+                "PlayStation · ID VinayFC10", null, null);
     }
 
     private static EmailNotifier notifierSending(JavaMailSender sender) {

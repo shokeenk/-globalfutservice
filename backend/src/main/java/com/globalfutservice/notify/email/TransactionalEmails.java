@@ -99,6 +99,27 @@ public final class TransactionalEmails {
      * boosting and coaching all need a conversation before anyone can start, and that
      * conversation happens in a Discord ticket.
      */
+    /**
+     * The session a coaching order is booked into, in the customer's own time zone and
+     * named, e.g. "Mon 5 Oct 2026, 7:00 PM (Europe/London)". Null when there is none.
+     * An unreadable zone falls back to India's, where the business runs.
+     */
+    static String sessionTime(OrderNotification n) {
+        if (n.sessionStartsAt() == null) {
+            return null;
+        }
+        java.time.ZoneId zone;
+        try {
+            zone = n.sessionTimezone() == null || n.sessionTimezone().isBlank()
+                    ? java.time.ZoneId.of("Asia/Kolkata") : java.time.ZoneId.of(n.sessionTimezone());
+        } catch (RuntimeException e) {
+            zone = java.time.ZoneId.of("Asia/Kolkata");
+        }
+        return java.time.format.DateTimeFormatter
+                .ofPattern("EEE d MMM uuuu, h:mm a", java.util.Locale.ENGLISH)
+                .format(n.sessionStartsAt().atZone(zone)) + " (" + zone.getId() + ")";
+    }
+
     public static Rendered orderConfirmed(OrderNotification n, EmailTemplate.Brand brand,
                                           String trackUrl, String discordUrl) {
         boolean coins = COINS_SKU.equals(n.sku());
@@ -113,6 +134,10 @@ public final class TransactionalEmails {
         cards.add(EmailTemplate.InfoCard.of("■", "Amount", n.amountFormatted()));
         if (n.platform() != null && !n.platform().isBlank()) {
             cards.add(EmailTemplate.InfoCard.of("▪", "Platform", n.platform()));
+        }
+        String session = sessionTime(n);
+        if (session != null) {
+            cards.add(EmailTemplate.InfoCard.accented("◷", "Your session", session));
         }
 
         List<EmailTemplate.Step> steps = coins ? List.of() : List.of(
@@ -166,13 +191,14 @@ public final class TransactionalEmails {
                 Order #%s
                 %s
                 Status: Confirmed
-                Amount: %s%s
+                Amount: %s%s%s
 
                 %s
 
                 — Global FUT Services
                 """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted(),
                 n.platform() == null || n.platform().isBlank() ? "" : "\nPlatform: " + n.platform(),
+                session == null ? "" : "\nYour session: " + session,
                 next);
 
         return new Rendered("Your GFS Order Is Confirmed",

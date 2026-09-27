@@ -202,14 +202,14 @@ class SmtpDeliveryTest {
         return new OrderNotification(
                 "GFS-1042", status, "EA FC Coins 100K", "INR 1,600.00",
                 "player@example.com", "player#1234", "COMFORT_TRADE",
-                "TRADING_SERVICE", "PS5", null, null);
+                "TRADING_SERVICE", "PS5", null, null, null, null);
     }
 
     private static OrderNotification coachingOrder() {
         return new OrderNotification(
                 "GFS-2088", "CONFIRMED", "1-to-1 Coaching", "INR 2,400.00",
                 "student@example.com", "student#9999", null,
-                "COACHING", "PC", null, "PC / student99 / Div 4 / finishing");
+                "COACHING", "PC", null, "PC / student99 / Div 4 / finishing", null, null);
     }
 
     @Nested

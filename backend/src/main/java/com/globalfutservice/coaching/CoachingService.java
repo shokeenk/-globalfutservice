@@ -93,6 +93,18 @@ public class CoachingService {
         this.announcer = announcer;
     }
 
+    /**
+     * The session an order holds or has booked -- the first one still live -- for telling
+     * the customer when it is. Empty for an order with no slot, or whose hold let go.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CoachingSessionEntity> activeSessionForOrder(Long orderId) {
+        return sessions.findByOrderIdOrderByIdAsc(orderId).stream()
+                .filter(s -> s.getStatus() == SessionStatus.PENDING
+                        || s.getStatus() == SessionStatus.SCHEDULED)
+                .findFirst();
+    }
+
     /** How long a session bought under a rate-card variant runs, per the admin's settings. */
     public Duration sessionLengthForVariant(String variant) {
         return settings.sessionLengthFor(variant);
