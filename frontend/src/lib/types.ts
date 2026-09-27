@@ -377,6 +377,43 @@ export interface AdminSession {
   orderRef: string | null
   sessionLabel: string | null
   paymentStatus: string | null
+  /** From the order: who to look for in game, on what, at what level, and why. */
+  inGameId: string | null
+  platform: string | null
+  rank: string | null
+  improvementFocus: string | null
+  /** When a PENDING hold lets go if the payment is still unverified. */
+  holdExpiresAt: string | null
+}
+
+/** One line of a session's history: what changed, who changed it, and when. */
+export interface AdminSessionEvent {
+  type: string
+  fromStatus: string | null
+  toStatus: string | null
+  fromTime: string | null
+  toTime: string | null
+  actor: string | null
+  actorEmail: string | null
+  detail: string | null
+  at: string
+}
+
+/** The booking settings an admin sets, in minutes. */
+export interface CoachingSettings {
+  minNoticeMinutes: number
+  bufferMinutes: number
+  holdMinutes: number
+  singleSessionMinutes: number
+  blockSessionMinutes: number
+}
+
+/** A one-off window outside the weekly hours. */
+export interface CoachExtraSlot {
+  id: number
+  startsAt: string
+  endsAt: string
+  reason: string | null
 }
 
 export interface Coach {
