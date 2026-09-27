@@ -105,6 +105,35 @@ public class CoachingService {
                 .findFirst();
     }
 
+    /**
+     * Where an order's sessions stand, for "1 of 6 booked" on the customer's order page.
+     *
+     * @param booked sessions that took one of the order's credits, or hold a slot for it:
+     *               held, scheduled, done, missed, or cancelled too late to get it back
+     * @param total  the sessions the order bought
+     * @param next   the earliest session still to come, held or scheduled
+     */
+    public record OrderSessions(int booked, int total, Optional<CoachingSessionEntity> next) {
+    }
+
+    @Transactional(readOnly = true)
+    public OrderSessions sessionsForOrder(Long orderId, int boughtIfUngranted) {
+        List<CoachingSessionEntity> all = sessions.findByOrderIdOrderByIdAsc(orderId);
+        int booked = (int) all.stream().filter(s -> switch (s.getStatus()) {
+            case PENDING, SCHEDULED, COMPLETED, NO_SHOW -> true;
+            case CANCELLED_BY_CUSTOMER -> !s.isCreditReturned();
+            case CANCELLED_BY_COACH, RELEASED -> false;
+        }).count();
+        int total = credits.findGrantForOrder(orderId)
+                .map(SessionCreditEntity::getAmount)
+                .orElse(boughtIfUngranted);
+        Optional<CoachingSessionEntity> next = all.stream()
+                .filter(s -> s.getStatus() == SessionStatus.PENDING
+                        || s.getStatus() == SessionStatus.SCHEDULED)
+                .min(java.util.Comparator.comparing(CoachingSessionEntity::getStartsAt));
+        return new OrderSessions(booked, total, next);
+    }
+
     /** How long a session bought under a rate-card variant runs, per the admin's settings. */
     public Duration sessionLengthForVariant(String variant) {
         return settings.sessionLengthFor(variant);

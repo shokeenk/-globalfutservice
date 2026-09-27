@@ -199,7 +199,19 @@ public final class OrderDtos {
              * already hold gets a link straight into their ticket, and everybody else
              * gets an invite and the reference to quote.
              */
-            DiscordAccessDto discordAccess) {
+            DiscordAccessDto discordAccess,
+
+            /** Coaching only: how many of the order's sessions are booked, and the next. */
+            CoachingProgressDto coaching) {
+    }
+
+    /**
+     * "1 of 6 booked". {@code nextStatus} is PENDING while the next session is a slot held
+     * at checkout awaiting payment, SCHEDULED once it is booked; the next fields are null
+     * when nothing is booked yet.
+     */
+    public record CoachingProgressDto(int booked, int total, Instant nextStartsAt,
+                                      Instant nextEndsAt, String nextStatus, String nextTimezone) {
     }
 
     /**

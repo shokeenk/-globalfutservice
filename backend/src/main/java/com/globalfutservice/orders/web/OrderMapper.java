@@ -1,5 +1,7 @@
 package com.globalfutservice.orders.web;
 
+import com.globalfutservice.coaching.CoachingSessionEntity;
+import com.globalfutservice.coaching.CoachingService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.domain.orders.OrderStateMachine;
@@ -39,12 +41,17 @@ public class OrderMapper {
     private final DiscordBotClient bot;
 
     public OrderMapper(ObjectMapper mapper, AppProperties props,
-                       DiscordVerificationService verification, DiscordBotClient bot) {
+                       DiscordVerificationService verification, DiscordBotClient bot,
+                       CoachingService coachingService) {
         this.mapper = mapper;
         this.props = props;
         this.verification = verification;
         this.bot = bot;
+        this.coachingService = coachingService;
     }
+
+    /** For a coaching order's "1 of 6 booked". */
+    private final CoachingService coachingService;
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
@@ -134,7 +141,21 @@ public class OrderMapper {
                 coaching ? order.getCoachingRank() : null,
                 coaching ? order.getCoachingFocus() : null,
                 order.getPcLauncher() == null ? null : order.getPcLauncher().name(),
-                discordAccess(order));
+                discordAccess(order),
+                coaching ? coachingProgress(order) : null);
+    }
+
+    private OrderDtos.CoachingProgressDto coachingProgress(OrderEntity order) {
+        if (order.getId() == null) {
+            return null;
+        }
+        CoachingService.OrderSessions s = coachingService.sessionsForOrder(order.getId(),
+                props.coaching().creditsFor(order.getVariant()));
+        return new OrderDtos.CoachingProgressDto(s.booked(), s.total(),
+                s.next().map(CoachingSessionEntity::getStartsAt).orElse(null),
+                s.next().map(CoachingSessionEntity::getEndsAt).orElse(null),
+                s.next().map(x -> x.getStatus().name()).orElse(null),
+                s.next().map(CoachingSessionEntity::getCustomerTimezone).orElse(null));
     }
 
     public OrderDtos.AdminOrderSummary toAdminSummary(OrderEntity order, boolean credentialsHeld) {
