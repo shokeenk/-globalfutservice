@@ -87,7 +87,21 @@ public class EmailNotifier implements Notifier {
 
     @Override
     public void credentialsNeeded(OrderNotification n) {
-        send(n, "Action needed on order " + n.publicRef(), """
+        send(n, "Action needed on order " + n.publicRef(), credentialsRequest(n));
+    }
+
+    /**
+     * The same request again, sent by staff from the Orders page. Same words, so the
+     * customer is not left comparing two sets of instructions; only the subject says it
+     * is a reminder.
+     */
+    @Override
+    public void credentialsReminder(OrderNotification n) {
+        send(n, "Reminder: action needed on order " + n.publicRef(), credentialsRequest(n));
+    }
+
+    private String credentialsRequest(OrderNotification n) {
+        return """
                 Your order is paid and queued. To start, we need a few details from you.
 
                 Reference: %s
@@ -100,7 +114,7 @@ public class EmailNotifier implements Notifier {
                 almost every delayed order.
 
                 — Global FUT Services
-                """.formatted(n.publicRef(), publicUrl()));
+                """.formatted(n.publicRef(), publicUrl());
     }
 
     @Override

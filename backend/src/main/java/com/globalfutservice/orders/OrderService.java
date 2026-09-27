@@ -668,6 +668,49 @@ public class OrderService {
         return events.findByOrderIdOrderByCreatedAtAsc(orderId);
     }
 
+    /**
+     * Emails the customer again asking for their EA sign-in.
+     *
+     * <p>The same email the order sent when it was paid, to the customer only: the
+     * operator channels were told about this order the first time and do not need telling
+     * again. Refused when the order is not waiting for a sign-in, when one is already on
+     * file, and within {@link CredentialReminders#GAP} of the last reminder.
+     *
+     * @return when the reminder was recorded
+     */
+    @Transactional
+    public Instant remindCredentials(OrderEntity order, Long operatorId, String operatorLabel) {
+        if (order.getStatus() != OrderStatus.CREDENTIALS_PENDING) {
+            throw new ApiExceptions.ConflictException("not_awaiting_sign_in",
+                    "This order is not waiting for a sign-in.");
+        }
+        if (vaultService.hasCredentials(order.getId())) {
+            throw new ApiExceptions.ConflictException("sign_in_on_file",
+                    "The customer has already sent their sign-in.");
+        }
+        Instant now = clock.instant();
+        List<Instant> sent = events.findByOrderIdOrderByCreatedAtAsc(order.getId()).stream()
+                .filter(CredentialReminders::isReminder)
+                .map(OrderEventEntity::getCreatedAt)
+                .toList();
+        var notBefore = CredentialReminders.notBefore(sent, now);
+        if (notBefore.isPresent()) {
+            String at = java.time.format.DateTimeFormatter.ofPattern("d MMM, h:mm a", Locale.ENGLISH)
+                    .withZone(java.time.ZoneId.of("Asia/Kolkata"))
+                    .format(notBefore.get());
+            throw new ApiExceptions.ConflictException("reminded_recently",
+                    "A reminder went out recently. The next one can be sent after " + at + " IST.");
+        }
+
+        record(order, OrderStatus.CREDENTIALS_PENDING, OrderStatus.CREDENTIALS_PENDING,
+                Actor.OPERATOR, operatorId, operatorLabel, CredentialReminders.REASON);
+        OrderNotification notification = notificationFor(order);
+        afterCommit.run("sign-in reminder for " + order.getPublicRef(),
+                () -> notifications.credentialsReminder(notification));
+        log.info("Operator {} sent a sign-in reminder for order {}", operatorLabel, order.getPublicRef());
+        return now;
+    }
+
     // ----------------------------------------------------------------- helpers
 
     private void record(OrderEntity order, OrderStatus from, OrderStatus to, Actor actor,
