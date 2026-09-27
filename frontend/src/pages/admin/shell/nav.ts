@@ -123,6 +123,11 @@ const ORDER_SEARCH: SearchTarget = {
 const SEARCHES: Array<[prefix: string, target: SearchTarget]> = [
   ['/admin/dashboard', { ...ORDER_SEARCH, placeholder: 'Search orders, customers, or order ID…' }],
   ['/admin/orders', ORDER_SEARCH],
+  ['/admin/payments', {
+    placeholder: 'Search order, customer, txn ID…',
+    label: 'Search payments by order, customer name or email, or payment or refund reference',
+    path: '/admin/payments',
+  }],
   ['/admin/customers', {
     placeholder: 'Search name, email, EA ID, Discord…',
     label: 'Search customers by name, email, EA ID or Discord name or ID',

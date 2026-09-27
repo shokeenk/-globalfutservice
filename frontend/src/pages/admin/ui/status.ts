@@ -32,15 +32,34 @@ export const ORDER_STATUS: Record<string, StatusStyle> = {
 /**
  * Where an order's payment has got to, from its latest manual payment claim.
  *
- * <p>No claim at all is "Unpaid", which is what the reference's "New" badge means.
- * "Failed" in the reference is a rejected claim: it means the money could not be found,
- * not that a payment failed, so it is called that.
+ * <p>One set of words for a payment on every page. The references disagree -- the
+ * dashboard's says Verified and Pending, the payments page's Success and Failed -- so the
+ * dashboard's are used, and "Failed" is "Rejected": it means the money could not be found,
+ * not that a payment failed. No claim at all is "Unpaid", the dashboard's "New".
  */
 export const PAYMENT_STATE: Record<string, StatusStyle> = {
   NONE: { label: 'Unpaid', tone: 'blue' },
-  SUBMITTED: { label: 'To check', tone: 'amber' },
+  SUBMITTED: { label: 'Pending', tone: 'amber' },
   VERIFIED: { label: 'Verified', tone: 'green' },
   REJECTED: { label: 'Rejected', tone: 'red' },
+}
+
+/**
+ * A payment on the Payments page, in the same words: the server's four statuses, which
+ * add Refunded -- verified, and the order later refunded -- to the claim's own three.
+ */
+export const PAY_STATUS: Record<string, StatusStyle> = {
+  SUCCESS: PAYMENT_STATE.VERIFIED!,
+  PENDING: PAYMENT_STATE.SUBMITTED!,
+  FAILED: PAYMENT_STATE.REJECTED!,
+  REFUNDED: { label: 'Refunded', tone: 'violet' },
+}
+
+/** How a customer paid, named as they would name it. */
+export const METHOD_LABEL: Record<string, string> = {
+  UPI: 'UPI',
+  PAYPAL: 'PayPal',
+  CRYPTO: 'USDT (TRON)',
 }
 
 /** "SOMETHING_NEW" -> "Something new", for a value the tables above do not know yet. */

@@ -28,7 +28,7 @@ describe('status names', () => {
     expect(orderStatus('CREDENTIALS_PENDING').label).toBe('Awaiting sign-in')
     expect(orderStatus('ABANDONED').label).toBe('Abandoned')
     expect(paymentState(null).label).toBe('Unpaid')
-    expect(paymentState('SUBMITTED').label).toBe('To check')
+    expect(paymentState('SUBMITTED').label).toBe('Pending')
     expect(paymentState('REJECTED').label).toBe('Rejected')
   })
 

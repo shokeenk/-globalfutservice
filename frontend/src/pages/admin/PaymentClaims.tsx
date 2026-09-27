@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { LuWallet } from 'react-icons/lu'
 import { api } from '../../lib/api'
 import type { AdminPaymentClaim } from '../../lib/types'
+import { reviewClaim } from './payments/review'
 import { StatusBadge } from './ui/Badge'
 import { AdminButton } from './ui/controls'
 import { shortDateTime } from './ui/format'
+import { METHOD_LABEL } from './ui/status'
 import { Th } from './ui/Table'
 
 /**
@@ -30,7 +32,7 @@ import { Th } from './ui/Table'
  * would put personal financial data on screen continuously, for rows nobody is looking
  * at, and pull megabytes out of the database to do it.
  */
-function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean }) {
+export function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -75,13 +77,6 @@ function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean 
   )
 }
 
-/** How each method is named where money is concerned: which rail, not a code. */
-const METHOD_LABEL: Record<string, string> = {
-  UPI: 'UPI',
-  PAYPAL: 'PayPal',
-  CRYPTO: 'USDT (TRON)',
-}
-
 export function PaymentClaims({
   highlight, onReviewed,
 }: {
@@ -118,30 +113,12 @@ export function PaymentClaims({
   }, [loaded, highlight])
 
   async function review(claim: AdminPaymentClaim, outcome: 'verify' | 'reject') {
-    /*
-     * Verifying releases an order and is not undoable from this screen, so it asks
-     * first. The prompt names the amount and the destination rather than the order
-     * reference: the question an operator is actually answering is "is this much money
-     * in that account", and the reference is the thing they have already been staring
-     * at on a bank statement.
-     */
-    if (outcome === 'verify') {
-      const confirmed = window.confirm(
-        `Confirm ${claim.totalFormatted} arrived at ${claim.destination} `
-        + `with reference ${claim.reference}?\n\n`
-        + `This marks order ${claim.publicRef} paid and starts fulfilment.`,
-      )
-      if (!confirmed) return
-    }
-
-    const note = outcome === 'reject'
-      ? window.prompt('Why is this being rejected? (optional, kept on the record)') ?? undefined
-      : undefined
-
     setBusyId(claim.id)
     setError(null)
     try {
-      await api.post(`/api/v1/admin/payment-claims/${claim.id}/${outcome}`, { note: note ?? null })
+      // The same questions the Payments page asks, from one definition.
+      const done = await reviewClaim({ ...claim, amountFormatted: claim.totalFormatted }, outcome)
+      if (!done) return
       await load()
       onReviewed?.()
     } catch {

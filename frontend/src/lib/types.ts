@@ -411,6 +411,58 @@ export interface AdminCustomerDetail {
   recentOrders: { publicRef: string; sku: string; serviceLabel: string; status: string; createdAt: string }[]
 }
 
+/**
+ * GET /api/v1/admin/payments: one payment a customer reported, and what became of it.
+ * Null fields are left out by the server, so optional ones may be missing.
+ */
+export interface AdminPayment {
+  claimId: number
+  publicRef: string
+  customerName?: string | null
+  email: string
+  method: ManualPaymentMethod
+  reference: string
+  /** Which account the customer was told to pay. */
+  destination: string
+  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REFUNDED'
+  orderStatus: string
+  amountMinor: number
+  amountFormatted: string
+  currency: string
+  submittedAt: string
+  reviewedAt?: string | null
+  reviewedBy?: string | null
+  reviewNote?: string | null
+  hasProof: boolean
+  /** The record of money sent back. A Refunded payment without one predates the records. */
+  refund?: {
+    amountMinor: number; amountFormatted: string; method: ManualPaymentMethod; reference: string
+    reason: string; at: string; by?: string | null
+  } | null
+}
+
+export interface AdminPaymentPage {
+  items: AdminPayment[]
+  total: number
+  page: number
+  size: number
+}
+
+/** One status in one currency. `minor` and `formatted` are sent to admins only. */
+export interface PaymentTotal {
+  status: AdminPayment['status']
+  currency: string
+  count: number
+  minor?: number | null
+  formatted?: string | null
+}
+
+export interface AdminPaymentOverview {
+  thisMonth: PaymentTotal[]
+  lastMonthSoFar: PaymentTotal[]
+  allTime: Record<AdminPayment['status'], number>
+}
+
 /** GET /api/v1/admin/saved-views: one person's named filters on a page. */
 export interface SavedView {
   id: number

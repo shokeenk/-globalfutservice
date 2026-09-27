@@ -94,13 +94,15 @@ export function StatCard({
  * <p>Up is green and down is red for the counts it is used with, where more is better.
  */
 export function TrendLine({
-  current, previous, against, good = 'up',
+  current, previous, against, good = 'up', format = (n) => n.toLocaleString('en-IN'),
 }: {
   current: number
   previous: number
   against: string
   /** Which way is good news. Down, for a backlog: the reference draws more pending in red. */
   good?: 'up' | 'down'
+  /** How to write the difference when there is no percentage, e.g. as money. */
+  format?: (n: number) => string
 }) {
   const t = trend(current, previous)
   if (t.direction === 'flat') {
@@ -114,7 +116,7 @@ export function TrendLine({
       <span className="inline-flex items-center gap-1">
         <span className={`inline-flex items-center gap-0.5 font-semibold ${colour}`}>
           <Arrow aria-hidden="true" className="h-3.5 w-3.5" />
-          {current - previous} more
+          {format(current - previous)} more
         </span>
         <span>than {against}</span>
       </span>

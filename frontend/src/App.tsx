@@ -43,6 +43,7 @@ const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
 const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'))
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
 const AdminNotFound = lazy(() =>
@@ -97,7 +98,7 @@ export default function App() {
               the weekly hours on the same screen is the exception the endpoint itself
               guards — that call is ADMIN and refuses an operator. */}
           <Route path="services/coaching" element={<AdminCoaching />} />
-          <Route path="payments" element={<AdminComingSoon eyebrow="Payments" title="Payments" />} />
+          <Route path="payments" element={<AdminPayments />} />
           <Route
             path="discord"
             element={<AdminComingSoon eyebrow="Discord Integration" title="Discord Integration" />}

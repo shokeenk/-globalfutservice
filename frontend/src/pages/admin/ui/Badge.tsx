@@ -48,7 +48,26 @@ export const TONE_CLASSES: Record<Tone, { badge: string; tile: string; soft: str
  * <p>Uppercase by stylesheet, not by text, so a screen reader says "Awaiting payment"
  * rather than spelling out capitals.
  */
-export function StatusBadge({ label, tone, className = '' }: { label: string; tone: Tone; className?: string }) {
+export function StatusBadge({
+  label, tone, className = '', dot = false,
+}: {
+  label: string
+  tone: Tone
+  className?: string
+  /** The payments reference's style: a dot and the word, same colours. */
+  dot?: boolean
+}) {
+  if (dot) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px]
+                    font-medium ${TONE_CLASSES[tone].badge} ${className}`}
+      >
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+        {label}
+      </span>
+    )
+  }
   return (
     <span
       className={`inline-flex items-center whitespace-nowrap rounded-[5px] px-2 py-[5px] text-admin-badge
