@@ -291,6 +291,66 @@ export interface AdminStats {
   credentialsHeld: number
 }
 
+/**
+ * GET /api/v1/admin/orders/search: one row of the Orders table.
+ *
+ * <p>`quantity` is a Java BigDecimal and arrives as a JSON number, not a string.
+ */
+export interface AdminOrderRow {
+  publicRef: string
+  status: string
+  sku: string
+  serviceLabel: string
+  variant: string | null
+  quantity: number | string
+  /** The order's platform, or for coaching the player's. */
+  platform: string | null
+  deliveryMethod: string
+  credentialsHeld: boolean
+  /** The fulfilment partner has it. */
+  withPartner: boolean
+  customerName: string | null
+  customerEmail: string | null
+  /** The latest payment claim's status, or null when none was ever made. */
+  paymentState: 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | null
+  paymentMethod: ManualPaymentMethod | null
+  paymentReference: string | null
+  eaHandle: string | null
+  totalMinor: number
+  totalFormatted: string
+  currency: string
+  createdAt: string
+  deliveredAt: string | null
+  availableTransitions: string[]
+}
+
+export interface AdminOrderPage {
+  items: AdminOrderRow[]
+  total: number
+  page: number
+  size: number
+}
+
+/** GET /api/v1/admin/orders/overview: counts only, never money. */
+export interface AdminOrderOverview {
+  counts: { sku: string; status: string; count: number }[]
+  paymentsToCheck: number
+  signInsToWork: number
+  disputed: number
+  awaitingSignIn: number
+  deliveredToday: number
+  deliveredYesterdaySoFar: number
+  credentialsHeld: number
+}
+
+/** GET /api/v1/admin/saved-views: one person's named filters on a page. */
+export interface SavedView {
+  id: number
+  name: string
+  filters: Record<string, string>
+  createdAt: string
+}
+
 /** GET /api/v1/admin/analytics/revenue. Admin only. */
 export interface AdminRevenue {
   revenueLast30dMinor: number

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, Badge, Button, EmptyState, Skeleton } from '../../components/ui'
+import { LuWallet } from 'react-icons/lu'
 import { api } from '../../lib/api'
-import { dateTime } from '../../lib/format'
 import type { AdminPaymentClaim } from '../../lib/types'
+import { StatusBadge } from './ui/Badge'
+import { AdminButton } from './ui/controls'
+import { shortDateTime } from './ui/format'
+import { Th } from './ui/Table'
 
 /**
  * The review desk for payments made outside the gateway.
@@ -13,9 +16,9 @@ import type { AdminPaymentClaim } from '../../lib/types'
  * AWAITING_PAYMENT until they email support. Verifying here is the only thing in the
  * system that marks such an order paid.
  *
- * It sits above the order queue on purpose. Every row is a customer who has already
- * sent money and is waiting on us, which makes it the most time-sensitive list in the
- * console -- and unlike the queue below, nothing else will surface it.
+ * On the Orders page it opens under the Needs Attention button, and a row's Verify
+ * Payment opens it with that order's claim highlighted. What it does is unchanged: the
+ * same list, the same confirmation, the same two endpoints.
  */
 /**
  * The customer's screenshot, fetched only when an operator asks for it.
@@ -37,7 +40,7 @@ function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
 
   if (!hasProof) {
-    return <p className="mt-1 text-[11.5px] text-chalk-faint">No screenshot</p>
+    return <p className="mt-1 text-[11.5px] text-admin-faint">No screenshot</p>
   }
 
   if (url) {
@@ -46,7 +49,7 @@ function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean 
         <img
           src={url}
           alt={`Payment screenshot for claim ${claimId}`}
-          className="max-h-28 rounded-edge border border-ink-400"
+          className="max-h-28 rounded-[6px] border border-admin-line"
         />
       </a>
     )
@@ -64,19 +67,33 @@ function ProofThumb({ claimId, hasProof }: { claimId: number; hasProof: boolean 
           .catch(() => setFailed(true))
           .finally(() => setLoading(false))
       }}
-      className="mt-1 text-[11.5px] font-semibold text-brand-400 hover:underline
-                 focus-visible:outline focus-visible:outline-2
-                 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+      className="mt-1 text-[11.5px] font-semibold text-admin-red-text hover:underline
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-red"
     >
       {loading ? 'Loading…' : failed ? 'Could not load — retry' : 'Show screenshot'}
     </button>
   )
 }
 
-export function PaymentClaims() {
+/** How each method is named where money is concerned: which rail, not a code. */
+const METHOD_LABEL: Record<string, string> = {
+  UPI: 'UPI',
+  PAYPAL: 'PayPal',
+  CRYPTO: 'USDT (TRON)',
+}
+
+export function PaymentClaims({
+  highlight, onReviewed,
+}: {
+  /** An order reference whose claim should be brought into view and marked. */
+  highlight?: string | null
+  /** Told after a verify or reject goes through, so the page can refresh its counts. */
+  onReviewed?: () => void
+} = {}) {
   const [claims, setClaims] = useState<AdminPaymentClaim[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const highlighted = useRef<HTMLTableRowElement>(null)
 
   const load = useCallback(async () => {
     try {
@@ -93,6 +110,12 @@ export function PaymentClaims() {
     const timer = setInterval(() => void load(), 20_000)
     return () => clearInterval(timer)
   }, [load])
+
+  // Once the rows are in, bring the claim the row's button asked about into view.
+  const loaded = claims !== null
+  useEffect(() => {
+    if (loaded && highlight) highlighted.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }, [loaded, highlight])
 
   async function review(claim: AdminPaymentClaim, outcome: 'verify' | 'reject') {
     /*
@@ -120,6 +143,7 @@ export function PaymentClaims() {
     try {
       await api.post(`/api/v1/admin/payment-claims/${claim.id}/${outcome}`, { note: note ?? null })
       await load()
+      onReviewed?.()
     } catch {
       setError(`Could not ${outcome} that claim. Reload and check whether it went through.`)
     } finally {
@@ -127,110 +151,131 @@ export function PaymentClaims() {
     }
   }
 
-  if (!claims) {
-    return <Skeleton className="h-32 w-full" />
-  }
-
   return (
-    <div className="mb-6">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="display text-[15px] text-chalk">
+    <section
+      aria-labelledby="payments-to-check"
+      className="mb-5 overflow-hidden rounded-admin-card border border-admin-line bg-white shadow-admin-card"
+    >
+      <div className="flex items-center justify-between gap-3 px-5 py-4">
+        <h2 id="payments-to-check" className="flex items-center gap-2.5 text-[15px] font-semibold text-admin-ink">
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-admin-red" />
           Payments to check
-          {claims.length > 0 && (
-            <span className="ml-2 tnum text-[13px] font-semibold text-brand-400">
+          {claims && claims.length > 0 && (
+            <span className="rounded-[6px] bg-admin-red px-1.5 py-0.5 text-[12px] font-semibold tabular-nums text-white">
               {claims.length}
             </span>
           )}
         </h2>
-        <p className="text-[12px] text-chalk-faint">Oldest first</p>
+        <p className="text-[12px] text-admin-faint">Oldest first</p>
       </div>
 
-      {error && <Alert tone="warn">{error}</Alert>}
+      {error && (
+        <p role="alert" className="mx-5 mb-4 rounded-admin-control bg-admin-red-tint px-3.5 py-2.5 text-[13px] text-admin-red-ink">
+          {error}
+        </p>
+      )}
 
-      {claims.length === 0 ? (
-        <EmptyState title="Nothing waiting">
-          Payments customers have reported show up here for checking.
-        </EmptyState>
+      {claims === null ? (
+        <div className="space-y-2 px-5 pb-5" aria-busy="true">
+          {[0, 1].map((i) => <span key={i} className="block h-10 animate-pulse rounded bg-admin-grey-tint" />)}
+        </div>
+      ) : claims.length === 0 ? (
+        // After a failed read the list is empty because nothing came back, not because
+        // nothing is waiting: the error above is the whole message then.
+        error ? null : <div className="px-5 pb-8 pt-2 text-center">
+          <LuWallet aria-hidden="true" className="mx-auto h-6 w-6 text-admin-faint" />
+          <p className="mt-2 text-[14px] font-semibold text-admin-ink">Nothing waiting</p>
+          <p className="mt-1 text-[13px] text-admin-muted">
+            Payments customers have reported show up here for checking.
+          </p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-ink-400 text-left text-[11.5px] uppercase tracking-[0.06em] text-chalk-faint">
-                <th className="py-2 pr-3 font-semibold">Order</th>
-                <th className="py-2 pr-3 font-semibold">Paid to</th>
-                <th className="py-2 pr-3 font-semibold">Reference</th>
-                <th className="py-2 pr-3 font-semibold">Amount</th>
-                <th className="py-2 pr-3 font-semibold">Submitted</th>
-                <th className="py-2 font-semibold">Decision</th>
+        <div className="relative overflow-x-auto">
+          <table className="w-full min-w-[860px] border-collapse text-admin-cell">
+            <thead className="bg-[#FAFBFC]">
+              <tr className="border-y border-admin-line">
+                <Th>Order</Th>
+                <Th>Paid to</Th>
+                <Th>Reference</Th>
+                <Th>Amount</Th>
+                <Th>Submitted</Th>
+                <Th>Decision</Th>
               </tr>
             </thead>
             <tbody>
-              {claims.map((claim) => (
-                <tr key={claim.id} className="border-b border-ink-400/60 align-top">
-                  <td className="py-3 pr-3">
-                    <Link
-                      to={`/admin/orders/${claim.publicRef}`}
-                      className="font-semibold text-brand-400 hover:underline"
-                    >
-                      {claim.publicRef}
-                    </Link>
-                    <div className="text-[12px] text-chalk-faint">{claim.customerEmail}</div>
-                  </td>
-
-                  <td className="py-3 pr-3">
-                    <Badge tone="neutral">{claim.method}</Badge>
-                    {/*
-                      The destination is the row's most important column and the reason
-                      the claim records it: it tells the operator which account to open.
-                      Wrapped rather than truncated -- a half-shown wallet address is
-                      indistinguishable from a different wallet address.
-                    */}
-                    <div
-                      className="mt-1 text-[12px] text-chalk-muted"
-                      style={{ overflowWrap: 'anywhere' }}
-                    >
-                      {claim.destination}
-                    </div>
-                  </td>
-
-                  <td className="py-3 pr-3">
-                    <code className="tnum text-[12.5px] text-chalk" style={{ overflowWrap: 'anywhere' }}>
-                      {claim.reference}
-                    </code>
-                    <ProofThumb claimId={claim.id} hasProof={claim.hasProof} />
-                  </td>
-
-                  <td className="tnum py-3 pr-3 font-semibold text-chalk">{claim.totalFormatted}</td>
-
-                  <td className="py-3 pr-3 text-[12px] text-chalk-muted">
-                    {dateTime(claim.submittedAt)}
-                  </td>
-
-                  <td className="py-3">
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        loading={busyId === claim.id}
-                        onClick={() => void review(claim, 'verify')}
+              {claims.map((claim) => {
+                const marked = highlight === claim.publicRef
+                return (
+                  <tr
+                    key={claim.id}
+                    ref={marked ? highlighted : undefined}
+                    aria-current={marked ? 'true' : undefined}
+                    className={`border-b border-admin-line align-top last:border-b-0 ${marked ? 'bg-[#FFF8F8]' : ''}`}
+                  >
+                    <td className={`px-4 py-3 ${marked ? 'shadow-[inset_3px_0_0_#DB1825]' : ''}`}>
+                      <Link
+                        to={`/admin/orders/${claim.publicRef}`}
+                        className="font-semibold text-admin-red-text hover:underline"
                       >
-                        Verify
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={busyId === claim.id}
-                        onClick={() => void review(claim, 'reject')}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {claim.publicRef}
+                      </Link>
+                      <div className="text-[12px] text-admin-faint">{claim.customerEmail}</div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <StatusBadge label={METHOD_LABEL[claim.method] ?? claim.method} tone="grey" />
+                      {/*
+                        The destination is the row's most important column and the reason
+                        the claim records it: it tells the operator which account to open.
+                        Wrapped rather than truncated -- a half-shown wallet address is
+                        indistinguishable from a different wallet address.
+                      */}
+                      <div className="mt-1 text-[12px] text-admin-muted" style={{ overflowWrap: 'anywhere' }}>
+                        {claim.destination}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <code className="text-[12.5px] tabular-nums text-admin-ink" style={{ overflowWrap: 'anywhere' }}>
+                        {claim.reference}
+                      </code>
+                      <ProofThumb claimId={claim.id} hasProof={claim.hasProof} />
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums text-admin-ink">
+                      {claim.totalFormatted}
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-3 text-[12px] text-admin-muted">
+                      {shortDateTime(claim.submittedAt)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <AdminButton
+                          size="sm"
+                          variant="primary"
+                          disabled={busyId === claim.id}
+                          onClick={() => void review(claim, 'verify')}
+                        >
+                          {busyId === claim.id ? 'Working…' : 'Verify'}
+                        </AdminButton>
+                        <AdminButton
+                          size="sm"
+                          disabled={busyId === claim.id}
+                          onClick={() => void review(claim, 'reject')}
+                        >
+                          Reject
+                        </AdminButton>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
-    </div>
+    </section>
   )
 }
