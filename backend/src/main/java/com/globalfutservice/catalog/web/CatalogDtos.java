@@ -56,7 +56,13 @@ public final class CatalogDtos {
              * then aggregate achieved-versus-ordered over a window long enough to be
              * meaningful and large enough not to identify individual orders.
              */
-            Integer successRateBps) {
+            Integer successRateBps,
+            /**
+             * Whether this option carries the Best Value tag. The admin's choice on the
+             * Listings page; without one, the last tier of a boosting service, as the
+             * storefront always drew it. Always false outside boosting.
+             */
+            boolean bestValue) {
     }
 
     /**
