@@ -68,7 +68,14 @@ final class AdminOrderSpecs {
         };
     }
 
-    /** Waiting for payment, and the customer says they have paid. */
+    /**
+     * The customer says they have paid and nobody has checked.
+     *
+     * <p>Whatever the order's status, so this counts exactly what the payments-to-check
+     * queue lists and the top bar's bell counts. A claim can outlive the order it was made
+     * on -- an unpaid order is abandoned after 48 hours even with a claim pending -- and
+     * that claim still needs a person.
+     */
     static Specification<OrderEntity> paymentsToCheck() {
         return AdminOrderSpecs::paymentToCheck;
     }
@@ -85,9 +92,7 @@ final class AdminOrderSpecs {
         claim.select(c.get("id")).where(
                 cb.equal(c.get("orderId"), root.get("id")),
                 cb.equal(c.get("status"), ClaimStatus.SUBMITTED));
-        return cb.and(
-                cb.equal(root.get("status"), OrderStatus.AWAITING_PAYMENT),
-                cb.exists(claim));
+        return cb.exists(claim);
     }
 
     private static Predicate signInToWork(Root<OrderEntity> root, CriteriaQuery<?> query,

@@ -65,7 +65,7 @@ public final class AdminOrderViews {
      */
     public record Overview(
             List<StatusCount> counts,
-            /** Waiting for payment with a claim nobody has checked. */
+            /** Orders with a payment claim nobody has checked: the payments-to-check queue. */
             long paymentsToCheck,
             /** Ready to work with a sign-in on file. */
             long signInsToWork,
