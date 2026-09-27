@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface CredentialVaultRepository extends JpaRepository<CredentialVaultEntity, Long> {
@@ -26,4 +27,8 @@ public interface CredentialVaultRepository extends JpaRepository<CredentialVault
 
     @Query("select count(c) from CredentialVaultEntity c where c.purgedAt is null")
     long countHeld();
+
+    /** Which of these orders hold a sign-in right now. One query for a page of the queue. */
+    @Query("select c.orderId from CredentialVaultEntity c where c.orderId in :orderIds and c.purgedAt is null")
+    List<Long> heldAmong(@Param("orderIds") Collection<Long> orderIds);
 }
