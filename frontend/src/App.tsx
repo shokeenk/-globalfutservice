@@ -23,6 +23,7 @@ const Rewards = lazy(() => import('./pages/Rewards'))
 const Track = lazy(() => import('./pages/Track'))
 const Help = lazy(() => import('./pages/Help'))
 const Support = lazy(() => import('./pages/Support'))
+const SupportTicket = lazy(() => import('./pages/SupportTicket'))
 const Legal = lazy(() => import('./pages/Legal'))
 const About = lazy(() => import('./pages/About'))
 const ComingSoon = lazy(() => import('./pages/ComingSoon'))
@@ -153,6 +154,9 @@ export default function App() {
               <Route path="/unsubscribe" element={<Unsubscribe />} />
               <Route path="/help" element={<Help />} />
               <Route path="/support" element={<Support />} />
+              {/* Unguarded like /unsubscribe: a guest opens it from our email, with the
+                  ticket's own key in the link. The server decides who may read it. */}
+              <Route path="/support/tickets/:ref" element={<SupportTicket />} />
 
               <Route path="/terms" element={<Legal doc="terms" />} />
               <Route path="/privacy" element={<Legal doc="privacy" />} />

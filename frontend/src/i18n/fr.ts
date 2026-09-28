@@ -631,6 +631,18 @@ const fr: Dictionary = {
       'sont recueillis via le formulaire chiffré de la commande elle-même.',
     send: 'Envoyer le message',
     sendFailed: 'Envoi impossible.',
+    category: 'De quoi s’agit-il ?',
+    categoryHint: 'Facultatif, mais ton message arrive ainsi à la bonne personne.',
+    categoryNone: 'Choisis un sujet',
+    categories: {
+      COINS: 'Crédits',
+      BOOSTING: 'Boosting',
+      COACHING: 'Coaching',
+      PAYMENT: 'Paiement',
+      ACCOUNT: 'Compte',
+      TECHNICAL: 'Technique',
+      OTHER: 'Autre',
+    },
     fasterTitle: 'Réponses plus rapides',
     faster1: 'Commande à l’arrêt ? Vérifie d’abord que tu es déconnecté partout.',
     faster2: 'Montant incorrect ? Envoie-nous la référence et une capture d’écran.',
@@ -640,6 +652,30 @@ const fr: Dictionary = {
       'Te demander ton mot de passe par chat ou e-mail, te demander de payer en dehors du ' +
       'site, ou te contacter en premier au sujet d’un « problème » sur ta commande. Si ' +
       'quelqu’un le fait, ce n’est pas nous.',
+  },
+
+  supportTicket: {
+    seoTitle: 'Ta demande d’assistance',
+    eyebrow: 'Assistance',
+    statusOpen: 'Avec notre équipe',
+    statusAnswered: 'En attente de ta réponse',
+    statusClosed: 'Résolue',
+    order: 'Commande',
+    opened: (date: string) => `Ouverte le ${date}`,
+    you: 'Toi',
+    us: 'Global FUT Services',
+    replyLabel: 'Ta réponse',
+    replyPlaceholder: 'Écris ta réponse…',
+    noPassword: 'N’inclus jamais ton mot de passe ni tes codes de secours. Nous ne te les demanderons jamais ici.',
+    send: 'Envoyer la réponse',
+    sent: 'Envoyé. Nous te répondrons ici et par e-mail.',
+    sendFailed: 'Envoi impossible. Réessaie.',
+    closedNote: 'Cette demande est résolue. Si tu écris à nouveau, elle sera rouverte.',
+    notFoundTitle: 'Nous n’avons pas trouvé cette demande',
+    notFoundBody: 'Ouvre-la depuis le lien de notre e-mail, ou connecte-toi avec le compte qui l’a envoyée.',
+    loadFailed: 'Impossible de charger cette demande. Réessaie dans un instant.',
+    retry: 'Réessayer',
+    newTicket: 'Envoyer une nouvelle demande',
   },
 
   account: {
@@ -673,6 +709,7 @@ const fr: Dictionary = {
     startOrder: 'Passer commande',
     needChange: 'Besoin de modifier une commande en cours ?',
     contactSupport: 'Contacte l’assistance',
+    yourTickets: 'Demandes d’assistance',
     withReference: 'avec la référence.',
   },
 

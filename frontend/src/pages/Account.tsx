@@ -6,9 +6,10 @@ import { useT } from '../i18n'
 import { api } from '../lib/api'
 import { dateTime, points as fmtPoints } from '../lib/format'
 import { useSeo } from '../lib/seo'
-import type { MyCoaching, OrderSummary, Wallet } from '../lib/types'
+import type { MyCoaching, OrderSummary, SupportTicketSummary, Wallet } from '../lib/types'
 import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
+import { ticketStatus } from './SupportTicket'
 import { statusTone } from './Track'
 
 export default function Account() {
@@ -19,6 +20,7 @@ export default function Account() {
   const [wallet, setWallet] = useState<Wallet | null>(null)
   const [orders, setOrders] = useState<OrderSummary[] | null>(null)
   const [coaching, setCoaching] = useState<MyCoaching | null>(null)
+  const [tickets, setTickets] = useState<SupportTicketSummary[] | null>(null)
   /*
    * Promotional email consent. null while unknown, so the control renders unticked but
    * disabled rather than briefly showing "off" to somebody who is actually opted in and
@@ -33,6 +35,8 @@ export default function Account() {
     // Absent rather than empty when it fails: the card below renders nothing at all
     // for someone who has never bought coaching, which is most people.
     api.get<MyCoaching>('/api/v1/coaching/me').then(setCoaching).catch(() => setCoaching(null))
+    // Like coaching: nothing at all when there are none, which is most people.
+    api.get<SupportTicketSummary[]>('/api/v1/support/tickets').then(setTickets).catch(() => setTickets(null))
     api.get<{ optIn: boolean }>('/api/v1/account/marketing')
       .then((r) => setMarketingOptIn(r.optIn))
       .catch(() => setMarketingOptIn(null))
@@ -166,6 +170,38 @@ export default function Account() {
                 </div>
               )}
             </section>
+
+            {/* --------------------------------------------------- support --- */}
+            {tickets && tickets.length > 0 && (
+              <section>
+                <h2 className="stamp mb-5">{t.account.yourTickets}</h2>
+                <div className="surface overflow-hidden">
+                  <ul className="divide-y divide-ink-400">
+                    {tickets.map((ticket) => {
+                      const status = ticketStatus(t, ticket.status)
+                      return (
+                        <li key={ticket.ref}>
+                          <Link
+                            to={`/support/tickets/${ticket.ref}`}
+                            className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4
+                                       transition-colors duration-200 hover:bg-ink-500/40"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[14px] font-semibold text-chalk">{ticket.subject}</p>
+                              <p className="tnum mt-0.5 text-[12.5px] text-chalk-muted">{ticket.ref}</p>
+                            </div>
+                            <Badge tone={status.tone}>{status.label}</Badge>
+                            <span className="w-full shrink-0 text-[11.5px] text-chalk-faint sm:w-auto sm:text-right">
+                              {dateTime(ticket.lastActivityAt)}
+                            </span>
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              </section>
+            )}
 
             {/* ------------------------------------------------- statement --- */}
             {wallet && wallet.statement.length > 0 && (

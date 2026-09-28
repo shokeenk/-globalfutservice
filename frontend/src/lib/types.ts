@@ -568,6 +568,29 @@ export interface AdminSupportDetail {
   messages: AdminSupportMessage[]
 }
 
+/** GET /api/v1/support/tickets: the signed-in customer's tickets. */
+export interface SupportTicketSummary {
+  ref: string
+  subject: string
+  category?: SupportCategory | null
+  status: SupportStatus
+  lastActivityAt: string
+}
+
+/**
+ * GET /api/v1/support/tickets/{ref}: a ticket as its customer sees it. Staff appear as
+ * SUPPORT, never by name, and notes are never sent.
+ */
+export interface SupportThread {
+  ref: string
+  subject: string
+  category?: SupportCategory | null
+  status: SupportStatus
+  orderRef?: string | null
+  createdAt: string
+  messages: { from: 'CUSTOMER' | 'SUPPORT'; body: string; at: string }[]
+}
+
 /** GET /api/v1/admin/saved-views: one person's named filters on a page. */
 export interface SavedView {
   id: number

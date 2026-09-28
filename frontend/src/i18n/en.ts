@@ -718,6 +718,18 @@ const en = {
       'through the encrypted form on the order itself.',
     send: 'Send message',
     sendFailed: 'Could not send that.',
+    category: 'What is it about?',
+    categoryHint: 'Optional, but it gets your message to the right person.',
+    categoryNone: 'Choose a topic',
+    categories: {
+      COINS: 'Coins',
+      BOOSTING: 'Boosting',
+      COACHING: 'Coaching',
+      PAYMENT: 'Payment',
+      ACCOUNT: 'Account',
+      TECHNICAL: 'Technical',
+      OTHER: 'Other',
+    },
     fasterTitle: 'Faster answers',
     faster1: 'Order not moving? Check it is signed out everywhere first.',
     faster2: 'Wrong amount? Send us the reference and a screenshot.',
@@ -726,6 +738,30 @@ const en = {
     neverBody:
       'Ask for your password over chat or email, ask you to move payment off the site, or ' +
       'contact you first about a "problem" with your order. If someone does, it is not us.',
+  },
+
+  supportTicket: {
+    seoTitle: 'Your support request',
+    eyebrow: 'Support',
+    statusOpen: 'With our team',
+    statusAnswered: 'Waiting for your reply',
+    statusClosed: 'Resolved',
+    order: 'Order',
+    opened: (date: string) => `Opened ${date}`,
+    you: 'You',
+    us: 'Global FUT Services',
+    replyLabel: 'Your reply',
+    replyPlaceholder: 'Write your reply…',
+    noPassword: 'Never include your password or backup codes. We will never ask for them here.',
+    send: 'Send reply',
+    sent: 'Sent. We will answer here and by email.',
+    sendFailed: 'Could not send that. Try again.',
+    closedNote: 'This request is resolved. Writing again reopens it.',
+    notFoundTitle: 'We could not find that request',
+    notFoundBody: 'Open it from the link in our email, or sign in with the account that sent it.',
+    loadFailed: 'Could not load this request. Try again in a moment.',
+    retry: 'Try again',
+    newTicket: 'Send a new request',
   },
 
   account: {
@@ -760,6 +796,7 @@ const en = {
     needChange: 'Need something changed on a live order?',
     contactSupport: 'Contact support',
     withReference: 'with the reference.',
+    yourTickets: 'Support requests',
   },
 
   order: {
