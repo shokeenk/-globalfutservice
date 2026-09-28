@@ -43,7 +43,8 @@ class SupportReplyEmailTest {
         assertThat(sent.getValue().getText())
                 .contains("Your coins are on the way.")
                 .contains("https://globalfutservices.com/support/tickets/TKT-AB12CD34?key=k3y")
-                .contains("answers sent to this email address do not reach us");
+                .contains("answers sent to this email address do not reach us")
+                .contains("We will never ask for your password or backup codes");
     }
 
     @Test

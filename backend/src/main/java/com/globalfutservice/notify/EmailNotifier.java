@@ -118,6 +118,7 @@ public class EmailNotifier implements Notifier {
                 %s
 
                 Please reply through that link: answers sent to this email address do not reach us.
+                We will never ask for your password or backup codes, by email or on that page.
 
                 — Global FUT Services
                 """.formatted(n.opened()
