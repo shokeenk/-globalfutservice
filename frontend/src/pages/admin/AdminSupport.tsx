@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { LuChevronRight, LuCircleCheck, LuClock, LuMessageCircle, LuSearch, LuX } from 'react-icons/lu'
+import { Link, useSearchParams } from 'react-router-dom'
+import { LuChevronRight, LuCircleCheck, LuClock, LuMessageCircle, LuSearch } from 'react-icons/lu'
 import { api } from '../../lib/api'
 import { useSeo } from '../../lib/seo'
 import type { AdminSupportOverview, AdminSupportPage, AdminSupportTicket } from '../../lib/types'
@@ -19,8 +19,8 @@ const selectClass = 'h-10 w-full rounded-admin-control border border-admin-line 
   + 'text-admin-ink focus:border-admin-red focus:outline-none focus:ring-2 focus:ring-admin-red/20'
 
 /**
- * Support: every ticket from the contact form, and every conversation staff started from
- * a customer's page, with the one that is open beside the list.
+ * Support: every ticket from the contact form, with the one that is open beside the list.
+ * Customers start every conversation; staff answer. We never contact a customer first.
  *
  * <p>A ticket is Open while it is with staff, Waiting once staff have answered, and
  * Resolved when closed. The customer writing again moves it back to Open, so the Open tab
@@ -29,8 +29,6 @@ const selectClass = 'h-10 w-full rounded-admin-control border border-admin-line 
  */
 export default function AdminSupport() {
   useSeo({ title: 'Support', noindex: true })
-  const location = useLocation()
-  const navigate = useNavigate()
 
   const [params, setParams] = useSearchParams()
   const tab = params.get('status') ?? ''
@@ -50,15 +48,6 @@ export default function AdminSupport() {
       return next
     }, { replace: true })
   }, [setParams])
-
-  // A ticket just opened from a customer's page says so once, then the message is dropped
-  // from history so a reload does not repeat it.
-  const [notice, setNotice] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null)
-  useEffect(() => {
-    if ((location.state as { notice?: string } | null)?.notice) {
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
-    }
-  }, [location, navigate])
 
   const [overview, setOverview] = useState<AdminSupportOverview | null>(null)
   const [overviewFailed, setOverviewFailed] = useState(false)
@@ -122,13 +111,6 @@ export default function AdminSupport() {
     <div className={openRef ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)] xl:items-start xl:gap-4' : ''}>
       <div className="min-w-0">
         <AdminPage eyebrow="Support" title="Support" description="View and manage customer support tickets.">
-          {notice && (
-            <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-admin-control bg-admin-green-tint px-4 py-3 text-[13px] text-admin-green-ink">
-              <span>{notice}</span>
-              <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss"><LuX aria-hidden="true" className="h-4 w-4" /></button>
-            </div>
-          )}
-
           <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard size="lg" icon={LuMessageCircle} tone="red" label="Open Tickets" failed={failedCounts}
               value={overview ? overview.open : null} />

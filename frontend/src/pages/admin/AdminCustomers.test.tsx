@@ -116,8 +116,8 @@ describe('Customers page', () => {
     expect(within(panel).getByText('Active')).toBeInTheDocument()
     expect(within(panel).getByRole('link', { name: /View All Orders/ }))
       .toHaveAttribute('href', '/admin/orders?search=rahul07%40example.test')
-    // Send Email opens a support ticket, so the customer's answer has somewhere to go.
-    expect(within(panel).getByRole('button', { name: 'Send Email' })).toBeInTheDocument()
+    // No Send Email: we never contact a customer first, so support starts with them.
+    expect(within(panel).queryByText('Send Email')).toBeNull()
 
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Customer details' })).toBeNull())

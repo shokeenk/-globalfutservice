@@ -518,7 +518,6 @@ export interface AdminSupportTicket {
   subject: string
   orderRef?: string | null
   status: SupportStatus
-  openedBy: 'CUSTOMER' | 'STAFF'
   messages: number
   lastFrom?: 'CUSTOMER' | 'STAFF' | null
   createdAt: string
@@ -557,7 +556,6 @@ export interface AdminSupportDetail {
   category?: SupportCategory | null
   subject: string
   orderRef?: string | null
-  openedBy: 'CUSTOMER' | 'STAFF'
   createdAt: string
   resolvedAt?: string | null
   customerName?: string | null

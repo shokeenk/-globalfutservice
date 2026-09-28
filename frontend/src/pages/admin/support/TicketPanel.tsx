@@ -201,12 +201,7 @@ export function TicketPanel({
           </div>
           <div className="mt-2 flex items-center gap-3">
             <p className="min-w-0 flex-1 text-[13px] text-admin-muted">
-              {detail ? (
-                <>
-                  Created on {dateAndTime(detail.createdAt)}
-                  {detail.openedBy === 'STAFF' && ' · written to them by staff'}
-                </>
-              ) : ' '}
+              {detail ? `Created on ${dateAndTime(detail.createdAt)}` : ' '}
             </p>
             {detail && (
               resolved ? (

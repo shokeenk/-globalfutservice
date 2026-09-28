@@ -16,7 +16,7 @@ const { default: Support } = await import('./AdminSupport')
 function ticket(patch: Partial<AdminSupportTicket>): AdminSupportTicket {
   return {
     ref: 'TKT-AB12CD34', customerName: 'Rahul Sharma', email: 'rahul07@example.test', category: 'COINS',
-    subject: 'Coins not received', orderRef: 'GFS-26-CN43SP05', status: 'OPEN', openedBy: 'CUSTOMER', messages: 2,
+    subject: 'Coins not received', orderRef: 'GFS-26-CN43SP05', status: 'OPEN', messages: 2,
     lastFrom: 'CUSTOMER', createdAt: '2026-09-26T10:12:00Z', lastActivityAt: new Date(Date.now() - 5 * 60_000).toISOString(),
     ...patch,
   }
@@ -31,7 +31,7 @@ const ROWS: AdminSupportTicket[] = [
 
 const DETAIL: AdminSupportDetail = {
   ref: 'TKT-AB12CD34', status: 'OPEN', category: 'COINS', subject: 'Coins not received', orderRef: 'GFS-26-CN43SP05',
-  openedBy: 'CUSTOMER', createdAt: '2026-09-26T10:12:00Z', customerName: 'Rahul Sharma', email: 'rahul07@example.test',
+  createdAt: '2026-09-26T10:12:00Z', customerName: 'Rahul Sharma', email: 'rahul07@example.test',
   hasAccount: false, customerLink: 'https://example.test/support/tickets/TKT-AB12CD34?key=k3y',
   messages: [
     { id: 1, author: 'CUSTOMER', kind: 'MESSAGE', body: 'I paid but have no coins.', at: '2026-09-26T10:12:00Z' },

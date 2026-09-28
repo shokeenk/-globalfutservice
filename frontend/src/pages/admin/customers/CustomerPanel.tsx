@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
-  LuArrowRight, LuClipboardList, LuCoins, LuGraduationCap, LuMail, LuPencil, LuTrophy, LuX,
+  LuArrowRight, LuClipboardList, LuCoins, LuGraduationCap, LuPencil, LuTrophy, LuX,
 } from 'react-icons/lu'
 import { SiDiscord } from 'react-icons/si'
 import type { IconType } from 'react-icons'
@@ -12,7 +12,6 @@ import { buttonClasses } from '../ui/controls'
 import { dateAndTime, shortDate } from '../ui/format'
 import { PlatformMark } from '../ui/PlatformMark'
 import { PLATFORM_LABEL, type Tone } from '../ui/status'
-import { SendEmail } from './SendEmail'
 import { Avatar, CUSTOMER_STATUS, spentText } from './shared'
 
 const SKU_ICON: Record<string, [IconType, Tone]> = {
@@ -40,8 +39,6 @@ export function CustomerPanel({
 }) {
   const [detail, setDetail] = useState<AdminCustomerDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [writing, setWriting] = useState(false)
-  const navigate = useNavigate()
   const panel = useRef<HTMLElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
 
@@ -62,8 +59,6 @@ export function CustomerPanel({
   useEffect(() => { closeButton.current?.focus() }, [customerKey])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      // A dialog opened from here (Send Email) handles its own keys.
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       if (event.key === 'Escape') {
         event.preventDefault()
         onClose()
@@ -188,28 +183,13 @@ export function CustomerPanel({
 
             <section aria-labelledby="customer-actions" className="mt-5">
               <h3 id="customer-actions" className="mb-2 text-[15px] font-semibold text-admin-ink">Quick Actions</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <Link to={`/admin/orders?search=${encodeURIComponent(c.email)}`} className={buttonClasses('outline')}>
-                  View Orders
-                </Link>
-                <button type="button" onClick={() => setWriting(true)} className={buttonClasses('outline')}>
-                  <LuMail aria-hidden="true" className="h-4 w-4" />
-                  Send Email
-                </button>
-              </div>
+              <Link to={`/admin/orders?search=${encodeURIComponent(c.email)}`} className={`${buttonClasses('outline')} w-full`}>
+                View Orders
+              </Link>
             </section>
           </div>
         )}
       </aside>
-      {writing && detail && (
-        <SendEmail
-          detail={detail}
-          onClose={() => setWriting(false)}
-          onSent={(ticket) => navigate(`/admin/support?ticket=${encodeURIComponent(ticket.ref)}`, {
-            state: { notice: `Emailed ${ticket.email}. Their answer will come back to ticket ${ticket.ref}.` },
-          })}
-        />
-      )}
     </>
   )
 }
