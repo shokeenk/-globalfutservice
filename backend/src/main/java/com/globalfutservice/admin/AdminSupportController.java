@@ -1,7 +1,5 @@
 package com.globalfutservice.admin;
 
-import com.globalfutservice.identity.AccountEntity;
-import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
 import com.globalfutservice.support.SupportMessageEntity;
@@ -14,7 +12,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -54,7 +51,7 @@ public class AdminSupportController {
 
     private static final String ROWS = """
             t as (
-              select s.id, s.public_ref, s.email, s.subject, s.category, s.status, s.order_ref, s.opened_by,
+              select s.id, s.public_ref, s.email, s.subject, s.category, s.status, s.order_ref,
                      s.created_at, s.last_activity_at,
                      coalesce(nullif(trim(a.display_name), ''), nullif(trim(o.guest_name), '')) as name,
                      (select count(*) from support_message m where m.ticket_id = s.id and m.kind = 'MESSAGE') as messages,
@@ -69,19 +66,14 @@ public class AdminSupportController {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final SupportService support;
-    private final AdminCustomerQueries customers;
-    private final AccountRepository accounts;
 
-    public AdminSupportController(NamedParameterJdbcTemplate jdbc, SupportService support,
-                                  AdminCustomerQueries customers, AccountRepository accounts) {
+    public AdminSupportController(NamedParameterJdbcTemplate jdbc, SupportService support) {
         this.jdbc = jdbc;
         this.support = support;
-        this.customers = customers;
-        this.accounts = accounts;
     }
 
     public record Row(String ref, String customerName, String email, String category, String subject, String orderRef,
-                      String status, String openedBy, long messages, String lastFrom, Instant createdAt,
+                      String status, long messages, String lastFrom, Instant createdAt,
                       Instant lastActivityAt) {
     }
 
@@ -131,7 +123,7 @@ public class AdminSupportController {
         List<Row> rows = jdbc.query("with " + ROWS + " select * from t" + clause
                 + " order by last_activity_at desc, id desc limit :limit offset :offset", params, (rs, i) -> new Row(
                 rs.getString("public_ref"), rs.getString("name"), rs.getString("email"), rs.getString("category"),
-                rs.getString("subject"), rs.getString("order_ref"), rs.getString("status"), rs.getString("opened_by"),
+                rs.getString("subject"), rs.getString("order_ref"), rs.getString("status"),
                 rs.getLong("messages"), rs.getString("last_from"), instant(rs.getTimestamp("created_at")),
                 instant(rs.getTimestamp("last_activity_at"))));
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(new Page(rows, total, p, s));
@@ -160,7 +152,7 @@ public class AdminSupportController {
     public record Message(long id, String author, String kind, String body, String authorLabel, Instant at) {
     }
 
-    public record Detail(String ref, String status, String category, String subject, String orderRef, String openedBy,
+    public record Detail(String ref, String status, String category, String subject, String orderRef,
                          Instant createdAt, Instant resolvedAt, String customerName, String email, boolean hasAccount,
                          /** The customer's own link to this ticket, for pasting into a chat with them. */
                          String customerLink,
@@ -217,32 +209,6 @@ public class AdminSupportController {
         return ResponseEntity.ok(detail(ticket));
     }
 
-    public record StartRequest(
-            @NotBlank String customerKey,
-            @Size(max = 32) String orderRef,
-            String category,
-            @NotBlank(message = "Give the message a subject") @Size(max = 120) String subject,
-            @NotBlank(message = "Write a message first") @Size(max = 4000) String message) {
-    }
-
-    /**
-     * Writing to a customer first, from their page: "Send Email". It opens a ticket to them
-     * and emails them, so their answer comes back into this thread. To one customer only,
-     * about their account or orders; campaigns are where marketing goes.
-     */
-    @PostMapping("/tickets")
-    @Operation(summary = "Write to one customer: opens a ticket and emails them")
-    public ResponseEntity<Detail> start(@Valid @RequestBody StartRequest request, @CurrentAccount AccountPrincipal staff) {
-        AdminCustomerQueries.Row customer = customers.detail(request.customerKey(), false)
-                .orElseThrow(() -> new ApiExceptions.NotFoundException("No such customer.")).customer();
-        Long accountId = request.customerKey().startsWith("a-")
-                ? accounts.findByPublicId(request.customerKey().substring(2)).map(AccountEntity::getId).orElse(null)
-                : null;
-        SupportTicketEntity ticket = support.openFromStaff(accountId, customer.email(), request.orderRef(),
-                request.category(), request.subject(), request.message(), staff.id(), label(staff));
-        return ResponseEntity.status(HttpStatus.CREATED).body(detail(ticket));
-    }
-
     private Detail detail(SupportTicketEntity ticket) {
         String name = jdbc.query("""
                 select coalesce(nullif(trim(a.display_name), ''), nullif(trim(o.guest_name), '')) from support_ticket s
@@ -255,7 +221,7 @@ public class AdminSupportController {
                         SupportMessageEntity.STAFF.equals(m.getAuthor()) ? m.getAuthorLabel() : null, m.getCreatedAt()))
                 .toList();
         return new Detail(ticket.getPublicRef(), ticket.getStatus(), ticket.getCategory(), ticket.getSubject(),
-                ticket.getOrderRef(), ticket.getOpenedBy(), ticket.getCreatedAt(), ticket.getResolvedAt(), name,
+                ticket.getOrderRef(), ticket.getCreatedAt(), ticket.getResolvedAt(), name,
                 ticket.getEmail(), ticket.getAccountId() != null, support.link(ticket.getPublicRef()), messages);
     }
 

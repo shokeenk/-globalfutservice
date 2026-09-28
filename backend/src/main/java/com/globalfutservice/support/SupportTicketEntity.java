@@ -55,10 +55,6 @@ public class SupportTicketEntity {
     /** COINS, BOOSTING, COACHING, PAYMENT, ACCOUNT, TECHNICAL or OTHER; null on old tickets. */
     private String category;
 
-    /** CUSTOMER when opened from the form, STAFF when opened from a customer's page. */
-    @Column(name = "opened_by", nullable = false)
-    private String openedBy = "CUSTOMER";
-
     @Column(name = "last_activity_at", nullable = false)
     private Instant lastActivityAt = Instant.now();
 
@@ -129,14 +125,6 @@ public class SupportTicketEntity {
 
     public void setCategory(String category) {
         this.category = category;
-    }
-
-    public String getOpenedBy() {
-        return openedBy;
-    }
-
-    public void setOpenedBy(String openedBy) {
-        this.openedBy = openedBy;
     }
 
     public Instant getLastActivityAt() {

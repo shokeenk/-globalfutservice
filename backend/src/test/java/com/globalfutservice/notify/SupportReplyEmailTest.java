@@ -34,7 +34,7 @@ class SupportReplyEmailTest {
         JavaMailSender sender = mock(JavaMailSender.class);
         notifier(sender).supportReply(new SupportReplyNotification("rahul07@example.test", "TKT-AB12CD34",
                 "Coins not received", "Your coins are on the way.",
-                "https://globalfutservices.com/support/tickets/TKT-AB12CD34?key=k3y", false));
+                "https://globalfutservices.com/support/tickets/TKT-AB12CD34?key=k3y"));
 
         ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(sender).send(sent.capture());

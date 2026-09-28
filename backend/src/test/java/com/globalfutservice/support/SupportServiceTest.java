@@ -109,21 +109,6 @@ class SupportServiceTest {
     }
 
     @Test
-    @DisplayName("staff writing first opens a ticket that waits for the customer, and emails them")
-    void staffOpens() {
-        SupportTicketEntity opened = service.openFromStaff(null, "buyer@example.test", null, "account",
-                "About your order", "Could you confirm your platform?", 2L, "vinay@example.test");
-
-        assertThat(opened.getOpenedBy()).isEqualTo("STAFF");
-        assertThat(opened.getStatus()).isEqualTo(SupportService.ANSWERED);
-        assertThat(opened.getCategory()).isEqualTo("ACCOUNT");
-        ArgumentCaptor<SupportReplyNotification> sent = ArgumentCaptor.forClass(SupportReplyNotification.class);
-        verify(notifications).supportReply(sent.capture());
-        assertThat(sent.getValue().opened()).isTrue();
-        assertThat(sent.getValue().email()).isEqualTo("buyer@example.test");
-    }
-
-    @Test
     @DisplayName("the customer's key is the same every time for a ticket, different for another, and checked exactly")
     void keys() {
         String key = service.linkKey("TKT-AB12CD34");

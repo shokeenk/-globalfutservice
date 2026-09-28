@@ -9,8 +9,6 @@ import com.globalfutservice.notify.SupportReplyNotification;
 import com.globalfutservice.notify.feed.CustomerFeedService;
 import com.globalfutservice.notify.feed.NotificationKind;
 import com.globalfutservice.web.ApiExceptions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +32,6 @@ import java.util.Set;
  */
 @Service
 public class SupportService {
-
-    private static final Logger log = LoggerFactory.getLogger(SupportService.class);
 
     public static final String OPEN = "OPEN";
     public static final String ANSWERED = "ANSWERED";
@@ -106,32 +102,6 @@ public class SupportService {
         return ticket;
     }
 
-    /**
-     * Staff writing to a customer first, from their page. The ticket starts waiting for the
-     * customer, and they are emailed at once, so their answer lands in this thread.
-     */
-    @Transactional
-    public SupportTicketEntity openFromStaff(Long customerAccountId, String email, String orderRef, String category,
-                                             String subject, String message, Long staffId, String staffLabel) {
-        String s = subject == null ? "" : subject.trim();
-        if (s.isEmpty() || s.length() > 120) {
-            throw new ApiExceptions.BadRequestException("Give the message a subject of up to 120 characters.");
-        }
-        String b = body(message);
-        SupportTicketEntity ticket = new SupportTicketEntity(newRef(), customerAccountId, blankToNull(orderRef),
-                email.trim(), s, b);
-        ticket.setCategory(category(category));
-        ticket.setOpenedBy("STAFF");
-        ticket.setStatus(ANSWERED);
-        ticket.setLastActivityAt(clock.instant());
-        tickets.save(ticket);
-        messages.save(new SupportMessageEntity(ticket.getId(), SupportMessageEntity.STAFF,
-                SupportMessageEntity.MESSAGE, b, staffId, staffLabel));
-        tellCustomer(ticket, b, true);
-        log.info("Staff {} opened support ticket {} to a customer", staffLabel, ticket.getPublicRef());
-        return ticket;
-    }
-
     /** A staff reply, which is sent, or a note, which is not. */
     @Transactional
     public SupportMessageEntity staffWrite(SupportTicketEntity ticket, String message, boolean note,
@@ -144,7 +114,7 @@ public class SupportService {
             ticket.setResolvedAt(null);
             ticket.setLastActivityAt(clock.instant());
             tickets.save(ticket);
-            tellCustomer(ticket, b, false);
+            tellCustomer(ticket, b);
         }
         return saved;
     }
@@ -209,16 +179,15 @@ public class SupportService {
         return props.publicUrl() + "/support/tickets/" + ref + "?key=" + linkKey(ref);
     }
 
-    private void tellCustomer(SupportTicketEntity ticket, String message, boolean opened) {
+    private void tellCustomer(SupportTicketEntity ticket, String message) {
         SupportReplyNotification n = new SupportReplyNotification(ticket.getEmail(), ticket.getPublicRef(),
-                ticket.getSubject(), message, link(ticket.getPublicRef()), opened);
+                ticket.getSubject(), message, link(ticket.getPublicRef()));
         Long account = ticket.getAccountId();
         String ref = ticket.getPublicRef();
         String subject = ticket.getSubject();
         afterCommit.run("support reply on " + ref, () -> {
             notifications.supportReply(n);
-            feed.record(account, NotificationKind.SUPPORT_REPLY,
-                    opened ? "A message from support" : "Support replied", truncate(subject, 480),
+            feed.record(account, NotificationKind.SUPPORT_REPLY, "Support replied", truncate(subject, 480),
                     "/support/tickets/" + ref, null);
         });
     }

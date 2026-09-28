@@ -108,7 +108,7 @@ public class EmailNotifier implements Notifier {
      */
     @Override
     public void supportReply(SupportReplyNotification n) {
-        String subject = (n.opened() ? "" : "Re: ") + n.subject() + " [" + n.ticketRef() + "]";
+        String subject = "Re: " + n.subject() + " [" + n.ticketRef() + "]";
         String body = """
                 %s
 
@@ -121,10 +121,7 @@ public class EmailNotifier implements Notifier {
                 We will never ask for your password or backup codes, by email or on that page.
 
                 — Global FUT Services
-                """.formatted(n.opened()
-                        ? "We have a message for you about your account or order (" + n.ticketRef() + ")."
-                        : "We've replied to your support request " + n.ticketRef() + ".",
-                n.message(), n.link());
+                """.formatted("We've replied to your support request " + n.ticketRef() + ".", n.message(), n.link());
         if (!isEnabled()) {
             log.debug("Email disabled; would have sent support reply on {}", n.ticketRef());
             return;

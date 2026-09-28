@@ -8,8 +8,9 @@
 --  support_ticket gains:
 --   * category, chosen on the form or by staff. Nullable: tickets from before
 --     this have none.
---   * opened_by, CUSTOMER from the form or STAFF from a customer's page.
 --   * last_activity_at, what the Support page sorts and ages by.
+--  A ticket is always opened by the customer: we never contact a customer
+--  first, so staff answer tickets and never start them.
 --  The status values stay as they were: OPEN (waiting for staff), ANSWERED
 --  (waiting for the customer) and CLOSED.
 --
@@ -23,7 +24,6 @@
 
 ALTER TABLE support_ticket
     ADD COLUMN category          TEXT,
-    ADD COLUMN opened_by         TEXT NOT NULL DEFAULT 'CUSTOMER',
     ADD COLUMN last_activity_at  TIMESTAMPTZ;
 
 UPDATE support_ticket SET last_activity_at = coalesce(resolved_at, created_at);
@@ -32,8 +32,7 @@ ALTER TABLE support_ticket
     ALTER COLUMN last_activity_at SET NOT NULL,
     ALTER COLUMN last_activity_at SET DEFAULT now(),
     ADD CONSTRAINT support_category_ck CHECK (category IS NULL OR category IN
-        ('COINS', 'BOOSTING', 'COACHING', 'PAYMENT', 'ACCOUNT', 'TECHNICAL', 'OTHER')),
-    ADD CONSTRAINT support_opened_by_ck CHECK (opened_by IN ('CUSTOMER', 'STAFF'));
+        ('COINS', 'BOOSTING', 'COACHING', 'PAYMENT', 'ACCOUNT', 'TECHNICAL', 'OTHER'));
 
 CREATE INDEX support_ticket_activity_ix ON support_ticket (last_activity_at DESC);
 

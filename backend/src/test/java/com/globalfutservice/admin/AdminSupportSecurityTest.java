@@ -1,7 +1,6 @@
 package com.globalfutservice.admin;
 
 import com.globalfutservice.config.SecurityConfig;
-import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.identity.AccountRole;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.JwtService;
@@ -20,9 +19,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -52,10 +54,11 @@ class AdminSupportSecurityTest {
     @Autowired
     private MockMvc mvc;
 
+    @Autowired
+    private RequestMappingHandlerMapping handlers;
+
     @MockBean private NamedParameterJdbcTemplate jdbc;
     @MockBean private SupportService support;
-    @MockBean private AdminCustomerQueries customers;
-    @MockBean private AccountRepository accounts;
     @MockBean private JwtService jwtService;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -97,6 +100,18 @@ class AdminSupportSecurityTest {
                         .with(authentication(as(AccountRole.OPERATOR))))
                 .andExpect(status().isOk());
         verify(support).staffWrite(any(), eq("Checked with the partner"), eq(true), eq(1L), eq("vinay@example.test"));
+    }
+
+    @Test
+    @DisplayName("staff cannot start a ticket: we never contact a customer first")
+    void noStaffFirstContact() {
+        // Asked of the routing itself rather than of a request's status, which today is a 500
+        // for any wrong method: GlobalExceptionHandler turns the 405 into "Unhandled exception".
+        java.util.function.Predicate<RequestMethod> mapped = method -> handlers.getHandlerMethods().keySet().stream()
+                .anyMatch(info -> info.getMethodsCondition().getMethods().contains(method)
+                        && info.getPatternValues().contains(BASE + "/tickets"));
+        assertThat(mapped.test(RequestMethod.GET)).as("the list, so the lookup itself works").isTrue();
+        assertThat(mapped.test(RequestMethod.POST)).as("starting a ticket").isFalse();
     }
 
     @Test
