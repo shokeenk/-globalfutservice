@@ -138,6 +138,11 @@ const SEARCHES: Array<[prefix: string, target: SearchTarget]> = [
     label: 'Search customers by name, email, EA ID or Discord name or ID',
     path: '/admin/customers',
   }],
+  ['/admin/support', {
+    placeholder: 'Search ticket, customer, order ID…',
+    label: 'Search support tickets by reference, customer name or email, subject or order ID',
+    path: '/admin/support',
+  }],
 ]
 
 export function searchFor(pathname: string): SearchTarget {

@@ -499,6 +499,75 @@ export interface AdminListingsOverview {
   categories: AdminListingCategory[]
 }
 
+/** A ticket's topic, chosen on the contact form or by staff. Tickets from before have none. */
+export type SupportCategory = 'COINS' | 'BOOSTING' | 'COACHING' | 'PAYMENT' | 'ACCOUNT' | 'TECHNICAL' | 'OTHER'
+
+/** OPEN is with staff, ANSWERED is waiting for the customer, CLOSED is resolved. */
+export type SupportStatus = 'OPEN' | 'ANSWERED' | 'CLOSED'
+
+/**
+ * GET /api/v1/admin/support/tickets: one ticket in the list. Null fields are left out by
+ * the server, so optional ones may be missing.
+ */
+export interface AdminSupportTicket {
+  ref: string
+  /** The account's name, or the name on the order; missing for a guest who gave none. */
+  customerName?: string | null
+  email: string
+  category?: SupportCategory | null
+  subject: string
+  orderRef?: string | null
+  status: SupportStatus
+  openedBy: 'CUSTOMER' | 'STAFF'
+  messages: number
+  lastFrom?: 'CUSTOMER' | 'STAFF' | null
+  createdAt: string
+  lastActivityAt: string
+}
+
+export interface AdminSupportPage {
+  items: AdminSupportTicket[]
+  total: number
+  page: number
+  size: number
+}
+
+/** GET /api/v1/admin/support/overview: tickets per tab. */
+export interface AdminSupportOverview {
+  open: number
+  waiting: number
+  resolved: number
+}
+
+export interface AdminSupportMessage {
+  id: number
+  author: 'CUSTOMER' | 'STAFF'
+  /** A NOTE is staff-only and never reaches the customer. */
+  kind: 'MESSAGE' | 'NOTE'
+  body: string
+  /** Which member of staff wrote it; staff messages only. */
+  authorLabel?: string | null
+  at: string
+}
+
+/** GET /api/v1/admin/support/tickets/{ref}: a ticket with its whole thread, notes included. */
+export interface AdminSupportDetail {
+  ref: string
+  status: SupportStatus
+  category?: SupportCategory | null
+  subject: string
+  orderRef?: string | null
+  openedBy: 'CUSTOMER' | 'STAFF'
+  createdAt: string
+  resolvedAt?: string | null
+  customerName?: string | null
+  email: string
+  hasAccount: boolean
+  /** The customer's own private link to this ticket. */
+  customerLink: string
+  messages: AdminSupportMessage[]
+}
+
 /** GET /api/v1/admin/saved-views: one person's named filters on a page. */
 export interface SavedView {
   id: number

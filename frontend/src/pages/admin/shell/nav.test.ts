@@ -71,9 +71,11 @@ describe('searchFor', () => {
     expect(searchFor('/admin/customers').path).toBe('/admin/customers')
     expect(searchFor('/admin/services/listings/new').placeholder).toBe('Search listings…')
     expect(searchFor('/admin/payments').path).toBe('/admin/payments')
+    expect(searchFor('/admin/support').placeholder).toBe('Search ticket, customer, order ID…')
+    expect(searchFor('/admin/support').path).toBe('/admin/support')
   })
 
   it('falls back to the order search on pages with no list of their own yet', () => {
-    expect(searchFor('/admin/support').path).toBe('/admin/orders')
+    expect(searchFor('/admin/promotions').path).toBe('/admin/orders')
   })
 })
