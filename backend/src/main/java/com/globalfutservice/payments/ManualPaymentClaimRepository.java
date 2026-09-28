@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,4 +30,7 @@ public interface ManualPaymentClaimRepository extends JpaRepository<ManualPaymen
      * one an operator has to be shown, not shielded from.
      */
     List<ManualPaymentClaimEntity> findByReferenceOrderBySubmittedAtDesc(String reference);
+
+    /** Every claim on a page of orders, newest first, so the first per order is its latest. */
+    List<ManualPaymentClaimEntity> findByOrderIdInOrderBySubmittedAtDesc(Collection<Long> orderIds);
 }

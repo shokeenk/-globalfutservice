@@ -33,7 +33,9 @@ export function AdminPage({
             <p className="text-[14px] leading-snug text-admin-muted">{description}</p>
           )}
         </div>
-        {action && <div className="flex shrink-0 items-center gap-3 sm:mt-[19px]">{action}</div>}
+        {/* max-w-full: once the actions wrap under the title they may wrap among themselves,
+            rather than keeping their one-line width and pushing the page sideways on a phone. */}
+        {action && <div className="flex max-w-full shrink-0 items-center gap-3 sm:mt-[19px]">{action}</div>}
       </header>
       {children}
     </>

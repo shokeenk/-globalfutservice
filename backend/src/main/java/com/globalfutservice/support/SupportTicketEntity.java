@@ -52,6 +52,12 @@ public class SupportTicketEntity {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    /** COINS, BOOSTING, COACHING, PAYMENT, ACCOUNT, TECHNICAL or OTHER; null on old tickets. */
+    private String category;
+
+    @Column(name = "last_activity_at", nullable = false)
+    private Instant lastActivityAt = Instant.now();
+
     protected SupportTicketEntity() {
     }
 
@@ -111,5 +117,21 @@ public class SupportTicketEntity {
 
     public Instant getResolvedAt() {
         return resolvedAt;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public Instant getLastActivityAt() {
+        return lastActivityAt;
+    }
+
+    public void setLastActivityAt(Instant lastActivityAt) {
+        this.lastActivityAt = lastActivityAt;
     }
 }

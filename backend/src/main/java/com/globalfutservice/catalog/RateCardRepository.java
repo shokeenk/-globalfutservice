@@ -57,4 +57,10 @@ public interface RateCardRepository extends JpaRepository<RateCardEntity, Long> 
     List<RateCardEntity> findHistory(@Param("season") String season,
                                      @Param("sku") Sku sku,
                                      @Param("currency") Currency currency);
+
+    /** Every price one listing has had this season, in every currency, newest first. */
+    List<RateCardEntity> findBySeasonAndSkuAndVariantOrderByValidFromDesc(String season, Sku sku, String variant);
+
+    /** Whether a variant code has ever been used for this service, in any season. */
+    boolean existsBySkuAndVariant(Sku sku, String variant);
 }

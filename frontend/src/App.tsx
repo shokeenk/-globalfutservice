@@ -23,6 +23,7 @@ const Rewards = lazy(() => import('./pages/Rewards'))
 const Track = lazy(() => import('./pages/Track'))
 const Help = lazy(() => import('./pages/Help'))
 const Support = lazy(() => import('./pages/Support'))
+const SupportTicket = lazy(() => import('./pages/SupportTicket'))
 const Legal = lazy(() => import('./pages/Legal'))
 const About = lazy(() => import('./pages/About'))
 const ComingSoon = lazy(() => import('./pages/ComingSoon'))
@@ -41,6 +42,11 @@ const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
 const SendCampaign = lazy(() => import('./pages/admin/campaigns/SendCampaign'))
 const AdminCoaching = lazy(() => import('./pages/admin/AdminCoaching'))
 const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'))
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminListings = lazy(() => import('./pages/admin/AdminListings'))
+const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'))
 const AdminComingSoon = lazy(() =>
   import('./pages/admin/shell/AdminComingSoon').then((m) => ({ default: m.AdminComingSoon })))
 const AdminNotFound = lazy(() =>
@@ -72,21 +78,24 @@ export default function App() {
             </RequireStaff>
           }
         >
-          {/* Orders until there is a dashboard to land on. */}
-          <Route index element={<Navigate to="orders" replace />} />
-          <Route path="dashboard" element={<AdminComingSoon eyebrow="Dashboard" title="Dashboard" />} />
+          {/* The dashboard is the console's front page now that it exists. */}
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="orders" element={<Admin />} />
           <Route path="orders/:publicRef" element={<AdminOrder />} />
-          <Route path="customers" element={<AdminComingSoon eyebrow="Customers" title="Customers" />} />
+          <Route path="customers" element={<AdminCustomers />} />
           {/* RequireAdmin, not RequireStaff: this screen sets what customers are
               charged, and the endpoint behind it is hasRole('ADMIN'). An operator
               reaching it would see a form that 403s on save. */}
           <Route path="services/rates" element={<RequireAdmin><AdminRates /></RequireAdmin>} />
+          {/* Listings sets prices, like the rate card: admin only, as its endpoint is. */}
+          <Route path="services/listings" element={<RequireAdmin><AdminListings /></RequireAdmin>} />
+          <Route path="services/listings/new" element={<RequireAdmin><AdminListings /></RequireAdmin>} />
           {/* Operator, not admin: marking who turned up is fulfilment work. Setting
               the weekly hours on the same screen is the exception the endpoint itself
               guards — that call is ADMIN and refuses an operator. */}
           <Route path="services/coaching" element={<AdminCoaching />} />
-          <Route path="payments" element={<AdminComingSoon eyebrow="Payments" title="Payments" />} />
+          <Route path="payments" element={<AdminPayments />} />
           <Route
             path="discord"
             element={<AdminComingSoon eyebrow="Discord Integration" title="Discord Integration" />}
@@ -113,7 +122,7 @@ export default function App() {
           <Route path="promotions" element={<AdminCoupons />} />
           {/* RequireAdmin: revenue is an admin's figure, and the endpoint is ADMIN only. */}
           <Route path="analytics" element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
-          <Route path="support" element={<AdminComingSoon eyebrow="Support" title="Support" />} />
+          <Route path="support" element={<AdminSupport />} />
           <Route
             path="settings"
             element={<AdminComingSoon eyebrow="Website Settings" title="Website Settings" />}
@@ -145,6 +154,9 @@ export default function App() {
               <Route path="/unsubscribe" element={<Unsubscribe />} />
               <Route path="/help" element={<Help />} />
               <Route path="/support" element={<Support />} />
+              {/* Unguarded like /unsubscribe: a guest opens it from our email, with the
+                  ticket's own key in the link. The server decides who may read it. */}
+              <Route path="/support/tickets/:ref" element={<SupportTicket />} />
 
               <Route path="/terms" element={<Legal doc="terms" />} />
               <Route path="/privacy" element={<Legal doc="privacy" />} />

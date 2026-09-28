@@ -24,6 +24,12 @@ export interface CatalogOption {
    * beside a buy button, which is the one thing this field must not do.
    */
   successRateBps?: number | null
+  /**
+   * Whether this option carries the Best Value tag: the admin's choice on the Listings page,
+   * or without one the last tier. Missing from older servers, which is why the page falls
+   * back to the last tier itself.
+   */
+  bestValue?: boolean
 }
 
 export interface ServiceGroup {
@@ -289,6 +295,306 @@ export interface AdminStats {
   deliveredAwaitingGuarantee: number
   disputed: number
   credentialsHeld: number
+}
+
+/**
+ * GET /api/v1/admin/orders/search: one row of the Orders table.
+ *
+ * <p>`quantity` is a Java BigDecimal and arrives as a JSON number, not a string.
+ */
+export interface AdminOrderRow {
+  publicRef: string
+  status: string
+  sku: string
+  serviceLabel: string
+  variant: string | null
+  quantity: number | string
+  /** The order's platform, or for coaching the player's. */
+  platform: string | null
+  deliveryMethod: string
+  credentialsHeld: boolean
+  /** The fulfilment partner has it. */
+  withPartner: boolean
+  customerName: string | null
+  customerEmail: string | null
+  /** The latest payment claim's status, or null when none was ever made. */
+  paymentState: 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | null
+  paymentMethod: ManualPaymentMethod | null
+  paymentReference: string | null
+  eaHandle: string | null
+  totalMinor: number
+  totalFormatted: string
+  currency: string
+  createdAt: string
+  deliveredAt: string | null
+  availableTransitions: string[]
+}
+
+export interface AdminOrderPage {
+  items: AdminOrderRow[]
+  total: number
+  page: number
+  size: number
+}
+
+/** GET /api/v1/admin/orders/overview: counts only, never money. */
+export interface AdminOrderOverview {
+  counts: { sku: string; status: string; count: number }[]
+  paymentsToCheck: number
+  signInsToWork: number
+  disputed: number
+  awaitingSignIn: number
+  deliveredToday: number
+  deliveredYesterdaySoFar: number
+  credentialsHeld: number
+}
+
+/** GET /api/v1/admin/dashboard: today against yesterday at the same time. No money. */
+export interface AdminDashboard {
+  newToday: number
+  newYesterdaySoFar: number
+  /** Paid and not delivered yet. */
+  pending: number
+  /** Pending at this time yesterday, rebuilt from order history. */
+  pendingYesterday: number
+  deliveredToday: number
+  deliveredYesterdaySoFar: number
+  newest: AdminOrderRow[]
+  /** The orders whose status changed most recently, and when. */
+  recent: { order: AdminOrderRow; changedAt: string }[]
+}
+
+/** GET /api/v1/admin/dashboard/revenue: admin only. One entry per currency, rupees first. */
+export interface CurrencyRevenue {
+  currency: string
+  todayMinor: number
+  todayFormatted: string
+  yesterdayMinor: number
+  yesterdayFormatted: string
+}
+
+/**
+ * GET /api/v1/admin/customers: one customer, an account or a guest.
+ *
+ * <p>The server leaves out fields that are null, so every optional one here may simply be
+ * missing. `spent` is only ever present for an admin.
+ */
+export interface AdminCustomer {
+  /** a-<account id> or g-<first order reference>. */
+  key: string
+  kind: 'ACCOUNT' | 'GUEST'
+  /** Never empty: a guest who gave no name is "Guest". */
+  name: string
+  email: string
+  eaHandle?: string | null
+  platform?: string | null
+  orders: number
+  /** Paid and not refunded, one entry per currency, largest first. Admins only. */
+  spent?: { currency: string; minor: number; formatted: string }[] | null
+  lastOrderAt?: string | null
+  joinedAt: string
+  status: 'ACTIVE' | 'DISABLED' | 'LOCKED' | 'GUEST'
+  discordConnected: boolean
+}
+
+export interface AdminCustomerPage {
+  items: AdminCustomer[]
+  total: number
+  page: number
+  size: number
+}
+
+export interface AdminCustomerOverview {
+  total: number
+  newThisMonth: number
+  newLastMonthSoFar: number
+  withOrders: number
+  withOrdersLastMonth: number
+}
+
+export interface AdminCustomerDetail {
+  customer: AdminCustomer
+  recentOrders: { publicRef: string; sku: string; serviceLabel: string; status: string; createdAt: string }[]
+}
+
+/**
+ * GET /api/v1/admin/payments: one payment a customer reported, and what became of it.
+ * Null fields are left out by the server, so optional ones may be missing.
+ */
+export interface AdminPayment {
+  claimId: number
+  publicRef: string
+  customerName?: string | null
+  email: string
+  method: ManualPaymentMethod
+  reference: string
+  /** Which account the customer was told to pay. */
+  destination: string
+  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REFUNDED'
+  orderStatus: string
+  amountMinor: number
+  amountFormatted: string
+  currency: string
+  submittedAt: string
+  reviewedAt?: string | null
+  reviewedBy?: string | null
+  reviewNote?: string | null
+  hasProof: boolean
+  /** The record of money sent back. A Refunded payment without one predates the records. */
+  refund?: {
+    amountMinor: number; amountFormatted: string; method: ManualPaymentMethod; reference: string
+    reason: string; at: string; by?: string | null
+  } | null
+}
+
+export interface AdminPaymentPage {
+  items: AdminPayment[]
+  total: number
+  page: number
+  size: number
+}
+
+/** One status in one currency. `minor` and `formatted` are sent to admins only. */
+export interface PaymentTotal {
+  status: AdminPayment['status']
+  currency: string
+  count: number
+  minor?: number | null
+  formatted?: string | null
+}
+
+export interface AdminPaymentOverview {
+  thisMonth: PaymentTotal[]
+  lastMonthSoFar: PaymentTotal[]
+  allTime: Record<AdminPayment['status'], number>
+}
+
+/** GET /api/v1/admin/listings: one boosting tier or coaching package. */
+export interface AdminListing {
+  sku: string
+  variant: string
+  /** The server's own label; the page shows the translated title where there is one. */
+  label: string
+  sortOrder: number
+  active: boolean
+  /** Minor units per currency code: live prices, or the last ones for a hidden listing. */
+  prices: Record<string, { minor: number; formatted: string }>
+  successRateBps?: number | null
+  /** LISTING when set on this page, CONFIGURATION when it still comes from the server's settings. */
+  successRateSource?: 'LISTING' | 'CONFIGURATION' | null
+  bestValue: boolean
+}
+
+export interface AdminListingCategory {
+  sku: 'BOOST_CHAMPS' | 'BOOST_RIVALS' | 'COACHING'
+  name: string
+  listings: AdminListing[]
+  /** Boosting only: DEFAULT (the last tier), CHOSEN, or NONE. */
+  bestValueChoice?: 'DEFAULT' | 'CHOSEN' | 'NONE' | null
+}
+
+export interface AdminListingsOverview {
+  /** The currencies the site sells in, and so the prices a listing can have. */
+  currencies: string[]
+  categories: AdminListingCategory[]
+}
+
+/** A ticket's topic, chosen on the contact form or by staff. Tickets from before have none. */
+export type SupportCategory = 'COINS' | 'BOOSTING' | 'COACHING' | 'PAYMENT' | 'ACCOUNT' | 'TECHNICAL' | 'OTHER'
+
+/** OPEN is with staff, ANSWERED is waiting for the customer, CLOSED is resolved. */
+export type SupportStatus = 'OPEN' | 'ANSWERED' | 'CLOSED'
+
+/**
+ * GET /api/v1/admin/support/tickets: one ticket in the list. Null fields are left out by
+ * the server, so optional ones may be missing.
+ */
+export interface AdminSupportTicket {
+  ref: string
+  /** The account's name, or the name on the order; missing for a guest who gave none. */
+  customerName?: string | null
+  email: string
+  category?: SupportCategory | null
+  subject: string
+  orderRef?: string | null
+  status: SupportStatus
+  messages: number
+  lastFrom?: 'CUSTOMER' | 'STAFF' | null
+  createdAt: string
+  lastActivityAt: string
+}
+
+export interface AdminSupportPage {
+  items: AdminSupportTicket[]
+  total: number
+  page: number
+  size: number
+}
+
+/** GET /api/v1/admin/support/overview: tickets per tab. */
+export interface AdminSupportOverview {
+  open: number
+  waiting: number
+  resolved: number
+}
+
+export interface AdminSupportMessage {
+  id: number
+  author: 'CUSTOMER' | 'STAFF'
+  /** A NOTE is staff-only and never reaches the customer. */
+  kind: 'MESSAGE' | 'NOTE'
+  body: string
+  /** Which member of staff wrote it; staff messages only. */
+  authorLabel?: string | null
+  at: string
+}
+
+/** GET /api/v1/admin/support/tickets/{ref}: a ticket with its whole thread, notes included. */
+export interface AdminSupportDetail {
+  ref: string
+  status: SupportStatus
+  category?: SupportCategory | null
+  subject: string
+  orderRef?: string | null
+  createdAt: string
+  resolvedAt?: string | null
+  customerName?: string | null
+  email: string
+  hasAccount: boolean
+  /** The customer's own private link to this ticket. */
+  customerLink: string
+  messages: AdminSupportMessage[]
+}
+
+/** GET /api/v1/support/tickets: the signed-in customer's tickets. */
+export interface SupportTicketSummary {
+  ref: string
+  subject: string
+  category?: SupportCategory | null
+  status: SupportStatus
+  lastActivityAt: string
+}
+
+/**
+ * GET /api/v1/support/tickets/{ref}: a ticket as its customer sees it. Staff appear as
+ * SUPPORT, never by name, and notes are never sent.
+ */
+export interface SupportThread {
+  ref: string
+  subject: string
+  category?: SupportCategory | null
+  status: SupportStatus
+  orderRef?: string | null
+  createdAt: string
+  messages: { from: 'CUSTOMER' | 'SUPPORT'; body: string; at: string }[]
+}
+
+/** GET /api/v1/admin/saved-views: one person's named filters on a page. */
+export interface SavedView {
+  id: number
+  name: string
+  filters: Record<string, string>
+  createdAt: string
 }
 
 /** GET /api/v1/admin/analytics/revenue. Admin only. */

@@ -74,7 +74,9 @@ export default function Boosting() {
 
           {!loading &&
             tiers.map((tier, index) => {
-              const best = index === tiers.length - 1
+              // The server says which tier carries the tag: an admin's choice on the
+              // Listings page, else the last tier, as this page always drew it.
+              const best = tier.bestValue ?? index === tiers.length - 1
               return (
                 <Reveal key={tier.variant} delay={(index % 4) * 70}>
                   {/*

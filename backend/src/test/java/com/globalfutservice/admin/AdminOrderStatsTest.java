@@ -58,6 +58,8 @@ class AdminOrderStatsTest {
     @MockBean
     private SupplierFulfilmentService supplierFulfilment;
     @MockBean
+    private AdminOrderQueries queries;
+    @MockBean
     private JwtService jwtService;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {

@@ -2,6 +2,8 @@ package com.globalfutservice.admin;
 
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.web.CredentialDtos;
+import com.globalfutservice.domain.money.Currency;
+import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
@@ -21,8 +23,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +36,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -57,11 +67,14 @@ public class AdminOrderController {
     private final OrderMapper mapper;
     private final CredentialVaultService vaultService;
     private final SupplierFulfilmentService supplierFulfilment;
+    private final AdminOrderQueries queries;
 
     public AdminOrderController(OrderRepository orders, OrderService orderService,
                                 OrderMapper mapper, CredentialVaultService vaultService,
-                                SupplierFulfilmentService supplierFulfilment) {
+                                SupplierFulfilmentService supplierFulfilment,
+                                AdminOrderQueries queries) {
         this.supplierFulfilment = supplierFulfilment;
+        this.queries = queries;
         this.orders = orders;
         this.orderService = orderService;
         this.mapper = mapper;
@@ -114,6 +127,128 @@ public class AdminOrderController {
                 orders.countByStatus(OrderStatus.DELIVERED),
                 orders.countByStatus(OrderStatus.DISPUTED),
                 vaultService.countHeld()));
+    }
+
+    /**
+     * The Orders page's table: filtered, newest first, with the total the pagination needs.
+     *
+     * <p>A separate path from the queue above rather than a change to it. The queue's
+     * shape is also read by the order page, and that caller is left exactly as it was.
+     */
+    @GetMapping("/search")
+    @Operation(summary = "The order table, filtered and paged",
+            description = "service: COINS, BOOSTING, CHAMPS, RIVALS or COACHING. status: one "
+                    + "or more statuses, comma-separated. from/to: whole days in India time, "
+                    + "inclusive. attention: only orders that need a person now.")
+    public ResponseEntity<AdminOrderViews.Page> search(
+            @RequestParam(required = false) String service,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String platform,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "false") boolean attention,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        AdminOrderFilter filter = AdminOrderFilter.parse(service, status, platform, from, to,
+                search, attention, AdminOrderQueries.BUSINESS_ZONE);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(queries.search(filter, Math.max(0, page), Math.max(1, Math.min(size, 100))));
+    }
+
+    /** The cards and tab counts above the table. Counts only: no money. */
+    @GetMapping("/overview")
+    @Operation(summary = "Counts for the Orders page's cards and tabs")
+    public ResponseEntity<AdminOrderViews.Overview> overview() {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(queries.overview());
+    }
+
+    /** At most this many rows in one file; the filters narrow it. */
+    static final int EXPORT_CAP = 10_000;
+
+    private static final DateTimeFormatter EXPORT_TIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(AdminOrderQueries.BUSINESS_ZONE);
+
+    /**
+     * The filtered table as a CSV file.
+     *
+     * <p>ADMIN only. A file of orders with their amounts adds up to revenue, which is an
+     * admin's figure; an operator has every row on screen already.
+     */
+    @GetMapping(value = "/export", produces = "text/csv")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Download the filtered orders as CSV (admin)")
+    public ResponseEntity<byte[]> export(
+            @RequestParam(required = false) String service,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String platform,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "false") boolean attention,
+            @CurrentAccount AccountPrincipal admin) {
+        AdminOrderFilter filter = AdminOrderFilter.parse(service, status, platform, from, to,
+                search, attention, AdminOrderQueries.BUSINESS_ZONE);
+        List<AdminOrderViews.Row> rows = queries.export(filter, EXPORT_CAP);
+
+        Csv csv = new Csv().row(List.of("Reference", "Placed (IST)", "Status", "Service", "SKU",
+                "Variant", "Quantity", "Platform", "Customer name", "Email", "EA ID", "Currency",
+                "Total", "Payment method", "Payment reference", "Payment state", "Delivered (IST)"));
+        for (AdminOrderViews.Row row : rows) {
+            List<Object> cells = new ArrayList<>();
+            cells.add(row.publicRef());
+            cells.add(time(row.createdAt()));
+            cells.add(row.status());
+            cells.add(row.serviceLabel());
+            cells.add(row.sku());
+            cells.add(row.variant());
+            cells.add(row.quantity());
+            cells.add(row.platform());
+            cells.add(row.customerName());
+            cells.add(row.customerEmail());
+            cells.add(row.eaHandle());
+            cells.add(row.currency());
+            cells.add(Money.ofMinor(row.totalMinor(), Currency.valueOf(row.currency())).toMajor());
+            cells.add(row.paymentMethod());
+            cells.add(row.paymentReference());
+            cells.add(row.paymentState());
+            cells.add(time(row.deliveredAt()));
+            csv.row(cells);
+        }
+
+        log.info("Admin {} exported {} order(s){}", admin.publicId(), rows.size(),
+                rows.size() >= EXPORT_CAP ? " (capped)" : "");
+        String name = "orders-" + LocalDate.now(AdminOrderQueries.BUSINESS_ZONE) + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + name + "\"")
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .body(csv.bytes());
+    }
+
+    private static String time(Instant at) {
+        return at == null ? null : EXPORT_TIME.format(at);
+    }
+
+    /**
+     * Emails the customer the sign-in request again.
+     *
+     * <p>Operator, like every other queue action. The order's status does not change; the
+     * reminder is written to its timeline, and the customer sees that line on their page.
+     */
+    @PostMapping("/{publicRef}/credentials/remind")
+    @Operation(summary = "Remind the customer to send their EA sign-in",
+            description = "At most once every six hours per order. Refused when the order is "
+                    + "not waiting for a sign-in or already has one.")
+    public ResponseEntity<AdminOrderViews.ReminderSent> remindCredentials(
+            @PathVariable String publicRef,
+            @CurrentAccount AccountPrincipal operator) {
+        OrderEntity order = orderService.requireAny(publicRef);
+        Instant sentAt = orderService.remindCredentials(order, operator.id(), operator.publicId());
+        return ResponseEntity.ok(new AdminOrderViews.ReminderSent(sentAt));
     }
 
     @GetMapping("/{publicRef}")

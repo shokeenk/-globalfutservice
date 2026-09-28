@@ -87,7 +87,63 @@ public class EmailNotifier implements Notifier {
 
     @Override
     public void credentialsNeeded(OrderNotification n) {
-        send(n, "Action needed on order " + n.publicRef(), """
+        send(n, "Action needed on order " + n.publicRef(), credentialsRequest(n));
+    }
+
+    /**
+     * The same request again, sent by staff from the Orders page. Same words, so the
+     * customer is not left comparing two sets of instructions; only the subject says it
+     * is a reminder.
+     */
+    @Override
+    public void credentialsReminder(OrderNotification n) {
+        send(n, "Reminder: action needed on order " + n.publicRef(), credentialsRequest(n));
+    }
+
+    /**
+     * A support reply, in full, with the link to the conversation.
+     *
+     * <p>The message itself is in the email so the customer does not have to click to read
+     * it; the link is for answering, because nothing reads replies sent to this address.
+     */
+    @Override
+    public void supportReply(SupportReplyNotification n) {
+        String subject = "Re: " + n.subject() + " [" + n.ticketRef() + "]";
+        String body = """
+                %s
+
+                %s
+
+                Read the conversation and reply here:
+                %s
+
+                Please reply through that link: answers sent to this email address do not reach us.
+                We will never ask for your password or backup codes, by email or on that page.
+
+                — Global FUT Services
+                """.formatted("We've replied to your support request " + n.ticketRef() + ".", n.message(), n.link());
+        if (!isEnabled()) {
+            log.debug("Email disabled; would have sent support reply on {}", n.ticketRef());
+            return;
+        }
+        if (n.email() == null || n.email().isBlank()) {
+            log.warn("No email address on support ticket {}", n.ticketRef());
+            return;
+        }
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(props.notifications().emailFrom());
+            message.setTo(n.email());
+            message.setSubject(subject);
+            message.setText(body);
+            mailSender.send(message);
+        } catch (Exception e) {
+            log.warn("Support reply email on {} failed: {}", n.ticketRef(), e.getMessage());
+        }
+    }
+
+    private String credentialsRequest(OrderNotification n) {
+        return """
                 Your order is paid and queued. To start, we need a few details from you.
 
                 Reference: %s
@@ -100,7 +156,7 @@ public class EmailNotifier implements Notifier {
                 almost every delayed order.
 
                 — Global FUT Services
-                """.formatted(n.publicRef(), publicUrl()));
+                """.formatted(n.publicRef(), publicUrl());
     }
 
     @Override

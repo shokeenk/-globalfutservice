@@ -66,7 +66,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         sweepIfStale();
 
         String path = request.getRequestURI();
-        int limit = limitFor(path);
+        int limit = limitFor(request.getMethod(), path);
         String key = limit + ":" + path.startsWith("/api/v1/admin") + ":" + clientKey(request);
 
         Bucket bucket = buckets.computeIfAbsent(key, k -> newBucket(limit));
@@ -82,7 +82,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 {"error":"rate_limited","message":"Too many requests. Please wait a minute and try again."}""");
     }
 
-    private int limitFor(String path) {
+    private int limitFor(String method, String path) {
         AppProperties.RateLimit rl = props.rateLimit();
         if (path.startsWith("/api/v1/quotes")) {
             return rl.quotesPerMinute();
@@ -91,6 +91,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return rl.authPerMinute();
         }
         if (path.equals("/api/v1/orders")) {
+            return rl.orderCreationPerMinute();
+        }
+        // Sending a ticket or a reply is open to guests, and each one is a message staff
+        // read. Reading one's tickets is not limited beyond the default.
+        if ("POST".equals(method) && path.startsWith("/api/v1/support")) {
             return rl.orderCreationPerMinute();
         }
         return rl.defaultPerMinute();

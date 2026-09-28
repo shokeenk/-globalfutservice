@@ -165,6 +165,7 @@ function Group({ group, rail }: { group: NavGroup; rail: boolean }) {
           <li key={child.to}>
             <NavLink
               to={child.to}
+              end={child.exact}
               className={({ isActive }) => [
                 itemBase, 'h-[29px] gap-4 pl-[13px] pr-3 text-[12.5px]',
                 isActive

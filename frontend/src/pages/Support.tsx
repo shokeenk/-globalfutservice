@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../motion/Reveal'
-import { Alert, Button, Checkbox, Field, Input, Section, Textarea } from '../components/ui'
+import { Alert, Button, Checkbox, Field, Input, Section, Select, Textarea } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { BUSINESS, EMAIL_HREF } from '../content/business'
 import { useSeo } from '../lib/seo'
 import { useAuth } from '../state/AuthContext'
+import type { SupportCategory } from '../lib/types'
+
+const CATEGORIES: SupportCategory[] = ['COINS', 'BOOSTING', 'COACHING', 'PAYMENT', 'ACCOUNT', 'TECHNICAL', 'OTHER']
 
 export default function Support() {
   const t = useT()
@@ -25,6 +28,7 @@ export default function Support() {
   const { account } = useAuth()
   const [email, setEmail] = useState(account?.email ?? '')
   const [orderRef, setOrderRef] = useState('')
+  const [category, setCategory] = useState<SupportCategory | ''>('')
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [confirmed, setConfirmed] = useState(false)
@@ -41,8 +45,10 @@ export default function Support() {
         subject: subject.trim(),
         message: message.trim(),
         confirmedNoCredentials: confirmed,
+        category: category || null,
       })
       setResult({ tone: 'ok', text: response.message })
+      setCategory('')
       setSubject('')
       setMessage('')
       setConfirmed(false)
@@ -89,12 +95,24 @@ export default function Support() {
               </Field>
             </div>
 
-            <Field label={t.support.subject} required>
-              {(props) => (
-                <Input {...props} value={subject} maxLength={120}
-                       onChange={(e) => setSubject(e.target.value)} />
-              )}
-            </Field>
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+              {/* Optional: it routes the message, and a guess is worse than none. */}
+              <Field label={t.support.category} hint={t.support.categoryHint}>
+                {(props) => (
+                  <Select {...props} value={category}
+                          onChange={(e) => setCategory(e.target.value as SupportCategory | '')}>
+                    <option value="">{t.support.categoryNone}</option>
+                    {CATEGORIES.map((c) => <option key={c} value={c}>{t.support.categories[c]}</option>)}
+                  </Select>
+                )}
+              </Field>
+              <Field label={t.support.subject} required>
+                {(props) => (
+                  <Input {...props} value={subject} maxLength={120}
+                         onChange={(e) => setSubject(e.target.value)} />
+                )}
+              </Field>
+            </div>
 
             <Field label={t.support.message} required>
               {(props) => (

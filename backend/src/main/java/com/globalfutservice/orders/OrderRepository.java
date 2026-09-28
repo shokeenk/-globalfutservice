@@ -4,6 +4,7 @@ import com.globalfutservice.domain.orders.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,7 +22,8 @@ import java.util.Optional;
  * defence is to make the unauthorised row impossible to load rather than remembering to
  * check it every time.
  */
-public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
+public interface OrderRepository extends JpaRepository<OrderEntity, Long>,
+        JpaSpecificationExecutor<OrderEntity> {
 
     Optional<OrderEntity> findByPublicRefAndAccountId(String publicRef, Long accountId);
 
@@ -128,6 +130,19 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
     @Query("select count(o) from OrderEntity o where o.status = :status")
     long countByStatus(@Param("status") OrderStatus status);
 
+    /**
+     * Every order counted by service and status, in one pass.
+     *
+     * <p>The Orders page's two rows of tabs are both read from this: the service tabs sum
+     * across statuses, the status tabs sum within the chosen service. One grouped count is
+     * a handful of rows however many orders there are, where a count per tab would be
+     * thirty queries every twenty seconds.
+     *
+     * @return rows of {@code [Sku, OrderStatus, Long]}
+     */
+    @Query("select o.sku, o.status, count(o) from OrderEntity o group by o.sku, o.status")
+    List<Object[]> countBySkuAndStatus();
+
     @Query("""
             select coalesce(sum(o.totalMinor), 0) from OrderEntity o
             where o.status in (com.globalfutservice.domain.orders.OrderStatus.DELIVERED,
@@ -135,6 +150,24 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
               and o.createdAt >= :since
             """)
     long revenueSince(@Param("since") Instant since);
+
+    /**
+     * Revenue by the same rule as {@link #revenueSince}, over a window and per currency.
+     *
+     * <p>Delivered and completed orders, dated by when they were placed. Grouped by
+     * currency rather than summed across them: there are no exchange rates in the system,
+     * so a rupee total with pounds added into it would be a number nobody can use.
+     *
+     * @return rows of {@code [Currency, Long minor units]}
+     */
+    @Query("""
+            select o.currency, coalesce(sum(o.totalMinor), 0) from OrderEntity o
+            where o.status in (com.globalfutservice.domain.orders.OrderStatus.DELIVERED,
+                               com.globalfutservice.domain.orders.OrderStatus.COMPLETED)
+              and o.createdAt >= :from and o.createdAt < :before
+            group by o.currency
+            """)
+    List<Object[]> revenueByCurrency(@Param("from") Instant from, @Param("before") Instant before);
 
     /**
      * Orders the supplier is still working.

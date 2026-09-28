@@ -628,6 +628,18 @@ const es: Dictionary = {
       'formulario cifrado del propio pedido.',
     send: 'Enviar mensaje',
     sendFailed: 'No se ha podido enviar.',
+    category: '¿Sobre qué es?',
+    categoryHint: 'Opcional, pero hace que tu mensaje llegue a la persona adecuada.',
+    categoryNone: 'Elige un tema',
+    categories: {
+      COINS: 'Monedas',
+      BOOSTING: 'Boosting',
+      COACHING: 'Clases',
+      PAYMENT: 'Pago',
+      ACCOUNT: 'Cuenta',
+      TECHNICAL: 'Técnico',
+      OTHER: 'Otro',
+    },
     fasterTitle: 'Respuestas más rápidas',
     faster1: '¿El pedido no avanza? Comprueba primero que has cerrado sesión en todas partes.',
     faster2: '¿Importe incorrecto? Envíanos la referencia y una captura.',
@@ -636,6 +648,30 @@ const es: Dictionary = {
     neverBody:
       'Pedirte la contraseña por chat o correo, pedirte que pagues fuera de la web, o ' +
       'escribirte primero por un «problema» con tu pedido. Si alguien lo hace, no somos nosotros.',
+  },
+
+  supportTicket: {
+    seoTitle: 'Tu solicitud de soporte',
+    eyebrow: 'Soporte',
+    statusOpen: 'Con nuestro equipo',
+    statusAnswered: 'Esperando tu respuesta',
+    statusClosed: 'Resuelta',
+    order: 'Pedido',
+    opened: (date: string) => `Abierta el ${date}`,
+    you: 'Tú',
+    us: 'Global FUT Services',
+    replyLabel: 'Tu respuesta',
+    replyPlaceholder: 'Escribe tu respuesta…',
+    noPassword: 'No incluyas nunca tu contraseña ni tus códigos de respaldo. Nunca te los pediremos aquí.',
+    send: 'Enviar respuesta',
+    sent: 'Enviado. Te responderemos aquí y por correo.',
+    sendFailed: 'No se ha podido enviar. Inténtalo de nuevo.',
+    closedNote: 'Esta solicitud está resuelta. Si vuelves a escribir, se abrirá de nuevo.',
+    notFoundTitle: 'No hemos encontrado esa solicitud',
+    notFoundBody: 'Ábrela desde el enlace de nuestro correo o inicia sesión con la cuenta que la envió.',
+    loadFailed: 'No se ha podido cargar esta solicitud. Inténtalo de nuevo en un momento.',
+    retry: 'Reintentar',
+    newTicket: 'Enviar una nueva solicitud',
   },
 
   account: {
@@ -669,6 +705,7 @@ const es: Dictionary = {
     startOrder: 'Hacer un pedido',
     needChange: '¿Necesitas cambiar algo de un pedido en curso?',
     contactSupport: 'Contacta con soporte',
+    yourTickets: 'Solicitudes de soporte',
     withReference: 'con la referencia.',
   },
 

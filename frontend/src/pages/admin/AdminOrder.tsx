@@ -8,6 +8,7 @@ import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
 import type { Order } from '../../lib/types'
 import { statusTone } from '../Track'
+import { releaseQuestion } from './orders/confirmations'
 import { AdminPage } from './shell/AdminPage'
 
 type Revealed = {
@@ -88,12 +89,8 @@ export default function AdminOrder() {
    * has the credentials, no click here takes them back.
    */
   async function approveFulfilment() {
-    const confirmed = window.confirm(
-      `Release ${publicRef} to the fulfilment partner?\n\n`
-      + `This sends the customer's EA sign-in — email, password and backup codes — to `
-      + `FUT Transfer so they can work the order.\n\n`
-      + `It cannot be undone. Once sent, the credentials are with a third party.`,
-    )
+    // The same question the Orders table's Start Order asks, from one definition.
+    const confirmed = window.confirm(releaseQuestion(publicRef))
     if (!confirmed) return
 
     setBusy('approve')

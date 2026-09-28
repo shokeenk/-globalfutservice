@@ -58,6 +58,16 @@ public class NotificationService {
     }
 
     @Async
+    public void credentialsReminder(OrderNotification n) {
+        each(notifier -> notifier.credentialsReminder(n));
+    }
+
+    @Async
+    public void supportReply(SupportReplyNotification n) {
+        each(notifier -> notifier.supportReply(n));
+    }
+
+    @Async
     public void readyToFulfil(OrderNotification n) {
         each(notifier -> notifier.readyToFulfil(n));
     }

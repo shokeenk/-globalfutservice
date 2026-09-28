@@ -35,7 +35,8 @@ public class CatalogService {
     private final PricingPolicy policy;
 
     public CatalogService(RateCardRepository repository, AppProperties props, PricingPolicy policy,
-                          CoachingSettingsService coachingSettings) {
+                          CoachingSettingsService coachingSettings, ListingSettings listingSettings) {
+        this.listingSettings = listingSettings;
         this.repository = repository;
         this.props = props;
         this.policy = policy;
@@ -44,6 +45,9 @@ public class CatalogService {
 
     /** The session lengths the storefront shows are the admin's, not configuration's. */
     private final CoachingSettingsService coachingSettings;
+
+    /** Success rates and Best Value, as set on the Listings page. */
+    private final ListingSettings listingSettings;
 
     @Transactional(readOnly = true)
     public CatalogDtos.CatalogResponse catalogue(Currency currency) {
@@ -54,6 +58,16 @@ public class CatalogService {
         }
 
         List<RateCardEntity> rows = repository.findLiveForSeason(props.season(), currency);
+
+        // Best Value per boosting service: the admin's choice, else its last tier.
+        Map<Sku, java.util.Optional<String>> bestValue = new java.util.EnumMap<>(Sku.class);
+        Map<Sku, Map<String, ListingSettings.Stored>> stored = new java.util.EnumMap<>(Sku.class);
+        for (Sku sku : ListingService.BOOSTING) {
+            List<String> inOrder = rows.stream().filter(r -> r.getSku() == sku && r.getVariant() != null)
+                    .map(RateCardEntity::getVariant).toList();
+            bestValue.put(sku, listingSettings.resolveBestValue(sku, inOrder));
+            stored.put(sku, listingSettings.forSku(sku));
+        }
 
         Map<Sku, List<CatalogDtos.CatalogOption>> bySku = new LinkedHashMap<>();
         for (RateCardEntity row : rows) {
@@ -75,7 +89,12 @@ public class CatalogService {
                              * figure the business stands behind. Null for every variant
                              * nobody has set one for, which is most of them.
                              */
-                            props.boosting().successRateBpsFor(row.getVariant())));
+                            ListingService.BOOSTING.contains(row.getSku())
+                                    ? listingSettings.successRate(row.getVariant(),
+                                            stored.get(row.getSku()).get(row.getVariant()))
+                                    : props.boosting().successRateBpsFor(row.getVariant()),
+                            row.getVariant() != null && bestValue.getOrDefault(row.getSku(), java.util.Optional.empty())
+                                    .map(row.getVariant()::equals).orElse(false)));
         }
 
         List<CatalogDtos.ServiceGroup> services = new ArrayList<>();

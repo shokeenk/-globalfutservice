@@ -32,6 +32,27 @@ public interface Notifier {
     }
 
     /**
+     * Staff asked the customer again for their EA sign-in.
+     *
+     * <p>For the customer's own channels only. The operator channels already heard about
+     * this order from {@link #credentialsNeeded}; a reminder is not news to them, and
+     * defaulting to a no-op is what keeps it out of Discord, Telegram and WhatsApp.
+     */
+    default void credentialsReminder(OrderNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    /**
+     * Staff replied to a customer's support ticket, or opened one to them.
+     *
+     * <p>For the customer's own channels only: the operator channels are where the reply
+     * came from.
+     */
+    default void supportReply(SupportReplyNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    /**
      * A customer has reported paying outside the gateway.
      *
      * <p>The most time-critical alert here, and the only one with nothing behind it. Every
