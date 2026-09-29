@@ -947,3 +947,85 @@ export interface ApiErrorBody {
   details?: Record<string, string[]>
   traceId?: string
 }
+
+// ---- FUT Transfer, for admins -------------------------------------------------------
+
+/** What an admin can do to an order the partner has. The server decides which apply. */
+export type VendorActionName =
+  | 'SEND_SIGN_IN' | 'RESUME' | 'STOP' | 'MARK_FINISHED' | 'RETRY' | 'LINK' | 'RESOLVE'
+
+/** Everything we hold about one order at FUT Transfer. Amounts are in K, the partner's unit. */
+export interface VendorOrderDetail {
+  state: string
+  externalRef: string
+  vendorOrderId: string | null
+  amountOrderedK: number
+  vendorAmountOrderedK: number | null
+  deliveredK: number | null
+  vendorStatus: string | null
+  vendorAccountCheck: string | null
+  vendorEconomyState: string | null
+  aborted: boolean | null
+  coinsUsed: number | null
+  /** The partner's cost figure. Its currency is not confirmed. */
+  toPay: number | null
+  attempts: number
+  lastErrorCode: string | null
+  reviewReason: string | null
+  customerAction: string | null
+  missingPolls: number
+  submittedAt: string | null
+  lastPolledAt: string | null
+  lastProgressAt: string | null
+  resubmittedAt: string | null
+  updatedAt: string | null
+}
+
+/** One HTTP call to the partner. Never a body. */
+export interface VendorCall {
+  at: string
+  endpoint: string
+  domain: 'PRIMARY' | 'BACKUP'
+  httpStatus: number | null
+  result: string
+  errorCode: string | null
+  vendorOrderId: string | null
+  durationMs: number
+}
+
+/** One admin action on an order at the partner, and who did it. */
+export interface VendorActionEntry {
+  at: string
+  action: VendorActionName
+  actorLabel: string | null
+  outcome: 'DONE' | 'REFUSED' | 'UNCERTAIN'
+  code: string | null
+  detail: string | null
+}
+
+export interface VendorSection {
+  enabled: boolean
+  paused: boolean
+  vendorOrder: VendorOrderDetail | null
+  available: VendorActionName[]
+  calls: VendorCall[]
+  actions: VendorActionEntry[]
+}
+
+/** An order at the partner waiting for an admin's decision. */
+export interface VendorReviewItem {
+  externalRef: string
+  state: 'NEEDS_REVIEW' | 'PARTIALLY_DELIVERED'
+  lastErrorCode: string | null
+  reviewReason: string | null
+  amountOrderedK: number
+  deliveredK: number | null
+  updatedAt: string
+}
+
+export interface VendorControlState {
+  paused: boolean
+  pausedAt: string | null
+  reason: string | null
+  resumedAt: string | null
+}

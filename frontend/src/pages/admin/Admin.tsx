@@ -18,6 +18,7 @@ import {
 } from './orders/filters'
 import type { NextAction } from './orders/nextAction'
 import { DateRangeMenu, SavedViewsMenu } from './orders/OrderPopovers'
+import { VendorReview } from './orders/VendorReview'
 import { ORDER_COLUMNS, OrderRows, OrderTableHead } from './orders/OrderTable'
 import { AdminButton } from './ui/controls'
 import { todayInIndia } from './ui/format'
@@ -287,6 +288,9 @@ export default function Admin() {
       {showClaims && (
         <PaymentClaims highlight={claimFor} onReviewed={reload} />
       )}
+
+      {/* Admin only, like its endpoints: the orders at FUT Transfer waiting for a decision. */}
+      {isAdmin && <VendorReview onChanged={reload} />}
 
       <div className="mb-3 overflow-hidden rounded-admin-card border border-admin-line bg-white shadow-admin-card">
         <TabRow
