@@ -33,11 +33,21 @@ final class VendorTestSupport {
     private VendorTestSupport() {
     }
 
+    /**
+     * A backup domain nothing listens on. Never the vendor's real one: a test whose read
+     * fails over must not reach the real API.
+     */
+    static final String NO_BACKUP = "http://127.0.0.1:9";
+
     static AppProperties props(String baseUrl, Duration timeout) {
+        return props(baseUrl, NO_BACKUP, timeout);
+    }
+
+    static AppProperties props(String baseUrl, String backupUrl, Duration timeout) {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
                 RAW_KEY, "targetedSnipe", 1, Duration.ofSeconds(60), timeout, 3, DOCUMENTED_CODES,
-                "https://eatransfer.top", METHOD_3_0));
+                backupUrl, METHOD_3_0));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         return props;
     }

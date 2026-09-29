@@ -173,7 +173,9 @@ public class FutTransferClient {
         body.put("pauseIfBelowMinTransfer", method.pauseIfBelowMinTransfer());
         body.put("riskLevel", cfg.riskLevel());
 
-        Exchange ex = exchange("/orderAPI", body, publicRef);
+        // The primary domain only, and once. Never the backup, never again: after a timeout
+        // the order may exist, and sending it anywhere else could create a second one.
+        Exchange ex = exchange(props.futTransfer().baseUrl(), "/orderAPI", body, publicRef);
         Placement outcome = classifyPlacement(ex);
         log.info("FUT Transfer /orderAPI for {}: {}", publicRef, describe(outcome));
         return outcome;
@@ -272,7 +274,7 @@ public class FutTransferClient {
         body.put("externalID", 1);
         body.put("isMotherID", 0);
 
-        Exchange ex = exchange("/orderStatusAPI", body, publicRef);
+        Exchange ex = readExchange("/orderStatusAPI", body, publicRef);
         Lookup outcome = classifyLookup(ex, publicRef, expectedThousands);
         log.info("FUT Transfer lookup for {}: {}", publicRef,
                 outcome instanceof NotConfirmed n ? "not confirmed (" + n.code() + ")" : "found");
@@ -313,8 +315,8 @@ public class FutTransferClient {
      * {@code externalOrderID}s, which is why the returned map is keyed by {@code publicRef}
      * and the caller never has to hold their ids to poll.
      */
-    public List<SupplierStatus> statusBulk(List<String> publicRefs) {
-        if (publicRefs.isEmpty()) return List.of();
+    public Read<List<SupplierStatus>> statusBulk(List<String> publicRefs) {
+        if (publicRefs.isEmpty()) return new ReadOk<>(List.of());
         if (publicRefs.size() > BULK_LIMIT) {
             throw new IllegalArgumentException("The supplier caps a bulk query at " + BULK_LIMIT);
         }
@@ -324,15 +326,109 @@ public class FutTransferClient {
         body.put("externalID", 1);
         body.put("isMotherID", 0);
 
-        JsonNode res = post("/orderStatusBulkAPI", body, String.join(",", publicRefs));
-
-        return publicRefs.stream()
+        Exchange ex = readExchange("/orderStatusBulkAPI", body, String.join(",", publicRefs));
+        return classifyRead(ex, res -> publicRefs.stream()
                 .map(ref -> {
                     JsonNode n = res.get(ref);
-                    return n == null || n.isNull() ? null : parseStatus(ref, n);
+                    return n == null || n.isNull() || !n.isObject() ? null : parseStatus(ref, n);
                 })
                 .filter(java.util.Objects::nonNull)
-                .toList();
+                .toList());
+    }
+
+    // ------------------------------------------------------------------ reads ---
+
+    /** What a status read came to. Never thrown: a read that fails says how. */
+    public sealed interface Read<T> permits ReadOk, ReadFailed {
+    }
+
+    public record ReadOk<T>(T value) implements Read<T> {
+    }
+
+    public record ReadFailed<T>(ReadError error, String code) implements Read<T> {
+    }
+
+    public enum ReadError {
+        /** 403: our API credentials were refused. */
+        AUTH,
+        /** 429: back off. The vendor sends no Retry-After, so the caller chooses how long. */
+        RATE_LIMITED,
+        /** Timeouts, dropped connections and 5xx, still failing after the retries. */
+        TRANSIENT,
+        /** A 4xx the documentation does not explain. */
+        NEEDS_REVIEW,
+        /** A 2xx we could not read. */
+        UNKNOWN
+    }
+
+    private <T> Read<T> classifyRead(Exchange ex, java.util.function.Function<JsonNode, T> parse) {
+        if (ex.failure() != null) return new ReadFailed<>(ReadError.TRANSIENT, ex.failure());
+        int status = ex.status();
+        if (status >= 500) return new ReadFailed<>(ReadError.TRANSIENT, "HTTP_" + status);
+        if (status == 403) return new ReadFailed<>(ReadError.AUTH, "HTTP_403");
+        if (status == 429) return new ReadFailed<>(ReadError.RATE_LIMITED, "HTTP_429");
+        if (status / 100 != 2) {
+            String code = ex.errorCode(mapper);
+            return new ReadFailed<>(ReadError.NEEDS_REVIEW, code == null ? "HTTP_" + status : code);
+        }
+        JsonNode json = ex.json(mapper);
+        if (json == null || !json.isObject()) return new ReadFailed<>(ReadError.UNKNOWN, "UNPARSEABLE_RESPONSE");
+        try {
+            return new ReadOk<>(parse.apply(json));
+        } catch (RuntimeException e) {
+            return new ReadFailed<>(ReadError.UNKNOWN, "UNPARSEABLE_RESPONSE");
+        }
+    }
+
+    /**
+     * A read, retried while it fails for a reason that may pass: the primary domain, then
+     * the backup, then the primary again, with a short, jittered pause between. A 403, a
+     * 429 or any other answer ends it at once. Writes never come through here.
+     */
+    private Exchange readExchange(String path, Map<String, Object> body, String context) {
+        AppProperties.FutTransfer cfg = props.futTransfer();
+        String[] domains = {cfg.baseUrl(), cfg.backupBaseUrl(), cfg.baseUrl()};
+        Exchange ex = null;
+        for (int attempt = 0; attempt < domains.length; attempt++) {
+            if (attempt > 0) {
+                try {
+                    sleeper.sleep(readBackoff(attempt));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return Exchange.failed("INTERRUPTED");
+                }
+            }
+            ex = exchange(domains[attempt], path, body, context);
+            if (!worthRetrying(ex)) return ex;
+        }
+        return ex;
+    }
+
+    private static boolean worthRetrying(Exchange ex) {
+        if (ex.failure() != null) {
+            return !ex.failure().equals("NOT_CONFIGURED") && !ex.failure().equals("INTERRUPTED");
+        }
+        return ex.status() >= 500;
+    }
+
+    /** Half a second, then a second, each plus up to a quarter of a second of jitter. */
+    static Duration readBackoff(int attempt) {
+        long base = 500L << (attempt - 1);
+        return Duration.ofMillis(base + java.util.concurrent.ThreadLocalRandom.current().nextLong(250));
+    }
+
+    /** How the client waits between read attempts; replaced in tests. */
+    interface Sleeper {
+        void sleep(Duration d) throws InterruptedException;
+    }
+
+    private Sleeper sleeper = d -> Thread.sleep(d.toMillis());
+
+    /** For tests: waits nothing, so retries are checked without slowing the suite. */
+    FutTransferClient withoutRetryPauses() {
+        this.sleeper = d -> {
+        };
+        return this;
     }
 
     /**
@@ -353,7 +449,7 @@ public class FutTransferClient {
         }
         body.put("continue", 1);
 
-        post("/correctCredentialsAPI", body, publicRef);
+        post(props.futTransfer().baseUrl(), "/correctCredentialsAPI", body, publicRef);
         log.info("Supplier credentials replaced and order {} resumed", publicRef);
     }
 
@@ -383,7 +479,7 @@ public class FutTransferClient {
      * One request and its answer, or the name of what went wrong. Never throws, and never
      * lets a body reach a log line or an exception message.
      */
-    private Exchange exchange(String path, Map<String, Object> body, String context) {
+    private Exchange exchange(String domain, String path, Map<String, Object> body, String context) {
         AppProperties.FutTransfer cfg = props.futTransfer();
         if (!cfg.isConfigured()) {
             return Exchange.failed("NOT_CONFIGURED");
@@ -392,7 +488,7 @@ public class FutTransferClient {
         Exchange result;
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(cfg.baseUrl() + path))
+                    .uri(URI.create(domain + path))
                     .timeout(cfg.timeout())
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
@@ -414,14 +510,14 @@ public class FutTransferClient {
             result = Exchange.failed("CLIENT_ERROR");
         }
         long ms = (System.nanoTime() - started) / 1_000_000;
-        log.info("FUT Transfer {} for {}: {} in {} ms", path, context,
-                result.failure() != null ? result.failure() : "HTTP " + result.status(), ms);
+        log.info("FUT Transfer {}{} for {}: {} in {} ms", domain.equals(cfg.baseUrl()) ? "" : "(backup) ", path,
+                context, result.failure() != null ? result.failure() : "HTTP " + result.status(), ms);
         return result;
     }
 
-    /** The poller's calls, which still treat anything but a 2xx JSON answer as a failure. */
-    private JsonNode post(String path, Map<String, Object> body, String context) {
-        Exchange ex = exchange(path, body, context);
+    /** A write whose failure is reported by throwing: correcting a sign-in, for now. */
+    private JsonNode post(String domain, String path, Map<String, Object> body, String context) {
+        Exchange ex = exchange(domain, path, body, context);
         if (ex.failure() != null) {
             throw new FutTransferException("Could not reach the supplier at " + path + " (" + ex.failure() + ")");
         }

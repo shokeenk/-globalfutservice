@@ -87,13 +87,13 @@ public class SupplierPollJob {
 
     private int pollBatch(List<OrderEntity> batch) {
         List<String> refs = batch.stream().map(OrderEntity::getPublicRef).toList();
-        List<FutTransferClient.SupplierStatus> results;
-        try {
-            results = client.statusBulk(refs);
-        } catch (RuntimeException e) {
-            log.warn("Supplier status poll failed for {} order(s): {}", refs.size(), e.getMessage());
+        FutTransferClient.Read<List<FutTransferClient.SupplierStatus>> read = client.statusBulk(refs);
+        if (read instanceof FutTransferClient.ReadFailed<List<FutTransferClient.SupplierStatus>> failed) {
+            log.warn("Supplier status poll failed for {} order(s): {} ({})", refs.size(), failed.error(), failed.code());
             return 0;
         }
+        List<FutTransferClient.SupplierStatus> results =
+                ((FutTransferClient.ReadOk<List<FutTransferClient.SupplierStatus>>) read).value();
 
         Instant now = clock.instant();
         int changed = 0;
