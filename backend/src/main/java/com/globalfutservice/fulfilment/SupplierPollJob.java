@@ -12,6 +12,7 @@ import com.globalfutservice.domain.orders.SupplierStatusMapper;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.scheduling.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,15 +41,18 @@ public class SupplierPollJob {
 
     private final FutTransferClient client;
     private final VendorControl control;
+    private final SchedulerLock lock;
     private final OrderService orderService;
     private final OrderRepository orders;
     private final CredentialVaultService vault;
     private final Clock clock;
 
-    public SupplierPollJob(FutTransferClient client, VendorControl control, OrderService orderService,
-                           OrderRepository orders, CredentialVaultService vault, Clock clock) {
+    public SupplierPollJob(FutTransferClient client, VendorControl control, SchedulerLock lock,
+                           OrderService orderService, OrderRepository orders, CredentialVaultService vault,
+                           Clock clock) {
         this.client = client;
         this.control = control;
+        this.lock = lock;
         this.orderService = orderService;
         this.orders = orders;
         this.vault = vault;
@@ -68,8 +72,11 @@ public class SupplierPollJob {
         // Paused calls are the client's to refuse too; skipping here just keeps the log quiet.
         if (control.isPaused()) return;
         try {
-            int changed = pollOpenOrders();
-            if (changed > 0) log.info("Supplier poll moved {} order(s)", changed);
+            // One poller across every instance: a second one would repeat every vendor call.
+            lock.runExclusively("futtransfer-poll", () -> {
+                int changed = pollOpenOrders();
+                if (changed > 0) log.info("Supplier poll moved {} order(s)", changed);
+            });
         } catch (RuntimeException e) {
             // A scheduled method that throws is silently unscheduled by some executors.
             log.error("Supplier poll failed: {}", e.getMessage());

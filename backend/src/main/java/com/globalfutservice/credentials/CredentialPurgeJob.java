@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import com.globalfutservice.scheduling.SchedulerLock;
 
 /**
  * Enforces the retention promise on a timer.
@@ -20,15 +21,18 @@ public class CredentialPurgeJob {
     private static final Logger log = LoggerFactory.getLogger(CredentialPurgeJob.class);
 
     private final CredentialVaultService vaultService;
+    private final SchedulerLock lock;
 
-    public CredentialPurgeJob(CredentialVaultService vaultService) {
+    public CredentialPurgeJob(CredentialVaultService vaultService, SchedulerLock lock) {
         this.vaultService = vaultService;
+        this.lock = lock;
     }
 
     @Scheduled(fixedDelayString = "PT10M", initialDelayString = "PT1M")
     public void sweep() {
         try {
-            vaultService.purgeExpired();
+            // One sweeper across every instance.
+            lock.runExclusively("credential-purge", vaultService::purgeExpired);
         } catch (Exception e) {
             log.error("Credential retention sweep failed", e);
         }
