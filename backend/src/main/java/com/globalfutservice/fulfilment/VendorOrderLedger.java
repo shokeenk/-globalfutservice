@@ -192,6 +192,121 @@ public class VendorOrderLedger {
                 .addValue("state", state).addValue("code", code).addValue("reason", reason)) == 1;
     }
 
+    // ---------------------------------------------------------------- polling ---
+
+    /** A vendor order the poller asks about. */
+    public record PollRow(long orderId, String externalRef, String vendorOrderId, String state,
+                          long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls) {
+    }
+
+    private static final String POLL_COLUMNS = """
+            order_id, external_ref, vendor_order_id, state, amount_ordered_k, amount_delivered_k,
+            vendor_status, missing_polls
+            """;
+
+    private static PollRow pollRow(ResultSet rs, int i) throws SQLException {
+        return new PollRow(rs.getLong("order_id"), rs.getString("external_ref"), rs.getString("vendor_order_id"),
+                rs.getString("state"), rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
+                rs.getString("vendor_status"), rs.getInt("missing_polls"));
+    }
+
+    /** Orders the vendor is working on or waiting for the customer on, least recently asked about first. */
+    public List<PollRow> openForPolling() {
+        return jdbc.query("select " + POLL_COLUMNS + """
+                  from vendor_order where state in ('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER')
+                 order by last_polled_at asc nulls first, id
+                """, new MapSqlParameterSource(), VendorOrderLedger::pollRow);
+    }
+
+    /** Sends still SUBMITTING after the grace period: the process that sent them is gone. */
+    public List<PollRow> staleSubmitting(java.time.Duration grace) {
+        return jdbc.query("select " + POLL_COLUMNS + """
+                  from vendor_order where state = 'SUBMITTING'
+                   and updated_at < now() - make_interval(secs => :secs)
+                """, new MapSqlParameterSource("secs", grace.toSeconds()), VendorOrderLedger::pollRow);
+    }
+
+    /** Working orders with no progress at all for longer than {@code stallAfter}. */
+    public List<PollRow> stalled(java.time.Duration stallAfter) {
+        return jdbc.query("select " + POLL_COLUMNS + """
+                  from vendor_order where state in ('SUBMITTED', 'IN_DELIVERY')
+                   and last_progress_at < now() - make_interval(secs => :secs)
+                """, new MapSqlParameterSource("secs", stallAfter.toSeconds()), VendorOrderLedger::pollRow);
+    }
+
+    /**
+     * What the vendor just reported, in named fields. The stall clock restarts if anything
+     * moved, and the missing count clears because the order was mentioned.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordReport(long orderId, FutTransferClient.SupplierStatus s, boolean progressed) {
+        jdbc.update("""
+                update vendor_order
+                   set vendor_status = :status, vendor_account_check = :accountCheck,
+                       vendor_economy_state = :economyState, vendor_was_aborted = :aborted,
+                       vendor_amount_ordered_k = :ordered, amount_delivered_k = :delivered,
+                       coins_used = :coinsUsed, to_pay = :toPay, missing_polls = 0,
+                       last_polled_at = now(),
+                       last_progress_at = case when :progressed then now() else last_progress_at end,
+                       updated_at = now()
+                 where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId)
+                .addValue("status", s.status())
+                .addValue("accountCheck", s.accountCheck())
+                .addValue("economyState", s.economyState())
+                .addValue("aborted", s.aborted())
+                .addValue("ordered", s.amountOrderedK())
+                .addValue("delivered", s.amountDeliveredK())
+                .addValue("coinsUsed", s.coinsUsed())
+                .addValue("toPay", s.toPay())
+                .addValue("progressed", progressed));
+    }
+
+    /** The vendor left this order out of its answer. @return the count of misses in a row */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int recordMissing(long orderId) {
+        return jdbc.queryForObject("""
+                update vendor_order set missing_polls = missing_polls + 1, last_polled_at = now(), updated_at = now()
+                 where order_id = :orderId
+                returning missing_polls
+                """, new MapSqlParameterSource("orderId", orderId), Integer.class);
+    }
+
+    /**
+     * Moves the row to a new state if it is still in one of {@code from}. Conditional, so
+     * the poller never overwrites an admin's decision or another path's outcome.
+     *
+     * @param action what the customer is asked to do; only kept while AWAITING_CUSTOMER
+     * @return whether it moved
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean move(long orderId, java.util.Collection<String> from, String to, String reasonCode,
+                        String reason, String action) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = :to, last_error_code = coalesce(:code, last_error_code),
+                       review_reason = case when :to in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED') then :reason
+                                            else review_reason end,
+                       customer_action = case when :to = 'AWAITING_CUSTOMER' then :action else null end,
+                       last_progress_at = case when state <> :to then now() else last_progress_at end,
+                       updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId)
+                .addValue("from", from)
+                .addValue("to", to)
+                .addValue("code", reasonCode)
+                .addValue("reason", reason)
+                .addValue("action", action)) == 1;
+    }
+
+    /** What the customer is asked to do, while their order waits for them. */
+    public Optional<String> customerAction(long orderId) {
+        return jdbc.query("""
+                select customer_action from vendor_order where order_id = :orderId and state = 'AWAITING_CUSTOMER'
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> rs.getString(1))
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
     public Optional<Row> find(long orderId) {
         return jdbc.query("""
                 select order_id, external_ref, vendor_order_id, state, amount_ordered_k, attempts,

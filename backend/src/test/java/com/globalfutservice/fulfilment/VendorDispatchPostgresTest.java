@@ -79,7 +79,7 @@ class VendorDispatchPostgresTest {
         flyway("34").migrate();
         seedLegacyOrders();
         // ...then this migration, backfill and all.
-        flyway("37").migrate();
+        flyway("latest").migrate();
     }
 
     private Flyway flyway(String target) {
@@ -292,8 +292,8 @@ class VendorDispatchPostgresTest {
         assertThat(row(id).get("vendor_amount_ordered_k")).isEqualTo(500L);
 
         // No vendor id, but the poller still finds it.
-        List<Long> open = jdbc.queryForList(OrderRepository.OPEN_SUPPLIER_ORDERS_SQL.replace("o.*", "o.id"), Long.class);
-        assertThat(open).contains(id);
+        assertThat(new VendorOrderLedger(new NamedParameterJdbcTemplate(ds)).openForPolling())
+                .extracting(VendorOrderLedger.PollRow::orderId).contains(id);
         assertThat(vendor.calls("/orderAPI")).isEqualTo(1);
     }
 

@@ -348,7 +348,16 @@ gfs:
       skip-customer-check: ${GFS_FUTTRANSFER_SKIP_CUSTOMER_CHECK:0}
       sender-group: "${GFS_FUTTRANSFER_SENDER_GROUP:-1}"
       persona: "${GFS_FUTTRANSFER_PERSONA:-1}"
-    poll-interval: 60s
+    # The status poll. Its schedule lives in the database, so it holds across instances.
+    polling:
+      interval: ${GFS_FUTTRANSFER_POLL_INTERVAL:60s}
+      jitter: ${GFS_FUTTRANSFER_POLL_JITTER:10s}
+      max-backoff: ${GFS_FUTTRANSFER_MAX_BACKOFF:15m}
+      missing-polls-before-review: ${GFS_FUTTRANSFER_MISSING_POLLS_BEFORE_REVIEW:3}
+      stall-after: ${GFS_FUTTRANSFER_STALL_AFTER:6h}
+      submitting-grace: ${GFS_FUTTRANSFER_SUBMITTING_GRACE:2m}
+    # How long a sign-in is kept for an order waiting for an admin, before it is deleted.
+    review-credential-retention: ${GFS_FUTTRANSFER_REVIEW_CREDENTIAL_RETENTION:72h}
     timeout: 15s
     max-dispatch-attempts: 3
     # Ask the vendor whether the customer's EA account is in its transfer cooldown before

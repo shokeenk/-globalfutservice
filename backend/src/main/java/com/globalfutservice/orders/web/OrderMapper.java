@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.orders.OrderStatus;
-import com.globalfutservice.domain.orders.SupplierStatusMapper;
+import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
 import com.globalfutservice.config.AppProperties;
@@ -42,13 +42,17 @@ public class OrderMapper {
 
     public OrderMapper(ObjectMapper mapper, AppProperties props,
                        DiscordVerificationService verification, DiscordBotClient bot,
-                       CoachingService coachingService) {
+                       CoachingService coachingService, VendorOrderLedger vendorOrders) {
+        this.vendorOrders = vendorOrders;
         this.mapper = mapper;
         this.props = props;
         this.verification = verification;
         this.bot = bot;
         this.coachingService = coachingService;
     }
+
+    /** What a held coin order is waiting for the customer to do. */
+    private final VendorOrderLedger vendorOrders;
 
     /** For a coaching order's "1 of 6 booked". */
     private final CoachingService coachingService;
@@ -268,21 +272,14 @@ public class OrderMapper {
     }
 
     /**
-     * The supplier's stall reason, as something the customer can act on.
+     * What the customer has to do for a held order, in our own vocabulary
+     * ({@code RESUBMIT_SIGN_IN}, {@code FREE_TRANSFER_SLOTS}...), which the storefront words.
      *
-     * <p>Only meaningful while an order is actually held — the mapper returns an action
-     * for any recognised code, but showing "clear your unassigned items" beside a
-     * delivered order would be nonsense. Null means there is nothing to do.
+     * <p>Only while the order is actually held and its vendor order is waiting for the
+     * customer. Null means there is nothing for them to do.
      */
-    private static String customerActionFor(OrderEntity order) {
+    private String customerActionFor(OrderEntity order) {
         if (order.getStatus() != OrderStatus.ON_HOLD) return null;
-        SupplierStatusMapper.Outcome outcome = SupplierStatusMapper.map(
-                order.getStatus(),
-                order.getSupplierStatus(),
-                order.getSupplierAccountCheck(),
-                order.getSupplierEconomyState(),
-                false);
-        return outcome.action() == SupplierStatusMapper.CustomerAction.NONE
-                ? null : outcome.action().name();
+        return vendorOrders.customerAction(order.getId()).orElse(null);
     }
 }

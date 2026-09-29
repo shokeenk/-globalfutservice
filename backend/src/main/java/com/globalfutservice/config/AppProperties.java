@@ -435,7 +435,8 @@ public record AppProperties(
              * descriptions of this field disagree, so the first supervised order confirms it.
              */
             @DefaultValue("1") @Min(1) @Max(6) int riskLevel,
-            @DefaultValue("60s") Duration pollInterval,
+            /** How and how often the vendor is asked about orders already sent. */
+            @Valid @DefaultValue FutTransferPolling polling,
             @DefaultValue("15s") Duration timeout,
             /** Consecutive dispatch failures before an order is parked for an operator. */
             @DefaultValue("3") @Min(1) int maxDispatchAttempts,
@@ -460,7 +461,12 @@ public record AppProperties(
              * Ask the vendor whether the customer's EA account is in its transfer cooldown before
              * sending. On by default; off only if the check itself misbehaves.
              */
-            @DefaultValue("true") boolean cooldownCheck) {
+            @DefaultValue("true") boolean cooldownCheck,
+            /**
+             * How long a customer's sign-in is kept for an order waiting for an admin's
+             * review before it is deleted. Approving it again afterwards needs a new one.
+             */
+            @DefaultValue("72h") Duration reviewCredentialRetention) {
 
         public FutTransfer {
             requireSecure("gfs.fut-transfer.base-url", baseUrl);
@@ -510,6 +516,28 @@ public record AppProperties(
                 throw new IllegalArgumentException(property + " must be the site itself, with no path");
             }
         }
+    }
+
+    /**
+     * The status poll. Its schedule is kept in the database, so these hold across instances.
+     *
+     * @param interval                 the time between polls when all is well
+     * @param jitter                   up to this much is added at random, so polls do not
+     *                                 fall into step with anything else
+     * @param maxBackoff               the longest wait after rate limits or failures
+     * @param missingPollsBeforeReview reads in a row that must fail to mention an order
+     *                                 before it goes to an admin
+     * @param stallAfter               how long an order may show no progress at all
+     * @param submittingGrace          how long a send may be in flight before a lookup
+     *                                 decides it (longer than the request timeout)
+     */
+    public record FutTransferPolling(
+            @DefaultValue("60s") Duration interval,
+            @DefaultValue("10s") Duration jitter,
+            @DefaultValue("15m") Duration maxBackoff,
+            @DefaultValue("3") @Min(1) int missingPollsBeforeReview,
+            @DefaultValue("6h") Duration stallAfter,
+            @DefaultValue("2m") Duration submittingGrace) {
     }
 
     /**

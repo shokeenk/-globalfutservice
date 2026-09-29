@@ -342,42 +342,72 @@ public class FutTransferClient {
 
     // ------------------------------------------------------------------ status ---
 
-    /** One order's supplier-side state, as three separate vocabularies plus progress. */
-    public record SupplierStatus(String orderRef,
-                                 String status,
+    /**
+     * One order's report from the vendor: three vocabularies plus progress, in thousands of
+     * coins. Named fields only -- the report can also carry the customer's backup codes,
+     * and those are never read.
+     */
+    public record SupplierStatus(String status,
                                  String accountCheck,
                                  String economyState,
-                                 Long amountOrdered,
-                                 Long amountDelivered,
+                                 Long amountOrderedK,
+                                 Long amountDeliveredK,
+                                 Long coinsUsed,
+                                 BigDecimal toPay,
                                  boolean aborted) {
     }
 
     /**
-     * Reads up to twenty orders in one call, keyed by <em>our</em> reference.
+     * Up to twenty orders in one call, by the vendor's own order ids -- the form its
+     * documentation gives. The answer is keyed by those ids; an id it leaves out is simply
+     * not in the result, and the caller decides what that means.
      *
-     * <p>{@code externalID} makes the supplier interpret the ids as our
-     * {@code externalOrderID}s, which is why the returned map is keyed by {@code publicRef}
-     * and the caller never has to hold their ids to poll.
+     * @param vendorIdToRef the vendor's ids, each with our reference for the audit trail
      */
-    public Read<List<SupplierStatus>> statusBulk(List<String> publicRefs) {
-        if (publicRefs.isEmpty()) return new ReadOk<>(List.of());
-        if (publicRefs.size() > BULK_LIMIT) {
+    public Read<Map<String, SupplierStatus>> statusByVendorIds(Map<String, String> vendorIdToRef) {
+        if (vendorIdToRef.isEmpty()) return new ReadOk<>(Map.of());
+        if (vendorIdToRef.size() > BULK_LIMIT) {
             throw new IllegalArgumentException("The supplier caps a bulk query at " + BULK_LIMIT);
         }
-
+        List<String> ids = List.copyOf(vendorIdToRef.keySet());
         Map<String, Object> body = auth();
-        body.put("orderIDs", publicRefs);
+        body.put("orderIDs", ids);
+        body.put("isMotherID", 0);
+
+        Exchange ex = readExchange("/orderStatusBulkAPI", body, List.copyOf(vendorIdToRef.values()));
+        return classifyRead(ex, res -> {
+            Map<String, SupplierStatus> found = new LinkedHashMap<>();
+            for (String id : ids) {
+                JsonNode n = res.get(id);
+                if (n != null && n.isObject()) {
+                    found.put(id, parseStatus(n));
+                }
+            }
+            return found;
+        });
+    }
+
+    /**
+     * One order by our reference ({@code /orderStatusAPI}, {@code externalID: 1}), for
+     * orders the vendor has but whose id it never gave us. The answer must name our
+     * reference, or it is not about this order.
+     */
+    public Read<SupplierStatus> statusByReference(String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("orderID", publicRef);
         body.put("externalID", 1);
         body.put("isMotherID", 0);
 
-        Exchange ex = readExchange("/orderStatusBulkAPI", body, publicRefs);
-        return classifyRead(ex, res -> publicRefs.stream()
-                .map(ref -> {
-                    JsonNode n = res.get(ref);
-                    return n == null || n.isNull() || !n.isObject() ? null : parseStatus(ref, n);
-                })
-                .filter(java.util.Objects::nonNull)
-                .toList());
+        Exchange ex = readExchange("/orderStatusAPI", body, List.of(publicRef));
+        Read<JsonNode> read = classifyRead(ex, json -> json);
+        if (read instanceof ReadFailed<JsonNode> f) {
+            return new ReadFailed<>(f.error(), f.code());
+        }
+        JsonNode json = ((ReadOk<JsonNode>) read).value();
+        if (!publicRef.equals(text(json, "externalOrderID"))) {
+            return new ReadFailed<>(ReadError.NEEDS_REVIEW, "REFERENCE_NOT_ECHOED");
+        }
+        return new ReadOk<>(parseStatus(json));
     }
 
     // ------------------------------------------------------------------ reads ---
@@ -501,14 +531,15 @@ public class FutTransferClient {
 
     // ------------------------------------------------------------------ plumbing ---
 
-    private SupplierStatus parseStatus(String ref, JsonNode n) {
+    private static SupplierStatus parseStatus(JsonNode n) {
         return new SupplierStatus(
-                ref,
                 text(n, "status"),
                 text(n, "accountCheck"),
                 text(n, "economyState"),
                 asLong(n, "amountOrdered"),
                 asLong(n, "amount"),
+                asLong(n, "coinsUsed"),
+                asDecimal(n, "toPay"),
                 n.path("wasAborted").asInt(0) == 1);
     }
 

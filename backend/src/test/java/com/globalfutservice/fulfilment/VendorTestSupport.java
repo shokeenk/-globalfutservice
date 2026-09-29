@@ -26,6 +26,11 @@ final class VendorTestSupport {
     static final List<String> DOCUMENTED_CODES = List.of("MissingData", "InvalidPassword", "InvalidBA1",
             "InvalidBA2", "InvalidBA3", "InvalidBA4", "InvalidBA5", "InvalidAmount", "InvalidPlatform");
 
+    /** The poll's defaults. */
+    static final AppProperties.FutTransferPolling POLLING = new AppProperties.FutTransferPolling(
+            Duration.ofSeconds(60), Duration.ofSeconds(10), Duration.ofMinutes(15), 3, Duration.ofHours(6),
+            Duration.ofMinutes(2));
+
     /** GFS Transfer Method 3.0, exactly as the client's brief gives it. */
     static final AppProperties.FutTransferOrder METHOD_3_0 = new AppProperties.FutTransferOrder(
             300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1");
@@ -46,8 +51,8 @@ final class VendorTestSupport {
     static AppProperties props(String baseUrl, String backupUrl, Duration timeout) {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
-                RAW_KEY, "targetedSnipe", 1, Duration.ofSeconds(60), timeout, 3, DOCUMENTED_CODES,
-                backupUrl, METHOD_3_0, true));
+                RAW_KEY, "targetedSnipe", 1, POLLING, timeout, 3, DOCUMENTED_CODES,
+                backupUrl, METHOD_3_0, true, Duration.ofHours(72)));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         return props;
     }

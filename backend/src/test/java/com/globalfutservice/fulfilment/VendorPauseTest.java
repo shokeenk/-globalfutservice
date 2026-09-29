@@ -67,7 +67,7 @@ class VendorPauseTest {
     void readTrips() {
         vendor.on("/orderStatusBulkAPI", Reply.of(403, "{\"error\":\"Unauthorized\"}"));
 
-        assertThat(client.statusBulk(List.of(REF, "GFS-26-OTHER01")))
+        assertThat(client.statusByVendorIds(java.util.Map.of("vid-1", REF, "vid-2", "GFS-26-OTHER01")))
                 .isEqualTo(new FutTransferClient.ReadFailed<>(FutTransferClient.ReadError.AUTH, "HTTP_403"));
 
         verify(control).pause(eq("HTTP_403 /orderStatusBulkAPI"), isNull());
@@ -81,7 +81,7 @@ class VendorPauseTest {
 
         assertThat(client.submitOrder(REF, "Rahul", Platform.PC, 500, VendorTestSupport.signIn()))
                 .isEqualTo(new FutTransferClient.Refused(FutTransferClient.Reason.AUTH_FAILED, 0, FutTransferClient.PAUSED));
-        assertThat(client.statusBulk(List.of(REF)))
+        assertThat(client.statusByVendorIds(java.util.Map.of("vid-1", REF)))
                 .isEqualTo(new FutTransferClient.ReadFailed<>(FutTransferClient.ReadError.AUTH, FutTransferClient.PAUSED));
         assertThat(client.lookupByReference(REF, 500)).isEqualTo(new FutTransferClient.NotConfirmed(FutTransferClient.PAUSED));
         assertThat(vendor.requests()).isEmpty();

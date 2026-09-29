@@ -392,7 +392,7 @@ public class AdminOrderController {
             case FAILED_SIGN_IN -> {
                 // The sign-in was refused and deleted: the customer is asked for it again.
                 // This reason is on the order timeline, which the customer reads.
-                orderService.transition(released, OrderStatus.ON_HOLD, Actor.SYSTEM, null, "futtransfer",
+                orderService.transition(released, OrderStatus.ON_HOLD, Actor.SYSTEM, null, "GFS",
                         "Your EA sign-in was not accepted. Please enter your details again so we can start.");
             }
             default -> {

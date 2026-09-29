@@ -77,6 +77,43 @@ public class VendorControl {
         }
     }
 
+    // ------------------------------------------------------------ poll schedule ---
+
+    /** Whether the next poll is due. Held in the database, so every instance agrees. */
+    public boolean pollDue() {
+        Boolean due = jdbc.queryForObject("select next_poll_at is null or next_poll_at <= now() from vendor_control where id = 1",
+                new MapSqlParameterSource(), Boolean.class);
+        return Boolean.TRUE.equals(due);
+    }
+
+    /**
+     * Sets the next poll: after the interval if this one went well, or after a back-off that
+     * doubles with each troubled poll, up to {@code maxBackoff}. Either way, plus up to
+     * {@code jitter} at random.
+     */
+    public java.time.Duration scheduleNextPoll(boolean troubled, java.time.Duration interval,
+                                               java.time.Duration jitter, java.time.Duration maxBackoff) {
+        Integer level = jdbc.queryForObject("""
+                update vendor_control set backoff_level = case when :troubled then least(backoff_level + 1, 20) else 0 end
+                 where id = 1 returning backoff_level
+                """, new MapSqlParameterSource("troubled", troubled), Integer.class);
+        java.time.Duration delay = nextDelay(level == null ? 0 : level, interval, jitter, maxBackoff);
+        jdbc.update("update vendor_control set next_poll_at = now() + make_interval(secs => :secs) where id = 1",
+                new MapSqlParameterSource("secs", delay.toMillis() / 1000.0));
+        return delay;
+    }
+
+    static java.time.Duration nextDelay(int level, java.time.Duration interval, java.time.Duration jitter,
+                                        java.time.Duration maxBackoff) {
+        long base = interval.toMillis();
+        for (int i = 0; i < level && base < maxBackoff.toMillis(); i++) {
+            base *= 2;
+        }
+        base = Math.min(base, Math.max(interval.toMillis(), maxBackoff.toMillis()));
+        long extra = jitter.isZero() ? 0 : java.util.concurrent.ThreadLocalRandom.current().nextLong(jitter.toMillis() + 1);
+        return java.time.Duration.ofMillis(base + extra);
+    }
+
     /** @return whether calls were paused and now are not */
     public boolean resume(long adminAccountId) {
         int n = jdbc.update("""

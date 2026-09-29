@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FutTransferFailoverTest {
 
     private static final String REF = "GFS-26-FAILOVER";
+    private static final String VID = "aaaaaaaa-0000-0000-0000-00000000f0f0";
 
     private FakeFutTransfer primary;
     private FakeFutTransfer backup;
@@ -93,13 +94,14 @@ class FutTransferFailoverTest {
     @DisplayName("a status read moves to the backup on a timeout")
     void bulkReadFailsOver() {
         primary.on("/orderStatusBulkAPI", Reply.slow(1_500));
-        backup.on("/orderStatusBulkAPI", Reply.ok("{\"" + REF + "\":{\"status\":\"finished\",\"accountCheck\":\"finished\","
+        backup.on("/orderStatusBulkAPI", Reply.ok("{\"" + VID + "\":{\"status\":\"finished\",\"accountCheck\":\"finished\","
                 + "\"amountOrdered\":500,\"amount\":500}}"));
 
-        FutTransferClient.Read<List<FutTransferClient.SupplierStatus>> read = client.statusBulk(List.of(REF));
+        FutTransferClient.Read<java.util.Map<String, FutTransferClient.SupplierStatus>> read =
+                client.statusByVendorIds(java.util.Map.of(VID, REF));
 
         assertThat(read).isInstanceOf(ReadOk.class);
-        assertThat(((ReadOk<List<FutTransferClient.SupplierStatus>>) read).value()).hasSize(1);
+        assertThat(((ReadOk<java.util.Map<String, FutTransferClient.SupplierStatus>>) read).value()).containsKey(VID);
     }
 
     @Test
@@ -108,7 +110,7 @@ class FutTransferFailoverTest {
         primary.on("/orderStatusBulkAPI", Reply.of(502, "Bad Gateway"));
         backup.on("/orderStatusBulkAPI", Reply.of(502, "Bad Gateway"));
 
-        assertThat(client.statusBulk(List.of(REF))).isEqualTo(new ReadFailed<>(ReadError.TRANSIENT, "HTTP_502"));
+        assertThat(client.statusByVendorIds(java.util.Map.of(VID, REF))).isEqualTo(new ReadFailed<>(ReadError.TRANSIENT, "HTTP_502"));
         assertThat(primary.calls("/orderStatusBulkAPI")).isEqualTo(2);
         assertThat(backup.calls("/orderStatusBulkAPI")).isEqualTo(1);
     }
@@ -117,16 +119,16 @@ class FutTransferFailoverTest {
     @DisplayName("a 403, a 429, an unexplained 4xx or an unreadable answer is not retried, and is typed")
     void notRetried() {
         primary.on("/orderStatusBulkAPI", Reply.of(403, "{\"error\":\"Unauthorized\"}"));
-        assertThat(client.statusBulk(List.of(REF))).isEqualTo(new ReadFailed<>(ReadError.AUTH, "HTTP_403"));
+        assertThat(client.statusByVendorIds(java.util.Map.of(VID, REF))).isEqualTo(new ReadFailed<>(ReadError.AUTH, "HTTP_403"));
 
         primary.on("/orderStatusBulkAPI", Reply.of(429, "Too many requests"));
-        assertThat(client.statusBulk(List.of(REF))).isEqualTo(new ReadFailed<>(ReadError.RATE_LIMITED, "HTTP_429"));
+        assertThat(client.statusByVendorIds(java.util.Map.of(VID, REF))).isEqualTo(new ReadFailed<>(ReadError.RATE_LIMITED, "HTTP_429"));
 
         primary.on("/orderStatusBulkAPI", Reply.of(404, "notFound"));
-        assertThat(client.statusBulk(List.of(REF))).isEqualTo(new ReadFailed<>(ReadError.NEEDS_REVIEW, "notFound"));
+        assertThat(client.statusByVendorIds(java.util.Map.of(VID, REF))).isEqualTo(new ReadFailed<>(ReadError.NEEDS_REVIEW, "notFound"));
 
         primary.on("/orderStatusBulkAPI", Reply.ok("<html>maintenance</html>"));
-        assertThat(client.statusBulk(List.of(REF))).isEqualTo(new ReadFailed<>(ReadError.UNKNOWN, "UNPARSEABLE_RESPONSE"));
+        assertThat(client.statusByVendorIds(java.util.Map.of(VID, REF))).isEqualTo(new ReadFailed<>(ReadError.UNKNOWN, "UNPARSEABLE_RESPONSE"));
 
         assertThat(primary.calls("/orderStatusBulkAPI")).isEqualTo(4);
         assertThat(backup.requests()).isEmpty();
