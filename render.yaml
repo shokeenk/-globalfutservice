@@ -128,13 +128,17 @@ services:
         sync: false
 
       # ---- coin fulfilment --------------------------------------------------
+      # OFF here, always. The Render dashboard is the source of truth for this
+      # integration, and it is switched on there by hand, after the supervised
+      # first order. This file must never turn it on (a test checks).
+      #
       # GFS Transfer Method 3.0 runs at risk level 1, the supplier's maximum-safety
       # setting, as the client's brief requires. Never 3 or above: the supplier
       # documents those as ban risk with no refunds, which the seven-day ban
       # guarantee on this storefront cannot be squared with. The first supervised
       # order confirms level 1, since the supplier's docs describe the scale twice.
       - key: GFS_FUTTRANSFER_ENABLED
-        value: "true"
+        value: "false"
       - key: GFS_FUTTRANSFER_API_USER
         sync: false
       - key: GFS_FUTTRANSFER_API_KEY
