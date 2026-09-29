@@ -39,7 +39,7 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class VendorAdminActionsPostgresTest {
 
-    private static final VendorOrderActions.Admin ADMIN = new VendorOrderActions.Admin(null, "admin@example.test");
+    private static final VendorOrderActions.Admin ADMIN = new VendorOrderActions.Admin(null, "admin@example.test", "acc_admin");
 
     private TestDatabase db;
     private FakeFutTransfer vendor;
@@ -128,7 +128,7 @@ class VendorAdminActionsPostgresTest {
         });
         assertThat(row("GFS-26-RESUME01").get("state")).isEqualTo("SUBMITTED");
         verify(orderService).transition(any(), eq(OrderStatus.IN_PROGRESS), eq(Actor.OPERATOR), eq(null),
-                eq("admin@example.test"), anyString());
+                eq("acc_admin"), anyString());
         assertThat(audit("GFS-26-RESUME01")).singleElement().satisfies(a -> {
             assertThat(a.get("action")).isEqualTo("RESUME");
             assertThat(a.get("outcome")).isEqualTo("DONE");

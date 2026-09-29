@@ -3,6 +3,8 @@ package com.globalfutservice.admin;
 import com.globalfutservice.fulfilment.FutTransferClient;
 import com.globalfutservice.fulfilment.VendorCallLog;
 import com.globalfutservice.fulfilment.VendorOrderActions;
+import com.globalfutservice.identity.AccountEntity;
+import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
 import com.globalfutservice.security.AccountPrincipal;
@@ -35,11 +37,14 @@ public class AdminVendorOrderController {
     private final VendorOrderActions actions;
     private final OrderService orderService;
     private final VendorCallLog calls;
+    private final AccountRepository accounts;
 
-    public AdminVendorOrderController(VendorOrderActions actions, OrderService orderService, VendorCallLog calls) {
+    public AdminVendorOrderController(VendorOrderActions actions, OrderService orderService, VendorCallLog calls,
+                                      AccountRepository accounts) {
         this.actions = actions;
         this.orderService = orderService;
         this.calls = calls;
+        this.accounts = accounts;
     }
 
     /** The admin has checked the partner's dashboard and there is no order there. */
@@ -123,8 +128,16 @@ public class AdminVendorOrderController {
                 body == null ? null : body.note()));
     }
 
-    private static VendorOrderActions.Admin as(AccountPrincipal admin) {
-        return new VendorOrderActions.Admin(admin.id(), admin.email());
+    /**
+     * Who is acting, by name as well as id. The access token carries no email, so it is read
+     * from the account: an audit row that says only "account 14" is one nobody reads. The
+     * order's timeline gets the opaque public id instead, as every other transition does,
+     * because the customer's own API returns that timeline.
+     */
+    private VendorOrderActions.Admin as(AccountPrincipal admin) {
+        String label = admin.email() != null ? admin.email()
+                : accounts.findById(admin.id()).map(AccountEntity::getEmail).orElse("account " + admin.id());
+        return new VendorOrderActions.Admin(admin.id(), label, admin.publicId());
     }
 
     /**

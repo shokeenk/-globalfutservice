@@ -52,6 +52,7 @@ class AdminVendorOrderSecurityTest {
     @MockBean private VendorOrderActions actions;
     @MockBean private OrderService orderService;
     @MockBean private VendorCallLog calls;
+    @MockBean private com.globalfutservice.identity.AccountRepository accounts;
     @MockBean private JwtService jwtService;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -86,7 +87,24 @@ class AdminVendorOrderSecurityTest {
         mvc.perform(post(BASE + "send-sign-in").with(authentication(as(AccountRole.ADMIN))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("The customer has not entered new details yet."));
-        verify(actions).sendCorrectedSignIn(order, new VendorOrderActions.Admin(1L, "staff@example.test"));
+        verify(actions).sendCorrectedSignIn(order, new VendorOrderActions.Admin(1L, "staff@example.test", "acc_staff"));
+    }
+
+    @Test
+    @DisplayName("the audit names the admin from their account, since the access token carries no email")
+    void labelFromAccount() throws Exception {
+        OrderEntity order = mock(OrderEntity.class);
+        when(orderService.requireAny("GFS-26-SECURE01")).thenReturn(order);
+        com.globalfutservice.identity.AccountEntity account = mock(com.globalfutservice.identity.AccountEntity.class);
+        when(account.getEmail()).thenReturn("owner@example.test");
+        when(accounts.findById(1L)).thenReturn(java.util.Optional.of(account));
+        when(actions.resume(any(), any())).thenReturn(new VendorOrderActions.Result(VendorOrderActions.Status.DONE, "ok"));
+        AccountPrincipal fromToken = new AccountPrincipal(1L, "acc_staff", null, AccountRole.ADMIN);
+
+        mvc.perform(post(BASE + "resume").with(authentication(
+                        new UsernamePasswordAuthenticationToken(fromToken, null, fromToken.authorities()))))
+                .andExpect(status().isOk());
+        verify(actions).resume(order, new VendorOrderActions.Admin(1L, "owner@example.test", "acc_staff"));
     }
 
     @Test
@@ -98,7 +116,7 @@ class AdminVendorOrderSecurityTest {
         when(actions.allowResend(any(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(ok);
         when(actions.link(any(), any(), any())).thenReturn(ok);
         when(actions.resolve(any(), any(), any())).thenReturn(ok);
-        VendorOrderActions.Admin admin = new VendorOrderActions.Admin(1L, "staff@example.test");
+        VendorOrderActions.Admin admin = new VendorOrderActions.Admin(1L, "staff@example.test", "acc_staff");
 
         mvc.perform(post(BASE + "retry").with(authentication(as(AccountRole.ADMIN)))
                         .contentType("application/json").content("{\"confirmedAbsent\":true}"))

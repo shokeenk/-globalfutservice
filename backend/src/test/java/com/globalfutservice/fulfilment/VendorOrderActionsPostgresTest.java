@@ -50,7 +50,7 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class VendorOrderActionsPostgresTest {
 
-    private static final VendorOrderActions.Admin ADMIN = new VendorOrderActions.Admin(null, "admin@example.test");
+    private static final VendorOrderActions.Admin ADMIN = new VendorOrderActions.Admin(null, "admin@example.test", "acc_admin");
 
     private TestDatabase db;
     private FakeFutTransfer vendor;
@@ -150,8 +150,9 @@ class VendorOrderActionsPostgresTest {
             assertThat(v.get("customer_action")).isNull();
             assertThat(v.get("resubmitted_at")).isNotNull();
         });
+        // The timeline, which the customer's own API returns, is signed with the opaque id, not the email.
         verify(orderService).transition(any(), eq(OrderStatus.IN_PROGRESS), eq(Actor.OPERATOR), eq(null),
-                eq("admin@example.test"), eq(CustomerText.forState(VendorStatusMap.State.SUBMITTED, CustomerAction.NONE)));
+                eq("acc_admin"), eq(CustomerText.forState(VendorStatusMap.State.SUBMITTED, CustomerAction.NONE)));
         assertThat(audit("GFS-26-SIGNIN01")).singleElement().satisfies(a -> {
             assertThat(a.get("action")).isEqualTo("SEND_SIGN_IN");
             assertThat(a.get("outcome")).isEqualTo("DONE");

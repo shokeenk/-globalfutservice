@@ -69,8 +69,14 @@ public class VendorOrderActions {
     public record Result(Status status, String message) {
     }
 
-    /** Who is acting, for the audit trail and the order's timeline. */
-    public record Admin(Long id, String label) {
+    /**
+     * Who is acting.
+     *
+     * @param label    their email, for the vendor audit trail, which only staff read
+     * @param publicId their opaque account id, for the order's timeline -- which the
+     *                 customer's own API reads, so it never carries a staff email
+     */
+    public record Admin(Long id, String label, String publicId) {
     }
 
     /**
@@ -451,7 +457,7 @@ public class VendorOrderActions {
     private void startOrder(OrderEntity order, Admin admin) {
         OrderEntity current = orderService.requireAny(order.getPublicRef());
         if (current.getStatus() == OrderStatus.READY_FOR_DELIVERY || current.getStatus() == OrderStatus.ON_HOLD) {
-            orderService.transition(current, OrderStatus.IN_PROGRESS, Actor.OPERATOR, admin.id(), admin.label(),
+            orderService.transition(current, OrderStatus.IN_PROGRESS, Actor.OPERATOR, admin.id(), admin.publicId(),
                     CustomerText.forState(VendorStatusMap.State.SUBMITTED, CustomerAction.NONE));
         }
     }
