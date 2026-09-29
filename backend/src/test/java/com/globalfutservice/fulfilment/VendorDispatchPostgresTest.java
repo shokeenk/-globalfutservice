@@ -79,7 +79,7 @@ class VendorDispatchPostgresTest {
         flyway("34").migrate();
         seedLegacyOrders();
         // ...then this migration, backfill and all.
-        flyway("36").migrate();
+        flyway("37").migrate();
     }
 
     private Flyway flyway(String target) {
@@ -149,7 +149,8 @@ class VendorDispatchPostgresTest {
         CredentialVaultService vault = mock(CredentialVaultService.class);
         when(vault.reveal(anyLong(), any())).thenReturn(VendorTestSupport.signIn());
         VendorControl control = VendorTestSupport.running();
-        return new SupplierFulfilmentService(new FutTransferClient(props, mapper, control), control, vault,
+        return new SupplierFulfilmentService(new FutTransferClient(props, mapper, control,
+                new VendorCallLog(new NamedParameterJdbcTemplate(ds))).withoutRetryPauses(), control, vault,
                 new VendorOrderLedger(new NamedParameterJdbcTemplate(ds)), mock(NotificationService.class), props, mapper);
     }
 
@@ -206,6 +207,9 @@ class VendorDispatchPostgresTest {
         assertThat(vendor.calls("/orderAPI")).isEqualTo(1);
         assertThat(outcomes).containsOnlyOnce(Result.SUBMITTED);
         assertThat(outcomes).allMatch(r -> r == Result.SUBMITTED || r == Result.IN_FLIGHT || r == Result.ALREADY_SUBMITTED);
+        assertThat(jdbc.queryForList("select result || ' ' || coalesce(vendor_order_id, '-') from vendor_call "
+                + "where endpoint = '/orderAPI' and 'GFS-26-RACE0001' = any(order_refs)", String.class))
+                .containsExactly("ACCEPTED " + RACE_ID);
         assertThat(row(id).get("state")).isEqualTo("SUBMITTED");
         assertThat(row(id).get("vendor_order_id")).isEqualTo(RACE_ID);
         assertThat(jdbc.queryForObject("select supplier_order_id from orders where id = ?", String.class, id))
@@ -245,6 +249,34 @@ class VendorDispatchPostgresTest {
         assertThat(instance().approveAndDispatch(order(id, "GFS-26-TIMEOUT1", "0.5"), 1L).result())
                 .isEqualTo(Result.NOT_SENT);
         assertThat(vendor.calls("/orderAPI")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("every attempt is recorded: endpoint, status, typed result, our reference, timing, no body")
+    void callsRecorded() {
+        long id = insertOrder("GFS-26-AUDIT001", "TRADING_SERVICE", "READY_FOR_DELIVERY", "0.5");
+        vendor.on("/orderAPI", Reply.slow(2_000));
+        vendor.on("/orderStatusAPI", Reply.of(404, "notFound"));
+
+        instance().approveAndDispatch(order(id, "GFS-26-AUDIT001", "0.5"), 1L);
+
+        List<Map<String, Object>> calls = jdbc.queryForList("""
+                select endpoint, domain, http_status, result, error_code, duration_ms
+                  from vendor_call where 'GFS-26-AUDIT001' = any(order_refs) order by id
+                """);
+        assertThat(calls).extracting(c -> c.get("endpoint") + " " + c.get("http_status") + " " + c.get("result")
+                        + " " + c.get("error_code"))
+                .containsExactly(
+                        "/getCooldownStatus 200 OK null",
+                        "/orderAPI null UNCERTAIN TIMEOUT",
+                        "/orderStatusAPI 404 NEEDS_REVIEW notFound");
+        assertThat(calls).allMatch(c -> "PRIMARY".equals(c.get("domain")));
+        assertThat((Integer) calls.get(1).get("duration_ms")).isGreaterThanOrEqualTo(700);
+
+        // The order's timeline reads the same rows.
+        assertThat(new VendorCallLog(new NamedParameterJdbcTemplate(ds)).forOrder("GFS-26-AUDIT001"))
+                .extracting(VendorCallLog.Call::endpoint)
+                .containsExactly("/getCooldownStatus", "/orderAPI", "/orderStatusAPI");
     }
 
     @Test
@@ -348,6 +380,7 @@ class VendorDispatchPostgresTest {
             instance().approveAndDispatch(order(id, "GFS-26-SECRET01", "0.5"), 1L);
 
             String stored = String.join("\n", jdbc.queryForList("select row_to_json(v)::text from vendor_order v", String.class))
+                    + String.join("\n", jdbc.queryForList("select row_to_json(c)::text from vendor_call c", String.class))
                     + String.join("\n", jdbc.queryForList("select row_to_json(o)::text from orders o", String.class));
             for (String secret : VendorTestSupport.secrets()) {
                 assertThat(stored).as("a secret in the database").doesNotContain(secret);

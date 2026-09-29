@@ -36,7 +36,7 @@ class FutTransferFailoverTest {
         primary = new FakeFutTransfer();
         backup = new FakeFutTransfer();
         client = new FutTransferClient(VendorTestSupport.props(primary.baseUrl(), backup.baseUrl(), Duration.ofMillis(400)),
-                new ObjectMapper(), VendorTestSupport.running()).withoutRetryPauses();
+                new ObjectMapper(), VendorTestSupport.running(), VendorTestSupport.noCallLog()).withoutRetryPauses();
     }
 
     @AfterEach

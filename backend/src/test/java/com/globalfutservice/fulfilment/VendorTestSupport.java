@@ -58,8 +58,13 @@ final class VendorTestSupport {
     }
 
     static FutTransferClient client(AppProperties props, VendorControl control) {
-        return new FutTransferClient(props, new com.fasterxml.jackson.databind.ObjectMapper(), control)
+        return new FutTransferClient(props, new com.fasterxml.jackson.databind.ObjectMapper(), control, noCallLog())
                 .withoutRetryPauses();
+    }
+
+    /** An audit trail that goes nowhere, for tests that are not about it. */
+    static VendorCallLog noCallLog() {
+        return org.mockito.Mockito.mock(VendorCallLog.class);
     }
 
     static CredentialDtos.RevealedCredentials signIn() {

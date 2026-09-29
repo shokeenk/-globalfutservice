@@ -76,12 +76,14 @@ public class FutTransferClient {
     private final AppProperties props;
     private final ObjectMapper mapper;
     private final VendorControl control;
+    private final VendorCallLog calls;
     private final HttpClient http;
 
-    public FutTransferClient(AppProperties props, ObjectMapper mapper, VendorControl control) {
+    public FutTransferClient(AppProperties props, ObjectMapper mapper, VendorControl control, VendorCallLog calls) {
         this.props = props;
         this.mapper = mapper;
         this.control = control;
+        this.calls = calls;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -180,7 +182,7 @@ public class FutTransferClient {
 
         // The primary domain only, and once. Never the backup, never again: after a timeout
         // the order may exist, and sending it anywhere else could create a second one.
-        Exchange ex = exchange(props.futTransfer().baseUrl(), "/orderAPI", body, publicRef);
+        Exchange ex = exchange(Kind.PLACEMENT, props.futTransfer().baseUrl(), "/orderAPI", body, List.of(publicRef));
         Placement outcome = classifyPlacement(ex);
         log.info("FUT Transfer /orderAPI for {}: {}", publicRef, describe(outcome));
         return outcome;
@@ -283,7 +285,7 @@ public class FutTransferClient {
         body.put("externalID", 1);
         body.put("isMotherID", 0);
 
-        Exchange ex = readExchange("/orderStatusAPI", body, publicRef);
+        Exchange ex = readExchange("/orderStatusAPI", body, List.of(publicRef));
         Lookup outcome = classifyLookup(ex, publicRef, expectedThousands);
         log.info("FUT Transfer lookup for {}: {}", publicRef,
                 outcome instanceof NotConfirmed n ? "not confirmed (" + n.code() + ")" : "found");
@@ -322,7 +324,7 @@ public class FutTransferClient {
     public Read<Cooldown> cooldown(String eaAccountEmail, String publicRef) {
         Map<String, Object> body = auth();
         body.put("account", eaAccountEmail);
-        Exchange ex = readExchange("/getCooldownStatus", body, publicRef);
+        Exchange ex = readExchange("/getCooldownStatus", body, List.of(publicRef));
         Read<Cooldown> read = classifyRead(ex, json -> {
             if (!json.path("success").isBoolean() || !json.path("success").asBoolean()) {
                 throw new IllegalStateException("no success flag");
@@ -368,7 +370,7 @@ public class FutTransferClient {
         body.put("externalID", 1);
         body.put("isMotherID", 0);
 
-        Exchange ex = readExchange("/orderStatusBulkAPI", body, String.join(",", publicRefs));
+        Exchange ex = readExchange("/orderStatusBulkAPI", body, publicRefs);
         return classifyRead(ex, res -> publicRefs.stream()
                 .map(ref -> {
                     JsonNode n = res.get(ref);
@@ -428,7 +430,7 @@ public class FutTransferClient {
      * the backup, then the primary again, with a short, jittered pause between. A 403, a
      * 429 or any other answer ends it at once. Writes never come through here.
      */
-    private Exchange readExchange(String path, Map<String, Object> body, String context) {
+    private Exchange readExchange(String path, Map<String, Object> body, List<String> refs) {
         AppProperties.FutTransfer cfg = props.futTransfer();
         String[] domains = {cfg.baseUrl(), cfg.backupBaseUrl(), cfg.baseUrl()};
         Exchange ex = null;
@@ -441,7 +443,7 @@ public class FutTransferClient {
                     return Exchange.failed("INTERRUPTED");
                 }
             }
-            ex = exchange(domains[attempt], path, body, context);
+            ex = exchange(Kind.READ, domains[attempt], path, body, refs);
             if (!worthRetrying(ex)) return ex;
         }
         return ex;
@@ -493,7 +495,7 @@ public class FutTransferClient {
         }
         body.put("continue", 1);
 
-        post(props.futTransfer().baseUrl(), "/correctCredentialsAPI", body, publicRef);
+        post(props.futTransfer().baseUrl(), "/correctCredentialsAPI", body, List.of(publicRef));
         log.info("Supplier credentials replaced and order {} resumed", publicRef);
     }
 
@@ -523,7 +525,11 @@ public class FutTransferClient {
      * One request and its answer, or the name of what went wrong. Never throws, and never
      * lets a body reach a log line or an exception message.
      */
-    private Exchange exchange(String domain, String path, Map<String, Object> body, String context) {
+    /** What a call is, for the audit trail: placing an order, reading, or writing. */
+    private enum Kind { PLACEMENT, READ, WRITE }
+
+    private Exchange exchange(Kind kind, String domain, String path, Map<String, Object> body, List<String> refs) {
+        String context = String.join(",", refs);
         AppProperties.FutTransfer cfg = props.futTransfer();
         if (!cfg.isConfigured()) {
             return Exchange.failed("NOT_CONFIGURED");
@@ -558,9 +564,10 @@ public class FutTransferClient {
             result = Exchange.failed("CLIENT_ERROR");
         }
         long ms = (System.nanoTime() - started) / 1_000_000;
+        record(kind, !domain.equals(cfg.baseUrl()), path, result, refs, ms);
         if (result.status() == 403) {
             // Our credentials were refused. Everything stops until an admin resumes it.
-            control.pause("HTTP_403 " + path, context == null || context.contains(",") ? null : context);
+            control.pause("HTTP_403 " + path, refs.size() == 1 ? refs.get(0) : null);
         }
         log.info("FUT Transfer {}{} for {}: {} in {} ms", domain.equals(cfg.baseUrl()) ? "" : "(backup) ", path,
                 context, result.failure() != null ? result.failure() : "HTTP " + result.status(), ms);
@@ -568,8 +575,9 @@ public class FutTransferClient {
     }
 
     /** A write whose failure is reported by throwing: correcting a sign-in, for now. */
-    private JsonNode post(String domain, String path, Map<String, Object> body, String context) {
-        Exchange ex = exchange(domain, path, body, context);
+    private JsonNode post(String domain, String path, Map<String, Object> body, List<String> refs) {
+        String context = String.join(",", refs);
+        Exchange ex = exchange(Kind.WRITE, domain, path, body, refs);
         if (ex.failure() != null) {
             throw new FutTransferException("Could not reach the supplier at " + path + " (" + ex.failure() + ")");
         }
@@ -582,6 +590,49 @@ public class FutTransferClient {
             throw new FutTransferException("Supplier returned an unreadable answer from " + path);
         }
         return json;
+    }
+
+    /**
+     * One row in {@code vendor_call} for this attempt: what was called, what came back and
+     * what it means. Never the body. Calls that were not made -- paused, not configured --
+     * are not vendor calls and are not recorded.
+     */
+    private void record(Kind kind, boolean backup, String path, Exchange ex, List<String> refs, long ms) {
+        String result;
+        String code;
+        String vendorOrderId = null;
+        if (kind == Kind.PLACEMENT) {
+            Placement p = classifyPlacement(ex);
+            switch (p) {
+                case Accepted a -> {
+                    result = "ACCEPTED";
+                    code = null;
+                    vendorOrderId = a.vendorOrderId();
+                }
+                case Refused r -> {
+                    result = "REFUSED";
+                    code = r.code();
+                }
+                case Unrecognised u -> {
+                    result = "UNRECOGNISED";
+                    code = u.code();
+                }
+                case Uncertain u -> {
+                    result = "UNCERTAIN";
+                    code = u.code();
+                }
+            }
+        } else {
+            Read<JsonNode> r = classifyRead(ex, json -> json);
+            if (r instanceof ReadFailed<JsonNode> f) {
+                result = f.error().name();
+                code = f.code();
+            } else {
+                result = "OK";
+                code = null;
+            }
+        }
+        calls.record(path, backup, ex.failure() == null ? ex.status() : null, result, code, refs, vendorOrderId, ms);
     }
 
     /** A status and a body held only long enough to read named fields from it. */

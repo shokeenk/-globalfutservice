@@ -63,7 +63,7 @@ class SupplierReleaseTest {
         when(ledger.markSubmitted(anyLong(), anyString())).thenReturn(true);
         when(ledger.markConfirmedByLookup(anyLong(), anyString(), any())).thenReturn(true);
         control = VendorTestSupport.running();
-        service = new SupplierFulfilmentService(new FutTransferClient(props, mapper, control), control, vault, ledger,
+        service = new SupplierFulfilmentService(new FutTransferClient(props, mapper, control, VendorTestSupport.noCallLog()), control, vault, ledger,
                 notifications, props, mapper);
     }
 
