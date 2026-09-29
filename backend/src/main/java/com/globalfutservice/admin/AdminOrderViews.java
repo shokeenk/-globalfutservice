@@ -30,7 +30,7 @@ public final class AdminOrderViews {
             String deliveryMethod,
             /** A sign-in is in the vault now. */
             boolean credentialsHeld,
-            /** The fulfilment partner has this order. */
+            /** The fulfilment partner has this order, whether or not it gave us its id. */
             boolean withPartner,
             /** The name typed at checkout, else the account's display name, else null. */
             String customerName,

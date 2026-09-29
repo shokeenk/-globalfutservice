@@ -331,6 +331,20 @@ class VendorAdminActionsPostgresTest {
     }
 
     @Test
+    @DisplayName("the queue counts every order the partner has as with it, id or not; a definite refusal is not")
+    void atPartner() {
+        long neverSent = db.order("GFS-26-ATP00001", "READY_FOR_DELIVERY", "0.5");
+        at("GFS-26-ATP00002", null, "SUBMITTED", OrderStatus.READY_FOR_DELIVERY);
+        at("GFS-26-ATP00003", null, "FAILED", OrderStatus.READY_FOR_DELIVERY);
+        at("GFS-26-ATP00004", "vid-atp-4", "RESOLVED", OrderStatus.IN_PROGRESS);
+
+        assertThat(ledger.atPartner(List.of(neverSent, ids.get("GFS-26-ATP00002"), ids.get("GFS-26-ATP00003"),
+                ids.get("GFS-26-ATP00004")))).containsExactlyInAnyOrder(ids.get("GFS-26-ATP00002"),
+                ids.get("GFS-26-ATP00004"));
+        assertThat(ledger.atPartner(List.of())).isEmpty();
+    }
+
+    @Test
     @DisplayName("what the page offers follows each action's own rules")
     void available() {
         assertThat(VendorOrderActions.available(null, OrderStatus.READY_FOR_DELIVERY)).isEmpty();

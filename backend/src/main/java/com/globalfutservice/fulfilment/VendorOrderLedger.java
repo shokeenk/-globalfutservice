@@ -472,6 +472,18 @@ public class VendorOrderLedger {
         return t == null ? null : t.toInstant();
     }
 
+    /**
+     * Of these orders, the ones the partner has, or may have: a vendor order in any state
+     * but FAILED, whether or not it gave us its id. Approving one of them sends nothing --
+     * the release refuses it -- so the queue does not offer to.
+     */
+    public java.util.Set<Long> atPartner(java.util.Collection<Long> orderIds) {
+        if (orderIds.isEmpty()) return java.util.Set.of();
+        return new java.util.HashSet<>(jdbc.queryForList("""
+                select order_id from vendor_order where order_id in (:ids) and state <> 'FAILED'
+                """, new MapSqlParameterSource("ids", orderIds), Long.class));
+    }
+
     /** What the customer is asked to do, while their order waits for them. */
     public Optional<String> customerAction(long orderId) {
         return jdbc.query("""

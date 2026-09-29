@@ -5,6 +5,7 @@ import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.orders.OrderEntity;
@@ -38,9 +39,9 @@ import java.util.Set;
  * <p>Reads only. Every action the page offers goes through the endpoints that already
  * existed — transition, release, verify — so nothing here can change an order.
  *
- * <p>A page of rows costs four queries whatever its size: the orders, then their claims,
- * their vault rows and their accounts in one query each. The old queue asked the vault
- * once per row.
+ * <p>A page of rows costs five queries whatever its size: the orders, then their claims,
+ * their vault rows, their accounts and their orders at the fulfilment partner in one query
+ * each. The old queue asked the vault once per row.
  */
 @Service
 public class AdminOrderQueries {
@@ -55,15 +56,17 @@ public class AdminOrderQueries {
     private final ManualPaymentClaimRepository claims;
     private final CredentialVaultRepository vault;
     private final AccountRepository accounts;
+    private final VendorOrderLedger vendorOrders;
     private final Clock clock;
 
     public AdminOrderQueries(OrderRepository orders, ManualPaymentClaimRepository claims,
                              CredentialVaultRepository vault, AccountRepository accounts,
-                             Clock clock) {
+                             VendorOrderLedger vendorOrders, Clock clock) {
         this.orders = orders;
         this.claims = claims;
         this.vault = vault;
         this.accounts = accounts;
+        this.vendorOrders = vendorOrders;
         this.clock = clock;
     }
 
@@ -155,6 +158,9 @@ public class AdminOrderQueries {
         }
 
         Set<Long> held = new HashSet<>(vault.heldAmong(ids));
+        // With the partner even without its id: a lookup can confirm an order the partner
+        // never numbered for us, and releasing that one again would be refused.
+        Set<Long> atPartner = vendorOrders.atPartner(ids);
 
         Set<Long> accountIds = new HashSet<>();
         for (OrderEntity order : page) {
@@ -187,7 +193,7 @@ public class AdminOrderQueries {
                     platformOf(order),
                     order.getDeliveryMethod().name(),
                     held.contains(order.getId()),
-                    order.getSupplierOrderId() != null,
+                    order.getSupplierOrderId() != null || atPartner.contains(order.getId()),
                     name,
                     order.getGuestEmail(),
                     claim == null ? null : claim.getStatus().name(),
