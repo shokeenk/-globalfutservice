@@ -154,3 +154,50 @@ when no variant is given -- the length of the credit the booking will spend -- o
 picker pass it.
 
 **Evidence:** read in the code.
+
+---
+
+## 7. Approve's timeline entry does not say which admin released the order
+
+**Where:** `AdminOrderController.approveFulfilment` (`main` and the FUT Transfer branch)
+
+Releasing a coin order to the fulfilment partner moves it to In progress with
+`operator.email()` as the timeline's actor label. The principal built from an access
+token never carries an email -- `JwtService.verify` passes `null` for it, because the
+token holds only the account id, public id and role -- so the label is always empty. The
+admin order page shows the row as "OPERATOR" with no name. The account id is still stored
+on the row, so who did it can be recovered from the database.
+
+Every other transition labels the row with the account's public id instead
+(`operator.publicId()`), which is also the right fix here: the customer's own order API
+returns timeline labels as written, so a staff email must never be one.
+
+**When it bites:** every approval, from the order page or the Orders table.
+
+**What it would take:** pass `operator.publicId()` instead of `operator.email()`.
+
+**Evidence:** observed locally. An order approved during the FUT Transfer end-to-end
+run has `actor_label` null on its IN_PROGRESS row, alongside `actor_id` set.
+
+---
+
+## 8. One Service Listings test fails now and then under a full run
+
+**Where:** `frontend/src/pages/admin/AdminListings.test.tsx`, "edits a tier: title
+read-only, prices per currency, and asks before changing a price"
+
+It failed once during a full run of the admin tests: `waitFor(() => expect(api.put)
+.toHaveBeenCalledWith(...))` gave up with "expected spy to be called with arguments"
+after the test had run for 1.3 s. Run on its own it passed three times in a row, and the
+next full run of every frontend test passed. `waitFor` stops retrying after one second by
+default, so a save that has not happened within a second of the click on a loaded machine
+fails the test -- the likeliest reading, not an established one.
+
+**When it bites:** a full `vitest run` on a loaded machine; it would show as a flaky CI
+failure.
+
+**What it would take:** confirm by reproducing under load, then give that `waitFor` a
+longer `timeout`, or wait on what the save renders (`findByRole('status')`, which the
+test already checks afterwards) before asserting on the call.
+
+**Evidence:** observed once; the cause is read, not confirmed.
