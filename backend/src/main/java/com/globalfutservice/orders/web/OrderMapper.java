@@ -109,9 +109,24 @@ public class OrderMapper {
         return new OrderDtos.DiscordAccessDto("VERIFY", null, invite, command);
     }
 
+    /** The order as its customer reads it: the timeline in {@link #toCustomerEventDto} form. */
     public OrderDtos.OrderResponse toResponse(OrderEntity order,
                                               List<OrderEventEntity> timeline,
                                               boolean credentialsSubmitted) {
+        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toCustomerEventDto);
+    }
+
+    /** The order as staff read it: every timeline row exactly as it was written. */
+    public OrderDtos.OrderResponse toAdminResponse(OrderEntity order,
+                                                   List<OrderEventEntity> timeline,
+                                                   boolean credentialsSubmitted) {
+        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toEventDto);
+    }
+
+    private OrderDtos.OrderResponse toResponse(OrderEntity order,
+                                               List<OrderEventEntity> timeline,
+                                               boolean credentialsSubmitted,
+                                               java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events) {
         boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
         return new OrderDtos.OrderResponse(
                 order.getPublicRef(),
@@ -139,7 +154,7 @@ public class OrderMapper {
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
                 order.getGuaranteeExpiresAt(),
-                timeline.stream().map(OrderMapper::toEventDto).toList(),
+                timeline.stream().map(events).toList(),
                 coaching ? order.getEaPlatformHandle() : null,
                 coaching && order.getCoachingPlatform() != null ? order.getCoachingPlatform().name() : null,
                 coaching ? order.getCoachingRank() : null,
@@ -203,6 +218,31 @@ public class OrderMapper {
         }
         return out;
     }
+
+    /**
+     * A timeline row as the customer reads it.
+     *
+     * <p>Whatever part of the system wrote it, a system row is signed "GFS": the customer
+     * has no use for which subsystem it was, and one of them was named after the
+     * fulfilment partner. Rows the first supplier poll wrote also carried the partner's own
+     * codes in their reason ("Supplier reports interrupted — NEW_BACKUP_CODES"); those keep
+     * the status change and lose the reason.
+     */
+    static OrderDtos.OrderEventDto toCustomerEventDto(OrderEventEntity event) {
+        OrderDtos.OrderEventDto raw = toEventDto(event);
+        if (event.getActorType() != com.globalfutservice.domain.orders.Actor.SYSTEM) {
+            return raw;
+        }
+        String reason = raw.reason() != null && raw.reason().startsWith(LEGACY_SUPPLIER_REASON) ? null : raw.reason();
+        return new OrderDtos.OrderEventDto(raw.fromStatus(), raw.toStatus(), raw.actorType(), SYSTEM_LABEL, reason,
+                raw.at());
+    }
+
+    /** What every system row on a customer's timeline is signed. */
+    static final String SYSTEM_LABEL = "GFS";
+
+    /** How the first supplier poll began every reason it wrote. */
+    private static final String LEGACY_SUPPLIER_REASON = "Supplier reports ";
 
     private static OrderDtos.OrderEventDto toEventDto(OrderEventEntity event) {
         return new OrderDtos.OrderEventDto(

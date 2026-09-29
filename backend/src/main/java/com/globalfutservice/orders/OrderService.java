@@ -130,7 +130,8 @@ public class OrderService {
                     "This order has already been placed. Check your email for the reference.");
         }
 
-        DeliveryMethod delivery = resolveDeliveryMethod(request.deliveryMethod(), quote);
+        DeliveryMethod delivery = resolveDeliveryMethod(request.deliveryMethod(), quote.sku(),
+                props.fulfilment().defaultDeliveryMethod());
 
         String breakdownJson;
         try {
@@ -274,16 +275,20 @@ public class OrderService {
      * default everywhere else — the method that needs no credentials should be the one
      * that happens unless somebody deliberately chooses otherwise.
      */
-    private DeliveryMethod resolveDeliveryMethod(String requested, Quote quote) {
+    static DeliveryMethod resolveDeliveryMethod(String requested, Sku sku, DeliveryMethod fallback) {
         // Scheduled SKUs are not negotiable: a coaching order is fulfilled by a calendar,
         // and letting a request body talk one into COMFORT_TRADE would put it in the
         // trading queue and, worse, mark it as an order that may hold an EA sign-in.
-        if (quote.sku().isScheduled()) {
+        if (sku.isScheduled()) {
             return DeliveryMethod.SCHEDULED_SESSION;
         }
-        DeliveryMethod fallback = props.fulfilment().defaultDeliveryMethod();
+        // Coins have one method, GFS Transfer Method 3.0, which the checkout shows rather
+        // than offers. What it is sent as is decided here, whatever a request body says.
+        if (sku == Sku.TRADING_SERVICE) {
+            return fallback;
+        }
         if (requested == null || requested.isBlank()) {
-            return quote.sku().mayRequireCredentials() ? fallback : DeliveryMethod.PLAYER_AUCTION;
+            return sku.mayRequireCredentials() ? fallback : DeliveryMethod.PLAYER_AUCTION;
         }
         DeliveryMethod method;
         try {
@@ -291,7 +296,7 @@ public class OrderService {
         } catch (IllegalArgumentException e) {
             throw new ApiExceptions.BadRequestException("Unknown delivery method.");
         }
-        if (method.requiresCredentials() && !quote.sku().mayRequireCredentials()) {
+        if (method.requiresCredentials() && !sku.mayRequireCredentials()) {
             return DeliveryMethod.PLAYER_AUCTION;
         }
         return method;

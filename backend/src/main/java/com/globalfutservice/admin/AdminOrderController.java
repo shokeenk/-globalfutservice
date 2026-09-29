@@ -258,7 +258,7 @@ public class AdminOrderController {
         OrderEntity order = orderService.requireAny(publicRef);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(mapper.toResponse(order, orderService.timeline(order.getId()),
+                .body(mapper.toAdminResponse(order, orderService.timeline(order.getId()),
                         vaultService.status(order.getId()).present()));
     }
 
@@ -292,7 +292,7 @@ public class AdminOrderController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(mapper.toResponse(updated, orderService.timeline(updated.getId()),
+                .body(mapper.toAdminResponse(updated, orderService.timeline(updated.getId()),
                         vaultService.status(updated.getId()).present()));
     }
 
@@ -387,7 +387,7 @@ public class AdminOrderController {
                                 : "Released to fulfilment partner as " + release.vendorOrderId());
                 return ResponseEntity.ok()
                         .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                        .body(mapper.toResponse(moved, orderService.timeline(moved.getId()), true));
+                        .body(mapper.toAdminResponse(moved, orderService.timeline(moved.getId()), true));
             }
             case FAILED_SIGN_IN -> {
                 // The sign-in was refused and deleted: the customer is asked for it again.
@@ -403,7 +403,7 @@ public class AdminOrderController {
                 || release.result() == SupplierFulfilmentService.Result.ALREADY_SUBMITTED) {
             return ResponseEntity.ok()
                     .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                    .body(mapper.toResponse(released, orderService.timeline(released.getId()), true));
+                    .body(mapper.toAdminResponse(released, orderService.timeline(released.getId()), true));
         }
         // Safe to show: written by us, never containing the sign-in.
         throw new FutTransferClient.FutTransferException(release.message());
