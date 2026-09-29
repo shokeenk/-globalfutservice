@@ -47,6 +47,7 @@ class SupplierReleaseTest {
     private VendorOrderLedger ledger;
     private CredentialVaultService vault;
     private NotificationService notifications;
+    private VendorControl control;
     private SupplierFulfilmentService service;
 
     @BeforeEach
@@ -61,7 +62,8 @@ class SupplierReleaseTest {
         when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.Claimed(1));
         when(ledger.markSubmitted(anyLong(), anyString())).thenReturn(true);
         when(ledger.markConfirmedByLookup(anyLong(), anyString(), any())).thenReturn(true);
-        service = new SupplierFulfilmentService(new FutTransferClient(props, mapper), vault, ledger,
+        control = VendorTestSupport.running();
+        service = new SupplierFulfilmentService(new FutTransferClient(props, mapper, control), control, vault, ledger,
                 notifications, props, mapper);
     }
 

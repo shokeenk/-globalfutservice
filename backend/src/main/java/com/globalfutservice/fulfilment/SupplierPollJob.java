@@ -39,14 +39,16 @@ public class SupplierPollJob {
     private static final Logger log = LoggerFactory.getLogger(SupplierPollJob.class);
 
     private final FutTransferClient client;
+    private final VendorControl control;
     private final OrderService orderService;
     private final OrderRepository orders;
     private final CredentialVaultService vault;
     private final Clock clock;
 
-    public SupplierPollJob(FutTransferClient client, OrderService orderService,
+    public SupplierPollJob(FutTransferClient client, VendorControl control, OrderService orderService,
                            OrderRepository orders, CredentialVaultService vault, Clock clock) {
         this.client = client;
+        this.control = control;
         this.orderService = orderService;
         this.orders = orders;
         this.vault = vault;
@@ -63,6 +65,8 @@ public class SupplierPollJob {
     @Scheduled(fixedDelayString = "PT1M", initialDelayString = "PT1M")
     public void poll() {
         if (!client.isEnabled()) return;
+        // Paused calls are the client's to refuse too; skipping here just keeps the log quiet.
+        if (control.isPaused()) return;
         try {
             int changed = pollOpenOrders();
             if (changed > 0) log.info("Supplier poll moved {} order(s)", changed);

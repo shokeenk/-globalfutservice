@@ -38,16 +38,18 @@ public class SupplierFulfilmentService {
     private static final Logger log = LoggerFactory.getLogger(SupplierFulfilmentService.class);
 
     private final FutTransferClient client;
+    private final VendorControl control;
     private final CredentialVaultService vault;
     private final VendorOrderLedger ledger;
     private final NotificationService notifications;
     private final AppProperties props;
     private final ObjectMapper mapper;
 
-    public SupplierFulfilmentService(FutTransferClient client, CredentialVaultService vault,
+    public SupplierFulfilmentService(FutTransferClient client, VendorControl control, CredentialVaultService vault,
                                      VendorOrderLedger ledger, NotificationService notifications,
                                      AppProperties props, ObjectMapper mapper) {
         this.client = client;
+        this.control = control;
         this.vault = vault;
         this.ledger = ledger;
         this.notifications = notifications;
@@ -101,6 +103,11 @@ public class SupplierFulfilmentService {
         }
         if (!order.getSku().isCoinTransfer()) {
             return new Release(Result.NOT_SENT, null, "The fulfilment partner only takes coin orders.");
+        }
+        if (control.isPaused()) {
+            return new Release(Result.NOT_SENT, null, "Every call to the fulfilment partner is paused, because it "
+                    + "refused our API credentials. Fix GFS_FUTTRANSFER_API_USER and GFS_FUTTRANSFER_API_KEY, then "
+                    + "resume calls. Nothing was sent.");
         }
 
         long amountK;

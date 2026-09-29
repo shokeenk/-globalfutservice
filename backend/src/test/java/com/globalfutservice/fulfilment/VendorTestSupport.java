@@ -52,6 +52,16 @@ final class VendorTestSupport {
         return props;
     }
 
+    /** Calls not paused, and a record of any pause a test trips. */
+    static VendorControl running() {
+        return org.mockito.Mockito.mock(VendorControl.class);
+    }
+
+    static FutTransferClient client(AppProperties props, VendorControl control) {
+        return new FutTransferClient(props, new com.fasterxml.jackson.databind.ObjectMapper(), control)
+                .withoutRetryPauses();
+    }
+
     static CredentialDtos.RevealedCredentials signIn() {
         return new CredentialDtos.RevealedCredentials("customer@example.test", PASSWORD, BACKUP_CODES, null, null);
     }

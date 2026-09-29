@@ -79,7 +79,7 @@ class VendorDispatchPostgresTest {
         flyway("34").migrate();
         seedLegacyOrders();
         // ...then this migration, backfill and all.
-        flyway("35").migrate();
+        flyway("36").migrate();
     }
 
     private Flyway flyway(String target) {
@@ -148,7 +148,8 @@ class VendorDispatchPostgresTest {
         AppProperties props = VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(800));
         CredentialVaultService vault = mock(CredentialVaultService.class);
         when(vault.reveal(anyLong(), any())).thenReturn(VendorTestSupport.signIn());
-        return new SupplierFulfilmentService(new FutTransferClient(props, mapper), vault,
+        VendorControl control = VendorTestSupport.running();
+        return new SupplierFulfilmentService(new FutTransferClient(props, mapper, control), control, vault,
                 new VendorOrderLedger(new NamedParameterJdbcTemplate(ds)), mock(NotificationService.class), props, mapper);
     }
 
@@ -307,6 +308,33 @@ class VendorDispatchPostgresTest {
         assertThat(instance().approveAndDispatch(order(second, "GFS-26-DUPE0002", "1.0"), 1L).result())
                 .isEqualTo(Result.NEEDS_REVIEW);
         assertThat(row(second).get("last_error_code")).isEqualTo("VENDOR_ID_CONFLICT");
+    }
+
+    @Test
+    @DisplayName("the pause trips once, alerts once, holds in the database, and records who resumed it")
+    void pauseSwitch() {
+        NotificationService notifications = mock(NotificationService.class);
+        AppProperties props = VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(800));
+        VendorControl control = new VendorControl(new NamedParameterJdbcTemplate(ds), notifications, props);
+        Long admin = jdbc.queryForObject("""
+                insert into account (public_id, email, email_normalised, password_hash, role)
+                values ('acc_pause_admin', 'admin@example.test', 'admin@example.test', 'x', 'ADMIN') returning id
+                """, Long.class);
+
+        assertThat(control.isPaused()).isFalse();
+        control.pause("HTTP_403 /orderAPI", "GFS-26-PAUSE001");
+        control.pause("HTTP_403 /orderStatusBulkAPI", null);
+        assertThat(control.isPaused()).isTrue();
+        assertThat(control.state().orElseThrow().reason()).isEqualTo("HTTP_403 /orderAPI");
+        org.mockito.Mockito.verify(notifications, org.mockito.Mockito.times(1)).fulfilmentAlert(any());
+
+        // Another instance sees the same switch.
+        assertThat(new VendorControl(new NamedParameterJdbcTemplate(ds), notifications, props).isPaused()).isTrue();
+
+        assertThat(control.resume(admin)).isTrue();
+        assertThat(control.isPaused()).isFalse();
+        assertThat(jdbc.queryForObject("select resumed_by from vendor_control", Long.class)).isEqualTo(admin);
+        assertThat(control.resume(admin)).isFalse();
     }
 
     @Test

@@ -57,6 +57,9 @@ public class FutTransferClient {
 
     private static final Logger log = LoggerFactory.getLogger(FutTransferClient.class);
 
+    /** The failure code for a call that was not made because calls are paused. */
+    static final String PAUSED = "VENDOR_PAUSED";
+
     /** The supplier caps a bulk status query at twenty ids. */
     static final int BULK_LIMIT = 20;
 
@@ -72,11 +75,13 @@ public class FutTransferClient {
 
     private final AppProperties props;
     private final ObjectMapper mapper;
+    private final VendorControl control;
     private final HttpClient http;
 
-    public FutTransferClient(AppProperties props, ObjectMapper mapper) {
+    public FutTransferClient(AppProperties props, ObjectMapper mapper, VendorControl control) {
         this.props = props;
         this.mapper = mapper;
+        this.control = control;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -182,6 +187,10 @@ public class FutTransferClient {
     }
 
     private Placement classifyPlacement(Exchange ex) {
+        if (PAUSED.equals(ex.failure())) {
+            // Stopped before anything was sent: a definite "not created".
+            return new Refused(Reason.AUTH_FAILED, 0, PAUSED);
+        }
         if (ex.failure() != null) {
             return new Uncertain(ex.failure());
         }
@@ -362,6 +371,7 @@ public class FutTransferClient {
     }
 
     private <T> Read<T> classifyRead(Exchange ex, java.util.function.Function<JsonNode, T> parse) {
+        if (PAUSED.equals(ex.failure())) return new ReadFailed<>(ReadError.AUTH, PAUSED);
         if (ex.failure() != null) return new ReadFailed<>(ReadError.TRANSIENT, ex.failure());
         int status = ex.status();
         if (status >= 500) return new ReadFailed<>(ReadError.TRANSIENT, "HTTP_" + status);
@@ -406,7 +416,8 @@ public class FutTransferClient {
 
     private static boolean worthRetrying(Exchange ex) {
         if (ex.failure() != null) {
-            return !ex.failure().equals("NOT_CONFIGURED") && !ex.failure().equals("INTERRUPTED");
+            return !ex.failure().equals("NOT_CONFIGURED") && !ex.failure().equals("INTERRUPTED")
+                    && !ex.failure().equals(PAUSED);
         }
         return ex.status() >= 500;
     }
@@ -484,6 +495,10 @@ public class FutTransferClient {
         if (!cfg.isConfigured()) {
             return Exchange.failed("NOT_CONFIGURED");
         }
+        if (control.isPaused()) {
+            log.warn("FUT Transfer {} for {}: not sent, calls are paused", path, context);
+            return Exchange.failed(PAUSED);
+        }
         long started = System.nanoTime();
         Exchange result;
         try {
@@ -510,6 +525,10 @@ public class FutTransferClient {
             result = Exchange.failed("CLIENT_ERROR");
         }
         long ms = (System.nanoTime() - started) / 1_000_000;
+        if (result.status() == 403) {
+            // Our credentials were refused. Everything stops until an admin resumes it.
+            control.pause("HTTP_403 " + path, context == null || context.contains(",") ? null : context);
+        }
         log.info("FUT Transfer {}{} for {}: {} in {} ms", domain.equals(cfg.baseUrl()) ? "" : "(backup) ", path,
                 context, result.failure() != null ? result.failure() : "HTTP " + result.status(), ms);
         return result;

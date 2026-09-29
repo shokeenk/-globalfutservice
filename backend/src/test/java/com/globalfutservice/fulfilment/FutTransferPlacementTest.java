@@ -39,7 +39,7 @@ class FutTransferPlacementTest {
     void setUp() throws Exception {
         vendor = new FakeFutTransfer();
         client = new FutTransferClient(VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(800)),
-                new ObjectMapper());
+                new ObjectMapper(), VendorTestSupport.running()).withoutRetryPauses();
     }
 
     @AfterEach
@@ -133,7 +133,7 @@ class FutTransferPlacementTest {
         int port = Integer.parseInt(vendor.baseUrl().substring(vendor.baseUrl().lastIndexOf(':') + 1));
         vendor.close();
         FutTransferClient offline = new FutTransferClient(
-                VendorTestSupport.props("http://127.0.0.1:" + port, Duration.ofMillis(800)), new ObjectMapper());
+                VendorTestSupport.props("http://127.0.0.1:" + port, Duration.ofMillis(800)), new ObjectMapper(), VendorTestSupport.running());
         assertThat(offline.submitOrder(REF, "Rahul", Platform.PC, 500, VendorTestSupport.signIn()))
                 .isEqualTo(new Uncertain("CONNECTION_ERROR"));
     }
