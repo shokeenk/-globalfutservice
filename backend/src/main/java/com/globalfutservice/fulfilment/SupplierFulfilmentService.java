@@ -1,29 +1,36 @@
 package com.globalfutservice.fulfilment;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.web.CredentialDtos;
+import com.globalfutservice.notify.FulfilmentAlert;
+import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.orders.OrderEntity;
-import com.globalfutservice.orders.OrderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Automated coin fulfilment: hands the order to the supplier, then keeps our copy of its
- * state in step with theirs.
+ * Sends a paid coin order to FUT Transfer, exactly once.
  *
  * <p><b>Disabled is a supported state, not a broken one.</b> With no supplier configured
  * the order stops at {@code READY_FOR_DELIVERY} for an operator to work by hand, which is
- * exactly how this system behaved before the integration existed. That is what makes the
- * integration safe to switch off in an incident rather than something the storefront
- * depends on to function.
+ * how this system behaved before the integration existed.
  *
- * <p><b>Credentials are read, used, and dropped.</b> The plaintext exists as a local in
- * {@link #dispatch}, for the length of one HTTP call. It is never held on a field, never
- * put on the order, and never logged — see {@link FutTransferClient} for why the client
- * refuses to log a body at all.
+ * <p><b>Exactly once.</b> {@link VendorOrderLedger#claim} commits a SUBMITTING row before
+ * the vendor is called, and only the caller that wrote it may call. When the answer is
+ * lost -- a timeout, a dropped connection, a 5xx, an unreadable reply -- the order may
+ * exist at the vendor, so it is looked up by our reference and never placed again. If the
+ * lookup cannot prove the order exists, an admin decides. The only outcome that allows a
+ * second placement is a definite, documented refusal, and even then only when an admin
+ * approves again.
+ *
+ * <p><b>Credentials are read, used, and dropped.</b> The plaintext exists as a local for
+ * the length of one HTTP call. It is never held on a field, never put on the order, and
+ * never logged. When the vendor refuses the sign-in itself it is deleted, because it is
+ * no use to anyone and the customer is asked for a new one.
  */
 @Service
 public class SupplierFulfilmentService {
@@ -32,277 +39,210 @@ public class SupplierFulfilmentService {
 
     private final FutTransferClient client;
     private final CredentialVaultService vault;
-    private final OrderRepository orders;
+    private final VendorOrderLedger ledger;
+    private final NotificationService notifications;
     private final AppProperties props;
-    private final SupplierDispatchClaim claim;
+    private final ObjectMapper mapper;
 
     public SupplierFulfilmentService(FutTransferClient client, CredentialVaultService vault,
-                                     OrderRepository orders, AppProperties props,
-                                     SupplierDispatchClaim claim) {
+                                     VendorOrderLedger ledger, NotificationService notifications,
+                                     AppProperties props, ObjectMapper mapper) {
         this.client = client;
         this.vault = vault;
-        this.orders = orders;
+        this.ledger = ledger;
+        this.notifications = notifications;
         this.props = props;
-        this.claim = claim;
+        this.mapper = mapper;
     }
 
     public boolean isEnabled() {
         return client.isEnabled();
     }
 
-    // ---------------------------------------------------------------- dispatch ---
-
-    /**
-     * Sends a paid, credentialed coin order to the supplier.
-     *
-     * <p>Called after the vault has sealed the sign-in. Failure here is deliberately
-     * <b>not</b> propagated to the customer: they have paid and submitted everything asked
-     * of them, and the order is fulfillable by hand. A supplier outage becomes an operator
-     * alert, not a red error on a checkout the customer cannot retry.
-     *
-     * @return the supplier's order id, or null if it was not dispatched
-     */
-    @Transactional
-    public String dispatch(OrderEntity order) {
-        return dispatch(order, false);
+    /** What releasing an order came to. */
+    public enum Result {
+        /** The vendor has the order: it told us its id, or a lookup confirmed it. */
+        SUBMITTED,
+        /** It already had it before this click. Nothing was sent. */
+        ALREADY_SUBMITTED,
+        /** Another request is sending it right now. Nothing was sent. */
+        IN_FLIGHT,
+        /** The vendor refused the customer's sign-in. It has been deleted. */
+        FAILED_SIGN_IN,
+        /** The vendor refused the order and created nothing. */
+        FAILED,
+        /** We cannot prove whether the vendor created it. An admin decides. */
+        NEEDS_REVIEW,
+        /** Not sent, for a reason on our side: see the message. */
+        NOT_SENT
     }
 
     /**
-     * @param propagate whether the partner's own reason should reach the caller.
-     *                  False on the customer path, where a supplier outage must not
-     *                  become a red error on a checkout nobody can retry; true on the
-     *                  operator path, where somebody is waiting to be told what happened
-     *                  and "check the application log" is not an answer they can act on
-     *                  from the screen they are looking at.
+     * @param vendorOrderId the vendor's id, when known; a lookup confirms an order without one
+     * @param message       for the admin who clicked; never contains a credential
      */
-    private String dispatch(OrderEntity order, boolean propagate) {
-        if (!isEnabled()) {
-            log.debug("Supplier disabled — order {} stays for manual fulfilment",
-                    order.getPublicRef());
-            return null;
-        }
-        if (!order.getSku().isCoinTransfer()) {
-            /*
-             * Keyed off the SKU, not the delivery method. The delivery-method test
-             * excluded coaching and let boosting through -- and boosting reaches this
-             * point looking dispatchable, because it holds a sign-in like a coin order
-             * does. See Sku#isCoinTransfer for what the partner's API actually takes.
-             */
-            log.debug("Order {} is not a coin order — nothing to dispatch",
-                    order.getPublicRef());
-            return null;
-        }
-        if (order.getSupplierOrderId() != null) {
-            return order.getSupplierOrderId(); // already sent; never submit twice
-        }
-
-        /*
-         * Take the dispatch before calling anybody.
-         *
-         * The read above is not a guard on its own. Two operator clicks land while the
-         * first submission is still in flight, both see a null supplier id, and the
-         * customer's coins are sent twice -- the window is as wide as the HTTP call
-         * below. The claim is one conditional UPDATE, committed in its own transaction,
-         * so the database decides which caller proceeds. It also carries the attempt
-         * ceiling, which is why the separate parked check above it is gone: both
-         * conditions now live in the statement that enforces them.
-         */
-        if (!claim.tryClaim(order.getId(), props.futTransfer().maxDispatchAttempts())) {
-            return notClaimed(order, propagate);
-        }
-
-        try {
-            /*
-             * Opened as the system rather than an operator. The vault counts and attributes
-             * every read because staff are in its threat model, and an automated dispatch
-             * that borrowed a human's id would put a name against a read they did not make.
-             */
-            CredentialDtos.RevealedCredentials creds = vault.reveal(order.getId(), null);
-
-            long amountK = FutTransferClient.toThousands(order.getQuantity());
-            FutTransferClient.Accepted accepted = client.submitOrder(
-                    order.getPublicRef(),
-                    customerNameFor(order),
-                    order.getPlatform(),
-                    amountK,
-                    creds);
-
-            /*
-             * Written through a targeted update, not by saving this entity: the claim
-             * changed the row outside this persistence context, so the copy in hand has
-             * a stale attempt count and a stale version. Callers that need the moved
-             * order re-read it -- AdminOrderController already does, and says why.
-             */
-            claim.recordAccepted(order.getId(), accepted.supplierOrderId());
-            order.setSupplierOrderId(accepted.supplierOrderId());
-            log.info("Order {} dispatched to supplier as {}",
-                    order.getPublicRef(), accepted.supplierOrderId());
-            return accepted.supplierOrderId();
-
-        } catch (RuntimeException e) {
-            /*
-             * Message only. Whatever went wrong, the request that caused it held an EA
-             * password, and a stack trace from a serialisation layer can quote the value
-             * that failed.
-             */
-            log.error("Could not dispatch order {} to supplier: {}",
-                    order.getPublicRef(), e.getMessage());
-
-            if (propagate) {
-                /*
-                 * The partner's own words, not a summary of them. The message is built
-                 * from the status, the path and the order reference -- never a request
-                 * body -- so it is safe to put in front of an operator, and it is the
-                 * difference between "try again later" and "our API account is out of
-                 * balance".
-                 */
-                String reason = e.getMessage() == null ? "no reason given" : e.getMessage().trim();
-                if (!reason.endsWith(".")) {
-                    reason = reason + ".";
-                }
-                throw new FutTransferClient.FutTransferException(
-                        "The fulfilment partner refused order " + order.getPublicRef()
-                                + ": " + reason + " The order has not moved.");
-            }
-
-            /*
-             * Re-read to decide whether that was the last attempt. The count in hand is
-             * the one from before the claim, which incremented the column rather than
-             * this copy of it -- trusting it here would under-report by one and the order
-             * would go quiet without ever saying it had been parked.
-             */
-            int attempts = orders.findById(order.getId())
-                    .map(OrderEntity::getSupplierDispatchAttempts)
-                    .orElse(order.getSupplierDispatchAttempts());
-            if (attempts >= props.futTransfer().maxDispatchAttempts()) {
-                /*
-                 * Parked rather than retried forever. The order is paid and has a sign-in
-                 * on file, so it is fulfillable by hand — and an unbounded retry against a
-                 * supplier that is rejecting our credentials is how an API account gets
-                 * locked. It stays at READY_FOR_DELIVERY, which is the queue an operator
-                 * already works.
-                 */
-                log.error("Order {} parked after {} failed dispatches — needs manual fulfilment",
-                        order.getPublicRef(), attempts);
-            }
-            return null;
-        }
+    public record Release(Result result, String vendorOrderId, String message) {
     }
-
-    /**
-     * The claim went to somebody else, or there was nothing left to claim.
-     *
-     * <p>Three different situations arrive here and an operator needs them told apart.
-     * The row is re-read because the winning caller may have finished in the meantime,
-     * and "it is already done" is a success, not a failure.
-     */
-    private String notClaimed(OrderEntity order, boolean propagate) {
-        OrderEntity fresh = orders.findById(order.getId()).orElse(order);
-
-        if (fresh.getSupplierOrderId() != null) {
-            // Somebody else got there and finished. The caller's intent is satisfied.
-            log.info("Order {} was released concurrently as {}",
-                    fresh.getPublicRef(), fresh.getSupplierOrderId());
-            return fresh.getSupplierOrderId();
-        }
-
-        if (fresh.getSupplierDispatchAttempts() >= props.futTransfer().maxDispatchAttempts()) {
-            /*
-             * Parked rather than retried forever. The order is paid and has a sign-in on
-             * file, so it is fulfillable by hand -- and an unbounded retry against a
-             * supplier rejecting our credentials is how an API account gets locked. It
-             * stays at READY_FOR_DELIVERY, the queue an operator already works.
-             */
-            log.error("Order {} parked after {} dispatch attempts — needs manual fulfilment",
-                    fresh.getPublicRef(), fresh.getSupplierDispatchAttempts());
-            if (propagate) {
-                throw new FutTransferClient.FutTransferException(
-                        "Order " + fresh.getPublicRef() + " has already been tried "
-                                + fresh.getSupplierDispatchAttempts() + " times and will not "
-                                + "be sent again automatically. Work it by hand and mark it "
-                                + "in progress.");
-            }
-            return null;
-        }
-
-        /*
-         * Still in flight elsewhere -- almost always the same operator clicking twice on
-         * a button that takes a few seconds. Saying "refused" would be a lie, and saying
-         * nothing would invite a third click.
-         */
-        log.info("Order {} is already being released by another request",
-                fresh.getPublicRef());
-        if (propagate) {
-            throw new FutTransferClient.FutTransferException(
-                    "Order " + fresh.getPublicRef() + " is already being released. Give it "
-                            + "a moment and refresh — it has not been sent twice.");
-        }
-        return null;
-    }
-
-    // --------------------------------------------------------------- approval ---
 
     /**
      * An operator has reviewed the order and released it to the supplier.
      *
-     * <p><b>Why this exists next to {@link #dispatch} rather than replacing it.</b> They
-     * differ in one way that matters: dispatch swallows failure because it used to run
-     * inside a customer's checkout, where a supplier outage must not become a red error
-     * on a form they cannot retry. This runs inside an operator's click, where the
-     * opposite is true -- somebody is looking at the screen, waiting to be told whether it
-     * worked, and a silent failure would leave them believing an order was released when
-     * it was not.
-     *
-     * <p>The order is <b>not</b> moved by this method. It returns what happened and lets
-     * the caller decide, so the status change and the audit entry are written in the same
-     * place, attributed to the operator who made them.
-     *
-     * <p>Credentials: read inside {@link #dispatch}, used for one HTTP call, and dropped.
-     * Nothing here ever sees the plaintext, and nothing writes it anywhere.
-     *
-     * @throws FutTransferException with the supplier's own reason when the submission is
-     *                              refused -- safe to show an operator, and never
-     *                              containing the sign-in
+     * <p>The order itself is not moved here. What happened is returned, and the caller
+     * moves the order and writes the timeline entry, attributed to whoever clicked.
+     * Nothing is thrown for a vendor outcome, so the vault's record of the read commits
+     * whatever the vendor said.
      */
     @Transactional
-    public String approveAndDispatch(OrderEntity order, Long operatorAccountId) {
+    public Release approveAndDispatch(OrderEntity order, Long operatorAccountId) {
+        String ref = order.getPublicRef();
         if (!isEnabled()) {
-            throw new FutTransferClient.FutTransferException(
-                    "The fulfilment partner is not configured, so this order cannot be "
-                            + "released automatically. Work it by hand and mark it in progress.");
+            return new Release(Result.NOT_SENT, null, "The fulfilment partner is not configured, so "
+                    + "this order cannot be released automatically. Work it by hand and mark it in progress.");
         }
-        if (order.getSupplierOrderId() != null) {
-            // Not an error worth failing on -- the operator's intent is already satisfied,
-            // and re-submitting the same sign-in is the one thing to avoid.
-            log.info("Order {} was already with the supplier as {}; approval is a no-op",
-                    order.getPublicRef(), order.getSupplierOrderId());
-            return order.getSupplierOrderId();
+        if (!order.getSku().isCoinTransfer()) {
+            return new Release(Result.NOT_SENT, null, "The fulfilment partner only takes coin orders.");
+        }
+
+        long amountK;
+        try {
+            amountK = VendorAmount.forOrder(order, mapper);
+        } catch (VendorAmount.InvalidAmountException e) {
+            return new Release(Result.NOT_SENT, null, e.getMessage() + " Nothing was sent.");
+        }
+
+        VendorOrderLedger.Claim claim = ledger.claim(order.getId(), ref, amountK,
+                props.futTransfer().maxDispatchAttempts());
+        if (claim instanceof VendorOrderLedger.NotClaimed nc) {
+            return notClaimed(ref, nc.current());
         }
 
         /*
-         * The audit line, written before the call rather than after.
-         *
-         * If the process dies mid-request there has still been an outbound submission of
-         * this customer's sign-in, and the record of who authorised it must not depend on
-         * that request coming back. Order reference, operator id, outcome -- never a
-         * credential value; see the class note and FutTransferClient.
+         * The audit line, written after the claim and before the call. If the process dies
+         * mid-request there has still been an outbound submission of this customer's
+         * sign-in, and the record of who authorised it must not depend on the request
+         * coming back. Order reference and operator only -- never a credential.
          */
-        log.info("FULFILMENT APPROVAL: operator {} is releasing order {} to the supplier",
-                operatorAccountId, order.getPublicRef());
+        log.info("FULFILMENT APPROVAL: operator {} is releasing order {} ({}K) to the supplier",
+                operatorAccountId, ref, amountK);
 
-        String supplierId = dispatch(order, true);
-        if (supplierId == null) {
-            // dispatch() logged the cause and swallowed it. The operator gets told plainly
-            // rather than being left to infer failure from an unchanged screen.
-            throw new FutTransferClient.FutTransferException(
-                    "The fulfilment partner did not accept order " + order.getPublicRef()
-                            + ". The order has not moved and no further attempt was made. "
-                            + "Check the application log for the partner's reason.");
+        CredentialDtos.RevealedCredentials creds;
+        try {
+            // As the system, not the operator: the vault attributes every read.
+            creds = vault.reveal(order.getId(), null);
+        } catch (RuntimeException e) {
+            ledger.markFailed(order.getId(), "NO_SIGN_IN", "There was no sign-in to send.");
+            return new Release(Result.NOT_SENT, null,
+                    "This order has no sign-in on file, so there is nothing to send. Nothing was sent.");
         }
 
-        log.info("FULFILMENT APPROVED: order {} released by operator {} as supplier order {}",
-                order.getPublicRef(), operatorAccountId, supplierId);
-        return supplierId;
+        FutTransferClient.Placement placement = client.submitOrder(
+                ref, customerNameFor(order), order.getPlatform(), amountK, creds);
+
+        return switch (placement) {
+            case FutTransferClient.Accepted a -> accepted(order, a.vendorOrderId());
+            case FutTransferClient.Uncertain u -> resolveUncertain(order, amountK, u.code());
+            case FutTransferClient.Refused r -> refused(order, r);
+            case FutTransferClient.Unrecognised u -> review(order, u.code(),
+                    "The partner answered HTTP " + u.httpStatus() + " (" + u.code() + "), which its "
+                            + "documentation does not explain, so we cannot tell whether the order was "
+                            + "created. Check the FUT Transfer dashboard for " + ref + ".");
+        };
+    }
+
+    private Release accepted(OrderEntity order, String vendorOrderId) {
+        if (ledger.markSubmitted(order.getId(), vendorOrderId)) {
+            log.info("FULFILMENT APPROVED: order {} is supplier order {}", order.getPublicRef(), vendorOrderId);
+            return new Release(Result.SUBMITTED, vendorOrderId,
+                    "Sent to the fulfilment partner as " + vendorOrderId + ".");
+        }
+        return review(order, "VENDOR_ID_CONFLICT", "The partner accepted the order as " + vendorOrderId
+                + ", but that id is already recorded against another order.");
+    }
+
+    /**
+     * The answer was lost. The order may exist, so it is looked up by our reference, and
+     * never placed again from here.
+     */
+    private Release resolveUncertain(OrderEntity order, long amountK, String firstError) {
+        String ref = order.getPublicRef();
+        FutTransferClient.Lookup lookup = client.lookupByReference(ref, amountK);
+        if (lookup instanceof FutTransferClient.Found found
+                && ledger.markConfirmedByLookup(order.getId(), firstError, found)) {
+            log.info("FULFILMENT APPROVED: order {} confirmed at the supplier by lookup after {}", ref, firstError);
+            return new Release(Result.SUBMITTED, null, "The partner's answer was lost (" + firstError
+                    + "), and a lookup confirmed it has the order.");
+        }
+        String lookupCode = lookup instanceof FutTransferClient.NotConfirmed nc ? nc.code() : "NOT_RECORDED";
+        return review(order, firstError, "The order was sent, but the answer was lost (" + firstError
+                + ") and a lookup by " + ref + " could not confirm it exists (" + lookupCode + "). It may have "
+                + "been created. Check the FUT Transfer dashboard for " + ref + " before doing anything else. "
+                + "Nothing will be sent again automatically.");
+    }
+
+    private Release refused(OrderEntity order, FutTransferClient.Refused r) {
+        String ref = order.getPublicRef();
+        switch (r.reason()) {
+            case SIGN_IN_REJECTED -> {
+                ledger.markFailed(order.getId(), r.code(), "The partner refused the customer's sign-in.");
+                // Useless to anyone now, and the customer is asked for a new one.
+                vault.purge(order.getId(), "sign-in refused by supplier (" + r.code() + ")");
+                alert(ref, "Sign-in refused", "The partner refused the customer's sign-in (" + r.code()
+                        + "). It has been deleted and the customer has been asked to enter it again.", r.code());
+                return new Release(Result.FAILED_SIGN_IN, null, "The partner refused the customer's sign-in ("
+                        + r.code() + "). Nothing was created. The order is on hold until they enter it again.");
+            }
+            case AUTH_FAILED -> {
+                ledger.markFailed(order.getId(), r.code(), "Our API credentials were refused.");
+                alert(ref, "API credentials refused", "The partner refused our API credentials (HTTP 403). "
+                        + "Check GFS_FUTTRANSFER_API_USER and GFS_FUTTRANSFER_API_KEY. Nothing was created.", r.code());
+                return new Release(Result.FAILED, null, "The partner refused our API credentials (HTTP 403). "
+                        + "Nothing was created. Check the API user and key before trying again.");
+            }
+            case RATE_LIMITED -> {
+                ledger.markFailed(order.getId(), r.code(), "The same EA account was submitted too recently.");
+                return new Release(Result.FAILED, null, "The partner says this EA account was submitted too "
+                        + "recently (HTTP 429). Nothing was created. Try again later.");
+            }
+            default -> {
+                ledger.markFailed(order.getId(), r.code(), "The partner refused the order.");
+                alert(ref, "Order refused", "The partner refused the order (" + r.code() + ") and created "
+                        + "nothing. The customer's sign-in is kept.", r.code());
+                return new Release(Result.FAILED, null, "The partner refused the order (" + r.code()
+                        + "). Nothing was created.");
+            }
+        }
+    }
+
+    private Release review(OrderEntity order, String code, String reason) {
+        ledger.markNeedsReview(order.getId(), code, reason);
+        log.error("FULFILMENT NEEDS REVIEW: order {} ({})", order.getPublicRef(), code);
+        alert(order.getPublicRef(), "Needs review", reason, code);
+        return new Release(Result.NEEDS_REVIEW, null, reason);
+    }
+
+    /** The row belongs to someone else, or to a state that cannot be sent from. */
+    private Release notClaimed(String ref, VendorOrderLedger.Row row) {
+        return switch (row.state()) {
+            case VendorOrderLedger.SUBMITTING -> new Release(Result.IN_FLIGHT, null, "Order " + ref
+                    + " is already being released. Give it a moment and refresh -- it has not been sent twice.");
+            case VendorOrderLedger.NEEDS_REVIEW -> new Release(Result.NOT_SENT, null, "Order " + ref
+                    + " needs review before anything else is sent: " + row.reviewReason());
+            case VendorOrderLedger.FAILED -> new Release(Result.NOT_SENT, null, "Order " + ref
+                    + " has already been tried " + row.attempts() + " times and will not be sent again "
+                    + "automatically. Work it by hand and mark it in progress.");
+            default -> new Release(Result.ALREADY_SUBMITTED, row.vendorOrderId(), "Order " + ref
+                    + " is already with the fulfilment partner. Nothing was sent.");
+        };
+    }
+
+    private void alert(String ref, String headline, String detail, String code) {
+        try {
+            notifications.fulfilmentAlert(new FulfilmentAlert(ref, headline, detail, code,
+                    props.publicUrl() + "/admin/orders/" + ref));
+        } catch (RuntimeException e) {
+            // An alert that cannot be sent never changes what happened to the order.
+            log.warn("Could not queue the fulfilment alert for {}: {}", ref, e.getMessage());
+        }
     }
 
     private static String customerNameFor(OrderEntity order) {

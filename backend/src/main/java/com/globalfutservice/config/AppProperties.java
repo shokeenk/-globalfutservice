@@ -420,7 +420,16 @@ public record AppProperties(
             @DefaultValue("60s") Duration pollInterval,
             @DefaultValue("15s") Duration timeout,
             /** Consecutive dispatch failures before an order is parked for an operator. */
-            @DefaultValue("3") int maxDispatchAttempts) {
+            @DefaultValue("3") int maxDispatchAttempts,
+            /**
+             * 400 codes from /orderAPI that mean the vendor definitely refused the order and
+             * created nothing: the codes its documentation names. Any other refusal goes to
+             * an admin, because we cannot prove what it means. Widen this only once the
+             * vendor confirms another code.
+             */
+            @DefaultValue({"MissingData", "InvalidPassword", "InvalidBA1", "InvalidBA2", "InvalidBA3",
+                    "InvalidBA4", "InvalidBA5", "InvalidAmount", "InvalidPlatform"})
+            java.util.List<String> permanentErrorCodes) {
 
         public boolean isConfigured() {
             return enabled

@@ -53,6 +53,17 @@ public interface Notifier {
     }
 
     /**
+     * Sending an order to the fulfilment partner needs a person: it may have been created
+     * and could not be confirmed, or the partner refused it.
+     *
+     * <p>For the operator channels only; the customer is told separately, in their own
+     * words, when there is something for them to do.
+     */
+    default void fulfilmentAlert(FulfilmentAlert alert) {
+        // Channels opt in by overriding.
+    }
+
+    /**
      * A customer has reported paying outside the gateway.
      *
      * <p>The most time-critical alert here, and the only one with nothing behind it. Every
