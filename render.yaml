@@ -128,9 +128,11 @@ services:
         sync: false
 
       # ---- coin fulfilment --------------------------------------------------
-      # risk-level stays at 2: 3 and above are documented by the supplier as
-      # escalating ban risk with no refunds, which the seven-day ban guarantee on
-      # this storefront cannot be squared with.
+      # GFS Transfer Method 3.0 runs at risk level 1, the supplier's maximum-safety
+      # setting, as the client's brief requires. Never 3 or above: the supplier
+      # documents those as ban risk with no refunds, which the seven-day ban
+      # guarantee on this storefront cannot be squared with. The first supervised
+      # order confirms level 1, since the supplier's docs describe the scale twice.
       - key: GFS_FUTTRANSFER_ENABLED
         value: "true"
       - key: GFS_FUTTRANSFER_API_USER
@@ -138,7 +140,7 @@ services:
       - key: GFS_FUTTRANSFER_API_KEY
         sync: false
       - key: GFS_FUTTRANSFER_RISK_LEVEL
-        value: "2"
+        value: "1"
 
       # ---- order alerts -----------------------------------------------------
       # Both of the first two are required. Setting one without the other silently

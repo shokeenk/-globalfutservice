@@ -423,12 +423,18 @@ public record AppProperties(
             String apiUser,
             /** The raw API key, as the vendor issued it. Hashed to MD5 per request; never logged. */
             String apiKey,
-            /** snipe | cycle | targetedSnipe | snipeLimited */
-            @DefaultValue("snipe") @Pattern(regexp = "snipe|cycle|targetedSnipe|snipeLimited",
+            /**
+             * snipe | cycle | targetedSnipe | snipeLimited. GFS Transfer Method 3.0 is
+             * targetedSnipe; customers only ever see the GFS name.
+             */
+            @DefaultValue("targetedSnipe") @Pattern(regexp = "snipe|cycle|targetedSnipe|snipeLimited",
                     message = "must be one of the vendor's transfer methods: snipe, cycle, targetedSnipe, snipeLimited")
             String transferMethod,
-            /** 1 = maximum safety ... 6 = ban mode. */
-            @DefaultValue("2") @Min(1) @Max(6) int riskLevel,
+            /**
+             * 1 = maximum safety ... 6 = ban mode. GFS requires 1. The vendor's two
+             * descriptions of this field disagree, so the first supervised order confirms it.
+             */
+            @DefaultValue("1") @Min(1) @Max(6) int riskLevel,
             @DefaultValue("60s") Duration pollInterval,
             @DefaultValue("15s") Duration timeout,
             /** Consecutive dispatch failures before an order is parked for an operator. */
@@ -447,7 +453,9 @@ public record AppProperties(
              * never does, because sending it again anywhere after a timeout could create a
              * second order.
              */
-            @DefaultValue("https://eatransfer.top") String backupBaseUrl) {
+            @DefaultValue("https://eatransfer.top") String backupBaseUrl,
+            /** The rest of GFS Transfer Method 3.0: the same on every order, never the customer's choice. */
+            @Valid @DefaultValue FutTransferOrder order) {
 
         public FutTransfer {
             requireSecure("gfs.fut-transfer.base-url", baseUrl);
@@ -474,7 +482,7 @@ public record AppProperties(
             return "FutTransfer[enabled=" + enabled + ", baseUrl=" + baseUrl + ", backupBaseUrl=" + backupBaseUrl
                     + ", apiUser=" + (apiUser == null || apiUser.isBlank() ? "unset" : "set")
                     + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "unset" : "[redacted]")
-                    + ", transferMethod=" + transferMethod + ", riskLevel=" + riskLevel + "]";
+                    + ", transferMethod=" + transferMethod + ", riskLevel=" + riskLevel + ", order=" + order + "]";
         }
 
         /**
@@ -497,6 +505,31 @@ public record AppProperties(
                 throw new IllegalArgumentException(property + " must be the site itself, with no path");
             }
         }
+    }
+
+    /**
+     * The fixed /orderAPI settings of GFS Transfer Method 3.0, sent by the backend on every
+     * coin order. The defaults are the client's brief; the ranges are the vendor's.
+     *
+     * @param topUpEnabled            targetedSnipe top-up threshold, in K (300 = 300K)
+     * @param autoFinishCycle         1: the vendor may finish the remainder by its cycle method
+     * @param minTransferAmount       smallest single transfer, in K
+     * @param pauseIfBelowMinTransfer 0: switch method rather than pause below the minimum
+     * @param senderGroup             -1: the vendor chooses among our senders
+     * @param persona                 -1: the vendor detects the EA persona
+     */
+    public record FutTransferOrder(
+            @DefaultValue("300") @Min(0) @Max(9999) int topUpEnabled,
+            @DefaultValue("1") @Min(0) @Max(1) int autoFinishCycle,
+            @DefaultValue("50") @Min(0) @Max(9999) int minTransferAmount,
+            @DefaultValue("0") @Min(0) @Max(1) int pauseIfBelowMinTransfer,
+            @DefaultValue("1") @Pattern(regexp = "[01]") String updateCustomer,
+            @DefaultValue("0") @Min(0) @Max(1) int stopOrderAfterOnboarding,
+            @DefaultValue("0") @Pattern(regexp = "[01]") String lockOnboarding,
+            @DefaultValue("0") @Pattern(regexp = "[01]") String disableCustomerLock,
+            @DefaultValue("0") @Min(0) @Max(1) int skipCustomerCheck,
+            @DefaultValue("-1") @Pattern(regexp = "-1|[A-Za-z0-9_-]{1,64}") String senderGroup,
+            @DefaultValue("-1") @Pattern(regexp = "-1|[A-Za-z0-9_-]{1,64}") String persona) {
     }
 
     public record Notifications(

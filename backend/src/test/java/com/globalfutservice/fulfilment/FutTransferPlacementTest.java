@@ -68,6 +68,39 @@ class FutTransferPlacementTest {
     }
 
     @Test
+    @DisplayName("every order is sent as GFS Transfer Method 3.0: exactly the brief's fields and values")
+    void method30() {
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.ORDER_ACCEPTED));
+        place();
+
+        JsonNode sent = vendor.requests().get(0).body();
+        java.util.Map<String, Object> expected = new java.util.LinkedHashMap<>();
+        expected.put("persona", "-1");
+        expected.put("updateCustomer", "1");
+        expected.put("stopOrderAfterOnboarding", 0);
+        expected.put("lockOnboarding", "0");
+        expected.put("disableCustomerLock", "0");
+        expected.put("skipCustomerCheck", 0);
+        expected.put("transferMethod", "targetedSnipe");
+        expected.put("senderGroup", "-1");
+        expected.put("topUpEnabled", 300);
+        expected.put("autoFinishCycle", 1);
+        expected.put("minTransferAmount", 50);
+        expected.put("pauseIfBelowMinTransfer", 0);
+        expected.put("riskLevel", 1);
+        expected.forEach((field, value) -> assertThat(new ObjectMapper().convertValue(sent.get(field), Object.class))
+                .as(field).isEqualTo(value));
+
+        // Nothing beyond the brief: its settings, the order, the sign-in and our credentials.
+        java.util.Set<String> fields = new java.util.TreeSet<>();
+        sent.fieldNames().forEachRemaining(fields::add);
+        java.util.Set<String> allowed = new java.util.TreeSet<>(expected.keySet());
+        allowed.addAll(java.util.List.of("customerName", "user", "pass", "ba", "ba2", "platform", "amount",
+                "externalOrderID", "apiUser", "apiKey"));
+        assertThat(fields).isEqualTo(allowed);
+    }
+
+    @Test
     @DisplayName("a timeout is uncertain: the order may exist")
     void timeout() {
         vendor.on("/orderAPI", Reply.slow(2_000));

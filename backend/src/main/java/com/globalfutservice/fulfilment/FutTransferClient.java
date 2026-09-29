@@ -151,15 +151,27 @@ public class FutTransferClient {
         body.put("pass", creds.eaPassword());
         body.put("platform", platformCode(platform));
         body.put("amount", amountThousands);
-        body.put("persona", "-1");
         // `ba` is required and `ba2`..`ba5` are not; positional, as the supplier documents.
         for (int i = 0; i < Math.min(codes.size(), 5); i++) {
             body.put(i == 0 ? "ba" : "ba" + (i + 1), codes.get(i));
         }
+
+        // GFS Transfer Method 3.0: the same settings on every order, from configuration.
         AppProperties.FutTransfer cfg = props.futTransfer();
+        AppProperties.FutTransferOrder method = cfg.order();
+        body.put("persona", method.persona());
+        body.put("updateCustomer", method.updateCustomer());
+        body.put("stopOrderAfterOnboarding", method.stopOrderAfterOnboarding());
+        body.put("lockOnboarding", method.lockOnboarding());
+        body.put("disableCustomerLock", method.disableCustomerLock());
+        body.put("skipCustomerCheck", method.skipCustomerCheck());
         body.put("transferMethod", cfg.transferMethod());
+        body.put("senderGroup", method.senderGroup());
+        body.put("topUpEnabled", method.topUpEnabled());
+        body.put("autoFinishCycle", method.autoFinishCycle());
+        body.put("minTransferAmount", method.minTransferAmount());
+        body.put("pauseIfBelowMinTransfer", method.pauseIfBelowMinTransfer());
         body.put("riskLevel", cfg.riskLevel());
-        body.put("updateCustomer", "1");
 
         Exchange ex = exchange("/orderAPI", body, publicRef);
         Placement outcome = classifyPlacement(ex);

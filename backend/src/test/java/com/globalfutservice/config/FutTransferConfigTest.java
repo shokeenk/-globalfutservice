@@ -19,7 +19,8 @@ class FutTransferConfigTest {
 
     private static AppProperties.FutTransfer config(String baseUrl, String backup, String method, int riskLevel) {
         return new AppProperties.FutTransfer(true, baseUrl, "api@example.test", KEY, method, riskLevel,
-                Duration.ofSeconds(60), Duration.ofSeconds(15), 3, List.of("InvalidPassword"), backup);
+                Duration.ofSeconds(60), Duration.ofSeconds(15), 3, List.of("InvalidPassword"), backup,
+                new AppProperties.FutTransferOrder(300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1"));
     }
 
     @Test
@@ -46,6 +47,21 @@ class FutTransferConfigTest {
         assertThat(validator.validate(config("https://futtransfer.top", "https://eatransfer.top", "snipe", 0))).hasSize(1);
         assertThat(validator.validate(config("https://futtransfer.top", "https://eatransfer.top", "snipe", 7))).hasSize(1);
         assertThat(validator.validate(config("https://futtransfer.top", "https://eatransfer.top", "banMode", 2))).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("the Method 3.0 settings stay inside the vendor's ranges")
+    void methodRanges() {
+        var ok = new AppProperties.FutTransferOrder(300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1");
+        assertThat(validator.validate(ok)).isEmpty();
+        assertThat(validator.validate(new AppProperties.FutTransferOrder(10000, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1")))
+                .hasSize(1);
+        assertThat(validator.validate(new AppProperties.FutTransferOrder(300, 2, 50, 0, "1", 0, "0", "0", 0, "-1", "-1")))
+                .hasSize(1);
+        assertThat(validator.validate(new AppProperties.FutTransferOrder(300, 1, 50, 0, "yes", 0, "0", "0", 0, "-1", "-1")))
+                .hasSize(1);
+        assertThat(validator.validate(new AppProperties.FutTransferOrder(300, 1, 50, 0, "1", 0, "0", "0", 0, "all groups", "-1")))
+                .hasSize(1);
     }
 
     @Test
