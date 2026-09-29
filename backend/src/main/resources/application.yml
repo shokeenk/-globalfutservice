@@ -329,6 +329,8 @@ gfs:
   fut-transfer:
     enabled: ${GFS_FUTTRANSFER_ENABLED:false}
     base-url: ${GFS_FUTTRANSFER_BASE_URL:https://futtransfer.top}
+    # The vendor's second domain. Status reads may fall back to it; placing an order never does.
+    backup-base-url: ${GFS_FUTTRANSFER_BACKUP_BASE_URL:https://eatransfer.top}
     api-user: ${GFS_FUTTRANSFER_API_USER:}
     api-key: ${GFS_FUTTRANSFER_API_KEY:}
     transfer-method: ${GFS_FUTTRANSFER_METHOD:snipe}

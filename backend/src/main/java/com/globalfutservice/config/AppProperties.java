@@ -5,9 +5,11 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.pricing.GatewayFeeMode;
 import com.globalfutservice.domain.pricing.MarketTaxMode;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
@@ -406,21 +408,31 @@ public record AppProperties(
             @DefaultValue("100") @Min(1) int dailyCap) {
     }
 
+    /**
+     * FUT Transfer, the partner that moves the coins.
+     *
+     * <p>Checked when the application starts, so a bad value stops the deploy rather than
+     * reaching the vendor: both base URLs must be HTTPS (plain HTTP only to this machine,
+     * for tests), the transfer method must be one the vendor documents, and the risk level
+     * must be 1-6, the range both of the vendor's descriptions of it agree on.
+     */
     public record FutTransfer(
             @DefaultValue("false") boolean enabled,
             @DefaultValue("https://futtransfer.top") String baseUrl,
             /** Account email, sent as {@code apiUser}. */
             String apiUser,
-            /** Raw API key. Hashed to MD5 per request; never logged. */
+            /** The raw API key, as the vendor issued it. Hashed to MD5 per request; never logged. */
             String apiKey,
             /** snipe | cycle | targetedSnipe | snipeLimited */
-            @DefaultValue("snipe") String transferMethod,
-            /** 1 = maximum safety … 6 = ban mode. See the note above before raising it. */
-            @DefaultValue("2") int riskLevel,
+            @DefaultValue("snipe") @Pattern(regexp = "snipe|cycle|targetedSnipe|snipeLimited",
+                    message = "must be one of the vendor's transfer methods: snipe, cycle, targetedSnipe, snipeLimited")
+            String transferMethod,
+            /** 1 = maximum safety ... 6 = ban mode. */
+            @DefaultValue("2") @Min(1) @Max(6) int riskLevel,
             @DefaultValue("60s") Duration pollInterval,
             @DefaultValue("15s") Duration timeout,
             /** Consecutive dispatch failures before an order is parked for an operator. */
-            @DefaultValue("3") int maxDispatchAttempts,
+            @DefaultValue("3") @Min(1) int maxDispatchAttempts,
             /**
              * 400 codes from /orderAPI that mean the vendor definitely refused the order and
              * created nothing: the codes its documentation names. Any other refusal goes to
@@ -429,12 +441,61 @@ public record AppProperties(
              */
             @DefaultValue({"MissingData", "InvalidPassword", "InvalidBA1", "InvalidBA2", "InvalidBA3",
                     "InvalidBA4", "InvalidBA5", "InvalidAmount", "InvalidPlatform"})
-            java.util.List<String> permanentErrorCodes) {
+            java.util.List<String> permanentErrorCodes,
+            /**
+             * The vendor's second domain. Status reads may fall back to it; placing an order
+             * never does, because sending it again anywhere after a timeout could create a
+             * second order.
+             */
+            @DefaultValue("https://eatransfer.top") String backupBaseUrl) {
+
+        public FutTransfer {
+            requireSecure("gfs.fut-transfer.base-url", baseUrl);
+            requireSecure("gfs.fut-transfer.backup-base-url", backupBaseUrl);
+            // "https://futtransfer.top/" as the vendor writes it; paths are appended to it.
+            baseUrl = withoutTrailingSlash(baseUrl);
+            backupBaseUrl = withoutTrailingSlash(backupBaseUrl);
+        }
+
+        private static String withoutTrailingSlash(String url) {
+            String u = url.trim();
+            return u.endsWith("/") ? u.substring(0, u.length() - 1) : u;
+        }
 
         public boolean isConfigured() {
             return enabled
                     && apiUser != null && !apiUser.isBlank()
                     && apiKey != null && !apiKey.isBlank();
+        }
+
+        /** Never prints the key: a record's own toString would, and a log line is forever. */
+        @Override
+        public String toString() {
+            return "FutTransfer[enabled=" + enabled + ", baseUrl=" + baseUrl + ", backupBaseUrl=" + backupBaseUrl
+                    + ", apiUser=" + (apiUser == null || apiUser.isBlank() ? "unset" : "set")
+                    + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "unset" : "[redacted]")
+                    + ", transferMethod=" + transferMethod + ", riskLevel=" + riskLevel + "]";
+        }
+
+        /**
+         * HTTPS, or plain HTTP to this machine only (the tests' stand-in vendor). The API key
+         * digest and customers' sign-ins travel in these request bodies.
+         */
+        private static void requireSecure(String property, String url) {
+            java.net.URI uri;
+            try {
+                uri = java.net.URI.create(url == null ? "" : url.trim());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(property + " is not a valid URL");
+            }
+            String host = uri.getHost() == null ? "" : uri.getHost();
+            boolean loopback = host.equals("localhost") || host.equals("127.0.0.1") || host.equals("[::1]");
+            if (!"https".equalsIgnoreCase(uri.getScheme()) && !("http".equalsIgnoreCase(uri.getScheme()) && loopback)) {
+                throw new IllegalArgumentException(property + " must be an https:// URL");
+            }
+            if (uri.getPath() != null && !uri.getPath().isEmpty() && !uri.getPath().equals("/")) {
+                throw new IllegalArgumentException(property + " must be the site itself, with no path");
+            }
         }
     }
 

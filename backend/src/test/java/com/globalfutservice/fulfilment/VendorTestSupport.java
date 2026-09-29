@@ -32,7 +32,7 @@ final class VendorTestSupport {
     static AppProperties props(String baseUrl, Duration timeout) {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
-                RAW_KEY, "snipe", 2, Duration.ofSeconds(60), timeout, 3, DOCUMENTED_CODES));
+                RAW_KEY, "snipe", 2, Duration.ofSeconds(60), timeout, 3, DOCUMENTED_CODES, "https://eatransfer.top"));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         return props;
     }
