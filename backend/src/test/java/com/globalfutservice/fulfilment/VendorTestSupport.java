@@ -47,7 +47,7 @@ final class VendorTestSupport {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
                 RAW_KEY, "targetedSnipe", 1, Duration.ofSeconds(60), timeout, 3, DOCUMENTED_CODES,
-                backupUrl, METHOD_3_0));
+                backupUrl, METHOD_3_0, true));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         return props;
     }
@@ -66,9 +66,13 @@ final class VendorTestSupport {
         return new CredentialDtos.RevealedCredentials("customer@example.test", PASSWORD, BACKUP_CODES, null, null);
     }
 
-    /** Every secret in play, including the digest actually sent as apiKey. */
+    /**
+     * Every secret in play, including the digest actually sent as apiKey -- and the
+     * customer's EA email, which goes to the vendor but never to a log line.
+     */
     static List<String> secrets() {
-        List<String> all = new java.util.ArrayList<>(List.of(RAW_KEY, FutTransferClient.md5(RAW_KEY), PASSWORD));
+        List<String> all = new java.util.ArrayList<>(List.of(RAW_KEY, FutTransferClient.md5(RAW_KEY), PASSWORD,
+                "customer@example.test"));
         all.addAll(BACKUP_CODES);
         all.addAll(RETURNED_CODES);
         return all;

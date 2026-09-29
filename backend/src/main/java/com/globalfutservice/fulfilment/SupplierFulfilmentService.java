@@ -117,8 +117,35 @@ public class SupplierFulfilmentService {
             return new Release(Result.NOT_SENT, null, e.getMessage() + " Nothing was sent.");
         }
 
-        VendorOrderLedger.Claim claim = ledger.claim(order.getId(), ref, amountK,
-                props.futTransfer().maxDispatchAttempts());
+        /*
+         * Can it be sent at all? Asked before the vault is opened, so an order that is in
+         * flight, with the vendor, or waiting for review never has its sign-in read for
+         * nothing. This is not the guard -- the claim below is -- only a courtesy to the vault.
+         */
+        int maxAttempts = props.futTransfer().maxDispatchAttempts();
+        var existing = ledger.find(order.getId());
+        if (existing.isPresent() && (!VendorOrderLedger.FAILED.equals(existing.get().state())
+                || existing.get().attempts() >= maxAttempts)) {
+            return notClaimed(ref, existing.get());
+        }
+
+        CredentialDtos.RevealedCredentials creds;
+        try {
+            // As the system, not the operator: the vault attributes every read.
+            creds = vault.reveal(order.getId(), null);
+        } catch (RuntimeException e) {
+            return new Release(Result.NOT_SENT, null,
+                    "This order has no sign-in on file, so there is nothing to send. Nothing was sent.");
+        }
+
+        if (props.futTransfer().cooldownCheck()) {
+            Release cooling = cooldownRefusal(ref, creds);
+            if (cooling != null) {
+                return cooling;
+            }
+        }
+
+        VendorOrderLedger.Claim claim = ledger.claim(order.getId(), ref, amountK, maxAttempts);
         if (claim instanceof VendorOrderLedger.NotClaimed nc) {
             return notClaimed(ref, nc.current());
         }
@@ -132,16 +159,6 @@ public class SupplierFulfilmentService {
         log.info("FULFILMENT APPROVAL: operator {} is releasing order {} ({}K) to the supplier",
                 operatorAccountId, ref, amountK);
 
-        CredentialDtos.RevealedCredentials creds;
-        try {
-            // As the system, not the operator: the vault attributes every read.
-            creds = vault.reveal(order.getId(), null);
-        } catch (RuntimeException e) {
-            ledger.markFailed(order.getId(), "NO_SIGN_IN", "There was no sign-in to send.");
-            return new Release(Result.NOT_SENT, null,
-                    "This order has no sign-in on file, so there is nothing to send. Nothing was sent.");
-        }
-
         FutTransferClient.Placement placement = client.submitOrder(
                 ref, customerNameFor(order), order.getPlatform(), amountK, creds);
 
@@ -154,6 +171,28 @@ public class SupplierFulfilmentService {
                             + "documentation does not explain, so we cannot tell whether the order was "
                             + "created. Check the FUT Transfer dashboard for " + ref + ".");
         };
+    }
+
+    /**
+     * The vendor's per-account cooldown, checked before anything is claimed or sent.
+     *
+     * @return a refusal if the order must not be sent now, or null to go ahead
+     */
+    private Release cooldownRefusal(String ref, CredentialDtos.RevealedCredentials creds) {
+        FutTransferClient.Read<FutTransferClient.Cooldown> read = client.cooldown(creds.eaEmail(), ref);
+        if (read instanceof FutTransferClient.ReadOk<FutTransferClient.Cooldown> ok) {
+            if (ok.value().ready()) {
+                return null;
+            }
+            long s = ok.value().remainingSeconds();
+            return new Release(Result.NOT_SENT, null, "The customer's EA account is in the partner's transfer "
+                    + "cooldown for another " + (s / 3600) + "h " + ((s % 3600) / 60) + "m. Nothing was sent; "
+                    + "approve it again after then.");
+        }
+        FutTransferClient.ReadFailed<FutTransferClient.Cooldown> failed =
+                (FutTransferClient.ReadFailed<FutTransferClient.Cooldown>) read;
+        return new Release(Result.NOT_SENT, null, "Could not check whether the customer's EA account is in the "
+                + "partner's transfer cooldown (" + failed.code() + "). Nothing was sent; try again shortly.");
     }
 
     private Release accepted(OrderEntity order, String vendorOrderId) {

@@ -178,11 +178,15 @@ class SupplierReleaseTest {
         assertThat(vendor.calls("/orderStatusAPI")).isZero();
     }
 
+    private void existing(VendorOrderLedger.Row row) {
+        when(ledger.find(ORDER_ID)).thenReturn(java.util.Optional.of(row));
+        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.NotClaimed(row));
+    }
+
     @Test
-    @DisplayName("a second click while the first is in flight is told so, and sends nothing")
+    @DisplayName("a second click while the first is in flight is told so, sends nothing, and reads no sign-in")
     void inFlight() {
-        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.NotClaimed(
-                row(VendorOrderLedger.SUBMITTING, null, 1)));
+        existing(row(VendorOrderLedger.SUBMITTING, null, 1));
 
         SupplierFulfilmentService.Release r = release();
 
@@ -195,8 +199,7 @@ class SupplierReleaseTest {
     @Test
     @DisplayName("an order already with the vendor reports its id and sends nothing")
     void alreadySubmitted() {
-        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.NotClaimed(
-                row(VendorOrderLedger.SUBMITTED, "SUP-EARLIER", 1)));
+        existing(row(VendorOrderLedger.SUBMITTED, "SUP-EARLIER", 1));
 
         SupplierFulfilmentService.Release r = release();
 
@@ -208,14 +211,38 @@ class SupplierReleaseTest {
     @Test
     @DisplayName("an order waiting for review, or out of attempts, is refused with the reason")
     void notSendable() {
-        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.NotClaimed(
-                row(VendorOrderLedger.NEEDS_REVIEW, null, 1)));
+        existing(row(VendorOrderLedger.NEEDS_REVIEW, null, 1));
         assertThat(release().message()).contains("needs review");
 
-        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.NotClaimed(
-                row(VendorOrderLedger.FAILED, null, 3)));
+        existing(row(VendorOrderLedger.FAILED, null, 3));
         assertThat(release().message()).contains("tried 3 times");
         assertThat(vendor.requests()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an EA account in the vendor's cooldown is not sent, and nothing is claimed")
+    void cooldown() {
+        vendor.on("/getCooldownStatus", Reply.ok(FakeFutTransfer.COOLDOWN_2H));
+
+        SupplierFulfilmentService.Release r = release();
+
+        assertThat(r.result()).isEqualTo(Result.NOT_SENT);
+        assertThat(r.message()).contains("cooldown for another 2h 0m");
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        assertThat(vendor.calls("/orderAPI")).isZero();
+        assertThat(vendor.requests().get(0).body().get("account").asText()).isEqualTo("customer@example.test");
+    }
+
+    @Test
+    @DisplayName("a cooldown answer we cannot trust also sends nothing")
+    void cooldownUnreadable() {
+        vendor.on("/getCooldownStatus", Reply.ok(FakeFutTransfer.COOLDOWN_DENIED));
+        assertThat(release().message()).contains("Could not check").contains("UNPARSEABLE_RESPONSE");
+
+        vendor.on("/getCooldownStatus", Reply.of(404, "notFound"));
+        assertThat(release().message()).contains("Could not check");
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        assertThat(vendor.calls("/orderAPI")).isZero();
     }
 
     @Test

@@ -305,6 +305,39 @@ public class FutTransferClient {
                 json.path("wasAborted").asInt(0) == 1);
     }
 
+    // ---------------------------------------------------------------- cooldown ---
+
+    /** Whether an EA account can receive another transfer yet. */
+    public record Cooldown(boolean ready, long remainingSeconds) {
+    }
+
+    /**
+     * Asks the vendor whether this EA account is in its transfer cooldown, via
+     * {@code /getCooldownStatus} with {@code account}.
+     *
+     * <p>Only an answer that says {@code success: true} with an {@code isReady} flag counts.
+     * The account's email goes to the vendor in the request, as it will in the order; it is
+     * never the log context, which is our reference.
+     */
+    public Read<Cooldown> cooldown(String eaAccountEmail, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("account", eaAccountEmail);
+        Exchange ex = readExchange("/getCooldownStatus", body, publicRef);
+        Read<Cooldown> read = classifyRead(ex, json -> {
+            if (!json.path("success").isBoolean() || !json.path("success").asBoolean()) {
+                throw new IllegalStateException("no success flag");
+            }
+            if (!json.path("isReady").isBoolean()) {
+                throw new IllegalStateException("no isReady flag");
+            }
+            return new Cooldown(json.get("isReady").asBoolean(), Math.max(0, json.path("cooldownRemaining").asLong(0)));
+        });
+        log.info("FUT Transfer cooldown for {}: {}", publicRef, read instanceof ReadOk<Cooldown> ok
+                ? (ok.value().ready() ? "ready" : "cooling down " + ok.value().remainingSeconds() + "s")
+                : ((ReadFailed<Cooldown>) read).error() + " (" + ((ReadFailed<Cooldown>) read).code() + ")");
+        return read;
+    }
+
     // ------------------------------------------------------------------ status ---
 
     /** One order's supplier-side state, as three separate vocabularies plus progress. */

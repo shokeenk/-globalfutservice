@@ -455,7 +455,12 @@ public record AppProperties(
              */
             @DefaultValue("https://eatransfer.top") String backupBaseUrl,
             /** The rest of GFS Transfer Method 3.0: the same on every order, never the customer's choice. */
-            @Valid @DefaultValue FutTransferOrder order) {
+            @Valid @DefaultValue FutTransferOrder order,
+            /**
+             * Ask the vendor whether the customer's EA account is in its transfer cooldown before
+             * sending. On by default; off only if the check itself misbehaves.
+             */
+            @DefaultValue("true") boolean cooldownCheck) {
 
         public FutTransfer {
             requireSecure("gfs.fut-transfer.base-url", baseUrl);
