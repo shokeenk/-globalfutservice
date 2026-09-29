@@ -276,6 +276,13 @@ public class SupplierFulfilmentService {
             case VendorOrderLedger.FAILED -> new Release(Result.NOT_SENT, null, "Order " + ref
                     + " has already been tried " + row.attempts() + " times and will not be sent again "
                     + "automatically. Work it by hand and mark it in progress.");
+            // The partner has it and is waiting for the customer. Approving again would move
+            // the order on without sending anything, and the partner would go on waiting.
+            case "AWAITING_CUSTOMER" -> new Release(Result.NOT_SENT, null, "The partner already has order " + ref
+                    + " and is waiting for the customer. Once they have entered new details, use Send corrected "
+                    + "sign-in. Nothing was sent.");
+            case "DELIVERED", "PARTIALLY_DELIVERED", "RESOLVED" -> new Release(Result.NOT_SENT, null, "Order " + ref
+                    + " is finished at the partner (" + row.state() + "). Nothing was sent.");
             default -> new Release(Result.ALREADY_SUBMITTED, row.vendorOrderId(), "Order " + ref
                     + " is already with the fulfilment partner. Nothing was sent.");
         };

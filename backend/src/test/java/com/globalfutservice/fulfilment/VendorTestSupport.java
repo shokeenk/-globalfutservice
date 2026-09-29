@@ -29,7 +29,7 @@ final class VendorTestSupport {
     /** The poll's defaults. */
     static final AppProperties.FutTransferPolling POLLING = new AppProperties.FutTransferPolling(
             Duration.ofSeconds(60), Duration.ofSeconds(10), Duration.ofMinutes(15), 3, Duration.ofHours(6),
-            Duration.ofMinutes(2));
+            Duration.ofMinutes(2), Duration.ofMinutes(10));
 
     /** GFS Transfer Method 3.0, exactly as the client's brief gives it. */
     static final AppProperties.FutTransferOrder METHOD_3_0 = new AppProperties.FutTransferOrder(

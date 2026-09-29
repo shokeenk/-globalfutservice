@@ -197,18 +197,22 @@ public class VendorOrderLedger {
     /** A vendor order the poller asks about. */
     public record PollRow(long orderId, String externalRef, String vendorOrderId, String state,
                           long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls,
-                          String customerAction) {
+                          String customerAction, String vendorAccountCheck, String vendorEconomyState,
+                          Instant resubmittedAt) {
     }
 
     private static final String POLL_COLUMNS = """
             order_id, external_ref, vendor_order_id, state, amount_ordered_k, amount_delivered_k,
-            vendor_status, missing_polls, customer_action
+            vendor_status, missing_polls, customer_action, vendor_account_check, vendor_economy_state,
+            resubmitted_at
             """;
 
     private static PollRow pollRow(ResultSet rs, int i) throws SQLException {
         return new PollRow(rs.getLong("order_id"), rs.getString("external_ref"), rs.getString("vendor_order_id"),
                 rs.getString("state"), rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
-                rs.getString("vendor_status"), rs.getInt("missing_polls"), rs.getString("customer_action"));
+                rs.getString("vendor_status"), rs.getInt("missing_polls"), rs.getString("customer_action"),
+                rs.getString("vendor_account_check"), rs.getString("vendor_economy_state"),
+                rs.getTimestamp("resubmitted_at") == null ? null : rs.getTimestamp("resubmitted_at").toInstant());
     }
 
     /** Orders the vendor is working on or waiting for the customer on, least recently asked about first. */
@@ -314,6 +318,47 @@ public class VendorOrderLedger {
                    and exists (select 1 from credential_vault c
                                 where c.order_id = vendor_order.order_id and c.purged_at is null)
                 """, new MapSqlParameterSource("secs", retention.toSeconds()), Long.class);
+    }
+
+    // ------------------------------------------------------------ admin actions ---
+
+    /**
+     * Takes the right to send a corrected sign-in, or a resume, for an order the vendor
+     * already has. Conditional, so two admins clicking at once send it once; a claim older
+     * than {@code inFlight} has been abandoned and may be taken again.
+     *
+     * @param from the states it may be sent from
+     * @return whether this caller may send it
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean claimRestart(long orderId, java.util.Collection<String> from, java.time.Duration inFlight) {
+        return jdbc.update("""
+                update vendor_order set resubmitted_at = now(), updated_at = now()
+                 where order_id = :orderId and state in (:from) and vendor_order_id is not null
+                   and (resubmitted_at is null or resubmitted_at < now() - make_interval(secs => :secs))
+                """, new MapSqlParameterSource("orderId", orderId).addValue("from", from)
+                .addValue("secs", inFlight.toSeconds())) == 1;
+    }
+
+    /** The vendor did not take it: the claim is let go at once, so an admin may try again. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void releaseRestart(long orderId) {
+        jdbc.update("update vendor_order set resubmitted_at = null, updated_at = now() where order_id = :orderId",
+                new MapSqlParameterSource("orderId", orderId));
+    }
+
+    /**
+     * The vendor restarted the order: back to SUBMITTED, with a fresh stall clock and
+     * nothing asked of the customer. {@code resubmitted_at} stays, for the poll's grace.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markRestarted(long orderId, java.util.Collection<String> from) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'SUBMITTED', customer_action = null, missing_polls = 0, review_reason = null,
+                       last_progress_at = now(), updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId).addValue("from", from)) == 1;
     }
 
     /** What the customer is asked to do, while their order waits for them. */

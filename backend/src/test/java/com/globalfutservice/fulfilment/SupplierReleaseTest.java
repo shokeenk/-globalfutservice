@@ -2,6 +2,7 @@ package com.globalfutservice.fulfilment;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.config.AppProperties;
@@ -217,6 +218,22 @@ class SupplierReleaseTest {
         existing(row(VendorOrderLedger.FAILED, null, 3));
         assertThat(release().message()).contains("tried 3 times");
         assertThat(vendor.requests()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an order the vendor holds for the customer is not 'already submitted': approving would send nothing")
+    void waitingForCustomer() {
+        existing(row("AWAITING_CUSTOMER", "SUP-WAITING", 1));
+        SupplierFulfilmentService.Release waiting = release();
+        assertThat(waiting.result()).isEqualTo(Result.NOT_SENT);
+        assertThat(waiting.message()).contains("Send corrected sign-in");
+
+        for (String finished : List.of("DELIVERED", "PARTIALLY_DELIVERED", "RESOLVED")) {
+            existing(row(finished, "SUP-DONE", 1));
+            assertThat(release().result()).as(finished).isEqualTo(Result.NOT_SENT);
+        }
+        assertThat(vendor.requests()).isEmpty();
+        verify(vault, never()).reveal(anyLong(), any());
     }
 
     @Test

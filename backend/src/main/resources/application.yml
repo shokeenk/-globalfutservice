@@ -356,6 +356,7 @@ gfs:
       missing-polls-before-review: ${GFS_FUTTRANSFER_MISSING_POLLS_BEFORE_REVIEW:3}
       stall-after: ${GFS_FUTTRANSFER_STALL_AFTER:6h}
       submitting-grace: ${GFS_FUTTRANSFER_SUBMITTING_GRACE:2m}
+      restart-grace: ${GFS_FUTTRANSFER_RESTART_GRACE:10m}
     # How long a sign-in is kept for an order waiting for an admin, before it is deleted.
     review-credential-retention: ${GFS_FUTTRANSFER_REVIEW_CREDENTIAL_RETENTION:72h}
     timeout: 15s

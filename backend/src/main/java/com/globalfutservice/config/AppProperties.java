@@ -530,6 +530,9 @@ public record AppProperties(
      * @param stallAfter               how long an order may show no progress at all
      * @param submittingGrace          how long a send may be in flight before a lookup
      *                                 decides it (longer than the request timeout)
+     * @param restartGrace             after an admin sends a corrected sign-in or resumes an
+     *                                 order, how long a report identical to the one from
+     *                                 before is read as stale rather than as a new refusal
      */
     public record FutTransferPolling(
             @DefaultValue("60s") Duration interval,
@@ -537,7 +540,8 @@ public record AppProperties(
             @DefaultValue("15m") Duration maxBackoff,
             @DefaultValue("3") @Min(1) int missingPollsBeforeReview,
             @DefaultValue("6h") Duration stallAfter,
-            @DefaultValue("2m") Duration submittingGrace) {
+            @DefaultValue("2m") Duration submittingGrace,
+            @DefaultValue("10m") Duration restartGrace) {
     }
 
     /**

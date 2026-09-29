@@ -507,16 +507,54 @@ public class FutTransferClient {
         return this;
     }
 
+    // ------------------------------------------------------------------ writes ---
+
     /**
-     * Replaces a rejected sign-in and resumes the order.
+     * What a change to an order the vendor already has came to.
      *
-     * <p>{@code continue: 1} is the difference between a corrected password and a
-     * corrected password that actually restarts the work.
+     * <p>None of these can create an order, so none is looked up afterwards. They are still
+     * sent once, to the primary domain only, and a lost answer is reported as such: an
+     * admin decides whether to send it again.
      */
-    public void correctCredentials(String publicRef, CredentialDtos.RevealedCredentials creds) {
+    public sealed interface Change permits Changed, NotChanged, ChangeUncertain {
+    }
+
+    /** The vendor confirmed it. {@code outcome} is its answer, as a bare word. */
+    public record Changed(String outcome) implements Change {
+    }
+
+    /** The vendor answered, and did not make the change; or we did not send it. */
+    public record NotChanged(Refusal refusal, String code) implements Change {
+    }
+
+    /** No answer we could read. It may have happened. */
+    public record ChangeUncertain(String code) implements Change {
+    }
+
+    public enum Refusal {
+        /** 403, or calls are paused: our API credentials. */
+        AUTH,
+        /** 429: for a resume, the cooldown after a console sign-in failure. */
+        RATE_LIMITED,
+        /** Any other 4xx: the vendor would not do it (405 is a temporary ban). */
+        REFUSED
+    }
+
+    /** {@code wasContinued} true: the new details were saved and the order restarted. */
+    public static final String CONTINUED = "continued";
+    /** {@code wasContinued} false: the new details were saved, and the order did not restart. */
+    public static final String SAVED = "saved";
+
+    /**
+     * Replaces the customer's sign-in on an order the vendor already has, and restarts it.
+     * Never a new order: this is how a refused sign-in is corrected.
+     *
+     * <p>{@code continue: 1} is the difference between a corrected password and a corrected
+     * password that actually restarts the work.
+     */
+    public Change correctSignIn(String vendorOrderId, String publicRef, CredentialDtos.RevealedCredentials creds) {
         Map<String, Object> body = auth();
-        body.put("orderID", publicRef);
-        body.put("externalOrderID", 1);
+        body.put("orderID", vendorOrderId);
         body.put("user", creds.eaEmail());
         body.put("pass", creds.eaPassword());
         List<String> codes = creds.backupCodes() == null ? List.of() : creds.backupCodes();
@@ -524,9 +562,69 @@ public class FutTransferClient {
             body.put(i == 0 ? "ba" : "ba" + (i + 1), codes.get(i));
         }
         body.put("continue", 1);
+        return write("/correctCredentialsAPI", body, publicRef, vendorOrderId,
+                json -> json.path("wasContinued").asBoolean(false) ? CONTINUED : SAVED);
+    }
 
-        post(props.futTransfer().baseUrl(), "/correctCredentialsAPI", body, List.of(publicRef));
-        log.info("Supplier credentials replaced and order {} resumed", publicRef);
+    /** Restarts an interrupted order, once the customer has fixed what stopped it. */
+    public Change resume(String vendorOrderId, String publicRef) {
+        return resumeOrStop(vendorOrderId, publicRef, "resume", "resumed");
+    }
+
+    /** Stops an active order. The vendor keeps what it has delivered so far. */
+    public Change stop(String vendorOrderId, String publicRef) {
+        return resumeOrStop(vendorOrderId, publicRef, "stop", "stopped");
+    }
+
+    private Change resumeOrStop(String vendorOrderId, String publicRef, String mode, String expected) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        body.put("mode", mode);
+        return write("/resumeOrderAPI", body, publicRef, vendorOrderId, json -> outcome(json, expected));
+    }
+
+    /** Closes the order at the vendor. Never automatic: an admin decides the order is done. */
+    public Change markFinished(String vendorOrderId, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        body.put("isMotherID", 0);
+        return write("/markFinishedAPI", body, publicRef, vendorOrderId, json -> outcome(json, "marked"));
+    }
+
+    private static String outcome(JsonNode json, String expected) {
+        return expected.equalsIgnoreCase(json.path("outcome").asText("")) ? expected : null;
+    }
+
+    private Change write(String path, Map<String, Object> body, String publicRef, String vendorOrderId,
+                         java.util.function.Function<JsonNode, String> outcome) {
+        if (vendorOrderId == null || !ORDER_ID.matcher(vendorOrderId).matches()) {
+            return new NotChanged(Refusal.REFUSED, "NO_VENDOR_ORDER_ID");
+        }
+        Exchange ex = exchange(Kind.WRITE, props.futTransfer().baseUrl(), path, body, List.of(publicRef));
+        Change change = classifyChange(ex, outcome);
+        log.info("FUT Transfer {} for {}: {}", path, publicRef, change);
+        return change;
+    }
+
+    private Change classifyChange(Exchange ex, java.util.function.Function<JsonNode, String> outcome) {
+        if (PAUSED.equals(ex.failure())) return new NotChanged(Refusal.AUTH, PAUSED);
+        if ("NOT_CONFIGURED".equals(ex.failure())) return new NotChanged(Refusal.REFUSED, "NOT_CONFIGURED");
+        if (ex.failure() != null) return new ChangeUncertain(ex.failure());
+        int status = ex.status();
+        if (status >= 500) return new ChangeUncertain("HTTP_" + status);
+        String code = ex.errorCode(mapper);
+        if (status == 403) return new NotChanged(Refusal.AUTH, "HTTP_403");
+        if (status == 429) return new NotChanged(Refusal.RATE_LIMITED, code == null ? "HTTP_429" : code);
+        if (status / 100 != 2) return new NotChanged(Refusal.REFUSED, code == null ? "HTTP_" + status : code);
+        JsonNode json = ex.json(mapper);
+        if (json == null || !json.isObject()) return new ChangeUncertain("UNPARSEABLE_RESPONSE");
+        String result;
+        try {
+            result = outcome.apply(json);
+        } catch (RuntimeException e) {
+            result = null;
+        }
+        return result == null ? new ChangeUncertain("UNEXPECTED_ANSWER") : new Changed(result);
     }
 
     // ------------------------------------------------------------------ plumbing ---
@@ -605,24 +703,6 @@ public class FutTransferClient {
         return result;
     }
 
-    /** A write whose failure is reported by throwing: correcting a sign-in, for now. */
-    private JsonNode post(String domain, String path, Map<String, Object> body, List<String> refs) {
-        String context = String.join(",", refs);
-        Exchange ex = exchange(Kind.WRITE, domain, path, body, refs);
-        if (ex.failure() != null) {
-            throw new FutTransferException("Could not reach the supplier at " + path + " (" + ex.failure() + ")");
-        }
-        if (ex.status() / 100 != 2) {
-            throw new FutTransferException(
-                    "Supplier returned HTTP " + ex.status() + " from " + path + " for " + context);
-        }
-        JsonNode json = ex.json(mapper);
-        if (json == null) {
-            throw new FutTransferException("Supplier returned an unreadable answer from " + path);
-        }
-        return json;
-    }
-
     /**
      * One row in {@code vendor_call} for this attempt: what was called, what came back and
      * what it means. Never the body. Calls that were not made -- paused, not configured --
@@ -649,6 +729,21 @@ public class FutTransferClient {
                     code = u.code();
                 }
                 case Uncertain u -> {
+                    result = "UNCERTAIN";
+                    code = u.code();
+                }
+            }
+        } else if (kind == Kind.WRITE) {
+            switch (classifyChange(ex, json -> "ok")) {
+                case Changed c -> {
+                    result = "OK";
+                    code = null;
+                }
+                case NotChanged n -> {
+                    result = n.refusal() == Refusal.REFUSED ? "REFUSED" : n.refusal().name();
+                    code = n.code();
+                }
+                case ChangeUncertain u -> {
                     result = "UNCERTAIN";
                     code = u.code();
                 }

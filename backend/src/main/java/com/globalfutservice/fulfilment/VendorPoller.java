@@ -208,6 +208,11 @@ public class VendorPoller {
 
         VendorStatusMap.Outcome o = VendorStatusMap.map(new VendorStatusMap.Report(s.status(), s.accountCheck(),
                 s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted()), row.amountOrderedK());
+        if (staleAfterRestart(row, s, o)) {
+            log.info("FUT Transfer: {} still reports what it did before it was restarted; waiting",
+                    row.externalRef());
+            return;
+        }
         String to = o.state().name();
         // Still waiting for the customer, but now for something else: a new sign-in was
         // refused for a different reason. They are asked again, for the new thing.
@@ -237,6 +242,23 @@ public class VendorPoller {
         if (o.alert()) {
             alert(row.externalRef(), headline(o.state()), staffText, o.reason());
         }
+    }
+
+    /**
+     * Just after an admin sent a corrected sign-in or resumed the order, the vendor may
+     * still be reporting what it said before. The same report again, asking the customer
+     * for something, is not news until the grace has passed: it is not their new details
+     * being refused.
+     */
+    private boolean staleAfterRestart(VendorOrderLedger.PollRow row, FutTransferClient.SupplierStatus s,
+                                      VendorStatusMap.Outcome o) {
+        if (o.state() != VendorStatusMap.State.AWAITING_CUSTOMER || row.resubmittedAt() == null) return false;
+        if (row.resubmittedAt().isBefore(java.time.Instant.now().minus(props.futTransfer().polling().restartGrace()))) {
+            return false;
+        }
+        return Objects.equals(s.status(), row.vendorStatus())
+                && Objects.equals(s.accountCheck(), row.vendorAccountCheck())
+                && Objects.equals(s.economyState(), row.vendorEconomyState());
     }
 
     /**

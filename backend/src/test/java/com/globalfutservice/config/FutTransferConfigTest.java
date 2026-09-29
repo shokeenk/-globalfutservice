@@ -20,7 +20,8 @@ class FutTransferConfigTest {
     private static AppProperties.FutTransfer config(String baseUrl, String backup, String method, int riskLevel) {
         return new AppProperties.FutTransfer(true, baseUrl, "api@example.test", KEY, method, riskLevel,
                 new AppProperties.FutTransferPolling(Duration.ofSeconds(60), Duration.ofSeconds(10),
-                        Duration.ofMinutes(15), 3, Duration.ofHours(6), Duration.ofMinutes(2)),
+                        Duration.ofMinutes(15), 3, Duration.ofHours(6), Duration.ofMinutes(2),
+                        Duration.ofMinutes(10)),
                 Duration.ofSeconds(15), 3, List.of("InvalidPassword"), backup,
                 new AppProperties.FutTransferOrder(300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1"), true,
                 Duration.ofHours(72));
