@@ -1,6 +1,7 @@
 package com.globalfutservice.admin;
 
 import com.globalfutservice.fulfilment.FutTransferClient;
+import com.globalfutservice.fulfilment.VendorCallLog;
 import com.globalfutservice.fulfilment.VendorOrderActions;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
@@ -12,8 +13,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,10 +34,33 @@ public class AdminVendorOrderController {
 
     private final VendorOrderActions actions;
     private final OrderService orderService;
+    private final VendorCallLog calls;
 
-    public AdminVendorOrderController(VendorOrderActions actions, OrderService orderService) {
+    public AdminVendorOrderController(VendorOrderActions actions, OrderService orderService, VendorCallLog calls) {
         this.actions = actions;
         this.orderService = orderService;
+        this.calls = calls;
+    }
+
+    /** The admin has checked the partner's dashboard and there is no order there. */
+    public record RetryRequest(boolean confirmedAbsent) {
+    }
+
+    /** The partner's order id, from its dashboard; optional when the order can be found by our reference. */
+    public record LinkRequest(String vendorOrderId) {
+    }
+
+    /** How it was settled: refunded, delivered by other means, given up. */
+    public record ResolveRequest(String note) {
+    }
+
+    @GetMapping
+    @Operation(summary = "The order at FUT Transfer: its state, every call, every admin action, and what can be done now")
+    public ResponseEntity<VendorOrderActions.Section> section(@PathVariable String publicRef) {
+        OrderEntity order = orderService.requireAny(publicRef);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(actions.section(order, calls.forOrder(publicRef)));
     }
 
     /** What an action came to, when the vendor did it. The page reloads the order to show the rest. */
@@ -47,6 +73,54 @@ public class AdminVendorOrderController {
                                                      @CurrentAccount AccountPrincipal admin) {
         OrderEntity order = orderService.requireAny(publicRef);
         return answer(actions.sendCorrectedSignIn(order, as(admin)));
+    }
+
+    @PostMapping("/resume")
+    @Operation(summary = "Restart an order FUT Transfer interrupted, once what stopped it is fixed")
+    public ResponseEntity<ActionResponse> resume(@PathVariable String publicRef,
+                                                 @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.resume(orderService.requireAny(publicRef), as(admin)));
+    }
+
+    @PostMapping("/stop")
+    @Operation(summary = "Stop the order at FUT Transfer; what it has delivered stays delivered")
+    public ResponseEntity<ActionResponse> stop(@PathVariable String publicRef,
+                                               @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.stop(orderService.requireAny(publicRef), as(admin)));
+    }
+
+    @PostMapping("/mark-finished")
+    @Operation(summary = "Close the order at FUT Transfer. Never automatic")
+    public ResponseEntity<ActionResponse> markFinished(@PathVariable String publicRef,
+                                                       @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.markFinished(orderService.requireAny(publicRef), as(admin)));
+    }
+
+    @PostMapping("/retry")
+    @Operation(summary = "Clear an order under review to be approved again, once it is confirmed nothing was created")
+    public ResponseEntity<ActionResponse> retry(@PathVariable String publicRef,
+                                                @RequestBody(required = false) RetryRequest body,
+                                                @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.allowResend(orderService.requireAny(publicRef), as(admin),
+                body != null && body.confirmedAbsent()));
+    }
+
+    @PostMapping("/link")
+    @Operation(summary = "Watch an order under review again, once FUT Transfer confirms it has it")
+    public ResponseEntity<ActionResponse> link(@PathVariable String publicRef,
+                                               @RequestBody(required = false) LinkRequest body,
+                                               @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.link(orderService.requireAny(publicRef), as(admin),
+                body == null ? null : body.vendorOrderId()));
+    }
+
+    @PostMapping("/resolve")
+    @Operation(summary = "Close an order under review by hand, with a note")
+    public ResponseEntity<ActionResponse> resolve(@PathVariable String publicRef,
+                                                  @RequestBody(required = false) ResolveRequest body,
+                                                  @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.resolve(orderService.requireAny(publicRef), as(admin),
+                body == null ? null : body.note()));
     }
 
     private static VendorOrderActions.Admin as(AccountPrincipal admin) {

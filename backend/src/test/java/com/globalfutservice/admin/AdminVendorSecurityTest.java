@@ -37,6 +37,7 @@ class AdminVendorSecurityTest {
     private MockMvc mvc;
 
     @MockBean private VendorControl control;
+    @MockBean private com.globalfutservice.fulfilment.VendorOrderLedger ledger;
     @MockBean private JwtService jwtService;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -54,6 +55,9 @@ class AdminVendorSecurityTest {
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/v1/admin/vendor/control").with(authentication(as(AccountRole.OPERATOR))))
                 .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/vendor/needs-review").with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/vendor/needs-review")).andExpect(status().isUnauthorized());
         verify(control, never()).resume(anyLong());
     }
 

@@ -361,6 +361,117 @@ public class VendorOrderLedger {
                 """, new MapSqlParameterSource("orderId", orderId).addValue("from", from)) == 1;
     }
 
+    /**
+     * An admin checked the vendor's dashboard, and our lookup did not find the order
+     * either: nothing was created, so the order may be approved again.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean allowResend(long orderId) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'FAILED', last_error_code = 'ADMIN_CONFIRMED_ABSENT', review_reason = null,
+                       updated_at = now()
+                 where order_id = :orderId and state = 'NEEDS_REVIEW' and vendor_order_id is null
+                """, new MapSqlParameterSource("orderId", orderId)) == 1;
+    }
+
+    /**
+     * An order waiting for review that the vendor does have: watched again, as sent.
+     * {@code vendorOrderId} is recorded if the admin gave one and none is held yet.
+     *
+     * @return false if it was no longer waiting for review, or the id belongs to another order
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean link(long orderId, String vendorOrderId) {
+        try {
+            int n = jdbc.update("""
+                    update vendor_order
+                       set state = 'SUBMITTED', vendor_order_id = coalesce(vendor_order_id, :vid),
+                           submitted_at = coalesce(submitted_at, now()), review_reason = null, missing_polls = 0,
+                           last_progress_at = now(), updated_at = now()
+                     where order_id = :orderId and state = 'NEEDS_REVIEW'
+                    """, new MapSqlParameterSource("orderId", orderId).addValue("vid", vendorOrderId));
+            if (n == 1 && vendorOrderId != null) {
+                jdbc.update("""
+                        update orders set supplier_order_id = :vid, version = version + 1
+                         where id = :orderId and supplier_order_id is null
+                        """, new MapSqlParameterSource("orderId", orderId).addValue("vid", vendorOrderId));
+            }
+            return n == 1;
+        } catch (DuplicateKeyException e) {
+            try {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            } catch (org.springframework.transaction.NoTransactionException outsideSpring) {
+                // Called directly, as the database tests do.
+            }
+            return false;
+        }
+    }
+
+    /** States an admin may close by hand: nothing more will happen to them on their own. */
+    public static final List<String> RESOLVABLE = List.of("NEEDS_REVIEW", "PARTIALLY_DELIVERED", "AWAITING_CUSTOMER",
+            "FAILED");
+
+    /** Closed by an admin, with their note. Never polled again, never sent again. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean resolve(long orderId, String note) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'RESOLVED', review_reason = :note, customer_action = null, updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId).addValue("note", note)
+                .addValue("from", RESOLVABLE)) == 1;
+    }
+
+    // ------------------------------------------------------------- admin view ---
+
+    /** Everything we hold about one vendor order, for the admin's order page. */
+    public record Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
+                         Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
+                         String vendorEconomyState, Boolean aborted, Long coinsUsed, java.math.BigDecimal toPay,
+                         int attempts, String lastErrorCode, String reviewReason, String customerAction,
+                         int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
+                         Instant resubmittedAt, Instant updatedAt) {
+    }
+
+    public Optional<Detail> detail(long orderId) {
+        return jdbc.query("""
+                select * from vendor_order where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new Detail(
+                rs.getString("state"), rs.getString("external_ref"), rs.getString("vendor_order_id"),
+                rs.getLong("amount_ordered_k"), rs.getObject("vendor_amount_ordered_k", Long.class),
+                rs.getObject("amount_delivered_k", Long.class), rs.getString("vendor_status"),
+                rs.getString("vendor_account_check"), rs.getString("vendor_economy_state"),
+                rs.getObject("vendor_was_aborted", Boolean.class), rs.getObject("coins_used", Long.class),
+                rs.getBigDecimal("to_pay"), rs.getInt("attempts"), rs.getString("last_error_code"),
+                rs.getString("review_reason"), rs.getString("customer_action"), rs.getInt("missing_polls"),
+                instant(rs, "submitted_at"), instant(rs, "last_polled_at"), instant(rs, "last_progress_at"),
+                instant(rs, "resubmitted_at"), instant(rs, "updated_at"))).stream().findFirst();
+    }
+
+    /** An order waiting for an admin's decision, for the review list on the Orders page. */
+    public record ReviewItem(String externalRef, String state, String lastErrorCode, String reviewReason,
+                             long amountOrderedK, Long deliveredK, Instant updatedAt) {
+    }
+
+    /** Everything waiting for an admin, longest-waiting first. */
+    public List<ReviewItem> needingReview() {
+        return jdbc.query("""
+                select external_ref, state, last_error_code, review_reason, amount_ordered_k, amount_delivered_k,
+                       updated_at
+                  from vendor_order where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED')
+                 order by updated_at, id
+                """, new MapSqlParameterSource(), (rs, i) -> new ReviewItem(rs.getString("external_ref"),
+                rs.getString("state"), rs.getString("last_error_code"), rs.getString("review_reason"),
+                rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
+                instant(rs, "updated_at")));
+    }
+
+    private static Instant instant(ResultSet rs, String column) throws SQLException {
+        Timestamp t = rs.getTimestamp(column);
+        return t == null ? null : t.toInstant();
+    }
+
     /** What the customer is asked to do, while their order waits for them. */
     public Optional<String> customerAction(long orderId) {
         return jdbc.query("""

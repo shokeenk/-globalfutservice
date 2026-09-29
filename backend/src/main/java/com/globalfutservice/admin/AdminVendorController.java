@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import java.time.Instant;
 
 import com.globalfutservice.fulfilment.VendorControl;
+import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,9 +30,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminVendorController {
 
     private final VendorControl control;
+    private final VendorOrderLedger ledger;
 
-    public AdminVendorController(VendorControl control) {
+    public AdminVendorController(VendorControl control, VendorOrderLedger ledger) {
         this.control = control;
+        this.ledger = ledger;
+    }
+
+    @GetMapping("/needs-review")
+    @Operation(summary = "Orders at FUT Transfer waiting for an admin's decision, longest-waiting first")
+    public ResponseEntity<java.util.List<VendorOrderLedger.ReviewItem>> needsReview() {
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(ledger.needingReview());
     }
 
     public record ControlView(boolean paused, Instant pausedAt, String reason, Instant resumedAt) {
