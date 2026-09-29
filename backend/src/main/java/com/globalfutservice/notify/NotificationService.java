@@ -73,6 +73,11 @@ public class NotificationService {
     }
 
     @Async
+    public void customerActionNeeded(CustomerActionNotification n) {
+        each(notifier -> notifier.customerActionNeeded(n));
+    }
+
+    @Async
     public void readyToFulfil(OrderNotification n) {
         each(notifier -> notifier.readyToFulfil(n));
     }

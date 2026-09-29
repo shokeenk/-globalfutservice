@@ -14,6 +14,7 @@ import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.CustomerAction;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.notify.CustomerActionNotification;
 import com.globalfutservice.notify.FulfilmentAlert;
 import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.orders.OrderEntity;
@@ -41,7 +42,8 @@ import org.springframework.stereotype.Component;
  * <p><b>What it changes.</b> {@link VendorStatusMap} decides the vendor order's state. The
  * order itself only moves through the state machine, with words from
  * {@link CustomerText}; an order waiting for review is left where it was and staff are
- * told. The sign-in is deleted once the order is delivered.
+ * told. A customer with something to fix is told what, by email and in their order's
+ * ticket, in those same words. The sign-in is deleted once the order is delivered.
  *
  * <p><b>When.</b> A tick every fifteen seconds asks whether a poll is due. The schedule
  * lives in the database -- the interval, its jitter, and a back-off after rate limits or
@@ -207,7 +209,11 @@ public class VendorPoller {
         VendorStatusMap.Outcome o = VendorStatusMap.map(new VendorStatusMap.Report(s.status(), s.accountCheck(),
                 s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted()), row.amountOrderedK());
         String to = o.state().name();
-        if (to.equals(row.state())) return;
+        // Still waiting for the customer, but now for something else: a new sign-in was
+        // refused for a different reason. They are asked again, for the new thing.
+        boolean newAsk = o.state() == VendorStatusMap.State.AWAITING_CUSTOMER && to.equals(row.state())
+                && !o.action().name().equals(row.customerAction());
+        if (to.equals(row.state()) && !newAsk) return;
 
         String staffText = staffText(o, s, row.amountOrderedK());
         if (!ledger.move(row.orderId(), List.of(row.state()), to, o.reason(), staffText, o.action().name())) {
@@ -215,11 +221,34 @@ public class VendorPoller {
         }
         log.info("FUT Transfer: {} {} -> {}{}", row.externalRef(), row.state(), to,
                 o.reason() == null ? "" : " (" + o.reason() + ")");
-        if (!TERMINAL_FOR_ORDER.contains(to)) {
-            moveOrder(row.orderId(), o.state(), o.action());
+        OrderEntity order = null;
+        if (newAsk) {
+            order = orders.findById(row.orderId()).orElse(null);
+        } else if (!TERMINAL_FOR_ORDER.contains(to)) {
+            order = moveOrder(row.orderId(), o.state(), o.action());
+        }
+        // Only while the order is on hold can the customer do anything about it: that is
+        // when their order page takes a new sign-in. After an order they have already
+        // re-entered details for, the old details' refusal is not news to them.
+        if (o.state() == VendorStatusMap.State.AWAITING_CUSTOMER && order != null
+                && order.getStatus() == OrderStatus.ON_HOLD) {
+            tellCustomer(order, o.action());
         }
         if (o.alert()) {
             alert(row.externalRef(), headline(o.state()), staffText, o.reason());
+        }
+    }
+
+    /**
+     * The customer's email and their order's ticket say what to do, in our words only.
+     * Queued after the order has moved, and never able to undo it.
+     */
+    private void tellCustomer(OrderEntity order, CustomerAction action) {
+        try {
+            notifications.customerActionNeeded(new CustomerActionNotification(
+                    orderService.notificationFor(order), CustomerText.forAction(action)));
+        } catch (RuntimeException e) {
+            log.warn("Could not queue the customer's notice for {}: {}", order.getPublicRef(), e.getMessage());
         }
     }
 
@@ -234,10 +263,12 @@ public class VendorPoller {
     /**
      * Moves our order to match the vendor's state, only along edges the state machine
      * allows. The reason is the customer's sentence, never the vendor's code.
+     *
+     * @return the order as it now is; null if it could not be found or was not allowed to move
      */
-    private void moveOrder(long orderId, VendorStatusMap.State state, CustomerAction action) {
+    private OrderEntity moveOrder(long orderId, VendorStatusMap.State state, CustomerAction action) {
         OrderEntity order = orders.findById(orderId).orElse(null);
-        if (order == null) return;
+        if (order == null) return null;
         List<OrderStatus> path = new ArrayList<>();
         switch (state) {
             case SUBMITTED, IN_DELIVERY -> {
@@ -259,7 +290,7 @@ public class VendorPoller {
                 }
             }
             default -> {
-                return;
+                return order;
             }
         }
         String reason = CustomerText.forState(state, action);
@@ -269,7 +300,7 @@ public class VendorPoller {
                         order.getPublicRef(), order.getStatus(), next);
                 alert(order.getPublicRef(), "Could not move the order", "The partner's report would move this order from "
                         + order.getStatus() + " to " + next + ", which is not allowed. It was left as it is.", "STATE_MACHINE");
-                return;
+                return null;
             }
             order = orderService.transition(order, next, Actor.SYSTEM, null, ACTOR,
                     next == OrderStatus.IN_PROGRESS && state == VendorStatusMap.State.DELIVERED
@@ -279,6 +310,7 @@ public class VendorPoller {
             // The storefront promises the sign-in is deleted once the order is done.
             vault.purge(orderId, "delivered by supplier");
         }
+        return order;
     }
 
     private static String headline(VendorStatusMap.State state) {

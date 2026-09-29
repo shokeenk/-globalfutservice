@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.scheduling.SchedulerLock;
 
 /**
@@ -14,6 +16,10 @@ import com.globalfutservice.scheduling.SchedulerLock;
  * this job purges anything past its window regardless of state. The second mechanism
  * exists because the first one depends on code being correct, and this one only depends
  * on the clock.
+ *
+ * <p>It also deletes the sign-in of an order parked for an admin's review once nobody has
+ * touched it for {@code gfs.fut-transfer.review-credential-retention}: an order that waits
+ * that long is not going to be sent again on the same details.
  */
 @Component
 public class CredentialPurgeJob {
@@ -22,19 +28,33 @@ public class CredentialPurgeJob {
 
     private final CredentialVaultService vaultService;
     private final SchedulerLock lock;
+    private final VendorOrderLedger vendorOrders;
+    private final AppProperties props;
 
-    public CredentialPurgeJob(CredentialVaultService vaultService, SchedulerLock lock) {
+    public CredentialPurgeJob(CredentialVaultService vaultService, SchedulerLock lock,
+                              VendorOrderLedger vendorOrders, AppProperties props) {
         this.vaultService = vaultService;
         this.lock = lock;
+        this.vendorOrders = vendorOrders;
+        this.props = props;
     }
 
     @Scheduled(fixedDelayString = "PT10M", initialDelayString = "PT1M")
     public void sweep() {
         try {
             // One sweeper across every instance.
-            lock.runExclusively("credential-purge", vaultService::purgeExpired);
+            lock.runExclusively("credential-purge", () -> {
+                vaultService.purgeExpired();
+                purgeHeldForReview();
+            });
         } catch (Exception e) {
             log.error("Credential retention sweep failed", e);
+        }
+    }
+
+    void purgeHeldForReview() {
+        for (long orderId : vendorOrders.heldForReviewLongerThan(props.futTransfer().reviewCredentialRetention())) {
+            vaultService.purge(orderId, "held for review past retention");
         }
     }
 

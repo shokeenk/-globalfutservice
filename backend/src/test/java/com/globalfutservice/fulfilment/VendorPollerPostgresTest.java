@@ -13,7 +13,10 @@ import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.fulfilment.FakeFutTransfer.Reply;
+import com.globalfutservice.domain.orders.CustomerAction;
+import com.globalfutservice.notify.CustomerActionNotification;
 import com.globalfutservice.notify.FulfilmentAlert;
+import com.globalfutservice.notify.OrderNotification;
 import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
@@ -36,6 +39,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,6 +98,18 @@ class VendorPollerPostgresTest {
             statuses.put(o.getId(), to);
             return orderEntity(o.getId());
         });
+        when(orderService.notificationFor(any())).thenAnswer(inv -> {
+            OrderEntity o = inv.getArgument(0);
+            return new OrderNotification(o.getPublicRef(), o.getStatus().name(), "Buy Coins — 500K", "₹1,000.00",
+                    "buyer@example.test", null, "PLAYER_AUCTION", "TRADING_SERVICE", "PC", null, null, null, null);
+        });
+    }
+
+    /** Everything the customer was told they have to do, in order. */
+    private List<CustomerActionNotification> customerNotices() {
+        ArgumentCaptor<CustomerActionNotification> captor = ArgumentCaptor.forClass(CustomerActionNotification.class);
+        verify(notifications, org.mockito.Mockito.atLeast(0)).customerActionNeeded(captor.capture());
+        return captor.getAllValues();
     }
 
     @AfterEach
@@ -267,6 +283,79 @@ class VendorPollerPostgresTest {
         ArgumentCaptor<String> reason = ArgumentCaptor.forClass(String.class);
         verify(orderService).transition(any(), eq(OrderStatus.ON_HOLD), eq(Actor.SYSTEM), eq(null), eq("GFS"), reason.capture());
         assertThat(reason.getValue()).contains("backup codes").doesNotContain("wrongBA");
+
+        // Told once, by email and ticket, in the same words -- never the vendor's.
+        assertThat(customerNotices()).singleElement().satisfies(n -> {
+            assertThat(n.instruction()).isEqualTo(CustomerText.forAction(CustomerAction.NEW_BACKUP_CODES));
+            assertThat(n.order().publicRef()).isEqualTo("ref-" + id);
+        });
+        // Staff hear about it separately, with the vendor's code.
+        assertThat(alerts()).singleElement().satisfies(a -> assertThat(a.detail()).contains("wrongBA"));
+
+        // The same report again is not news.
+        poller.pollOnce();
+        assertThat(customerNotices()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("still waiting, but now for something else: the customer is asked again, for the new thing")
+    void newAsk() {
+        long id = sent("GFS-26-NEWASK01", "vid-newask", "SUBMITTED", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-newask", report("interrupted", "wrongUserPass", null, 500, 0, 0)));
+        poller.pollOnce();
+        bulk(Map.of("vid-newask", report("interrupted", "console", null, 500, 0, 0)));
+        poller.pollOnce();
+
+        assertThat(row(id).get("state")).isEqualTo("AWAITING_CUSTOMER");
+        assertThat(ledger.customerAction(id)).contains("SIGN_OUT_CONSOLE");
+        assertThat(customerNotices()).extracting(CustomerActionNotification::instruction).containsExactly(
+                CustomerText.forAction(CustomerAction.RESUBMIT_SIGN_IN),
+                CustomerText.forAction(CustomerAction.SIGN_OUT_CONSOLE));
+        // Moved on hold once; the second ask leaves it where it is.
+        verify(orderService, times(1)).transition(any(), eq(OrderStatus.ON_HOLD), any(), any(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a customer who has already re-entered their details is not told the old ones were refused")
+    void notToldAfterResubmitting() {
+        long id = sent("GFS-26-RESUB001", "vid-resub", "AWAITING_CUSTOMER", OrderStatus.READY_FOR_DELIVERY);
+        db.jdbc.update("update vendor_order set customer_action = 'RESUBMIT_SIGN_IN' where order_id = ?", id);
+        bulk(Map.of("vid-resub", report("interrupted", "wrongBA", null, 500, 0, 0)));
+
+        poller.pollOnce();
+
+        assertThat(ledger.customerAction(id)).contains("NEW_BACKUP_CODES");
+        assertThat(customerNotices()).isEmpty();
+        verify(orderService, never()).transition(any(), any(), any(), any(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("an order the state machine will not put on hold: staff are told, the customer is not")
+    void notToldWhenNotHeld() {
+        sent("GFS-26-NOHOLD01", "vid-nohold", "SUBMITTED", OrderStatus.DELIVERED);
+        bulk(Map.of("vid-nohold", report("interrupted", "wrongBA", null, 500, 0, 0)));
+
+        poller.pollOnce();
+
+        assertThat(customerNotices()).isEmpty();
+        assertThat(alerts()).extracting(FulfilmentAlert::code).contains("CUSTOMER_ACTION");
+    }
+
+    @Test
+    @DisplayName("a sign-in held for review is listed for deletion once untouched past the retention, not before")
+    void reviewRetention() {
+        long old = sent("GFS-26-REVOLD01", "vid-revold", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        long fresh = sent("GFS-26-REVNEW01", "vid-revnew", "PARTIALLY_DELIVERED", OrderStatus.IN_PROGRESS);
+        long purged = sent("GFS-26-REVGON01", "vid-revgon", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        long working = sent("GFS-26-REVWRK01", "vid-revwrk", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        for (long id : List.of(old, fresh, purged, working)) {
+            db.jdbc.update("insert into credential_vault (order_id, purge_after) values (?, now() + interval '30 days')", id);
+        }
+        db.jdbc.update("update credential_vault set purged_at = now() where order_id = ?", purged);
+        db.jdbc.update("update vendor_order set updated_at = now() - interval '73 hours' where order_id in (?, ?, ?)",
+                old, purged, working);
+
+        assertThat(ledger.heldForReviewLongerThan(Duration.ofHours(72))).containsExactly(old);
     }
 
     @Test

@@ -196,18 +196,19 @@ public class VendorOrderLedger {
 
     /** A vendor order the poller asks about. */
     public record PollRow(long orderId, String externalRef, String vendorOrderId, String state,
-                          long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls) {
+                          long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls,
+                          String customerAction) {
     }
 
     private static final String POLL_COLUMNS = """
             order_id, external_ref, vendor_order_id, state, amount_ordered_k, amount_delivered_k,
-            vendor_status, missing_polls
+            vendor_status, missing_polls, customer_action
             """;
 
     private static PollRow pollRow(ResultSet rs, int i) throws SQLException {
         return new PollRow(rs.getLong("order_id"), rs.getString("external_ref"), rs.getString("vendor_order_id"),
                 rs.getString("state"), rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
-                rs.getString("vendor_status"), rs.getInt("missing_polls"));
+                rs.getString("vendor_status"), rs.getInt("missing_polls"), rs.getString("customer_action"));
     }
 
     /** Orders the vendor is working on or waiting for the customer on, least recently asked about first. */
@@ -297,6 +298,22 @@ public class VendorOrderLedger {
                 .addValue("code", reasonCode)
                 .addValue("reason", reason)
                 .addValue("action", action)) == 1;
+    }
+
+    /**
+     * Orders parked for an admin -- needing review, or delivered short -- that nobody has
+     * touched for longer than {@code retention}, and still holding a sign-in. Those sign-ins
+     * are deleted: a decision that slow is not going to send the order again on the same
+     * details.
+     */
+    public List<Long> heldForReviewLongerThan(java.time.Duration retention) {
+        return jdbc.queryForList("""
+                select order_id from vendor_order
+                 where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED')
+                   and updated_at < now() - make_interval(secs => :secs)
+                   and exists (select 1 from credential_vault c
+                                where c.order_id = vendor_order.order_id and c.purged_at is null)
+                """, new MapSqlParameterSource("secs", retention.toSeconds()), Long.class);
     }
 
     /** What the customer is asked to do, while their order waits for them. */

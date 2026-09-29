@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Operator alerts over Discord.
@@ -358,28 +359,61 @@ public class DiscordNotifier implements Notifier {
      */
     private void postQuietly(String channelId, String lead, Map<String, Object> embed,
                              String sessionRef, String where) {
+        retrying(() -> bot.postEmbed(channelId, lead, embed), "announce session " + sessionRef + " in the " + where);
+    }
+
+    private void retrying(Runnable post, String what) {
         int attempts = retryDelays.size() + 1;
         for (int attempt = 1; ; attempt++) {
             try {
-                bot.postEmbed(channelId, lead, embed);
+                post.run();
                 if (attempt > 1) {
-                    log.info("Announced session {} in the {} on attempt {}", sessionRef, where, attempt);
+                    log.info("Did {} on attempt {}", what, attempt);
                 }
                 return;
             } catch (DiscordBotClient.DiscordException e) {
                 boolean again = e.isRetryable() && attempt < attempts;
-                log.warn("Could not announce session {} in the {} (HTTP {}, attempt {} of {}{}): {}",
-                        sessionRef, where, e.status(), attempt, attempts,
+                log.warn("Could not {} (HTTP {}, attempt {} of {}{}): {}",
+                        what, e.status(), attempt, attempts,
                         again ? ", will retry" : "", e.getMessage());
                 if (!again) {
                     return;
                 }
                 pause(retryDelays.get(attempt - 1));
             } catch (RuntimeException e) {
-                log.warn("Could not announce session {} in the {}: {}", sessionRef, where, e.toString());
+                log.warn("Could not {}: {}", what, e.toString());
                 return;
             }
         }
+    }
+
+    /* ------------------------------------------------------ customer's ticket --- */
+
+    /**
+     * What the customer has to do, in their order's ticket -- which they can read.
+     *
+     * <p>So it carries the customer's sentence and nothing else: no partner code, no
+     * mention of staff. Staff get the detail on the staff channel, from
+     * {@link #fulfilmentAlert}. An order without a ticket gets only the email.
+     */
+    @Override
+    public void customerActionNeeded(CustomerActionNotification a) {
+        if (bot == null || !bot.isEnabled()) {
+            return;
+        }
+        String ref = a.order().publicRef();
+        Optional<String> ticket;
+        try {
+            ticket = bot.findTicketChannel(ref);
+        } catch (RuntimeException e) {
+            log.warn("Could not find the ticket for order {} to say what the customer has to do: {}", ref,
+                    e.getMessage());
+            return;
+        }
+        String message = "**Action needed on order " + ref + "**\n" + a.instruction()
+                + "\nYour order page: " + props.publicUrl() + "/track?ref=" + ref;
+        ticket.ifPresent(channel -> retrying(() -> bot.postMessage(channel, message),
+                "tell the customer what to do in the ticket for " + ref));
     }
 
     /**
