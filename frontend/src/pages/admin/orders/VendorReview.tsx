@@ -128,7 +128,7 @@ export function VendorReview({ onChanged }: { onChanged?: () => void } = {}) {
                     {item.reviewReason ?? ''}
                   </td>
                   <td className="px-4 py-3 tabular-nums text-admin-ink">
-                    {item.deliveredK === null ? '—' : `${item.deliveredK}K`} of {item.amountOrderedK}K
+                    {item.deliveredK == null ? '—' : `${item.deliveredK}K`} of {item.amountOrderedK}K
                   </td>
                   <td className="px-4 py-3 text-admin-muted">{shortDateTime(item.updatedAt)}</td>
                 </tr>

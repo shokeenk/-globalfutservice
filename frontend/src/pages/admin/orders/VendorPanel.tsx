@@ -90,16 +90,16 @@ export function VendorPanel({
           <dl className="mt-5 grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
             <Cell label="Partner order" value={v.vendorOrderId ?? '—'} mono />
             <Cell label="Ordered" value={`${v.amountOrderedK.toLocaleString('en-IN')}K`} />
-            <Cell label="Delivered" value={v.deliveredK === null ? '—' : `${v.deliveredK.toLocaleString('en-IN')}K`} />
+            <Cell label="Delivered" value={v.deliveredK == null ? '—' : `${v.deliveredK.toLocaleString('en-IN')}K`} />
             <Cell label="Partner status" value={v.vendorStatus ?? '—'} mono />
             <Cell label="Account check" value={v.vendorAccountCheck ?? '—'} mono />
             <Cell label="Economy state" value={v.vendorEconomyState ?? '—'} mono />
-            <Cell label="Coins used" value={v.coinsUsed === null ? '—' : v.coinsUsed.toLocaleString('en-IN')} />
-            <Cell label="To pay (currency unconfirmed)" value={v.toPay === null ? '—' : String(v.toPay)} />
+            <Cell label="Coins used" value={v.coinsUsed == null ? '—' : v.coinsUsed.toLocaleString('en-IN')} />
+            <Cell label="To pay (currency unconfirmed)" value={v.toPay == null ? '—' : String(v.toPay)} />
             <Cell label="Sends" value={String(v.attempts)} />
-            <Cell label="Sent" value={dateTime(v.submittedAt)} />
-            <Cell label="Last report" value={dateTime(v.lastPolledAt)} />
-            <Cell label="Last progress" value={dateTime(v.lastProgressAt)} />
+            <Cell label="Sent" value={dateTime(v.submittedAt ?? null)} />
+            <Cell label="Last report" value={dateTime(v.lastPolledAt ?? null)} />
+            <Cell label="Last progress" value={dateTime(v.lastProgressAt ?? null)} />
           </dl>
 
           {v.aborted && (
@@ -181,7 +181,7 @@ export function VendorPanel({
                     </p>
                     <p className="text-[11.5px] text-chalk-faint">
                       {dateTime(item.call.at)} · {item.call.domain === 'BACKUP' ? 'backup domain' : 'primary domain'}
-                      {' · '}{item.call.httpStatus === null ? 'no answer' : `HTTP ${item.call.httpStatus}`}
+                      {' · '}{item.call.httpStatus == null ? 'no answer' : `HTTP ${item.call.httpStatus}`}
                       {' · '}{item.call.durationMs} ms
                     </p>
                   </>

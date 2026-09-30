@@ -93,6 +93,18 @@ describe('VendorPanel', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  it('shows a dash, never "undefined", for what the server leaves out of its answer', () => {
+    // The API omits empty fields rather than sending null.
+    const sparse = { ...detail() } as Partial<VendorOrderDetail>
+    delete sparse.deliveredK
+    delete sparse.coinsUsed
+    delete sparse.toPay
+    delete sparse.submittedAt
+    renderPanel(section({ vendorOrder: sparse as VendorOrderDetail }))
+    expect(document.body.textContent).not.toContain('undefined')
+    expect(screen.getByText('Delivered').nextSibling).toHaveTextContent('—')
+  })
+
   it('offers only what the server says applies, asks first, and posts to that action', async () => {
     api.post.mockResolvedValue({ status: 'DONE', message: 'Stopped at the partner.' })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -191,6 +203,16 @@ describe('VendorReview', () => {
     expect(link).toHaveAttribute('href', `/admin/orders/${REF}`)
     expect(screen.getByText('Partly delivered')).toBeInTheDocument()
     expect(screen.getByText('420K of 500K')).toBeInTheDocument()
+  })
+
+  it('shows a dash, never "undefined", when nothing has been delivered yet', async () => {
+    // As the API sends it: no deliveredK at all.
+    stub([{ externalRef: REF, state: 'NEEDS_REVIEW', lastErrorCode: 'MISSING_FROM_POLL', amountOrderedK: 1000,
+      updatedAt: '2026-09-29T10:00:00Z' }])
+    render(<MemoryRouter><VendorReview /></MemoryRouter>)
+
+    expect(await screen.findByText('— of 1000K')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('undefined')
   })
 
   it('shows a pause, and resumes calls only after asking', async () => {
