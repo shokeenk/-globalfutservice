@@ -138,7 +138,24 @@ public class OperatorEmailNotifier implements Notifier {
                 .toList();
     }
 
+    @Override
+    public void fulfilmentAlert(FulfilmentAlert a) {
+        send(a.publicRef(), "[REVIEW] " + a.publicRef() + " " + a.headline(),
+                """
+                %s
+
+                Code:     %s
+
+                Open it here:
+                %s
+                """.formatted(a.detail(), a.code() == null ? "-" : a.code(), a.adminDeepLink()));
+    }
+
     private void send(OrderNotification n, String subject, String body) {
+        send(n.publicRef(), subject, body);
+    }
+
+    private void send(String publicRef, String subject, String body) {
         if (!isEnabled()) {
             log.debug("Operator email disabled; would have sent '{}'", subject);
             return;
@@ -153,7 +170,7 @@ public class OperatorEmailNotifier implements Notifier {
         } catch (Exception e) {
             // Swallowed, like every other channel. A paid order must never roll back
             // because a mail server was unreachable.
-            log.warn("Operator email for {} failed: {}", n.publicRef(), e.getMessage());
+            log.warn("Operator email for {} failed: {}", publicRef, e.getMessage());
         }
     }
 

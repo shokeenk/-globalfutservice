@@ -231,6 +231,16 @@ public class DiscordNotifier implements Notifier {
      * <p>A bare id renders as a number and a username renders as text; neither notifies
      * anybody, and both look like they worked.
      */
+    @Override
+    public void fulfilmentAlert(FulfilmentAlert a) {
+        send(mention() + " ⚠️ **Fulfilment needs review**",
+                embed(a.publicRef() + " — " + a.headline(), AMBER, List.of(
+                        field("What happened", a.detail(), false),
+                        field("Code", a.code(), true)
+                ), a.adminDeepLink(), null),
+                a.publicRef());
+    }
+
     private String mention() {
         String id = props.notifications().discordAdminId();
         if (id == null || id.isBlank()) {

@@ -68,6 +68,11 @@ public class NotificationService {
     }
 
     @Async
+    public void fulfilmentAlert(FulfilmentAlert alert) {
+        each(notifier -> notifier.fulfilmentAlert(alert));
+    }
+
+    @Async
     public void readyToFulfil(OrderNotification n) {
         each(notifier -> notifier.readyToFulfil(n));
     }

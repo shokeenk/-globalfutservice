@@ -196,7 +196,8 @@ class AdminOrderPageSecurityTest {
         when(orderService.requireAny("GFS-26-RELEASE1")).thenReturn(order);
         when(vaultService.status(7L)).thenReturn(
                 new com.globalfutservice.credentials.web.CredentialDtos.VaultStatus(true, false, null, 0));
-        when(supplierFulfilment.approveAndDispatch(order, 1L)).thenReturn("SUP-1");
+        when(supplierFulfilment.approveAndDispatch(order, 1L)).thenReturn(new SupplierFulfilmentService.Release(
+                SupplierFulfilmentService.Result.SUBMITTED, "SUP-1", "Sent to the fulfilment partner as SUP-1."));
         when(orderService.transition(any(), any(), any(), any(), any(), any())).thenReturn(order);
         // As an access token builds it: no email.
         AccountPrincipal fromToken = new AccountPrincipal(1L, "acc_test", null, AccountRole.OPERATOR);

@@ -7,6 +7,7 @@ import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.fulfilment.FutTransferClient;
 import com.globalfutservice.fulfilment.SupplierFulfilmentService;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
@@ -315,8 +316,14 @@ public class AdminOrderController {
 
                     The sign-in is decrypted in memory for the duration of one outbound
                     call and is never logged, never persisted in plaintext and never
-                    returned in this response. On failure the order does not move and the
-                    partner's reason is surfaced.
+                    returned in this response.
+
+                    Sent at most once: a second call finds the order already claimed and
+                    sends nothing. When the partner's answer is lost the order is looked up
+                    by its reference, never sent again; if that cannot confirm it, the order
+                    waits for an admin. A refused sign-in is deleted and the order goes on
+                    hold for the customer to enter it again. Any other failure leaves the
+                    order where it was, with the reason in the error.
                     """)
     public ResponseEntity<OrderDtos.OrderResponse> approveFulfilment(
             @PathVariable String publicRef,
@@ -356,30 +363,52 @@ public class AdminOrderController {
                     "This order has no sign-in on file, so there is nothing to send.");
         }
 
-        // Throws with the partner's reason if refused. The order stays put in that case:
-        // the transition below is only reached on a supplier order id.
-        String supplierOrderId = supplierFulfilment.approveAndDispatch(order, operator.id());
+        SupplierFulfilmentService.Release release = supplierFulfilment.approveAndDispatch(order, operator.id());
 
         /*
-         * Re-read before moving it, because the release just wrote to this row.
+         * Re-read before moving it, because the release may just have written to this row.
          *
-         * `approveAndDispatch` stores the partner's order id and commits, which leaves the
-         * copy loaded above one version behind. Transitioning that stale copy failed the
+         * The release records the partner's order id and commits, which leaves the copy
+         * loaded above one version behind. Transitioning that stale copy failed the
          * optimistic lock *after* the sign-in had already gone to the partner: the
          * operator saw a 500, the order sat in the queue, and only a second click moved
          * it. Loading it again costs one query and makes the successful path succeed.
          */
         OrderEntity released = orderService.requireAny(publicRef);
 
-        // Labelled with the public id, as every other transition is. Never the email: an
-        // access token does not carry one, and the customer's own API returns this label.
-        OrderEntity moved = orderService.transition(released, OrderStatus.IN_PROGRESS,
-                Actor.OPERATOR, operator.id(), operator.publicId(),
-                "Released to fulfilment partner as " + supplierOrderId);
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(mapper.toResponse(moved, orderService.timeline(moved.getId()), true));
+        switch (release.result()) {
+            case SUBMITTED, ALREADY_SUBMITTED -> {
+                if (released.getStatus() != OrderStatus.READY_FOR_DELIVERY) {
+                    break;
+                }
+                // Labelled with the public id, as every other transition is. Never the email: an
+                // access token does not carry one, and the customer's own API returns this label.
+                OrderEntity moved = orderService.transition(released, OrderStatus.IN_PROGRESS,
+                        Actor.OPERATOR, operator.id(), operator.publicId(),
+                        release.vendorOrderId() == null ? "Released to fulfilment partner"
+                                : "Released to fulfilment partner as " + release.vendorOrderId());
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                        .body(mapper.toResponse(moved, orderService.timeline(moved.getId()), true));
+            }
+            case FAILED_SIGN_IN -> {
+                // The sign-in was refused and deleted: the customer is asked for it again.
+                // This reason is on the order timeline, which the customer reads.
+                orderService.transition(released, OrderStatus.ON_HOLD, Actor.SYSTEM, null, "futtransfer",
+                        "Your EA sign-in was not accepted. Please enter your details again so we can start.");
+            }
+            default -> {
+                // The order stays where it was. The reason is in the error below.
+            }
+        }
+        if (release.result() == SupplierFulfilmentService.Result.SUBMITTED
+                || release.result() == SupplierFulfilmentService.Result.ALREADY_SUBMITTED) {
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                    .body(mapper.toResponse(released, orderService.timeline(released.getId()), true));
+        }
+        // Safe to show: written by us, never containing the sign-in.
+        throw new FutTransferClient.FutTransferException(release.message());
     }
 
     @PostMapping("/{publicRef}/credentials/reveal")
