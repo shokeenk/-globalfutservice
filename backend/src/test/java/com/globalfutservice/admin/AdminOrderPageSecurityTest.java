@@ -187,6 +187,31 @@ class AdminOrderPageSecurityTest {
     }
 
     @Test
+    @DisplayName("releasing to the partner puts who did it on the timeline: the public id, never an email")
+    void releaseNamesWhoDidIt() throws Exception {
+        OrderEntity order = org.mockito.Mockito.mock(OrderEntity.class);
+        when(order.getId()).thenReturn(7L);
+        when(order.getSku()).thenReturn(Sku.TRADING_SERVICE);
+        when(order.getStatus()).thenReturn(com.globalfutservice.domain.orders.OrderStatus.READY_FOR_DELIVERY);
+        when(orderService.requireAny("GFS-26-RELEASE1")).thenReturn(order);
+        when(vaultService.status(7L)).thenReturn(
+                new com.globalfutservice.credentials.web.CredentialDtos.VaultStatus(true, false, null, 0));
+        when(supplierFulfilment.approveAndDispatch(order, 1L)).thenReturn(new SupplierFulfilmentService.Release(
+                SupplierFulfilmentService.Result.SUBMITTED, "SUP-1", "Sent to the fulfilment partner as SUP-1."));
+        when(orderService.transition(any(), any(), any(), any(), any(), any())).thenReturn(order);
+        // As an access token builds it: no email.
+        AccountPrincipal fromToken = new AccountPrincipal(1L, "acc_test", null, AccountRole.OPERATOR);
+
+        mvc.perform(post(BASE + "/GFS-26-RELEASE1/approve-fulfilment").with(authentication(
+                        new UsernamePasswordAuthenticationToken(fromToken, null, fromToken.authorities()))))
+                .andExpect(status().isOk());
+
+        verify(orderService).transition(eq(order), eq(com.globalfutservice.domain.orders.OrderStatus.IN_PROGRESS),
+                eq(com.globalfutservice.domain.orders.Actor.OPERATOR), eq(1L), eq("acc_test"),
+                eq("Released to fulfilment partner as SUP-1"));
+    }
+
+    @Test
     @DisplayName("an operator can send the sign-in reminder; a customer cannot")
     void reminder() throws Exception {
         mvc.perform(post(BASE + "/GFS-26-CN43SP05/credentials/remind")
