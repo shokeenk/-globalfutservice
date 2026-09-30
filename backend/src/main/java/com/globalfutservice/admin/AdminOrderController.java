@@ -381,8 +381,10 @@ public class AdminOrderController {
                 if (released.getStatus() != OrderStatus.READY_FOR_DELIVERY) {
                     break;
                 }
+                // Labelled with the public id, as every other transition is. Never the email: an
+                // access token does not carry one, and the customer's own API returns this label.
                 OrderEntity moved = orderService.transition(released, OrderStatus.IN_PROGRESS,
-                        Actor.OPERATOR, operator.id(), operator.email(),
+                        Actor.OPERATOR, operator.id(), operator.publicId(),
                         release.vendorOrderId() == null ? "Released to fulfilment partner"
                                 : "Released to fulfilment partner as " + release.vendorOrderId());
                 return ResponseEntity.ok()
