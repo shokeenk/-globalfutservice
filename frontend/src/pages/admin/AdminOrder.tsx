@@ -6,9 +6,12 @@ import {
 import { ApiError, api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
-import type { Order } from '../../lib/types'
+import type { Order, VendorSection } from '../../lib/types'
+import { useAuth } from '../../state/AuthContext'
 import { statusTone } from '../Track'
 import { releaseQuestion } from './orders/confirmations'
+import { approveReplacedBy } from './orders/vendor'
+import { VendorPanel } from './orders/VendorPanel'
 import { AdminPage } from './shell/AdminPage'
 
 type Revealed = {
@@ -40,6 +43,20 @@ export default function AdminOrder() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Revealed | null>(null)
+  // The order at FUT Transfer. Admin only, like the endpoint; operators never ask.
+  const { account } = useAuth()
+  const isAdmin = account?.role === 'ADMIN'
+  const [vendor, setVendor] = useState<VendorSection | null>(null)
+
+  const loadVendor = useCallback(async () => {
+    if (!isAdmin) return
+    try {
+      setVendor(await api.get<VendorSection>(`/api/v1/admin/orders/${publicRef}/vendor`))
+    } catch {
+      // The rest of the page still works; the section simply does not show.
+      setVendor(null)
+    }
+  }, [isAdmin, publicRef])
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +77,10 @@ export default function AdminOrder() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    void loadVendor()
+  }, [loadVendor])
 
   async function transition(target: string) {
     setBusy(target)
@@ -105,6 +126,7 @@ export default function AdminOrder() {
       setError(e instanceof ApiError ? e.message : 'Could not release the order.')
     } finally {
       setBusy(null)
+      await loadVendor()
     }
   }
 
@@ -166,7 +188,7 @@ export default function AdminOrder() {
                 label="Method"
                 value={order.sku === 'COACHING' ? 'Scheduled session'
                   : order.sku.startsWith('BOOST_') ? 'Played on the account'
-                    : 'GFS Trading Method 3.0'}
+                    : 'GFS Transfer Method 3.0'}
               />
               <Detail label="Placed" value={dateTime(order.createdAt)} />
               <Detail label="Delivered" value={dateTime(order.deliveredAt)} />
@@ -235,6 +257,17 @@ export default function AdminOrder() {
             )}
           </Card>
 
+          {isAdmin && vendor && order.sku === 'TRADING_SERVICE' && (
+            <VendorPanel
+              publicRef={order.publicRef}
+              section={vendor}
+              onChanged={async () => {
+                setRevealed(null)
+                await Promise.all([load(), loadVendor()])
+              }}
+            />
+          )}
+
           <Card className="p-7">
             <p className="eyebrow mb-4">History</p>
             <ol className="space-y-4">
@@ -292,8 +325,18 @@ export default function AdminOrder() {
                 the same list as "Mark on hold" would make the most consequential button
                 on this screen look like the least.
               */}
+              {/*
+                Once the partner has the order, approving again sends nothing: a corrected
+                sign-in or a resume is what it needs, and those are in its own section.
+              */}
               {order.status === 'READY_FOR_DELIVERY' && order.credentialsSubmitted
-                && order.sku === 'TRADING_SERVICE' && (
+                && order.sku === 'TRADING_SERVICE' && approveReplacedBy(vendor) && (
+                <p className="mb-3 rounded-edge border border-ink-400 bg-ink-600 p-3 text-[12.5px] leading-snug text-chalk-muted">
+                  {approveReplacedBy(vendor)}
+                </p>
+              )}
+              {order.status === 'READY_FOR_DELIVERY' && order.credentialsSubmitted
+                && order.sku === 'TRADING_SERVICE' && !approveReplacedBy(vendor) && (
                 <div className="mb-3 rounded-edge border border-brand-500/40 bg-brand-500/[0.06] p-3">
                   <p className="text-[12.5px] leading-snug text-chalk-muted">
                     Sends this customer’s EA sign-in to FUT Transfer so they can work the

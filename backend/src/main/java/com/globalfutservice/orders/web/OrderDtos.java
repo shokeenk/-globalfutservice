@@ -38,7 +38,10 @@ public final class OrderDtos {
             @Size(max = 64, message = "That Discord username is too long")
             String discordUsername,
 
-            /** PLAYER_AUCTION or COMFORT_TRADE. Defaults to the safer of the two. */
+            /**
+             * PLAYER_AUCTION or COMFORT_TRADE, for boosting. Defaults to the safer of the two.
+             * Ignored for coins, which always use the configured method.
+             */
             String deliveryMethod,
 
             @Size(max = 64, message = "That handle is too long")

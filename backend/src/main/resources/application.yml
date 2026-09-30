@@ -323,19 +323,47 @@ gfs:
   # and stops at READY_FOR_DELIVERY for an operator to work by hand, which is exactly
   # how the system behaved before this integration existed.
   #
-  # risk-level: 2 is the supplier's own default and the only value compatible with the
-  # seven-day ban guarantee this storefront sells — 3 and above are documented as
-  # escalating ban risk with no refunds.
+  # Every coin order is sent as GFS Transfer Method 3.0: targetedSnipe at risk level 1,
+  # with the fixed settings under `order`. Customers only ever see the GFS name.
   fut-transfer:
     enabled: ${GFS_FUTTRANSFER_ENABLED:false}
     base-url: ${GFS_FUTTRANSFER_BASE_URL:https://futtransfer.top}
+    # The vendor's second domain. Status reads may fall back to it; placing an order never does.
+    backup-base-url: ${GFS_FUTTRANSFER_BACKUP_BASE_URL:https://eatransfer.top}
     api-user: ${GFS_FUTTRANSFER_API_USER:}
     api-key: ${GFS_FUTTRANSFER_API_KEY:}
-    transfer-method: ${GFS_FUTTRANSFER_METHOD:snipe}
-    risk-level: ${GFS_FUTTRANSFER_RISK_LEVEL:2}
-    poll-interval: 60s
+    transfer-method: ${GFS_FUTTRANSFER_METHOD:targetedSnipe}
+    risk-level: ${GFS_FUTTRANSFER_RISK_LEVEL:1}
+    # Each can be set from the environment; the defaults are the client's brief, and every
+    # value is checked against the supplier's ranges when the application starts.
+    order:
+      top-up-enabled: ${GFS_FUTTRANSFER_TOP_UP:300}
+      auto-finish-cycle: ${GFS_FUTTRANSFER_AUTO_FINISH_CYCLE:1}
+      min-transfer-amount: ${GFS_FUTTRANSFER_MIN_TRANSFER:50}
+      pause-if-below-min-transfer: ${GFS_FUTTRANSFER_PAUSE_IF_BELOW_MIN:0}
+      update-customer: "${GFS_FUTTRANSFER_UPDATE_CUSTOMER:1}"
+      stop-order-after-onboarding: ${GFS_FUTTRANSFER_STOP_AFTER_ONBOARDING:0}
+      lock-onboarding: "${GFS_FUTTRANSFER_LOCK_ONBOARDING:0}"
+      disable-customer-lock: "${GFS_FUTTRANSFER_DISABLE_CUSTOMER_LOCK:0}"
+      skip-customer-check: ${GFS_FUTTRANSFER_SKIP_CUSTOMER_CHECK:0}
+      sender-group: "${GFS_FUTTRANSFER_SENDER_GROUP:-1}"
+      persona: "${GFS_FUTTRANSFER_PERSONA:-1}"
+    # The status poll. Its schedule lives in the database, so it holds across instances.
+    polling:
+      interval: ${GFS_FUTTRANSFER_POLL_INTERVAL:60s}
+      jitter: ${GFS_FUTTRANSFER_POLL_JITTER:10s}
+      max-backoff: ${GFS_FUTTRANSFER_MAX_BACKOFF:15m}
+      missing-polls-before-review: ${GFS_FUTTRANSFER_MISSING_POLLS_BEFORE_REVIEW:3}
+      stall-after: ${GFS_FUTTRANSFER_STALL_AFTER:6h}
+      submitting-grace: ${GFS_FUTTRANSFER_SUBMITTING_GRACE:2m}
+      restart-grace: ${GFS_FUTTRANSFER_RESTART_GRACE:10m}
+    # How long a sign-in is kept for an order waiting for an admin, before it is deleted.
+    review-credential-retention: ${GFS_FUTTRANSFER_REVIEW_CREDENTIAL_RETENTION:72h}
     timeout: 15s
     max-dispatch-attempts: 3
+    # Ask the vendor whether the customer's EA account is in its transfer cooldown before
+    # sending. Nothing is sent while it is, or if the answer cannot be trusted.
+    cooldown-check: ${GFS_FUTTRANSFER_COOLDOWN_CHECK:true}
     # /orderAPI 400 codes that prove nothing was created (the vendor's documented list).
     # Anything else goes to an admin. Comma-separated.
     permanent-error-codes: ${GFS_FUTTRANSFER_PERMANENT_CODES:MissingData,InvalidPassword,InvalidBA1,InvalidBA2,InvalidBA3,InvalidBA4,InvalidBA5,InvalidAmount,InvalidPlatform}

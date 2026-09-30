@@ -192,6 +192,306 @@ public class VendorOrderLedger {
                 .addValue("state", state).addValue("code", code).addValue("reason", reason)) == 1;
     }
 
+    // ---------------------------------------------------------------- polling ---
+
+    /** A vendor order the poller asks about. */
+    public record PollRow(long orderId, String externalRef, String vendorOrderId, String state,
+                          long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls,
+                          String customerAction, String vendorAccountCheck, String vendorEconomyState,
+                          Instant resubmittedAt) {
+    }
+
+    private static final String POLL_COLUMNS = """
+            order_id, external_ref, vendor_order_id, state, amount_ordered_k, amount_delivered_k,
+            vendor_status, missing_polls, customer_action, vendor_account_check, vendor_economy_state,
+            resubmitted_at
+            """;
+
+    private static PollRow pollRow(ResultSet rs, int i) throws SQLException {
+        return new PollRow(rs.getLong("order_id"), rs.getString("external_ref"), rs.getString("vendor_order_id"),
+                rs.getString("state"), rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
+                rs.getString("vendor_status"), rs.getInt("missing_polls"), rs.getString("customer_action"),
+                rs.getString("vendor_account_check"), rs.getString("vendor_economy_state"),
+                rs.getTimestamp("resubmitted_at") == null ? null : rs.getTimestamp("resubmitted_at").toInstant());
+    }
+
+    /** Orders the vendor is working on or waiting for the customer on, least recently asked about first. */
+    public List<PollRow> openForPolling() {
+        return jdbc.query("select " + POLL_COLUMNS + """
+                  from vendor_order where state in ('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER')
+                 order by last_polled_at asc nulls first, id
+                """, new MapSqlParameterSource(), VendorOrderLedger::pollRow);
+    }
+
+    /** Sends still SUBMITTING after the grace period: the process that sent them is gone. */
+    public List<PollRow> staleSubmitting(java.time.Duration grace) {
+        return jdbc.query("select " + POLL_COLUMNS + """
+                  from vendor_order where state = 'SUBMITTING'
+                   and updated_at < now() - make_interval(secs => :secs)
+                """, new MapSqlParameterSource("secs", grace.toSeconds()), VendorOrderLedger::pollRow);
+    }
+
+    /** Working orders with no progress at all for longer than {@code stallAfter}. */
+    public List<PollRow> stalled(java.time.Duration stallAfter) {
+        return jdbc.query("select " + POLL_COLUMNS + """
+                  from vendor_order where state in ('SUBMITTED', 'IN_DELIVERY')
+                   and last_progress_at < now() - make_interval(secs => :secs)
+                """, new MapSqlParameterSource("secs", stallAfter.toSeconds()), VendorOrderLedger::pollRow);
+    }
+
+    /**
+     * What the vendor just reported, in named fields. The stall clock restarts if anything
+     * moved, and the missing count clears because the order was mentioned.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordReport(long orderId, FutTransferClient.SupplierStatus s, boolean progressed) {
+        jdbc.update("""
+                update vendor_order
+                   set vendor_status = :status, vendor_account_check = :accountCheck,
+                       vendor_economy_state = :economyState, vendor_was_aborted = :aborted,
+                       vendor_amount_ordered_k = :ordered, amount_delivered_k = :delivered,
+                       coins_used = :coinsUsed, to_pay = :toPay, missing_polls = 0,
+                       last_polled_at = now(),
+                       last_progress_at = case when :progressed then now() else last_progress_at end,
+                       updated_at = now()
+                 where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId)
+                .addValue("status", s.status())
+                .addValue("accountCheck", s.accountCheck())
+                .addValue("economyState", s.economyState())
+                .addValue("aborted", s.aborted())
+                .addValue("ordered", s.amountOrderedK())
+                .addValue("delivered", s.amountDeliveredK())
+                .addValue("coinsUsed", s.coinsUsed())
+                .addValue("toPay", s.toPay())
+                .addValue("progressed", progressed));
+    }
+
+    /** The vendor left this order out of its answer. @return the count of misses in a row */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int recordMissing(long orderId) {
+        return jdbc.queryForObject("""
+                update vendor_order set missing_polls = missing_polls + 1, last_polled_at = now(), updated_at = now()
+                 where order_id = :orderId
+                returning missing_polls
+                """, new MapSqlParameterSource("orderId", orderId), Integer.class);
+    }
+
+    /**
+     * Moves the row to a new state if it is still in one of {@code from}. Conditional, so
+     * the poller never overwrites an admin's decision or another path's outcome.
+     *
+     * @param action what the customer is asked to do; only kept while AWAITING_CUSTOMER
+     * @return whether it moved
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean move(long orderId, java.util.Collection<String> from, String to, String reasonCode,
+                        String reason, String action) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = :to, last_error_code = coalesce(:code, last_error_code),
+                       review_reason = case when :to in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED') then :reason
+                                            else review_reason end,
+                       customer_action = case when :to = 'AWAITING_CUSTOMER' then :action else null end,
+                       last_progress_at = case when state <> :to then now() else last_progress_at end,
+                       updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId)
+                .addValue("from", from)
+                .addValue("to", to)
+                .addValue("code", reasonCode)
+                .addValue("reason", reason)
+                .addValue("action", action)) == 1;
+    }
+
+    /**
+     * Orders parked for an admin -- needing review, or delivered short -- that nobody has
+     * touched for longer than {@code retention}, and still holding a sign-in. Those sign-ins
+     * are deleted: a decision that slow is not going to send the order again on the same
+     * details.
+     */
+    public List<Long> heldForReviewLongerThan(java.time.Duration retention) {
+        return jdbc.queryForList("""
+                select order_id from vendor_order
+                 where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED')
+                   and updated_at < now() - make_interval(secs => :secs)
+                   and exists (select 1 from credential_vault c
+                                where c.order_id = vendor_order.order_id and c.purged_at is null)
+                """, new MapSqlParameterSource("secs", retention.toSeconds()), Long.class);
+    }
+
+    // ------------------------------------------------------------ admin actions ---
+
+    /**
+     * Takes the right to send a corrected sign-in, or a resume, for an order the vendor
+     * already has. Conditional, so two admins clicking at once send it once; a claim older
+     * than {@code inFlight} has been abandoned and may be taken again.
+     *
+     * @param from the states it may be sent from
+     * @return whether this caller may send it
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean claimRestart(long orderId, java.util.Collection<String> from, java.time.Duration inFlight) {
+        return jdbc.update("""
+                update vendor_order set resubmitted_at = now(), updated_at = now()
+                 where order_id = :orderId and state in (:from) and vendor_order_id is not null
+                   and (resubmitted_at is null or resubmitted_at < now() - make_interval(secs => :secs))
+                """, new MapSqlParameterSource("orderId", orderId).addValue("from", from)
+                .addValue("secs", inFlight.toSeconds())) == 1;
+    }
+
+    /** The vendor did not take it: the claim is let go at once, so an admin may try again. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void releaseRestart(long orderId) {
+        jdbc.update("update vendor_order set resubmitted_at = null, updated_at = now() where order_id = :orderId",
+                new MapSqlParameterSource("orderId", orderId));
+    }
+
+    /**
+     * The vendor restarted the order: back to SUBMITTED, with a fresh stall clock and
+     * nothing asked of the customer. {@code resubmitted_at} stays, for the poll's grace.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markRestarted(long orderId, java.util.Collection<String> from) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'SUBMITTED', customer_action = null, missing_polls = 0, review_reason = null,
+                       last_progress_at = now(), updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId).addValue("from", from)) == 1;
+    }
+
+    /**
+     * An admin checked the vendor's dashboard, and our lookup did not find the order
+     * either: nothing was created, so the order may be approved again.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean allowResend(long orderId) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'FAILED', last_error_code = 'ADMIN_CONFIRMED_ABSENT', review_reason = null,
+                       updated_at = now()
+                 where order_id = :orderId and state = 'NEEDS_REVIEW' and vendor_order_id is null
+                """, new MapSqlParameterSource("orderId", orderId)) == 1;
+    }
+
+    /**
+     * An order waiting for review that the vendor does have: watched again, as sent.
+     * {@code vendorOrderId} is recorded if the admin gave one and none is held yet.
+     *
+     * @return false if it was no longer waiting for review, or the id belongs to another order
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean link(long orderId, String vendorOrderId) {
+        try {
+            int n = jdbc.update("""
+                    update vendor_order
+                       set state = 'SUBMITTED', vendor_order_id = coalesce(vendor_order_id, :vid),
+                           submitted_at = coalesce(submitted_at, now()), review_reason = null, missing_polls = 0,
+                           last_progress_at = now(), updated_at = now()
+                     where order_id = :orderId and state = 'NEEDS_REVIEW'
+                    """, new MapSqlParameterSource("orderId", orderId).addValue("vid", vendorOrderId));
+            if (n == 1 && vendorOrderId != null) {
+                jdbc.update("""
+                        update orders set supplier_order_id = :vid, version = version + 1
+                         where id = :orderId and supplier_order_id is null
+                        """, new MapSqlParameterSource("orderId", orderId).addValue("vid", vendorOrderId));
+            }
+            return n == 1;
+        } catch (DuplicateKeyException e) {
+            try {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            } catch (org.springframework.transaction.NoTransactionException outsideSpring) {
+                // Called directly, as the database tests do.
+            }
+            return false;
+        }
+    }
+
+    /** States an admin may close by hand: nothing more will happen to them on their own. */
+    public static final List<String> RESOLVABLE = List.of("NEEDS_REVIEW", "PARTIALLY_DELIVERED", "AWAITING_CUSTOMER",
+            "FAILED");
+
+    /** Closed by an admin, with their note. Never polled again, never sent again. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean resolve(long orderId, String note) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'RESOLVED', review_reason = :note, customer_action = null, updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId).addValue("note", note)
+                .addValue("from", RESOLVABLE)) == 1;
+    }
+
+    // ------------------------------------------------------------- admin view ---
+
+    /** Everything we hold about one vendor order, for the admin's order page. */
+    public record Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
+                         Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
+                         String vendorEconomyState, Boolean aborted, Long coinsUsed, java.math.BigDecimal toPay,
+                         int attempts, String lastErrorCode, String reviewReason, String customerAction,
+                         int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
+                         Instant resubmittedAt, Instant updatedAt) {
+    }
+
+    public Optional<Detail> detail(long orderId) {
+        return jdbc.query("""
+                select * from vendor_order where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new Detail(
+                rs.getString("state"), rs.getString("external_ref"), rs.getString("vendor_order_id"),
+                rs.getLong("amount_ordered_k"), rs.getObject("vendor_amount_ordered_k", Long.class),
+                rs.getObject("amount_delivered_k", Long.class), rs.getString("vendor_status"),
+                rs.getString("vendor_account_check"), rs.getString("vendor_economy_state"),
+                rs.getObject("vendor_was_aborted", Boolean.class), rs.getObject("coins_used", Long.class),
+                rs.getBigDecimal("to_pay"), rs.getInt("attempts"), rs.getString("last_error_code"),
+                rs.getString("review_reason"), rs.getString("customer_action"), rs.getInt("missing_polls"),
+                instant(rs, "submitted_at"), instant(rs, "last_polled_at"), instant(rs, "last_progress_at"),
+                instant(rs, "resubmitted_at"), instant(rs, "updated_at"))).stream().findFirst();
+    }
+
+    /** An order waiting for an admin's decision, for the review list on the Orders page. */
+    public record ReviewItem(String externalRef, String state, String lastErrorCode, String reviewReason,
+                             long amountOrderedK, Long deliveredK, Instant updatedAt) {
+    }
+
+    /** Everything waiting for an admin, longest-waiting first. */
+    public List<ReviewItem> needingReview() {
+        return jdbc.query("""
+                select external_ref, state, last_error_code, review_reason, amount_ordered_k, amount_delivered_k,
+                       updated_at
+                  from vendor_order where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED')
+                 order by updated_at, id
+                """, new MapSqlParameterSource(), (rs, i) -> new ReviewItem(rs.getString("external_ref"),
+                rs.getString("state"), rs.getString("last_error_code"), rs.getString("review_reason"),
+                rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
+                instant(rs, "updated_at")));
+    }
+
+    private static Instant instant(ResultSet rs, String column) throws SQLException {
+        Timestamp t = rs.getTimestamp(column);
+        return t == null ? null : t.toInstant();
+    }
+
+    /**
+     * Of these orders, the ones the partner has, or may have: a vendor order in any state
+     * but FAILED, whether or not it gave us its id. Approving one of them sends nothing --
+     * the release refuses it -- so the queue does not offer to.
+     */
+    public java.util.Set<Long> atPartner(java.util.Collection<Long> orderIds) {
+        if (orderIds.isEmpty()) return java.util.Set.of();
+        return new java.util.HashSet<>(jdbc.queryForList("""
+                select order_id from vendor_order where order_id in (:ids) and state <> 'FAILED'
+                """, new MapSqlParameterSource("ids", orderIds), Long.class));
+    }
+
+    /** What the customer is asked to do, while their order waits for them. */
+    public Optional<String> customerAction(long orderId) {
+        return jdbc.query("""
+                select customer_action from vendor_order where order_id = :orderId and state = 'AWAITING_CUSTOMER'
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> rs.getString(1))
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
     public Optional<Row> find(long orderId) {
         return jdbc.query("""
                 select order_id, external_ref, vendor_order_id, state, amount_ordered_k, attempts,

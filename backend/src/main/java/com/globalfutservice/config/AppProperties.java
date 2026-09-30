@@ -5,9 +5,11 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.pricing.GatewayFeeMode;
 import com.globalfutservice.domain.pricing.MarketTaxMode;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
@@ -406,21 +408,38 @@ public record AppProperties(
             @DefaultValue("100") @Min(1) int dailyCap) {
     }
 
+    /**
+     * FUT Transfer, the partner that moves the coins.
+     *
+     * <p>Checked when the application starts, so a bad value stops the deploy rather than
+     * reaching the vendor: both base URLs must be HTTPS (plain HTTP only to this machine,
+     * for tests), the transfer method must be one the vendor documents, and the risk level
+     * must be 1-6, the range both of the vendor's descriptions of it agree on.
+     */
     public record FutTransfer(
             @DefaultValue("false") boolean enabled,
             @DefaultValue("https://futtransfer.top") String baseUrl,
             /** Account email, sent as {@code apiUser}. */
             String apiUser,
-            /** Raw API key. Hashed to MD5 per request; never logged. */
+            /** The raw API key, as the vendor issued it. Hashed to MD5 per request; never logged. */
             String apiKey,
-            /** snipe | cycle | targetedSnipe | snipeLimited */
-            @DefaultValue("snipe") String transferMethod,
-            /** 1 = maximum safety … 6 = ban mode. See the note above before raising it. */
-            @DefaultValue("2") int riskLevel,
-            @DefaultValue("60s") Duration pollInterval,
+            /**
+             * snipe | cycle | targetedSnipe | snipeLimited. GFS Transfer Method 3.0 is
+             * targetedSnipe; customers only ever see the GFS name.
+             */
+            @DefaultValue("targetedSnipe") @Pattern(regexp = "snipe|cycle|targetedSnipe|snipeLimited",
+                    message = "must be one of the vendor's transfer methods: snipe, cycle, targetedSnipe, snipeLimited")
+            String transferMethod,
+            /**
+             * 1 = maximum safety ... 6 = ban mode. GFS requires 1. The vendor's two
+             * descriptions of this field disagree, so the first supervised order confirms it.
+             */
+            @DefaultValue("1") @Min(1) @Max(6) int riskLevel,
+            /** How and how often the vendor is asked about orders already sent. */
+            @Valid @DefaultValue FutTransferPolling polling,
             @DefaultValue("15s") Duration timeout,
             /** Consecutive dispatch failures before an order is parked for an operator. */
-            @DefaultValue("3") int maxDispatchAttempts,
+            @DefaultValue("3") @Min(1) int maxDispatchAttempts,
             /**
              * 400 codes from /orderAPI that mean the vendor definitely refused the order and
              * created nothing: the codes its documentation names. Any other refusal goes to
@@ -429,13 +448,125 @@ public record AppProperties(
              */
             @DefaultValue({"MissingData", "InvalidPassword", "InvalidBA1", "InvalidBA2", "InvalidBA3",
                     "InvalidBA4", "InvalidBA5", "InvalidAmount", "InvalidPlatform"})
-            java.util.List<String> permanentErrorCodes) {
+            java.util.List<String> permanentErrorCodes,
+            /**
+             * The vendor's second domain. Status reads may fall back to it; placing an order
+             * never does, because sending it again anywhere after a timeout could create a
+             * second order.
+             */
+            @DefaultValue("https://eatransfer.top") String backupBaseUrl,
+            /** The rest of GFS Transfer Method 3.0: the same on every order, never the customer's choice. */
+            @Valid @DefaultValue FutTransferOrder order,
+            /**
+             * Ask the vendor whether the customer's EA account is in its transfer cooldown before
+             * sending. On by default; off only if the check itself misbehaves.
+             */
+            @DefaultValue("true") boolean cooldownCheck,
+            /**
+             * How long a customer's sign-in is kept for an order waiting for an admin's
+             * review before it is deleted. Approving it again afterwards needs a new one.
+             */
+            @DefaultValue("72h") Duration reviewCredentialRetention) {
+
+        public FutTransfer {
+            requireSecure("gfs.fut-transfer.base-url", baseUrl);
+            requireSecure("gfs.fut-transfer.backup-base-url", backupBaseUrl);
+            // "https://futtransfer.top/" as the vendor writes it; paths are appended to it.
+            baseUrl = withoutTrailingSlash(baseUrl);
+            backupBaseUrl = withoutTrailingSlash(backupBaseUrl);
+        }
+
+        private static String withoutTrailingSlash(String url) {
+            String u = url.trim();
+            return u.endsWith("/") ? u.substring(0, u.length() - 1) : u;
+        }
 
         public boolean isConfigured() {
             return enabled
                     && apiUser != null && !apiUser.isBlank()
                     && apiKey != null && !apiKey.isBlank();
         }
+
+        /** Never prints the key: a record's own toString would, and a log line is forever. */
+        @Override
+        public String toString() {
+            return "FutTransfer[enabled=" + enabled + ", baseUrl=" + baseUrl + ", backupBaseUrl=" + backupBaseUrl
+                    + ", apiUser=" + (apiUser == null || apiUser.isBlank() ? "unset" : "set")
+                    + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "unset" : "[redacted]")
+                    + ", transferMethod=" + transferMethod + ", riskLevel=" + riskLevel + ", order=" + order + "]";
+        }
+
+        /**
+         * HTTPS, or plain HTTP to this machine only (the tests' stand-in vendor). The API key
+         * digest and customers' sign-ins travel in these request bodies.
+         */
+        private static void requireSecure(String property, String url) {
+            java.net.URI uri;
+            try {
+                uri = java.net.URI.create(url == null ? "" : url.trim());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(property + " is not a valid URL");
+            }
+            String host = uri.getHost() == null ? "" : uri.getHost();
+            boolean loopback = host.equals("localhost") || host.equals("127.0.0.1") || host.equals("[::1]");
+            if (!"https".equalsIgnoreCase(uri.getScheme()) && !("http".equalsIgnoreCase(uri.getScheme()) && loopback)) {
+                throw new IllegalArgumentException(property + " must be an https:// URL");
+            }
+            if (uri.getPath() != null && !uri.getPath().isEmpty() && !uri.getPath().equals("/")) {
+                throw new IllegalArgumentException(property + " must be the site itself, with no path");
+            }
+        }
+    }
+
+    /**
+     * The status poll. Its schedule is kept in the database, so these hold across instances.
+     *
+     * @param interval                 the time between polls when all is well
+     * @param jitter                   up to this much is added at random, so polls do not
+     *                                 fall into step with anything else
+     * @param maxBackoff               the longest wait after rate limits or failures
+     * @param missingPollsBeforeReview reads in a row that must fail to mention an order
+     *                                 before it goes to an admin
+     * @param stallAfter               how long an order may show no progress at all
+     * @param submittingGrace          how long a send may be in flight before a lookup
+     *                                 decides it (longer than the request timeout)
+     * @param restartGrace             after an admin sends a corrected sign-in or resumes an
+     *                                 order, how long a report identical to the one from
+     *                                 before is read as stale rather than as a new refusal
+     */
+    public record FutTransferPolling(
+            @DefaultValue("60s") Duration interval,
+            @DefaultValue("10s") Duration jitter,
+            @DefaultValue("15m") Duration maxBackoff,
+            @DefaultValue("3") @Min(1) int missingPollsBeforeReview,
+            @DefaultValue("6h") Duration stallAfter,
+            @DefaultValue("2m") Duration submittingGrace,
+            @DefaultValue("10m") Duration restartGrace) {
+    }
+
+    /**
+     * The fixed /orderAPI settings of GFS Transfer Method 3.0, sent by the backend on every
+     * coin order. The defaults are the client's brief; the ranges are the vendor's.
+     *
+     * @param topUpEnabled            targetedSnipe top-up threshold, in K (300 = 300K)
+     * @param autoFinishCycle         1: the vendor may finish the remainder by its cycle method
+     * @param minTransferAmount       smallest single transfer, in K
+     * @param pauseIfBelowMinTransfer 0: switch method rather than pause below the minimum
+     * @param senderGroup             -1: the vendor chooses among our senders
+     * @param persona                 -1: the vendor detects the EA persona
+     */
+    public record FutTransferOrder(
+            @DefaultValue("300") @Min(0) @Max(9999) int topUpEnabled,
+            @DefaultValue("1") @Min(0) @Max(1) int autoFinishCycle,
+            @DefaultValue("50") @Min(0) @Max(9999) int minTransferAmount,
+            @DefaultValue("0") @Min(0) @Max(1) int pauseIfBelowMinTransfer,
+            @DefaultValue("1") @Pattern(regexp = "[01]") String updateCustomer,
+            @DefaultValue("0") @Min(0) @Max(1) int stopOrderAfterOnboarding,
+            @DefaultValue("0") @Pattern(regexp = "[01]") String lockOnboarding,
+            @DefaultValue("0") @Pattern(regexp = "[01]") String disableCustomerLock,
+            @DefaultValue("0") @Min(0) @Max(1) int skipCustomerCheck,
+            @DefaultValue("-1") @Pattern(regexp = "-1|[A-Za-z0-9_-]{1,64}") String senderGroup,
+            @DefaultValue("-1") @Pattern(regexp = "-1|[A-Za-z0-9_-]{1,64}") String persona) {
     }
 
     public record Notifications(

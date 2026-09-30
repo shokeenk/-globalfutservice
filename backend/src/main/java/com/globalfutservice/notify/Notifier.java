@@ -64,6 +64,17 @@ public interface Notifier {
     }
 
     /**
+     * The customer's order is on hold until they fix something on their EA account.
+     *
+     * <p>For the customer's own channels only: their email, and the order's ticket, which
+     * they can read. Staff hear about the same hold through {@link #fulfilmentAlert}, with
+     * the detail they need; this carries only the customer's sentence.
+     */
+    default void customerActionNeeded(CustomerActionNotification notification) {
+        // Channels opt in by overriding.
+    }
+
+    /**
      * A customer has reported paying outside the gateway.
      *
      * <p>The most time-critical alert here, and the only one with nothing behind it. Every

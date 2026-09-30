@@ -57,6 +57,9 @@ public class FutTransferClient {
 
     private static final Logger log = LoggerFactory.getLogger(FutTransferClient.class);
 
+    /** The failure code for a call that was not made because calls are paused. */
+    static final String PAUSED = "VENDOR_PAUSED";
+
     /** The supplier caps a bulk status query at twenty ids. */
     static final int BULK_LIMIT = 20;
 
@@ -72,11 +75,15 @@ public class FutTransferClient {
 
     private final AppProperties props;
     private final ObjectMapper mapper;
+    private final VendorControl control;
+    private final VendorCallLog calls;
     private final HttpClient http;
 
-    public FutTransferClient(AppProperties props, ObjectMapper mapper) {
+    public FutTransferClient(AppProperties props, ObjectMapper mapper, VendorControl control, VendorCallLog calls) {
         this.props = props;
         this.mapper = mapper;
+        this.control = control;
+        this.calls = calls;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -151,23 +158,41 @@ public class FutTransferClient {
         body.put("pass", creds.eaPassword());
         body.put("platform", platformCode(platform));
         body.put("amount", amountThousands);
-        body.put("persona", "-1");
         // `ba` is required and `ba2`..`ba5` are not; positional, as the supplier documents.
         for (int i = 0; i < Math.min(codes.size(), 5); i++) {
             body.put(i == 0 ? "ba" : "ba" + (i + 1), codes.get(i));
         }
-        AppProperties.FutTransfer cfg = props.futTransfer();
-        body.put("transferMethod", cfg.transferMethod());
-        body.put("riskLevel", cfg.riskLevel());
-        body.put("updateCustomer", "1");
 
-        Exchange ex = exchange("/orderAPI", body, publicRef);
+        // GFS Transfer Method 3.0: the same settings on every order, from configuration.
+        AppProperties.FutTransfer cfg = props.futTransfer();
+        AppProperties.FutTransferOrder method = cfg.order();
+        body.put("persona", method.persona());
+        body.put("updateCustomer", method.updateCustomer());
+        body.put("stopOrderAfterOnboarding", method.stopOrderAfterOnboarding());
+        body.put("lockOnboarding", method.lockOnboarding());
+        body.put("disableCustomerLock", method.disableCustomerLock());
+        body.put("skipCustomerCheck", method.skipCustomerCheck());
+        body.put("transferMethod", cfg.transferMethod());
+        body.put("senderGroup", method.senderGroup());
+        body.put("topUpEnabled", method.topUpEnabled());
+        body.put("autoFinishCycle", method.autoFinishCycle());
+        body.put("minTransferAmount", method.minTransferAmount());
+        body.put("pauseIfBelowMinTransfer", method.pauseIfBelowMinTransfer());
+        body.put("riskLevel", cfg.riskLevel());
+
+        // The primary domain only, and once. Never the backup, never again: after a timeout
+        // the order may exist, and sending it anywhere else could create a second one.
+        Exchange ex = exchange(Kind.PLACEMENT, props.futTransfer().baseUrl(), "/orderAPI", body, List.of(publicRef));
         Placement outcome = classifyPlacement(ex);
         log.info("FUT Transfer /orderAPI for {}: {}", publicRef, describe(outcome));
         return outcome;
     }
 
     private Placement classifyPlacement(Exchange ex) {
+        if (PAUSED.equals(ex.failure())) {
+            // Stopped before anything was sent: a definite "not created".
+            return new Refused(Reason.AUTH_FAILED, 0, PAUSED);
+        }
         if (ex.failure() != null) {
             return new Uncertain(ex.failure());
         }
@@ -260,7 +285,7 @@ public class FutTransferClient {
         body.put("externalID", 1);
         body.put("isMotherID", 0);
 
-        Exchange ex = exchange("/orderStatusAPI", body, publicRef);
+        Exchange ex = readExchange("/orderStatusAPI", body, List.of(publicRef));
         Lookup outcome = classifyLookup(ex, publicRef, expectedThousands);
         log.info("FUT Transfer lookup for {}: {}", publicRef,
                 outcome instanceof NotConfirmed n ? "not confirmed (" + n.code() + ")" : "found");
@@ -282,57 +307,254 @@ public class FutTransferClient {
                 json.path("wasAborted").asInt(0) == 1);
     }
 
+    // ---------------------------------------------------------------- cooldown ---
+
+    /** Whether an EA account can receive another transfer yet. */
+    public record Cooldown(boolean ready, long remainingSeconds) {
+    }
+
+    /**
+     * Asks the vendor whether this EA account is in its transfer cooldown, via
+     * {@code /getCooldownStatus} with {@code account}.
+     *
+     * <p>Only an answer that says {@code success: true} with an {@code isReady} flag counts.
+     * The account's email goes to the vendor in the request, as it will in the order; it is
+     * never the log context, which is our reference.
+     */
+    public Read<Cooldown> cooldown(String eaAccountEmail, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("account", eaAccountEmail);
+        Exchange ex = readExchange("/getCooldownStatus", body, List.of(publicRef));
+        Read<Cooldown> read = classifyRead(ex, json -> {
+            if (!json.path("success").isBoolean() || !json.path("success").asBoolean()) {
+                throw new IllegalStateException("no success flag");
+            }
+            if (!json.path("isReady").isBoolean()) {
+                throw new IllegalStateException("no isReady flag");
+            }
+            return new Cooldown(json.get("isReady").asBoolean(), Math.max(0, json.path("cooldownRemaining").asLong(0)));
+        });
+        log.info("FUT Transfer cooldown for {}: {}", publicRef, read instanceof ReadOk<Cooldown> ok
+                ? (ok.value().ready() ? "ready" : "cooling down " + ok.value().remainingSeconds() + "s")
+                : ((ReadFailed<Cooldown>) read).error() + " (" + ((ReadFailed<Cooldown>) read).code() + ")");
+        return read;
+    }
+
     // ------------------------------------------------------------------ status ---
 
-    /** One order's supplier-side state, as three separate vocabularies plus progress. */
-    public record SupplierStatus(String orderRef,
-                                 String status,
+    /**
+     * One order's report from the vendor: three vocabularies plus progress, in thousands of
+     * coins. Named fields only -- the report can also carry the customer's backup codes,
+     * and those are never read.
+     */
+    public record SupplierStatus(String status,
                                  String accountCheck,
                                  String economyState,
-                                 Long amountOrdered,
-                                 Long amountDelivered,
+                                 Long amountOrderedK,
+                                 Long amountDeliveredK,
+                                 Long coinsUsed,
+                                 BigDecimal toPay,
                                  boolean aborted) {
     }
 
     /**
-     * Reads up to twenty orders in one call, keyed by <em>our</em> reference.
+     * Up to twenty orders in one call, by the vendor's own order ids -- the form its
+     * documentation gives. The answer is keyed by those ids; an id it leaves out is simply
+     * not in the result, and the caller decides what that means.
      *
-     * <p>{@code externalID} makes the supplier interpret the ids as our
-     * {@code externalOrderID}s, which is why the returned map is keyed by {@code publicRef}
-     * and the caller never has to hold their ids to poll.
+     * @param vendorIdToRef the vendor's ids, each with our reference for the audit trail
      */
-    public List<SupplierStatus> statusBulk(List<String> publicRefs) {
-        if (publicRefs.isEmpty()) return List.of();
-        if (publicRefs.size() > BULK_LIMIT) {
+    public Read<Map<String, SupplierStatus>> statusByVendorIds(Map<String, String> vendorIdToRef) {
+        if (vendorIdToRef.isEmpty()) return new ReadOk<>(Map.of());
+        if (vendorIdToRef.size() > BULK_LIMIT) {
             throw new IllegalArgumentException("The supplier caps a bulk query at " + BULK_LIMIT);
         }
-
+        List<String> ids = List.copyOf(vendorIdToRef.keySet());
         Map<String, Object> body = auth();
-        body.put("orderIDs", publicRefs);
-        body.put("externalID", 1);
+        body.put("orderIDs", ids);
         body.put("isMotherID", 0);
 
-        JsonNode res = post("/orderStatusBulkAPI", body, String.join(",", publicRefs));
-
-        return publicRefs.stream()
-                .map(ref -> {
-                    JsonNode n = res.get(ref);
-                    return n == null || n.isNull() ? null : parseStatus(ref, n);
-                })
-                .filter(java.util.Objects::nonNull)
-                .toList();
+        Exchange ex = readExchange("/orderStatusBulkAPI", body, List.copyOf(vendorIdToRef.values()));
+        return classifyRead(ex, res -> {
+            Map<String, SupplierStatus> found = new LinkedHashMap<>();
+            for (String id : ids) {
+                JsonNode n = res.get(id);
+                if (n != null && n.isObject()) {
+                    found.put(id, parseStatus(n));
+                }
+            }
+            return found;
+        });
     }
 
     /**
-     * Replaces a rejected sign-in and resumes the order.
-     *
-     * <p>{@code continue: 1} is the difference between a corrected password and a
-     * corrected password that actually restarts the work.
+     * One order by our reference ({@code /orderStatusAPI}, {@code externalID: 1}), for
+     * orders the vendor has but whose id it never gave us. The answer must name our
+     * reference, or it is not about this order.
      */
-    public void correctCredentials(String publicRef, CredentialDtos.RevealedCredentials creds) {
+    public Read<SupplierStatus> statusByReference(String publicRef) {
         Map<String, Object> body = auth();
         body.put("orderID", publicRef);
-        body.put("externalOrderID", 1);
+        body.put("externalID", 1);
+        body.put("isMotherID", 0);
+
+        Exchange ex = readExchange("/orderStatusAPI", body, List.of(publicRef));
+        Read<JsonNode> read = classifyRead(ex, json -> json);
+        if (read instanceof ReadFailed<JsonNode> f) {
+            return new ReadFailed<>(f.error(), f.code());
+        }
+        JsonNode json = ((ReadOk<JsonNode>) read).value();
+        if (!publicRef.equals(text(json, "externalOrderID"))) {
+            return new ReadFailed<>(ReadError.NEEDS_REVIEW, "REFERENCE_NOT_ECHOED");
+        }
+        return new ReadOk<>(parseStatus(json));
+    }
+
+    // ------------------------------------------------------------------ reads ---
+
+    /** What a status read came to. Never thrown: a read that fails says how. */
+    public sealed interface Read<T> permits ReadOk, ReadFailed {
+    }
+
+    public record ReadOk<T>(T value) implements Read<T> {
+    }
+
+    public record ReadFailed<T>(ReadError error, String code) implements Read<T> {
+    }
+
+    public enum ReadError {
+        /** 403: our API credentials were refused. */
+        AUTH,
+        /** 429: back off. The vendor sends no Retry-After, so the caller chooses how long. */
+        RATE_LIMITED,
+        /** Timeouts, dropped connections and 5xx, still failing after the retries. */
+        TRANSIENT,
+        /** A 4xx the documentation does not explain. */
+        NEEDS_REVIEW,
+        /** A 2xx we could not read. */
+        UNKNOWN
+    }
+
+    private <T> Read<T> classifyRead(Exchange ex, java.util.function.Function<JsonNode, T> parse) {
+        if (PAUSED.equals(ex.failure())) return new ReadFailed<>(ReadError.AUTH, PAUSED);
+        if (ex.failure() != null) return new ReadFailed<>(ReadError.TRANSIENT, ex.failure());
+        int status = ex.status();
+        if (status >= 500) return new ReadFailed<>(ReadError.TRANSIENT, "HTTP_" + status);
+        if (status == 403) return new ReadFailed<>(ReadError.AUTH, "HTTP_403");
+        if (status == 429) return new ReadFailed<>(ReadError.RATE_LIMITED, "HTTP_429");
+        if (status / 100 != 2) {
+            String code = ex.errorCode(mapper);
+            return new ReadFailed<>(ReadError.NEEDS_REVIEW, code == null ? "HTTP_" + status : code);
+        }
+        JsonNode json = ex.json(mapper);
+        if (json == null || !json.isObject()) return new ReadFailed<>(ReadError.UNKNOWN, "UNPARSEABLE_RESPONSE");
+        try {
+            return new ReadOk<>(parse.apply(json));
+        } catch (RuntimeException e) {
+            return new ReadFailed<>(ReadError.UNKNOWN, "UNPARSEABLE_RESPONSE");
+        }
+    }
+
+    /**
+     * A read, retried while it fails for a reason that may pass: the primary domain, then
+     * the backup, then the primary again, with a short, jittered pause between. A 403, a
+     * 429 or any other answer ends it at once. Writes never come through here.
+     */
+    private Exchange readExchange(String path, Map<String, Object> body, List<String> refs) {
+        AppProperties.FutTransfer cfg = props.futTransfer();
+        String[] domains = {cfg.baseUrl(), cfg.backupBaseUrl(), cfg.baseUrl()};
+        Exchange ex = null;
+        for (int attempt = 0; attempt < domains.length; attempt++) {
+            if (attempt > 0) {
+                try {
+                    sleeper.sleep(readBackoff(attempt));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return Exchange.failed("INTERRUPTED");
+                }
+            }
+            ex = exchange(Kind.READ, domains[attempt], path, body, refs);
+            if (!worthRetrying(ex)) return ex;
+        }
+        return ex;
+    }
+
+    private static boolean worthRetrying(Exchange ex) {
+        if (ex.failure() != null) {
+            return !ex.failure().equals("NOT_CONFIGURED") && !ex.failure().equals("INTERRUPTED")
+                    && !ex.failure().equals(PAUSED);
+        }
+        return ex.status() >= 500;
+    }
+
+    /** Half a second, then a second, each plus up to a quarter of a second of jitter. */
+    static Duration readBackoff(int attempt) {
+        long base = 500L << (attempt - 1);
+        return Duration.ofMillis(base + java.util.concurrent.ThreadLocalRandom.current().nextLong(250));
+    }
+
+    /** How the client waits between read attempts; replaced in tests. */
+    interface Sleeper {
+        void sleep(Duration d) throws InterruptedException;
+    }
+
+    private Sleeper sleeper = d -> Thread.sleep(d.toMillis());
+
+    /** For tests: waits nothing, so retries are checked without slowing the suite. */
+    FutTransferClient withoutRetryPauses() {
+        this.sleeper = d -> {
+        };
+        return this;
+    }
+
+    // ------------------------------------------------------------------ writes ---
+
+    /**
+     * What a change to an order the vendor already has came to.
+     *
+     * <p>None of these can create an order, so none is looked up afterwards. They are still
+     * sent once, to the primary domain only, and a lost answer is reported as such: an
+     * admin decides whether to send it again.
+     */
+    public sealed interface Change permits Changed, NotChanged, ChangeUncertain {
+    }
+
+    /** The vendor confirmed it. {@code outcome} is its answer, as a bare word. */
+    public record Changed(String outcome) implements Change {
+    }
+
+    /** The vendor answered, and did not make the change; or we did not send it. */
+    public record NotChanged(Refusal refusal, String code) implements Change {
+    }
+
+    /** No answer we could read. It may have happened. */
+    public record ChangeUncertain(String code) implements Change {
+    }
+
+    public enum Refusal {
+        /** 403, or calls are paused: our API credentials. */
+        AUTH,
+        /** 429: for a resume, the cooldown after a console sign-in failure. */
+        RATE_LIMITED,
+        /** Any other 4xx: the vendor would not do it (405 is a temporary ban). */
+        REFUSED
+    }
+
+    /** {@code wasContinued} true: the new details were saved and the order restarted. */
+    public static final String CONTINUED = "continued";
+    /** {@code wasContinued} false: the new details were saved, and the order did not restart. */
+    public static final String SAVED = "saved";
+
+    /**
+     * Replaces the customer's sign-in on an order the vendor already has, and restarts it.
+     * Never a new order: this is how a refused sign-in is corrected.
+     *
+     * <p>{@code continue: 1} is the difference between a corrected password and a corrected
+     * password that actually restarts the work.
+     */
+    public Change correctSignIn(String vendorOrderId, String publicRef, CredentialDtos.RevealedCredentials creds) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
         body.put("user", creds.eaEmail());
         body.put("pass", creds.eaPassword());
         List<String> codes = creds.backupCodes() == null ? List.of() : creds.backupCodes();
@@ -340,21 +562,82 @@ public class FutTransferClient {
             body.put(i == 0 ? "ba" : "ba" + (i + 1), codes.get(i));
         }
         body.put("continue", 1);
+        return write("/correctCredentialsAPI", body, publicRef, vendorOrderId,
+                json -> json.path("wasContinued").asBoolean(false) ? CONTINUED : SAVED);
+    }
 
-        post("/correctCredentialsAPI", body, publicRef);
-        log.info("Supplier credentials replaced and order {} resumed", publicRef);
+    /** Restarts an interrupted order, once the customer has fixed what stopped it. */
+    public Change resume(String vendorOrderId, String publicRef) {
+        return resumeOrStop(vendorOrderId, publicRef, "resume", "resumed");
+    }
+
+    /** Stops an active order. The vendor keeps what it has delivered so far. */
+    public Change stop(String vendorOrderId, String publicRef) {
+        return resumeOrStop(vendorOrderId, publicRef, "stop", "stopped");
+    }
+
+    private Change resumeOrStop(String vendorOrderId, String publicRef, String mode, String expected) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        body.put("mode", mode);
+        return write("/resumeOrderAPI", body, publicRef, vendorOrderId, json -> outcome(json, expected));
+    }
+
+    /** Closes the order at the vendor. Never automatic: an admin decides the order is done. */
+    public Change markFinished(String vendorOrderId, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        body.put("isMotherID", 0);
+        return write("/markFinishedAPI", body, publicRef, vendorOrderId, json -> outcome(json, "marked"));
+    }
+
+    private static String outcome(JsonNode json, String expected) {
+        return expected.equalsIgnoreCase(json.path("outcome").asText("")) ? expected : null;
+    }
+
+    private Change write(String path, Map<String, Object> body, String publicRef, String vendorOrderId,
+                         java.util.function.Function<JsonNode, String> outcome) {
+        if (vendorOrderId == null || !ORDER_ID.matcher(vendorOrderId).matches()) {
+            return new NotChanged(Refusal.REFUSED, "NO_VENDOR_ORDER_ID");
+        }
+        Exchange ex = exchange(Kind.WRITE, props.futTransfer().baseUrl(), path, body, List.of(publicRef));
+        Change change = classifyChange(ex, outcome);
+        log.info("FUT Transfer {} for {}: {}", path, publicRef, change);
+        return change;
+    }
+
+    private Change classifyChange(Exchange ex, java.util.function.Function<JsonNode, String> outcome) {
+        if (PAUSED.equals(ex.failure())) return new NotChanged(Refusal.AUTH, PAUSED);
+        if ("NOT_CONFIGURED".equals(ex.failure())) return new NotChanged(Refusal.REFUSED, "NOT_CONFIGURED");
+        if (ex.failure() != null) return new ChangeUncertain(ex.failure());
+        int status = ex.status();
+        if (status >= 500) return new ChangeUncertain("HTTP_" + status);
+        String code = ex.errorCode(mapper);
+        if (status == 403) return new NotChanged(Refusal.AUTH, "HTTP_403");
+        if (status == 429) return new NotChanged(Refusal.RATE_LIMITED, code == null ? "HTTP_429" : code);
+        if (status / 100 != 2) return new NotChanged(Refusal.REFUSED, code == null ? "HTTP_" + status : code);
+        JsonNode json = ex.json(mapper);
+        if (json == null || !json.isObject()) return new ChangeUncertain("UNPARSEABLE_RESPONSE");
+        String result;
+        try {
+            result = outcome.apply(json);
+        } catch (RuntimeException e) {
+            result = null;
+        }
+        return result == null ? new ChangeUncertain("UNEXPECTED_ANSWER") : new Changed(result);
     }
 
     // ------------------------------------------------------------------ plumbing ---
 
-    private SupplierStatus parseStatus(String ref, JsonNode n) {
+    private static SupplierStatus parseStatus(JsonNode n) {
         return new SupplierStatus(
-                ref,
                 text(n, "status"),
                 text(n, "accountCheck"),
                 text(n, "economyState"),
                 asLong(n, "amountOrdered"),
                 asLong(n, "amount"),
+                asLong(n, "coinsUsed"),
+                asDecimal(n, "toPay"),
                 n.path("wasAborted").asInt(0) == 1);
     }
 
@@ -371,16 +654,24 @@ public class FutTransferClient {
      * One request and its answer, or the name of what went wrong. Never throws, and never
      * lets a body reach a log line or an exception message.
      */
-    private Exchange exchange(String path, Map<String, Object> body, String context) {
+    /** What a call is, for the audit trail: placing an order, reading, or writing. */
+    private enum Kind { PLACEMENT, READ, WRITE }
+
+    private Exchange exchange(Kind kind, String domain, String path, Map<String, Object> body, List<String> refs) {
+        String context = String.join(",", refs);
         AppProperties.FutTransfer cfg = props.futTransfer();
         if (!cfg.isConfigured()) {
             return Exchange.failed("NOT_CONFIGURED");
+        }
+        if (control.isPaused()) {
+            log.warn("FUT Transfer {} for {}: not sent, calls are paused", path, context);
+            return Exchange.failed(PAUSED);
         }
         long started = System.nanoTime();
         Exchange result;
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(cfg.baseUrl() + path))
+                    .uri(URI.create(domain + path))
                     .timeout(cfg.timeout())
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
@@ -402,26 +693,72 @@ public class FutTransferClient {
             result = Exchange.failed("CLIENT_ERROR");
         }
         long ms = (System.nanoTime() - started) / 1_000_000;
-        log.info("FUT Transfer {} for {}: {} in {} ms", path, context,
-                result.failure() != null ? result.failure() : "HTTP " + result.status(), ms);
+        record(kind, !domain.equals(cfg.baseUrl()), path, result, refs, ms);
+        if (result.status() == 403) {
+            // Our credentials were refused. Everything stops until an admin resumes it.
+            control.pause("HTTP_403 " + path, refs.size() == 1 ? refs.get(0) : null);
+        }
+        log.info("FUT Transfer {}{} for {}: {} in {} ms", domain.equals(cfg.baseUrl()) ? "" : "(backup) ", path,
+                context, result.failure() != null ? result.failure() : "HTTP " + result.status(), ms);
         return result;
     }
 
-    /** The poller's calls, which still treat anything but a 2xx JSON answer as a failure. */
-    private JsonNode post(String path, Map<String, Object> body, String context) {
-        Exchange ex = exchange(path, body, context);
-        if (ex.failure() != null) {
-            throw new FutTransferException("Could not reach the supplier at " + path + " (" + ex.failure() + ")");
+    /**
+     * One row in {@code vendor_call} for this attempt: what was called, what came back and
+     * what it means. Never the body. Calls that were not made -- paused, not configured --
+     * are not vendor calls and are not recorded.
+     */
+    private void record(Kind kind, boolean backup, String path, Exchange ex, List<String> refs, long ms) {
+        String result;
+        String code;
+        String vendorOrderId = null;
+        if (kind == Kind.PLACEMENT) {
+            Placement p = classifyPlacement(ex);
+            switch (p) {
+                case Accepted a -> {
+                    result = "ACCEPTED";
+                    code = null;
+                    vendorOrderId = a.vendorOrderId();
+                }
+                case Refused r -> {
+                    result = "REFUSED";
+                    code = r.code();
+                }
+                case Unrecognised u -> {
+                    result = "UNRECOGNISED";
+                    code = u.code();
+                }
+                case Uncertain u -> {
+                    result = "UNCERTAIN";
+                    code = u.code();
+                }
+            }
+        } else if (kind == Kind.WRITE) {
+            switch (classifyChange(ex, json -> "ok")) {
+                case Changed c -> {
+                    result = "OK";
+                    code = null;
+                }
+                case NotChanged n -> {
+                    result = n.refusal() == Refusal.REFUSED ? "REFUSED" : n.refusal().name();
+                    code = n.code();
+                }
+                case ChangeUncertain u -> {
+                    result = "UNCERTAIN";
+                    code = u.code();
+                }
+            }
+        } else {
+            Read<JsonNode> r = classifyRead(ex, json -> json);
+            if (r instanceof ReadFailed<JsonNode> f) {
+                result = f.error().name();
+                code = f.code();
+            } else {
+                result = "OK";
+                code = null;
+            }
         }
-        if (ex.status() / 100 != 2) {
-            throw new FutTransferException(
-                    "Supplier returned HTTP " + ex.status() + " from " + path + " for " + context);
-        }
-        JsonNode json = ex.json(mapper);
-        if (json == null) {
-            throw new FutTransferException("Supplier returned an unreadable answer from " + path);
-        }
-        return json;
+        calls.record(path, backup, ex.failure() == null ? ex.status() : null, result, code, refs, vendorOrderId, ms);
     }
 
     /** A status and a body held only long enough to read named fields from it. */

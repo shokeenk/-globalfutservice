@@ -578,7 +578,7 @@ const en = {
     total: 'Total',
     placed: 'Placed',
     deliveryMethod: 'Delivery method',
-    deliveryTrading: 'GFS Trading Method 3.0 (Latest)',
+    deliveryTrading: 'GFS Transfer Method 3.0',
     deliveryBoosting: 'Played on your account',
     deliveryCoaching: 'Scheduled session',
     breakdown: 'Breakdown',
@@ -875,7 +875,7 @@ const en = {
     reqUnassignedNote: 'A full unassigned pile blocks transfers outright.',
 
     /* ----------------------------------------------- delivery method (note 13) --- */
-    deliveryFixed: 'GFS Trading Method 3.0 (Latest)',
+    deliveryFixed: 'GFS Transfer Method 3.0',
     deliveryFixedHint:
       'Our current method, used for every coin order. There is nothing to choose.',
 

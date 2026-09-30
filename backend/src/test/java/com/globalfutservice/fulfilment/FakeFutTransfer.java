@@ -106,7 +106,17 @@ final class FakeFutTransfer implements AutoCloseable {
             }
         });
         server.start();
+        // The collection's "Ready (No Cooldown)" example, unless a test says otherwise.
+        on("/getCooldownStatus", Reply.ok(COOLDOWN_READY));
     }
+
+    static final String COOLDOWN_READY = "{\"success\":true,\"cooldownRemaining\":0,"
+            + "\"message\":\"No recent transfers found. Account is ready.\",\"isReady\":true}";
+    /** The collection's "In Cooldown" example. */
+    static final String COOLDOWN_2H = "{\"success\":true,\"cooldownRemaining\":7200,"
+            + "\"message\":\"2 hours left in cooldown\",\"isReady\":false,\"hours\":2,\"minutes\":0}";
+    /** The collection's "Access Denied" example. */
+    static final String COOLDOWN_DENIED = "{\"success\":false,\"error\":\"Order not found or access denied\"}";
 
     String baseUrl() {
         return "http://127.0.0.1:" + server.getAddress().getPort();

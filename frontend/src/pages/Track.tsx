@@ -672,7 +672,7 @@ export function OrderView({
 
             This row used to print the enum's own words -- "Transfer market", "Comfort
             trade" -- while the checkout that sold the order called the same thing "GFS
-            Trading Method 3.0 (Latest)". One order, two names, and the second one arrives
+            Transfer Method 3.0". One order, two names, and the second one arrives
             after the money has gone. The enum still decides what happens; this decides
             what it is called, and it answers per service, because "Transfer market" on a
             boosting order was not a different name for the same thing but a wrong one.

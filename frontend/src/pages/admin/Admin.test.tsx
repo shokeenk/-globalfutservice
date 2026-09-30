@@ -70,6 +70,8 @@ function stubApi({ search = ROWS, overview = OVERVIEW as AdminOrderOverview | Er
     if (path.startsWith('/api/v1/admin/orders/search')) return { items: search, total: search.length, page: 0, size: 25 }
     if (path === '/api/v1/admin/payment-claims') return []
     if (path.startsWith('/api/v1/admin/saved-views')) return []
+    if (path === '/api/v1/admin/vendor/needs-review') return []
+    if (path === '/api/v1/admin/vendor/control') return { paused: false, pausedAt: null, reason: null, resumedAt: null }
     throw new Error(`unexpected GET ${path}`)
   })
 }

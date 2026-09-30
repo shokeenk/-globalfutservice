@@ -154,3 +154,26 @@ when no variant is given -- the length of the credit the booking will spend -- o
 picker pass it.
 
 **Evidence:** read in the code.
+
+---
+
+## 7. One Service Listings test fails now and then under a full run
+
+**Where:** `frontend/src/pages/admin/AdminListings.test.tsx`, "edits a tier: title
+read-only, prices per currency, and asks before changing a price"
+
+It failed once during a full run of the admin tests: `waitFor(() => expect(api.put)
+.toHaveBeenCalledWith(...))` gave up with "expected spy to be called with arguments"
+after the test had run for 1.3 s. Run on its own it passed three times in a row, and the
+next full run of every frontend test passed. `waitFor` stops retrying after one second by
+default, so a save that has not happened within a second of the click on a loaded machine
+fails the test -- the likeliest reading, not an established one.
+
+**When it bites:** a full `vitest run` on a loaded machine; it would show as a flaky CI
+failure.
+
+**What it would take:** confirm by reproducing under load, then give that `waitFor` a
+longer `timeout`, or wait on what the save renders (`findByRole('status')`, which the
+test already checks afterwards) before asserting on the call.
+
+**Evidence:** observed once; the cause is read, not confirmed.

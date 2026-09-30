@@ -497,7 +497,7 @@ const fr: Dictionary = {
     total: 'Total',
     placed: 'Passée le',
     deliveryMethod: 'Mode de livraison',
-    deliveryTrading: 'GFS Trading Method 3.0 (Latest)',
+    deliveryTrading: 'GFS Transfer Method 3.0',
     deliveryBoosting: 'Joué sur ton compte',
     deliveryCoaching: 'Séance programmée',
     breakdown: 'Détail',
@@ -763,7 +763,7 @@ const fr: Dictionary = {
     reqMinCoinsNote: 'Mettre une carte en vente demande un solde de départ.',
     reqUnassigned: 'Moins de 5 objets non assignés',
     reqUnassignedNote: 'Une pile pleine bloque totalement les transferts.',
-    deliveryFixed: 'GFS Trading Method 3.0 (Latest)',
+    deliveryFixed: 'GFS Transfer Method 3.0',
     deliveryFixedHint:
       'Notre méthode actuelle, utilisée pour chaque commande de crédits. Rien à choisir.',
 

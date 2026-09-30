@@ -101,6 +101,32 @@ public class EmailNotifier implements Notifier {
     }
 
     /**
+     * Their order is on hold until they fix something on their EA account.
+     *
+     * <p>The instruction is the storefront's own sentence. The rest is the same promise the
+     * sign-in request makes: where to go, and what we will never ask for by email.
+     */
+    @Override
+    public void customerActionNeeded(CustomerActionNotification a) {
+        OrderNotification n = a.order();
+        send(n, "Action needed on order " + n.publicRef(), """
+                Your order is paused until you do one thing for us.
+
+                Reference: %s
+
+                %s
+
+                Your order page: %s
+
+                When it's done, or if you have a question, tell us in your order's Discord ticket or
+                at %s/support. Replies to this email do not reach us.
+                We will never ask for your password or backup codes by email.
+
+                — Global FUT Services
+                """.formatted(n.publicRef(), a.instruction(), trackUrl(n), publicUrl()));
+    }
+
+    /**
      * A support reply, in full, with the link to the conversation.
      *
      * <p>The message itself is in the email so the customer does not have to click to read

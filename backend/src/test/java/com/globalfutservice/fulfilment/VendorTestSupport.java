@@ -26,24 +26,63 @@ final class VendorTestSupport {
     static final List<String> DOCUMENTED_CODES = List.of("MissingData", "InvalidPassword", "InvalidBA1",
             "InvalidBA2", "InvalidBA3", "InvalidBA4", "InvalidBA5", "InvalidAmount", "InvalidPlatform");
 
+    /** The poll's defaults. */
+    static final AppProperties.FutTransferPolling POLLING = new AppProperties.FutTransferPolling(
+            Duration.ofSeconds(60), Duration.ofSeconds(10), Duration.ofMinutes(15), 3, Duration.ofHours(6),
+            Duration.ofMinutes(2), Duration.ofMinutes(10));
+
+    /** GFS Transfer Method 3.0, exactly as the client's brief gives it. */
+    static final AppProperties.FutTransferOrder METHOD_3_0 = new AppProperties.FutTransferOrder(
+            300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1");
+
     private VendorTestSupport() {
     }
 
+    /**
+     * A backup domain nothing listens on. Never the vendor's real one: a test whose read
+     * fails over must not reach the real API.
+     */
+    static final String NO_BACKUP = "http://127.0.0.1:9";
+
     static AppProperties props(String baseUrl, Duration timeout) {
+        return props(baseUrl, NO_BACKUP, timeout);
+    }
+
+    static AppProperties props(String baseUrl, String backupUrl, Duration timeout) {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
-                RAW_KEY, "snipe", 2, Duration.ofSeconds(60), timeout, 3, DOCUMENTED_CODES));
+                RAW_KEY, "targetedSnipe", 1, POLLING, timeout, 3, DOCUMENTED_CODES,
+                backupUrl, METHOD_3_0, true, Duration.ofHours(72)));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         return props;
+    }
+
+    /** Calls not paused, and a record of any pause a test trips. */
+    static VendorControl running() {
+        return org.mockito.Mockito.mock(VendorControl.class);
+    }
+
+    static FutTransferClient client(AppProperties props, VendorControl control) {
+        return new FutTransferClient(props, new com.fasterxml.jackson.databind.ObjectMapper(), control, noCallLog())
+                .withoutRetryPauses();
+    }
+
+    /** An audit trail that goes nowhere, for tests that are not about it. */
+    static VendorCallLog noCallLog() {
+        return org.mockito.Mockito.mock(VendorCallLog.class);
     }
 
     static CredentialDtos.RevealedCredentials signIn() {
         return new CredentialDtos.RevealedCredentials("customer@example.test", PASSWORD, BACKUP_CODES, null, null);
     }
 
-    /** Every secret in play, including the digest actually sent as apiKey. */
+    /**
+     * Every secret in play, including the digest actually sent as apiKey -- and the
+     * customer's EA email, which goes to the vendor but never to a log line.
+     */
     static List<String> secrets() {
-        List<String> all = new java.util.ArrayList<>(List.of(RAW_KEY, FutTransferClient.md5(RAW_KEY), PASSWORD));
+        List<String> all = new java.util.ArrayList<>(List.of(RAW_KEY, FutTransferClient.md5(RAW_KEY), PASSWORD,
+                "customer@example.test"));
         all.addAll(BACKUP_CODES);
         all.addAll(RETURNED_CODES);
         return all;

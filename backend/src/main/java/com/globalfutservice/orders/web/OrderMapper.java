@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.orders.OrderStatus;
-import com.globalfutservice.domain.orders.SupplierStatusMapper;
+import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
 import com.globalfutservice.config.AppProperties;
@@ -42,13 +42,17 @@ public class OrderMapper {
 
     public OrderMapper(ObjectMapper mapper, AppProperties props,
                        DiscordVerificationService verification, DiscordBotClient bot,
-                       CoachingService coachingService) {
+                       CoachingService coachingService, VendorOrderLedger vendorOrders) {
+        this.vendorOrders = vendorOrders;
         this.mapper = mapper;
         this.props = props;
         this.verification = verification;
         this.bot = bot;
         this.coachingService = coachingService;
     }
+
+    /** What a held coin order is waiting for the customer to do. */
+    private final VendorOrderLedger vendorOrders;
 
     /** For a coaching order's "1 of 6 booked". */
     private final CoachingService coachingService;
@@ -105,9 +109,24 @@ public class OrderMapper {
         return new OrderDtos.DiscordAccessDto("VERIFY", null, invite, command);
     }
 
+    /** The order as its customer reads it: the timeline in {@link #toCustomerEventDto} form. */
     public OrderDtos.OrderResponse toResponse(OrderEntity order,
                                               List<OrderEventEntity> timeline,
                                               boolean credentialsSubmitted) {
+        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toCustomerEventDto);
+    }
+
+    /** The order as staff read it: every timeline row exactly as it was written. */
+    public OrderDtos.OrderResponse toAdminResponse(OrderEntity order,
+                                                   List<OrderEventEntity> timeline,
+                                                   boolean credentialsSubmitted) {
+        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toEventDto);
+    }
+
+    private OrderDtos.OrderResponse toResponse(OrderEntity order,
+                                               List<OrderEventEntity> timeline,
+                                               boolean credentialsSubmitted,
+                                               java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events) {
         boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
         return new OrderDtos.OrderResponse(
                 order.getPublicRef(),
@@ -135,7 +154,7 @@ public class OrderMapper {
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
                 order.getGuaranteeExpiresAt(),
-                timeline.stream().map(OrderMapper::toEventDto).toList(),
+                timeline.stream().map(events).toList(),
                 coaching ? order.getEaPlatformHandle() : null,
                 coaching && order.getCoachingPlatform() != null ? order.getCoachingPlatform().name() : null,
                 coaching ? order.getCoachingRank() : null,
@@ -199,6 +218,31 @@ public class OrderMapper {
         }
         return out;
     }
+
+    /**
+     * A timeline row as the customer reads it.
+     *
+     * <p>Whatever part of the system wrote it, a system row is signed "GFS": the customer
+     * has no use for which subsystem it was, and one of them was named after the
+     * fulfilment partner. Rows the first supplier poll wrote also carried the partner's own
+     * codes in their reason ("Supplier reports interrupted — NEW_BACKUP_CODES"); those keep
+     * the status change and lose the reason.
+     */
+    static OrderDtos.OrderEventDto toCustomerEventDto(OrderEventEntity event) {
+        OrderDtos.OrderEventDto raw = toEventDto(event);
+        if (event.getActorType() != com.globalfutservice.domain.orders.Actor.SYSTEM) {
+            return raw;
+        }
+        String reason = raw.reason() != null && raw.reason().startsWith(LEGACY_SUPPLIER_REASON) ? null : raw.reason();
+        return new OrderDtos.OrderEventDto(raw.fromStatus(), raw.toStatus(), raw.actorType(), SYSTEM_LABEL, reason,
+                raw.at());
+    }
+
+    /** What every system row on a customer's timeline is signed. */
+    static final String SYSTEM_LABEL = "GFS";
+
+    /** How the first supplier poll began every reason it wrote. */
+    private static final String LEGACY_SUPPLIER_REASON = "Supplier reports ";
 
     private static OrderDtos.OrderEventDto toEventDto(OrderEventEntity event) {
         return new OrderDtos.OrderEventDto(
@@ -268,21 +312,14 @@ public class OrderMapper {
     }
 
     /**
-     * The supplier's stall reason, as something the customer can act on.
+     * What the customer has to do for a held order, in our own vocabulary
+     * ({@code RESUBMIT_SIGN_IN}, {@code FREE_TRANSFER_SLOTS}...), which the storefront words.
      *
-     * <p>Only meaningful while an order is actually held — the mapper returns an action
-     * for any recognised code, but showing "clear your unassigned items" beside a
-     * delivered order would be nonsense. Null means there is nothing to do.
+     * <p>Only while the order is actually held and its vendor order is waiting for the
+     * customer. Null means there is nothing for them to do.
      */
-    private static String customerActionFor(OrderEntity order) {
+    private String customerActionFor(OrderEntity order) {
         if (order.getStatus() != OrderStatus.ON_HOLD) return null;
-        SupplierStatusMapper.Outcome outcome = SupplierStatusMapper.map(
-                order.getStatus(),
-                order.getSupplierStatus(),
-                order.getSupplierAccountCheck(),
-                order.getSupplierEconomyState(),
-                false);
-        return outcome.action() == SupplierStatusMapper.CustomerAction.NONE
-                ? null : outcome.action().name();
+        return vendorOrders.customerAction(order.getId()).orElse(null);
     }
 }

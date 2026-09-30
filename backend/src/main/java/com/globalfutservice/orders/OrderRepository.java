@@ -122,30 +122,4 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>,
             """)
     List<Object[]> revenueByCurrency(@Param("from") Instant from, @Param("before") Instant before);
 
-    /**
-     * Orders the supplier is still working.
-     *
-     * <p>Bounded by status rather than by "has a supplier id", so a delivered or refunded
-     * order stops being polled the moment it settles — otherwise every order ever
-     * dispatched would be re-read every minute for the life of the system.
-     *
-     * <p>Ordered oldest-poll-first so that when there are more open orders than one bulk
-     * call can carry, the ones waiting longest are the ones that get read.
-     *
-     * <p>Includes orders a lookup confirmed after their placement answer was lost: the
-     * vendor has them, but the lookup does not return the vendor's id, so they are found
-     * through {@code vendor_order} rather than {@code supplier_order_id}.
-     */
-    @Query(nativeQuery = true, value = OPEN_SUPPLIER_ORDERS_SQL)
-    List<OrderEntity> findOpenSupplierOrders();
-
-    /** Native, so it is only checked when it runs: a database test runs it directly. */
-    String OPEN_SUPPLIER_ORDERS_SQL = """
-           SELECT o.* FROM orders o
-            WHERE (o.supplier_order_id IS NOT NULL
-                   OR EXISTS (SELECT 1 FROM vendor_order v
-                               WHERE v.order_id = o.id AND v.state = 'SUBMITTED'))
-              AND o.status IN ('READY_FOR_DELIVERY', 'IN_PROGRESS', 'ON_HOLD')
-            ORDER BY o.supplier_polled_at ASC NULLS FIRST
-           """;
 }
