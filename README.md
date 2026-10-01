@@ -393,7 +393,7 @@ documents every variable; the ones that matter most:
 | `GFS_LOYALTY_BONUS_ZONE` | Whose midnight ends a loyalty day. **Not** UTC. |
 | `GFS_COACHING_CHANGE_CUTOFF` | Notice needed to move or cancel a session and keep the credit. |
 | `GFS_COACHING_CREDITS_PER_VARIANT` | Sessions each rate-card variant grants. A new pack is a row plus a line here. |
-| `GFS_SEASON` | `FC26`. Drives rate-card lookup, page copy and meta tags. |
+| `GFS_SEASON` | `FC26`. Drives rate-card lookup. The API refuses to start if this season has no live prices. The storefront's season label is separate: `SEASON` in `frontend/src/lib/seo.ts`. |
 
 ### Prices are data, not code
 

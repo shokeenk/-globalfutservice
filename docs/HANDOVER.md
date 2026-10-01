@@ -42,11 +42,24 @@ intended property. Back the key up somewhere that is not the same place as the d
 
 ## Changing the season for FC 27
 
-1. `GFS_SEASON=FC27`, `GFS_SEASON_YEAR=27`.
-2. Insert new `rate_card` rows with `season = 'FC27'`.
-3. That is all. Headings, meta tags, order references and rate lookup all read the
-   config value. There is no hard-coded season anywhere — which is exactly the mistake
-   the reference site made, and it still has "FC 25" in its meta description.
+Prices first, then the switch. Every price is looked up by `GFS_SEASON`, so a season
+with no rate cards leaves the shop with nothing to sell. That happened once in
+production: the coin page stopped quoting and nothing was logged. The API now refuses to
+start in that state, and the log names the season and the seasons that do have prices.
+
+1. Insert `rate_card` rows with `season = 'FC27'` for every sellable service in every
+   enabled currency. They do nothing while `GFS_SEASON` is still `FC26`. The admin rates
+   page cannot do this step: it only lists the configured season's rows.
+2. Set `GFS_SEASON=FC27` and `GFS_SEASON_YEAR=27`, and redeploy the API. Rate lookup and
+   order references follow these. Startup logs an error for any service and currency
+   still missing a price.
+3. Update the storefront, which does not read the API's season:
+   - `SEASON` in `frontend/src/lib/seo.ts` (headings, page titles, meta tags);
+   - `order.deliveryInfoLead` in `frontend/src/i18n/en.ts`, `es.ts` and `fr.ts`, which
+     names "FC 26" in a sentence;
+   - the FC26 key art behind the homepage hero (`frontend/src/pages/Home.tsx`).
+
+   Then redeploy the storefront.
 
 ## Turning on a service that is currently "coming soon"
 
