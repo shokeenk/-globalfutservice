@@ -48,6 +48,14 @@ public interface RateCardRepository extends JpaRepository<RateCardEntity, Long> 
             """)
     List<Currency> findLiveCurrencies(@Param("season") String season);
 
+    /** Every season with at least one live row, for telling an operator what exists. */
+    @Query("""
+            select distinct r.season from RateCardEntity r
+            where r.validTo is null
+            order by r.season
+            """)
+    List<String> findLiveSeasons();
+
     /** Price history for one combination, newest first — the admin audit view. */
     @Query("""
             select r from RateCardEntity r

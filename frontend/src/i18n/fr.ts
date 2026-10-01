@@ -64,6 +64,8 @@ const fr: Dictionary = {
     cancel: 'Annuler',
     close: 'Fermer',
     comingSoon: 'Bientôt disponible',
+    pricesUnavailable: 'Les tarifs sont indisponibles',
+    notOnSale: 'Ce service n’a pas de tarifs pour le moment, il ne peut donc pas être commandé. Repasse un peu plus tard.',
   },
 
   loyalty: {
@@ -717,7 +719,6 @@ const fr: Dictionary = {
     seoTitle: (season) => `Acheter des crédits ${season}`,
     seoDescription:
       'Choisis ta plateforme et ton montant. Tarifs en direct, aucun frais caché au paiement.',
-    pricesUnavailable: 'Les tarifs sont indisponibles',
     title: 'Compose ta commande',
     lead: 'Tout est tarifé à l’avance. Rien n’est ajouté à la dernière étape.',
     stepPackage: (_n, service) => service,
@@ -1152,6 +1153,7 @@ const fr: Dictionary = {
       'On analyse ce qui se passe dans tes matchs et on le transforme en changements clairs, vraiment applicables.',
     bookCta: 'Réserver une séance',
     meetCta: 'Découvrir le coach',
+    pricesUpdating: 'Les tarifs du coaching sont en cours de mise à jour.',
     badgeFeedback: 'Retours personnalisés',
     badgeImprovements: 'Améliorations concrètes',
     badgeConfidence: 'Joue avec plus de confiance',

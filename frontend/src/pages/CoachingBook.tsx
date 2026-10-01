@@ -68,7 +68,7 @@ export default function CoachingBook() {
   useSeo({ title: b.seoTitle, noindex: true })
 
   const { account, loading: authLoading } = useAuth()
-  const { catalog, policy } = useCatalog()
+  const { catalog, policy, error: catalogError } = useCatalog()
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
@@ -265,6 +265,25 @@ export default function CoachingBook() {
       }
       setError(e instanceof ApiError ? e.message : b.placeFailed)
     }
+  }
+
+  /*
+   * Nothing to sell, said on the first step rather than the last.
+   *
+   * With no coaching option priced -- a season with no rate cards, or a catalogue that
+   * failed to load -- the option list was a spinner that never stopped, and Continue
+   * still led through details and a calendar to a review screen that could not price.
+   * An order already placed is priced by its own quote, so resuming one carries on.
+   */
+  const resuming = Boolean(params.get('order')) || created !== null || resumed !== null
+  if (!resuming && (catalogError || (catalog && options.length === 0))) {
+    return (
+      <Section className="rhythm-section">
+        <div className="mx-auto max-w-2xl">
+          <Alert tone="warn" title={t.common.pricesUnavailable}>{catalogError ?? t.common.notOnSale}</Alert>
+        </div>
+      </Section>
+    )
   }
 
   const indicatorStep = step === 'option' ? 1 : step === 'details' ? 2 : step === 'schedule' ? 3 : 4

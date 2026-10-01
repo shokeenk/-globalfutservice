@@ -239,6 +239,11 @@ function Pricing({
       <div className="grid gap-5 md:grid-cols-2">
         {!options && Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-60 w-full" />)}
 
+        {/* Loaded with nothing priced: said, as the boosting tiers do, rather than left blank. */}
+        {options?.length === 0 && (
+          <p className="col-span-full text-sm text-chalk-faint">{p.pricesUpdating}</p>
+        )}
+
         {options?.map((option, index) => {
           const isPack = option.variant === 'MONTHLY_6_SESSIONS'
           return (
