@@ -73,6 +73,23 @@ class SupplierReleaseTest {
         vendor.close();
     }
 
+    @Test
+    @DisplayName("the confirmation is told the mode configured now and the one the last attempt used")
+    void preview() {
+        assertThat(service.preview(order(Sku.TRADING_SERVICE)))
+                .isEqualTo(new SupplierFulfilmentService.ReleasePreview("OWN_SENDERS", null));
+
+        when(ledger.orderMode(ORDER_ID)).thenReturn(java.util.Optional.of("OWN_SENDERS"));
+        AppProperties pool = VendorTestSupport.publicPool(vendor.baseUrl(), Duration.ofMillis(800),
+                VendorTestSupport.ORDER_AMOUNT_POOL);
+        SupplierFulfilmentService afterSwitch = new SupplierFulfilmentService(new FutTransferClient(pool,
+                new ObjectMapper(), control, VendorTestSupport.noCallLog()), control, vault, ledger, notifications, pool,
+                new ObjectMapper());
+        assertThat(afterSwitch.preview(order(Sku.TRADING_SERVICE)))
+                .isEqualTo(new SupplierFulfilmentService.ReleasePreview("PUBLIC_POOL", "OWN_SENDERS"));
+        assertThat(vendor.requests()).isEmpty();
+    }
+
     private static OrderEntity order(Sku sku) {
         OrderEntity o = mock(OrderEntity.class);
         when(o.getId()).thenReturn(ORDER_ID);

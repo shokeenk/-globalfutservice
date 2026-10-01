@@ -531,6 +531,12 @@ public class VendorOrderLedger {
                 .stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
+    /** How this order was last sent, or tried: PUBLIC_POOL or OWN_SENDERS. Empty if never. */
+    public Optional<String> orderMode(long orderId) {
+        return jdbc.query("select order_mode from vendor_order where order_id = :orderId",
+                new MapSqlParameterSource("orderId", orderId), (rs, i) -> rs.getString(1)).stream().findFirst();
+    }
+
     public Optional<Row> find(long orderId) {
         return jdbc.query("""
                 select order_id, external_ref, vendor_order_id, state, amount_ordered_k, attempts,

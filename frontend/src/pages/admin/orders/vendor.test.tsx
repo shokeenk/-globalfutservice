@@ -17,6 +17,7 @@ const { ApiError } = await import('../../../lib/api')
 const { approveReplacedBy, vendorQuestion, vendorTimeline } = await import('./vendor')
 const { VendorPanel } = await import('./VendorPanel')
 const { VendorReview, resumeCallsQuestion } = await import('./VendorReview')
+const { releaseQuestion } = await import('./confirmations')
 
 const REF = 'GFS-26-VENDOR01'
 
@@ -75,6 +76,7 @@ describe('vendor wording', () => {
 describe('VendorPanel', () => {
   beforeEach(() => {
     api.post.mockReset()
+    api.get.mockReset()
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -91,6 +93,46 @@ describe('VendorPanel', () => {
     expect(screen.getByText('420K')).toBeInTheDocument()
     expect(screen.getByText('To pay (currency unconfirmed)')).toBeInTheDocument()
     expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('shows how it was sent, with every partner figure labelled as unconfirmed', async () => {
+    api.get.mockResolvedValue({ balance: 4321.5, available: true, currency: 'unconfirmed' })
+    renderPanel(section({
+      currentOrderMode: 'PUBLIC_POOL',
+      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', buyNowThresholdSent: 500,
+        balanceAtSend: 5000 }),
+    }))
+
+    expect(screen.getByText('Order mode').nextSibling).toHaveTextContent('Public pool')
+    expect(screen.getByText('Transfer method').nextSibling).toHaveTextContent('targetedSnipe')
+    expect(screen.getByText('buyNowThreshold sent').nextSibling).toHaveTextContent('500')
+    expect(screen.getByText('maxPrice sent').nextSibling).toHaveTextContent('Not sent')
+    expect(screen.getByText('To pay (currency unconfirmed)').nextSibling).toHaveTextContent('12.5')
+    expect(screen.getByText('Balance at send (currency unconfirmed)').nextSibling).toHaveTextContent('5,000')
+    expect(await screen.findByText('4,321.5')).toBeInTheDocument()
+    expect(screen.getByText(/FUT Transfer balance \(currency unconfirmed\)/)).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledWith('/api/v1/admin/vendor/balance')
+    expect(screen.queryByText(/approving it again would use/)).toBeNull()
+  })
+
+  it('says Unavailable, never zero, when the balance cannot be read', async () => {
+    api.get.mockRejectedValue(new Error('offline'))
+    renderPanel(section())
+    expect(await screen.findByText('Unavailable')).toBeInTheDocument()
+
+    api.get.mockResolvedValue({ available: false, currency: 'unconfirmed' })
+    renderPanel(section())
+    await waitFor(() => expect(screen.getAllByText('Unavailable')).toHaveLength(2))
+    expect(document.body.textContent).not.toContain('undefined')
+  })
+
+  it('an order sent before modes were recorded says so, and warns that approving again would use the new one', () => {
+    // The API omits the fields it has no value for.
+    renderPanel(section({ currentOrderMode: 'PUBLIC_POOL', vendorOrder: detail({ orderMode: 'OWN_SENDERS' }) }))
+    expect(screen.getByText('Transfer method').nextSibling).toHaveTextContent('Not recorded')
+    expect(screen.getByText('buyNowThreshold sent').nextSibling).toHaveTextContent('Not sent')
+    expect(screen.getByText(/Sent as Own senders\. Configured now: Public pool/)).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('undefined')
   })
 
   it('shows a dash, never "undefined", for what the server leaves out of its answer', () => {
@@ -225,5 +267,24 @@ describe('VendorReview', () => {
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/admin/vendor/resume'))
     expect(confirm).toHaveBeenCalledWith(resumeCallsQuestion())
+  })
+})
+
+describe('release question', () => {
+  it('says how the order will be placed', () => {
+    const q = releaseQuestion(REF, { orderMode: 'PUBLIC_POOL' })
+    expect(q).toContain("It will be placed through the public pool — coins bought from FUT Transfer's sellers.")
+    expect(q).not.toContain('last attempt')
+    expect(q).toContain('cannot be undone')
+  })
+
+  it('warns when a retry is not placed the way the last attempt was', () => {
+    const q = releaseQuestion(REF, { orderMode: 'PUBLIC_POOL', lastAttemptMode: 'OWN_SENDERS' })
+    expect(q).toContain('The last attempt used own senders — coins sent from our own sender accounts. This one will not.')
+    expect(releaseQuestion(REF, { orderMode: 'OWN_SENDERS', lastAttemptMode: 'OWN_SENDERS' })).not.toContain('last attempt')
+  })
+
+  it('says so when it could not be checked, rather than guessing', () => {
+    expect(releaseQuestion(REF, null)).toContain('How it will be placed could not be checked.')
   })
 })

@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, Field, Input, Textarea } from '../../../components/ui'
 import { ApiError, api } from '../../../lib/api'
 import { dateTime } from '../../../lib/format'
-import type { VendorActionName, VendorSection } from '../../../lib/types'
+import type { VendorActionName, VendorBalance, VendorSection } from '../../../lib/types'
 import {
   VENDOR_ACTION_LABEL, VENDOR_ACTION_PATH, VENDOR_ACTIONS, VENDOR_FINAL_ACTIONS, VENDOR_STATE_LABEL,
-  vendorQuestion, vendorStateTone, vendorTimeline,
+  asReported, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
 } from './vendor'
 
 /**
@@ -32,6 +32,30 @@ export function VendorPanel({
 
   const v = section.vendorOrder
   const available = VENDOR_ACTIONS.filter((a) => section.available.includes(a))
+
+  /*
+   * The balance FUT Transfer reports, read live (the server keeps it for a minute). Its own
+   * request, so a slow partner never holds up the rest of this section; "Unavailable" when
+   * it cannot be read, never a zero.
+   */
+  const [balance, setBalance] = useState<VendorBalance | null | 'loading'>('loading')
+  useEffect(() => {
+    if (!section.enabled) return
+    let live = true
+    ;(async () => {
+      try {
+        const res = await api.get<VendorBalance>('/api/v1/admin/vendor/balance')
+        if (live) setBalance(res ?? null)
+      } catch {
+        if (live) setBalance(null)
+      }
+    })()
+    return () => { live = false }
+  }, [section.enabled])
+  const balanceText = balance === 'loading' ? '…'
+    : balance && balance.available && balance.balance != null ? asReported(balance.balance) : 'Unavailable'
+  const modeChanged = v?.orderMode != null && section.currentOrderMode != null
+    && v.orderMode !== section.currentOrderMode
 
   async function run(action: VendorActionName) {
     const input = { vendorOrderId: linkId.trim() || undefined, note: note.trim() }
@@ -75,6 +99,12 @@ export function VendorPanel({
           The fulfilment partner is switched off here. Nothing is sent or read.
         </p>
       )}
+      {section.enabled && (
+        <p className="mt-2 text-[12.5px] text-chalk-muted">
+          FUT Transfer balance (currency unconfirmed):{' '}
+          <span className="tnum font-semibold text-chalk">{balanceText}</span>
+        </p>
+      )}
       {section.paused && (
         <div className="mt-4">
           <Alert tone="warn" title="Calls to FUT Transfer are paused">
@@ -101,6 +131,21 @@ export function VendorPanel({
             <Cell label="Last report" value={dateTime(v.lastPolledAt ?? null)} />
             <Cell label="Last progress" value={dateTime(v.lastProgressAt ?? null)} />
           </dl>
+
+          <p className="stamp mb-3 mt-5">How it was sent</p>
+          <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
+            <Cell label="Order mode" value={orderModeLabel(v.orderMode)} />
+            <Cell label="Transfer method" value={v.transferMethod ?? 'Not recorded'} mono />
+            <Cell label="buyNowThreshold sent" value={v.buyNowThresholdSent == null ? 'Not sent' : asReported(v.buyNowThresholdSent)} />
+            <Cell label="maxPrice sent" value={v.maxPriceSent == null ? 'Not sent' : asReported(v.maxPriceSent)} />
+            <Cell label="Balance at send (currency unconfirmed)" value={asReported(v.balanceAtSend)} />
+          </dl>
+          {modeChanged && (
+            <p className="mt-3 text-[12.5px] text-warn">
+              Sent as {orderModeLabel(v.orderMode)}. Configured now: {orderModeLabel(section.currentOrderMode)} —
+              approving it again would use that.
+            </p>
+          )}
 
           {v.aborted && (
             <p className="mt-3 text-[12.5px] text-warn">The partner reports this order was aborted.</p>

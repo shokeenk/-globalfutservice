@@ -979,6 +979,16 @@ export interface VendorOrderDetail {
   lastProgressAt?: string | null
   resubmittedAt?: string | null
   updatedAt?: string | null
+  /** How it was sent: PUBLIC_POOL (/buyCoinsAPI) or OWN_SENDERS (/orderAPI). */
+  orderMode?: string | null
+  /** The partner's method as sent. Absent for orders from before it was recorded. */
+  transferMethod?: string | null
+  /** What a public-pool order sent as buyNowThreshold, in the partner's unit (per 100K). Absent: not sent. */
+  buyNowThresholdSent?: number | null
+  /** maxPrice as sent. Absent: not sent. */
+  maxPriceSent?: number | null
+  /** The balance the partner reported just before a public-pool send. Its currency is not confirmed. */
+  balanceAtSend?: number | null
 }
 
 /** One HTTP call to the partner. Never a body. */
@@ -1010,6 +1020,23 @@ export interface VendorSection {
   available: VendorActionName[]
   calls: VendorCall[]
   actions: VendorActionEntry[]
+  /** How a send now would go, from configuration: PUBLIC_POOL or OWN_SENDERS. */
+  currentOrderMode?: string | null
+}
+
+/** The balance FUT Transfer reports, read live. Its currency is not confirmed. */
+export interface VendorBalance {
+  /** Absent when it could not be read. */
+  balance?: number | null
+  available: boolean
+  readAt?: string | null
+  currency: string
+}
+
+/** How Approve would send an order: the mode configured now, and the one its last attempt used. */
+export interface ReleasePreview {
+  orderMode: string
+  lastAttemptMode?: string | null
 }
 
 /** An order at the partner waiting for an admin's decision. */

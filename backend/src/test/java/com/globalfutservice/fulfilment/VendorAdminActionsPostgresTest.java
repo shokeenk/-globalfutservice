@@ -329,6 +329,9 @@ class VendorAdminActionsPostgresTest {
         assertThat(s.actions()).extracting(VendorOrderActionLog.Entry::outcome).containsExactly("REFUSED");
         // On hold: the customer has not re-entered details, so no corrected sign-in to send yet.
         assertThat(s.available()).containsExactly("RESUME", "STOP", "MARK_FINISHED", "RESOLVE");
+        // How it was sent, and how a send now would go.
+        assertThat(s.vendorOrder().orderMode()).isEqualTo("OWN_SENDERS");
+        assertThat(s.currentOrderMode()).isEqualTo("OWN_SENDERS");
     }
 
     @Test

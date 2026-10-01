@@ -92,6 +92,18 @@ public class SupplierFulfilmentService {
     }
 
     /**
+     * How Approve would send this order: the mode configured now, and the one its last
+     * attempt used, if it has had one. Shown in the confirmation, so an admin retrying an
+     * order first sent from our own senders can see this one will go to the public pool.
+     */
+    public record ReleasePreview(String orderMode, String lastAttemptMode) {
+    }
+
+    public ReleasePreview preview(OrderEntity order) {
+        return new ReleasePreview(props.futTransfer().orderMode().name(), ledger.orderMode(order.getId()).orElse(null));
+    }
+
+    /**
      * An operator has reviewed the order and released it to the supplier.
      *
      * <p>The order itself is not moved here. What happened is returned, and the caller

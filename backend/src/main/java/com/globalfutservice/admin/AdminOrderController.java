@@ -297,6 +297,18 @@ public class AdminOrderController {
     }
 
     /**
+     * How Approve would send this order to FUT Transfer, for its confirmation: the mode
+     * configured now, and the one the last attempt used. Mode names only; nothing is sent.
+     */
+    @GetMapping("/{publicRef}/release-preview")
+    @Operation(summary = "How Approve would send this order to the fulfilment partner")
+    public ResponseEntity<SupplierFulfilmentService.ReleasePreview> releasePreview(@PathVariable String publicRef) {
+        OrderEntity order = orderService.requireAny(publicRef);
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(supplierFulfilment.preview(order));
+    }
+
+    /**
      * Opens the credential vault for one order.
      *
      * <p>A POST rather than a GET on purpose: this is not a safe, idempotent read. It is
