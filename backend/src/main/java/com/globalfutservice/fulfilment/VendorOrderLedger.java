@@ -229,17 +229,17 @@ public class VendorOrderLedger {
 
     // ---------------------------------------------------------------- polling ---
 
-    /** A vendor order the poller asks about. */
+    /** A vendor order the poller asks about, and how it was sent (PUBLIC_POOL or OWN_SENDERS). */
     public record PollRow(long orderId, String externalRef, String vendorOrderId, String state,
                           long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls,
                           String customerAction, String vendorAccountCheck, String vendorEconomyState,
-                          Instant resubmittedAt) {
+                          Instant resubmittedAt, String orderMode) {
     }
 
     private static final String POLL_COLUMNS = """
             order_id, external_ref, vendor_order_id, state, amount_ordered_k, amount_delivered_k,
             vendor_status, missing_polls, customer_action, vendor_account_check, vendor_economy_state,
-            resubmitted_at
+            resubmitted_at, order_mode
             """;
 
     private static PollRow pollRow(ResultSet rs, int i) throws SQLException {
@@ -247,7 +247,8 @@ public class VendorOrderLedger {
                 rs.getString("state"), rs.getLong("amount_ordered_k"), rs.getObject("amount_delivered_k", Long.class),
                 rs.getString("vendor_status"), rs.getInt("missing_polls"), rs.getString("customer_action"),
                 rs.getString("vendor_account_check"), rs.getString("vendor_economy_state"),
-                rs.getTimestamp("resubmitted_at") == null ? null : rs.getTimestamp("resubmitted_at").toInstant());
+                rs.getTimestamp("resubmitted_at") == null ? null : rs.getTimestamp("resubmitted_at").toInstant(),
+                rs.getString("order_mode"));
     }
 
     /** Orders the vendor is working on or waiting for the customer on, least recently asked about first. */
