@@ -56,7 +56,11 @@ class CustomerVocabularyTest {
             Pattern.compile("(?i)\\blimited\\b"),
             Pattern.compile("(?i)fut\\s*transfer|eatransfer"),     // the partner and its domains
             Pattern.compile("riskLevel|transferMethod|senderGroup|autoFinishCycle|topUpEnabled|minTransferAmount"
-                    + "|stopOrderAfterOnboarding|skipCustomerCheck|lockOnboarding"));
+                    + "|stopOrderAfterOnboarding|skipCustomerCheck|lockOnboarding"),
+            // The public pool: its endpoint and fields, and what the admin page calls the two modes.
+            Pattern.compile("buyCoins|buyCondition|buyNowThreshold|maxPrice|supplierID|supplierOverpriced"
+                    + "|supplierNotFound|privateSupplier"),
+            Pattern.compile("(?i)public\\s*pool|seller\\s*pool|own\\s*senders?|sender\\s*groups?"));
 
     @Test
     @DisplayName("every sentence CustomerText can produce is in our words")
@@ -236,6 +240,16 @@ class CustomerVocabularyTest {
             }
         }
         return out;
+    }
+
+    @Test
+    @DisplayName("the public pool's words are caught, however they are spaced or cased")
+    void publicPoolWords() {
+        for (String text : List.of("Bought from the Public  Pool", "public\tpool", "sent from own senders", "OWN SENDER",
+                "buyNowThreshold 500", "a sender group", "supplierOverpriced", "the seller pool")) {
+            assertThat(FORBIDDEN.stream().anyMatch(p -> p.matcher(text).find())).as(text).isTrue();
+        }
+        assertThat(FORBIDDEN.stream().anyMatch(p -> p.matcher("GFS Transfer Method 3.0").find())).isFalse();
     }
 
     @Test
