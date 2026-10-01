@@ -18,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -107,7 +108,7 @@ class VendorPauseTest {
 
         assertThat(r.result()).isEqualTo(SupplierFulfilmentService.Result.NOT_SENT);
         assertThat(r.message()).contains("paused");
-        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
         verify(vault, never()).reveal(anyLong(), org.mockito.ArgumentMatchers.any());
         assertThat(vendor.requests()).isEmpty();
     }

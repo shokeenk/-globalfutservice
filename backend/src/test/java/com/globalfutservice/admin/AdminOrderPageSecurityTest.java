@@ -226,4 +226,20 @@ class AdminOrderPageSecurityTest {
         mvc.perform(post(BASE + "/GFS-26-CN43SP05/credentials/remind"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("Approve's preview: who may approve sees how it would be sent, mode names only; nobody else")
+    void releasePreview() throws Exception {
+        when(supplierFulfilment.preview(any()))
+                .thenReturn(new SupplierFulfilmentService.ReleasePreview("PUBLIC_POOL", "OWN_SENDERS"));
+        String path = BASE + "/GFS-26-CN43SP05/release-preview";
+
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).with(authentication(as(AccountRole.CUSTOMER)))).andExpect(status().isForbidden());
+        mvc.perform(get(path).with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.orderMode").value("PUBLIC_POOL"))
+                .andExpect(jsonPath("$.lastAttemptMode").value("OWN_SENDERS"));
+    }
 }

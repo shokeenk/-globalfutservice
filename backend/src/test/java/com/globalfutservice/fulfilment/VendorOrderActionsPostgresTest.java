@@ -308,4 +308,26 @@ class VendorOrderActionsPostgresTest {
         assertThat(row("GFS-26-SIGNIN11").get("state")).isEqualTo("AWAITING_CUSTOMER");
         assertThat(row("GFS-26-SIGNIN11").get("customer_action")).isEqualTo("RESUBMIT_SIGN_IN");
     }
+
+    @Test
+    @DisplayName("after the switch to the public pool, a corrected sign-in still goes to the /orderAPI order it is for")
+    void correctedSignInAfterSwitch() {
+        OrderEntity o = waiting("GFS-26-SIGNSW01", "vid-signin-switch", OrderStatus.READY_FOR_DELIVERY);
+        assertThat(row("GFS-26-SIGNSW01").get("order_mode")).isEqualTo("OWN_SENDERS");
+        AppProperties pool = VendorTestSupport.props(vendor.baseUrl(), VendorTestSupport.NO_BACKUP,
+                Duration.ofMillis(800), AppProperties.FutTransferOrderMode.PUBLIC_POOL,
+                VendorTestSupport.ORDER_AMOUNT_POOL);
+        VendorOrderActions afterSwitch = new VendorOrderActions(new FutTransferClient(pool, new ObjectMapper(), control,
+                new VendorCallLog(db.named)).withoutRetryPauses(), control, ledger, actionLog, vault, orderService, pool);
+        vendor.on("/correctCredentialsAPI", Reply.ok(CONTINUED));
+
+        assertThat(afterSwitch.sendCorrectedSignIn(o, ADMIN).status()).isEqualTo(Status.DONE);
+
+        assertThat(vendor.requests()).singleElement().satisfies(r -> {
+            assertThat(r.path()).isEqualTo("/correctCredentialsAPI");
+            assertThat(r.body().path("orderID").asText()).isEqualTo("vid-signin-switch");
+        });
+        assertThat(row("GFS-26-SIGNSW01").get("state")).isEqualTo("SUBMITTED");
+        assertThat(row("GFS-26-SIGNSW01").get("order_mode")).isEqualTo("OWN_SENDERS");
+    }
 }

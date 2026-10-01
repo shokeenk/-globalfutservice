@@ -18,12 +18,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Resuming calls to the vendor is an admin's decision; an operator cannot. */
+/** Resuming calls to the vendor, and its balance, are for admins; an operator cannot. */
 @WebMvcTest(AdminVendorController.class)
 @Import(SecurityConfig.class)
 @TestPropertySource(properties = {
@@ -38,6 +40,7 @@ class AdminVendorSecurityTest {
 
     @MockBean private VendorControl control;
     @MockBean private com.globalfutservice.fulfilment.VendorOrderLedger ledger;
+    @MockBean private com.globalfutservice.fulfilment.VendorBalance balance;
     @MockBean private JwtService jwtService;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -59,6 +62,32 @@ class AdminVendorSecurityTest {
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/v1/admin/vendor/needs-review")).andExpect(status().isUnauthorized());
         verify(control, never()).resume(anyLong());
+
+        mvc.perform(get("/api/v1/admin/vendor/balance")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/admin/vendor/balance").with(authentication(as(AccountRole.CUSTOMER))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/vendor/balance").with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isForbidden());
+        verify(balance, never()).current();
+    }
+
+    @Test
+    @DisplayName("an admin sees the balance as reported, its currency unconfirmed, or that it is unavailable")
+    void adminBalance() throws Exception {
+        java.time.Instant at = java.time.Instant.parse("2026-10-01T06:00:00Z");
+        when(balance.current()).thenReturn(
+                new com.globalfutservice.fulfilment.VendorBalance.Reading(new java.math.BigDecimal("4321.75"), at));
+        mvc.perform(get("/api/v1/admin/vendor/balance").with(authentication(as(AccountRole.ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(4321.75))
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.currency").value("unconfirmed"));
+
+        when(balance.current()).thenReturn(new com.globalfutservice.fulfilment.VendorBalance.Reading(null, at));
+        mvc.perform(get("/api/v1/admin/vendor/balance").with(authentication(as(AccountRole.ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(false))
+                .andExpect(jsonPath("$.balance").doesNotExist());
     }
 
     @Test

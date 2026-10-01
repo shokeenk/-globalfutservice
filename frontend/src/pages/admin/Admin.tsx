@@ -11,7 +11,7 @@ import type { AdminOrderOverview, AdminOrderPage, AdminOrderRow } from '../../li
 import { Announcements } from './Announcements'
 import { PaymentClaims } from './PaymentClaims'
 import { AdminPage } from './shell/AdminPage'
-import { remindQuestion, releaseQuestion, startQuestion } from './orders/confirmations'
+import { releasePreview, remindQuestion, releaseQuestion, startQuestion } from './orders/confirmations'
 import {
   apiQuery, attentionBreakdown, countFor, EMPTY, fromSaved, isFiltered, PAGE_SIZE, readFilters, serviceTabFor, skusFor,
   statusTabFor, writeFilters, type OrderFilters,
@@ -135,7 +135,7 @@ export default function Admin() {
       setClaimFor(row.publicRef)
       return
     }
-    const question = action.kind === 'release' ? releaseQuestion(row.publicRef)
+    const question = action.kind === 'release' ? releaseQuestion(row.publicRef, await releasePreview(row.publicRef))
       : action.kind === 'start' ? startQuestion(row.publicRef)
         : action.kind === 'remind' ? remindQuestion(row.publicRef, row.customerEmail)
           : null

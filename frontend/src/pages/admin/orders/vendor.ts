@@ -33,6 +33,22 @@ export const VENDOR_ACTION_PATH: Record<VendorActionName, string> = {
   RESOLVE: 'resolve',
 }
 
+/** How an order is placed at the partner. */
+export const ORDER_MODE_LABEL: Record<string, string> = {
+  PUBLIC_POOL: 'Public pool',
+  OWN_SENDERS: 'Own senders',
+}
+
+/** The mode in words; "Not recorded" for an order from before it was. */
+export function orderModeLabel(mode: string | null | undefined): string {
+  return mode == null ? 'Not recorded' : ORDER_MODE_LABEL[mode] ?? mode
+}
+
+/** A partner figure as it reported it, with no currency assumed. */
+export function asReported(value: number | null | undefined): string {
+  return value == null ? '—' : value.toLocaleString('en-IN', { maximumFractionDigits: 4 })
+}
+
 /** Actions that end something at the partner, shown apart from the rest. */
 export const VENDOR_FINAL_ACTIONS = new Set<VendorActionName>(['STOP', 'MARK_FINISHED'])
 

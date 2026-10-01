@@ -221,6 +221,52 @@ class VendorPollerPostgresTest {
         verify(notifications, never()).fulfilmentAlert(any());
     }
 
+    /** A poller running with the public pool configured, as after the switch. */
+    private VendorPoller publicPoolPoller() {
+        AppProperties props = VendorTestSupport.props(vendor.baseUrl(), VendorTestSupport.NO_BACKUP,
+                Duration.ofMillis(800), AppProperties.FutTransferOrderMode.PUBLIC_POOL,
+                VendorTestSupport.ORDER_AMOUNT_POOL);
+        FutTransferClient client = new FutTransferClient(props, new ObjectMapper(), control, new VendorCallLog(db.named))
+                .withoutRetryPauses();
+        return new VendorPoller(client, control, ledger, new SchedulerLock(db.ds), orderService, orders, vault,
+                notifications, props);
+    }
+
+    @Test
+    @DisplayName("after the switch to the public pool, an order placed through /orderAPI is followed exactly as before")
+    void ownSendersOrderAfterSwitch() {
+        long id = sent("GFS-26-OLDMODE01", "vid-oldmode", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        assertThat(row(id).get("order_mode")).isEqualTo("OWN_SENDERS");
+        bulk(Map.of("vid-oldmode", report("finished", "finished", "finished", 500, 500, 0)));
+
+        publicPoolPoller().pollOnce();
+
+        assertThat(row(id).get("state")).isEqualTo("DELIVERED");
+        assertThat(row(id).get("order_mode")).isEqualTo("OWN_SENDERS");
+        verify(orderService).transition(any(), eq(OrderStatus.DELIVERED), eq(Actor.SYSTEM), eq(null), eq("GFS"),
+                eq("All your coins have been delivered."));
+        assertThat(vendor.calls("/buyCoinsAPI")).isZero();
+        assertThat(vendor.calls("/orderAPI")).isZero();
+    }
+
+    @Test
+    @DisplayName("a report about a mother order is never delivered, even with every coin: an admin looks")
+    void motherOrderNeverDelivered() {
+        long id = db.order("GFS-26-MOTHER001", OrderStatus.IN_PROGRESS.name(), "0.5");
+        db.vendorOrder(id, "GFS-26-MOTHER001", "vid-mother", "IN_DELIVERY", 500, "PUBLIC_POOL");
+        statuses.put(id, OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-mother", report("finished", "finished", "finished", 500, 500, 0)
+                .replace("\"wasAborted\"", "\"isMotherID\":1,\"wasAborted\"")));
+
+        publicPoolPoller().pollOnce();
+
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(id).get("last_error_code")).isEqualTo("MOTHER_ORDER");
+        verify(orderService, never()).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+        verify(vault, never()).purge(anyLong(), anyString());
+        assertThat(alerts()).isNotEmpty();
+    }
+
     @Test
     @DisplayName("finished short: partly delivered, the amount kept, the order left alone, an admin told")
     void shortDelivery() {

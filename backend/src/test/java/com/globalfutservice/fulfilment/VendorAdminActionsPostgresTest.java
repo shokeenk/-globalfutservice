@@ -213,7 +213,8 @@ class VendorAdminActionsPostgresTest {
         assertThat(row("GFS-26-RETRY001").get("last_error_code")).isEqualTo("ADMIN_CONFIRMED_ABSENT");
         assertThat(vendor.calls("/orderAPI")).isZero();
         // And Approve may now claim it.
-        assertThat(ledger.claim(ids.get("GFS-26-RETRY001"), "GFS-26-RETRY001", 500, 3))
+        assertThat(ledger.claim(ids.get("GFS-26-RETRY001"), "GFS-26-RETRY001", 500, 3,
+                new VendorOrderLedger.SendTerms("OWN_SENDERS", "targetedSnipe", null, null)))
                 .isInstanceOf(VendorOrderLedger.Claimed.class);
     }
 
@@ -328,6 +329,9 @@ class VendorAdminActionsPostgresTest {
         assertThat(s.actions()).extracting(VendorOrderActionLog.Entry::outcome).containsExactly("REFUSED");
         // On hold: the customer has not re-entered details, so no corrected sign-in to send yet.
         assertThat(s.available()).containsExactly("RESUME", "STOP", "MARK_FINISHED", "RESOLVE");
+        // How it was sent, and how a send now would go.
+        assertThat(s.vendorOrder().orderMode()).isEqualTo("OWN_SENDERS");
+        assertThat(s.currentOrderMode()).isEqualTo("OWN_SENDERS");
     }
 
     @Test
@@ -363,7 +367,8 @@ class VendorAdminActionsPostgresTest {
 
     private static VendorOrderLedger.Detail detail(String state, String vendorId) {
         return new VendorOrderLedger.Detail(state, "GFS-26-X", vendorId, 500, null, null, null, null, null, null,
-                null, null, 1, null, null, null, 0, null, null, null, null, null);
+                null, null, 1, null, null, null, 0, null, null, null, null, null, "OWN_SENDERS", "targetedSnipe",
+                null, null, null);
     }
 
     @Test

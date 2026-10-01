@@ -5,6 +5,7 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.pricing.GatewayFeeMode;
 import com.globalfutservice.domain.pricing.MarketTaxMode;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -466,7 +467,16 @@ public record AppProperties(
              * How long a customer's sign-in is kept for an order waiting for an admin's
              * review before it is deleted. Approving it again afterwards needs a new one.
              */
-            @DefaultValue("72h") Duration reviewCredentialRetention) {
+            @DefaultValue("72h") Duration reviewCredentialRetention,
+            /*
+             * Where coin orders are placed. PUBLIC_POOL buys from FUT Transfer's public
+             * seller pool (/buyCoinsAPI); OWN_SENDERS uses our own sender accounts
+             * (/orderAPI). Recorded on each vendor order when it is sent, so switching never
+             * changes how an order already placed is followed.
+             */
+            @DefaultValue("PUBLIC_POOL") FutTransferOrderMode orderMode,
+            /** What only a public-pool order sends. */
+            @Valid @DefaultValue FutTransferPublicPool publicPool) {
 
         public FutTransfer {
             requireSecure("gfs.fut-transfer.base-url", baseUrl);
@@ -493,7 +503,8 @@ public record AppProperties(
             return "FutTransfer[enabled=" + enabled + ", baseUrl=" + baseUrl + ", backupBaseUrl=" + backupBaseUrl
                     + ", apiUser=" + (apiUser == null || apiUser.isBlank() ? "unset" : "set")
                     + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "unset" : "[redacted]")
-                    + ", transferMethod=" + transferMethod + ", riskLevel=" + riskLevel + ", order=" + order + "]";
+                    + ", transferMethod=" + transferMethod + ", riskLevel=" + riskLevel + ", order=" + order
+                    + ", orderMode=" + orderMode + ", publicPool=" + publicPool + "]";
         }
 
         /**
@@ -544,15 +555,58 @@ public record AppProperties(
             @DefaultValue("10m") Duration restartGrace) {
     }
 
+    /** Which FUT Transfer endpoint places a coin order. */
+    public enum FutTransferOrderMode {
+        /** /buyCoinsAPI: coins bought from FUT Transfer's public seller pool. */
+        PUBLIC_POOL,
+        /** /orderAPI: coins sent from our own sender accounts. */
+        OWN_SENDERS
+    }
+
+    /** Where a public-pool order's {@code buyNowThreshold} comes from. */
+    public enum BuyNowThresholdMode {
+        /** The order's coins in K, the same number as {@code amount}: the client's decision. */
+        ORDER_AMOUNT,
+        /** {@code gfs.fut-transfer.public-pool.buy-now-threshold}, the same on every order. */
+        FIXED
+    }
+
     /**
-     * The fixed /orderAPI settings of GFS Transfer Method 3.0, sent by the backend on every
-     * coin order. The defaults are the client's brief; the ranges are the vendor's.
+     * What a public-pool order sends beyond the Method 3.0 settings it shares with
+     * /orderAPI.
+     *
+     * <p>A malformed value stops startup, like the rest of this block. A value that is
+     * needed and missing does not: FIXED without a threshold, or {@code sendMaxPrice}
+     * without a price, makes Approve refuse with the reason instead.
+     *
+     * @param buyNowThresholdMode ORDER_AMOUNT or FIXED. The vendor documents
+     *                            {@code buyNowThreshold} as a price threshold per 100K; the
+     *                            client has decided to send the order's amount in K, and the
+     *                            first supervised order confirms what the vendor makes of it
+     * @param buyNowThreshold     the value FIXED sends, in the vendor's unit (per 100K)
+     * @param sendMaxPrice        whether {@code maxPrice} is sent at all. Off until FUT
+     *                            Transfer confirms its currency and unit
+     * @param maxPrice            the vendor's "maximum price per 100K"; it states no currency.
+     *                            No default
+     */
+    public record FutTransferPublicPool(
+            @DefaultValue("ORDER_AMOUNT") BuyNowThresholdMode buyNowThresholdMode,
+            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal buyNowThreshold,
+            @DefaultValue("false") boolean sendMaxPrice,
+            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxPrice) {
+    }
+
+    /**
+     * The fixed settings of GFS Transfer Method 3.0, sent by the backend on every coin
+     * order, by either endpoint. The defaults are the client's brief; the ranges are the
+     * vendor's.
      *
      * @param topUpEnabled            targetedSnipe top-up threshold, in K (300 = 300K)
      * @param autoFinishCycle         1: the vendor may finish the remainder by its cycle method
      * @param minTransferAmount       smallest single transfer, in K
      * @param pauseIfBelowMinTransfer 0: switch method rather than pause below the minimum
-     * @param senderGroup             -1: the vendor chooses among our senders
+     * @param senderGroup             -1: the vendor chooses among our senders. OWN_SENDERS
+     *                                only: the public pool has no senders of ours to restrict
      * @param persona                 -1: the vendor detects the EA persona
      */
     public record FutTransferOrder(

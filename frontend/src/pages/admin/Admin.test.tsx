@@ -61,6 +61,9 @@ const ROWS = [
   }),
 ]
 
+/** How Approve would send it: the public pool now, and the last attempt from our own senders. */
+const PREVIEW = { orderMode: 'PUBLIC_POOL', lastAttemptMode: 'OWN_SENDERS' }
+
 function stubApi({ search = ROWS, overview = OVERVIEW as AdminOrderOverview | Error } = {}) {
   api.get.mockImplementation(async (path: string) => {
     if (path === '/api/v1/admin/orders/overview') {
@@ -72,6 +75,7 @@ function stubApi({ search = ROWS, overview = OVERVIEW as AdminOrderOverview | Er
     if (path.startsWith('/api/v1/admin/saved-views')) return []
     if (path === '/api/v1/admin/vendor/needs-review') return []
     if (path === '/api/v1/admin/vendor/control') return { paused: false, pausedAt: null, reason: null, resumedAt: null }
+    if (path.endsWith('/release-preview')) return PREVIEW
     throw new Error(`unexpected GET ${path}`)
   })
 }
@@ -217,7 +221,11 @@ describe('Orders page', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start Order, order GFS-26-70C4DPPW' }))
 
-    expect(confirm).toHaveBeenCalledWith(releaseQuestion('GFS-26-70C4DPPW'))
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(releaseQuestion('GFS-26-70C4DPPW', PREVIEW)))
+    expect(api.get).toHaveBeenCalledWith('/api/v1/admin/orders/GFS-26-70C4DPPW/release-preview')
+    // A retry that changes how the order is placed says so before anything is sent.
+    expect(confirm.mock.calls[0]?.[0]).toContain("the public pool — coins bought from FUT Transfer's sellers")
+    expect(confirm.mock.calls[0]?.[0]).toContain('The last attempt used own senders')
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/admin/orders/GFS-26-70C4DPPW/approve-fulfilment'))
     expect(await screen.findByRole('status')).toHaveTextContent('released to the fulfilment partner')
   })

@@ -9,7 +9,7 @@ import { useSeo } from '../../lib/seo'
 import type { Order, VendorSection } from '../../lib/types'
 import { useAuth } from '../../state/AuthContext'
 import { statusTone } from '../Track'
-import { releaseQuestion } from './orders/confirmations'
+import { releasePreview, releaseQuestion } from './orders/confirmations'
 import { approveReplacedBy } from './orders/vendor'
 import { VendorPanel } from './orders/VendorPanel'
 import { AdminPage } from './shell/AdminPage'
@@ -111,7 +111,7 @@ export default function AdminOrder() {
    */
   async function approveFulfilment() {
     // The same question the Orders table's Start Order asks, from one definition.
-    const confirmed = window.confirm(releaseQuestion(publicRef))
+    const confirmed = window.confirm(releaseQuestion(publicRef, await releasePreview(publicRef)))
     if (!confirmed) return
 
     setBusy('approve')

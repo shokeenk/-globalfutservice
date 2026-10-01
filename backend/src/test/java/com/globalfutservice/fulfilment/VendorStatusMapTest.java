@@ -143,4 +143,17 @@ class VendorStatusMapTest {
         assertThat(map("partlyDelivered", "finished", "transfersInProgress", 500L, 107L, false))
                 .isEqualTo(new Outcome(State.IN_DELIVERY, CustomerAction.NONE, null, false));
     }
+
+    @Test
+    @DisplayName("a mother order is never DELIVERED, even reporting the full amount finished: an admin looks")
+    void motherOrderToReview() {
+        Outcome o = VendorStatusMap.map(new Report("finished", "finished", "finished", OURS, OURS, false, true), OURS);
+        assertThat(o.state()).isEqualTo(VendorStatusMap.State.NEEDS_REVIEW);
+        assertThat(o.reason()).isEqualTo("MOTHER_ORDER");
+        assertThat(o.alert()).isTrue();
+
+        // The same report about a single order is delivered, as before.
+        assertThat(map("finished", "finished", "finished", OURS, OURS, false).state())
+                .isEqualTo(VendorStatusMap.State.DELIVERED);
+    }
 }

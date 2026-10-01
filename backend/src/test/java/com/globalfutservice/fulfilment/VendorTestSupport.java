@@ -48,11 +48,28 @@ final class VendorTestSupport {
         return props(baseUrl, NO_BACKUP, timeout);
     }
 
+    /**
+     * Own senders (/orderAPI) unless a test asks otherwise: the tests written before the
+     * public pool existed go on proving that path exactly as they did.
+     */
     static AppProperties props(String baseUrl, String backupUrl, Duration timeout) {
+        return props(baseUrl, backupUrl, timeout, AppProperties.FutTransferOrderMode.OWN_SENDERS, ORDER_AMOUNT_POOL);
+    }
+
+    /** The client's public-pool decisions: buyNowThreshold is the amount in K; no maxPrice. */
+    static final AppProperties.FutTransferPublicPool ORDER_AMOUNT_POOL = new AppProperties.FutTransferPublicPool(
+            AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, false, null);
+
+    static AppProperties publicPool(String baseUrl, Duration timeout, AppProperties.FutTransferPublicPool pool) {
+        return props(baseUrl, NO_BACKUP, timeout, AppProperties.FutTransferOrderMode.PUBLIC_POOL, pool);
+    }
+
+    static AppProperties props(String baseUrl, String backupUrl, Duration timeout,
+                               AppProperties.FutTransferOrderMode mode, AppProperties.FutTransferPublicPool pool) {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
                 RAW_KEY, "targetedSnipe", 1, POLLING, timeout, 3, DOCUMENTED_CODES,
-                backupUrl, METHOD_3_0, true, Duration.ofHours(72)));
+                backupUrl, METHOD_3_0, true, Duration.ofHours(72), mode, pool));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         return props;
     }

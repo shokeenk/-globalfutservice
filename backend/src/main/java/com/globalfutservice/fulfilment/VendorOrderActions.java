@@ -355,16 +355,19 @@ public class VendorOrderActions {
 
     // ------------------------------------------------------------- admin view ---
 
-    /** Everything the admin's order page shows about the vendor, and which actions apply now. */
+    /**
+     * Everything the admin's order page shows about the vendor, and which actions apply now.
+     * {@code currentOrderMode} is configuration now; the vendor order says how it was sent.
+     */
     public record Section(boolean enabled, boolean paused, VendorOrderLedger.Detail vendorOrder,
                           List<String> available, List<VendorCallLog.Call> calls,
-                          List<VendorOrderActionLog.Entry> actions) {
+                          List<VendorOrderActionLog.Entry> actions, String currentOrderMode) {
     }
 
     public Section section(OrderEntity order, List<VendorCallLog.Call> calls) {
         VendorOrderLedger.Detail d = ledger.detail(order.getId()).orElse(null);
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
-                actions.forOrder(order.getId()));
+                actions.forOrder(order.getId()), props.futTransfer().orderMode().name());
     }
 
     /** The same rules each action checks, so the page offers only what would be tried. */

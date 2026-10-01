@@ -31,10 +31,30 @@ public class AdminVendorController {
 
     private final VendorControl control;
     private final VendorOrderLedger ledger;
+    private final com.globalfutservice.fulfilment.VendorBalance balance;
 
-    public AdminVendorController(VendorControl control, VendorOrderLedger ledger) {
+    public AdminVendorController(VendorControl control, VendorOrderLedger ledger,
+                                 com.globalfutservice.fulfilment.VendorBalance balance) {
         this.control = control;
         this.ledger = ledger;
+        this.balance = balance;
+    }
+
+    /**
+     * @param balance   as FUT Transfer reports it; absent when it could not be read
+     * @param available false when the read failed: show "unavailable", not zero
+     * @param currency  always "unconfirmed": the vendor documents no currency for it
+     */
+    public record BalanceView(java.math.BigDecimal balance, boolean available, Instant readAt, String currency) {
+    }
+
+    @GetMapping("/balance")
+    @Operation(summary = "The account balance FUT Transfer reports, read live and kept for a minute",
+            description = "Its currency is not documented by FUT Transfer, so it is shown as reported.")
+    public ResponseEntity<BalanceView> balance() {
+        com.globalfutservice.fulfilment.VendorBalance.Reading r = balance.current();
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(new BalanceView(r.balance(), r.balance() != null, r.readAt(), "unconfirmed"));
     }
 
     @GetMapping("/needs-review")
