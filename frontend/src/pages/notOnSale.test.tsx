@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Account, Catalog, CatalogOption, ServiceGroup } from '../lib/types'
 
 /*
  * What the order pages do when the catalogue has nothing to sell.
@@ -25,9 +26,9 @@ const ApiErrorClass = vi.hoisted(() => class ApiError extends Error {
 vi.mock('../lib/api', () => ({ api, ApiError: ApiErrorClass }))
 
 const state = vi.hoisted(() => ({
-  catalog: null as unknown,
+  catalog: null as Catalog | null,
   error: null as string | null,
-  account: null as unknown,
+  account: null as Account | null,
 }))
 vi.mock('../state/CatalogContext', () => ({
   useCatalog: () => ({
@@ -60,29 +61,56 @@ const { default: Coaching } = await import('./Coaching')
 
 const SKUS = ['TRADING_SERVICE', 'BOOST_CHAMPS', 'BOOST_RIVALS', 'COACHING', 'CARDS']
 
-/** The catalogue a season with no rate cards serves: every service, no options. */
-function emptyCatalog() {
+/** One service as a season with no rate cards serves it: listed, not sellable, no options. */
+function unpriced(sku: string): ServiceGroup {
   return {
-    season: 'FC27', currency: 'INR', availableCurrencies: ['INR'],
-    services: SKUS.map((sku) => ({
-      sku, displayName: sku, sellable: false, marketTaxApplies: false, mayRequireCredentials: false,
-      priceUnit: sku === 'TRADING_SERVICE' ? 'PER_MILLION' : 'FLAT', options: [],
-    })),
+    sku,
+    displayName: sku,
+    sellable: false,
+    priceUnit: sku === 'TRADING_SERVICE' ? 'PER_MILLION' : 'FLAT',
+    marketTaxApplies: false,
+    mayRequireCredentials: false,
+    options: [],
   }
+}
+
+/** The catalogue a season with no rate cards serves: every service, no options. */
+function emptyCatalog(): Catalog {
+  return { season: 'FC27', currency: 'INR', availableCurrencies: ['INR'], services: SKUS.map(unpriced) }
+}
+
+/** Coins on PlayStation, 10K to 1M in 10K steps. */
+const PS_COINS: CatalogOption = {
+  platform: 'PS',
+  variant: null,
+  label: null,
+  unitPriceMinor: 90000,
+  unitPriceFormatted: '₹900.00',
+  minQuantity: '0.01',
+  maxQuantity: '1',
+  stepQuantity: '0.01',
 }
 
 /** Coins priced on one platform, the way a working season serves them. */
-function tradingCatalog() {
+function tradingCatalog(): Catalog {
   const catalog = emptyCatalog()
-  catalog.services[0] = {
-    ...catalog.services[0], sellable: true,
-    options: [{ platform: 'PS', variant: null, label: null, unitPriceMinor: 90000,
-      unitPriceFormatted: '₹900.00', minQuantity: 0.01, maxQuantity: 1, stepQuantity: 0.01 }] as never[],
-  }
+  catalog.services = catalog.services.map((service) => service.sku === 'TRADING_SERVICE'
+    ? { ...service, sellable: true, marketTaxApplies: true, options: [PS_COINS] }
+    : service)
   return catalog
 }
 
-const SIGNED_IN = { email: 'player@example.test', displayName: 'Player', role: 'CUSTOMER' }
+const SIGNED_IN: Account = {
+  publicId: 'acc_player',
+  email: 'player@example.test',
+  displayName: 'Player',
+  role: 'CUSTOMER',
+  pointsBalance: 0,
+  pointsValueMinor: 0,
+  pointsValueFormatted: '₹0.00',
+  firstOrder: true,
+  referredByCode: null,
+}
 const PLACED = { publicRef: 'GFS-26-TESTREF1', status: 'AWAITING_PAYMENT', totalFormatted: '₹1,050.00' }
 
 function renderAt(path: string, element: React.ReactElement) {
