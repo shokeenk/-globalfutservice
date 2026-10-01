@@ -367,6 +367,17 @@ gfs:
     # /orderAPI 400 codes that prove nothing was created (the vendor's documented list).
     # Anything else goes to an admin. Comma-separated.
     permanent-error-codes: ${GFS_FUTTRANSFER_PERMANENT_CODES:MissingData,InvalidPassword,InvalidBA1,InvalidBA2,InvalidBA3,InvalidBA4,InvalidBA5,InvalidAmount,InvalidPlatform}
+    # PUBLIC_POOL: buy from FUT Transfer's public seller pool (/buyCoinsAPI).
+    # OWN_SENDERS: send from our own sender accounts (/orderAPI). Recorded on each order.
+    order-mode: ${GFS_FUTTRANSFER_ORDER_MODE:PUBLIC_POOL}
+    # Only public-pool orders use these.
+    public-pool:
+      # ORDER_AMOUNT: the order's coins in K. FIXED: buy-now-threshold below.
+      buy-now-threshold-mode: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE:ORDER_AMOUNT}
+      buy-now-threshold: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD:}
+      # maxPrice is not sent unless this is true; then max-price must be set.
+      send-max-price: ${GFS_FUTTRANSFER_SEND_MAX_PRICE:false}
+      max-price: ${GFS_FUTTRANSFER_MAX_PRICE:}
 
   notifications:
     whatsapp-enabled: ${GFS_WHATSAPP_ENABLED:false}
