@@ -220,7 +220,7 @@ public class VendorPoller {
                 && !o.action().name().equals(row.customerAction());
         if (to.equals(row.state()) && !newAsk) return;
 
-        String staffText = staffText(o, s, row.amountOrderedK());
+        String staffText = staffText(o, s, row);
         if (!ledger.move(row.orderId(), List.of(row.state()), to, o.reason(), staffText, o.action().name())) {
             return; // Something else moved it first; that decision stands.
         }
@@ -240,7 +240,7 @@ public class VendorPoller {
             tellCustomer(order, o.action());
         }
         if (o.alert()) {
-            alert(row.externalRef(), headline(o.state()), staffText, o.reason());
+            alert(row.externalRef(), headline(o, row.orderMode()), staffText, o.reason());
         }
     }
 
@@ -335,18 +335,43 @@ public class VendorPoller {
         return order;
     }
 
-    private static String headline(VendorStatusMap.State state) {
-        return switch (state) {
+    private static String headline(VendorStatusMap.Outcome o, String orderMode) {
+        if (VendorStatusMap.NO_SUITABLE_SENDER.equals(o.reason())) {
+            return PUBLIC_POOL.equals(orderMode) ? "No seller available" : "No sender available";
+        }
+        return switch (o.state()) {
             case PARTIALLY_DELIVERED -> "Partly delivered";
             case AWAITING_CUSTOMER -> "Waiting for the customer";
             default -> "Needs review";
         };
     }
 
-    /** For staff: the vendor's own words are fine here, and they are what an admin needs. */
-    private static String staffText(VendorStatusMap.Outcome o, FutTransferClient.SupplierStatus s, long orderedK) {
-        return "The partner reports status " + s.status() + ", accountCheck " + s.accountCheck() + ", economyState "
-                + s.economyState() + (s.aborted() ? ", aborted" : "") + "; " + (s.amountDeliveredK() == null ? "?"
+    private static final String PUBLIC_POOL = "PUBLIC_POOL";
+
+    /**
+     * For staff: the vendor's own words are fine here, and they are what an admin needs.
+     *
+     * <p>No sender, or no seller, is said in plain words first, with what is left to
+     * deliver, because that is the decision in front of the admin; the vendor's codes follow.
+     */
+    private static String staffText(VendorStatusMap.Outcome o, FutTransferClient.SupplierStatus s,
+                                    VendorOrderLedger.PollRow row) {
+        long orderedK = row.amountOrderedK();
+        String codes = "status " + s.status() + ", accountCheck " + s.accountCheck() + ", economyState "
+                + s.economyState() + (s.aborted() ? ", aborted" : "");
+        if (VendorStatusMap.NO_SUITABLE_SENDER.equals(o.reason())) {
+            Long delivered = s.amountDeliveredK();
+            String amounts = delivered == null
+                    ? "delivered so far unknown, of " + orderedK + "K"
+                    : delivered + "K of " + orderedK + "K delivered"
+                            + (delivered < orderedK ? ", " + (orderedK - delivered) + "K remaining" : "");
+            return (PUBLIC_POOL.equals(row.orderMode())
+                    ? "No seller available in the public pool for this order"
+                    : "No sender available for own-senders order")
+                    + ": " + amounts + ". We have stopped following it, and nothing more is sent from here until an "
+                    + "admin decides. The partner reports " + codes + ". (" + o.reason() + ")";
+        }
+        return "The partner reports " + codes + "; " + (s.amountDeliveredK() == null ? "?"
                 : s.amountDeliveredK()) + "K of " + orderedK + "K delivered."
                 + (o.reason() == null ? "" : " (" + o.reason() + ")");
     }

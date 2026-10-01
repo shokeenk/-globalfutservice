@@ -27,7 +27,8 @@ import com.globalfutservice.domain.orders.CustomerAction;
  *   <li>A code the customer can fix (a wrong password, a full transfer list...):
  *       AWAITING_CUSTOMER, with the action to ask of them.</li>
  *   <li>Any other failure code (no transfer market, a ban, the vendor's side):
- *       NEEDS_REVIEW.</li>
+ *       NEEDS_REVIEW. {@code noSuitableSender} has its own reason, NO_SUITABLE_SENDER:
+ *       nobody is left to deliver the rest, which an admin needs to see as such.</li>
  *   <li>{@code interrupted} with no code to explain it: NEEDS_REVIEW.</li>
  *   <li>Otherwise it is working: IN_DELIVERY once coins are moving, SUBMITTED before.</li>
  * </ol>
@@ -36,6 +37,9 @@ public final class VendorStatusMap {
 
     private VendorStatusMap() {
     }
+
+    /** The reason for a report of {@code noSuitableSender}: no sender, or seller, can deliver the rest. */
+    public static final String NO_SUITABLE_SENDER = "NO_SUITABLE_SENDER";
 
     /** Our states for a vendor order, as vendor_order stores them. */
     public enum State { SUBMITTED, IN_DELIVERY, AWAITING_CUSTOMER, DELIVERED, PARTIALLY_DELIVERED, NEEDS_REVIEW }
@@ -56,7 +60,7 @@ public final class VendorStatusMap {
     }
 
     /** What a documented value means. */
-    private enum Meaning { PROGRESS, FIXABLE, UNUSABLE, BANNED, SUPPLIER, RETRY }
+    private enum Meaning { PROGRESS, FIXABLE, UNUSABLE, BANNED, SUPPLIER, NO_SENDER, RETRY }
 
     private record Known(Meaning meaning, CustomerAction action) {
     }
@@ -122,7 +126,7 @@ public final class VendorStatusMap {
             Map.entry("insufficientfunds", k(Meaning.SUPPLIER)),
             Map.entry("calcerrormaintenance", k(Meaning.SUPPLIER)),
             Map.entry("noplayer", k(Meaning.SUPPLIER)),
-            Map.entry("nosuitablesender", k(Meaning.SUPPLIER)),
+            Map.entry("nosuitablesender", k(Meaning.NO_SENDER)),
             Map.entry("belowmintransfer", k(Meaning.SUPPLIER)));
 
     /** One status report, in our units: thousands of coins throughout. */
@@ -189,6 +193,7 @@ public final class VendorStatusMap {
                 case UNUSABLE -> "ACCOUNT_UNUSABLE";
                 case BANNED -> "BANNED";
                 case SUPPLIER -> "SUPPLIER_SIDE";
+                case NO_SENDER -> NO_SUITABLE_SENDER;
                 default -> "NEEDS_RETRY";
             };
             return Outcome.review(reason, known.action());

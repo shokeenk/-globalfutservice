@@ -130,9 +130,26 @@ class VendorStatusMapTest {
         assertThat(map("interrupted", "noTM", null, 500L, 0L, false).reason()).isEqualTo("ACCOUNT_UNUSABLE");
         assertThat(map("interrupted", "LoginFailedDeviceBan", null, 500L, 0L, false).reason()).isEqualTo("BANNED");
         assertThat(map("interrupted", "finished", "FailPlayerLostToTempban", 500L, 0L, false).reason()).isEqualTo("BANNED");
-        assertThat(map("interrupted", "finished", "noSuitableSender", 500L, 0L, false).reason()).isEqualTo("SUPPLIER_SIDE");
+        assertThat(map("interrupted", "finished", "insufficientFunds", 500L, 0L, false).reason()).isEqualTo("SUPPLIER_SIDE");
         assertThat(map("interrupted", "loginFailed", null, 500L, 0L, false).reason()).isEqualTo("NEEDS_RETRY");
         assertThat(map("interrupted", "finished", null, 500L, 0L, false).reason()).isEqualTo("INTERRUPTED");
+    }
+
+    @Test
+    @DisplayName("no suitable sender: its own reason, to an admin with an alert, whatever has been delivered so far")
+    void noSuitableSender() {
+        for (Outcome o : List.of(
+                map("interrupted", "finished", "noSuitableSender", 500L, 0L, false),
+                map("partlyDelivered", "finished", "noSuitableSender", 500L, 150L, false),
+                map("interrupted", null, "NoSuitableSender", 500L, 150L, false))) {
+            assertThat(o.state()).isEqualTo(State.NEEDS_REVIEW);
+            assertThat(o.reason()).isEqualTo(VendorStatusMap.NO_SUITABLE_SENDER);
+            assertThat(o.action()).isEqualTo(CustomerAction.NONE);
+            assertThat(o.alert()).isTrue();
+        }
+        // Something the customer can fix still comes first: they are asked, not left waiting on an admin.
+        assertThat(map("interrupted", "wrongBA", "noSuitableSender", 500L, 0L, false).state())
+                .isEqualTo(State.AWAITING_CUSTOMER);
     }
 
     @Test

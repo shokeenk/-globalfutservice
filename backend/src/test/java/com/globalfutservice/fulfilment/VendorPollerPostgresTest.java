@@ -267,6 +267,56 @@ class VendorPollerPostgresTest {
         assertThat(alerts()).isNotEmpty();
     }
 
+    /** A 10K order with the partner, delivering, sent in {@code mode}. */
+    private long tenK(String ref, String vendorId, String mode) {
+        long id = db.order(ref, OrderStatus.IN_PROGRESS.name(), "0.01");
+        db.vendorOrder(id, ref, vendorId, "IN_DELIVERY", 10, mode);
+        statuses.put(id, OrderStatus.IN_PROGRESS);
+        return id;
+    }
+
+    @Test
+    @DisplayName("no suitable sender on an own-senders order: to review, said plainly with what is left, staff told, customer not")
+    void noSuitableSenderOwnSenders() {
+        long id = tenK("GFS-26-NOSEND01", "vid-nosend-own", "OWN_SENDERS");
+        bulk(Map.of("vid-nosend-own", report("interrupted", "finished", "noSuitableSender", 10, 3, 0)));
+
+        poller.pollOnce();
+
+        String expected = "No sender available for own-senders order: 3K of 10K delivered, 7K remaining.";
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(id).get("last_error_code")).isEqualTo("NO_SUITABLE_SENDER");
+        assertThat((String) row(id).get("review_reason")).startsWith(expected)
+                .contains("economyState noSuitableSender");
+        assertThat(alerts()).singleElement().satisfies(a -> {
+            assertThat(a.headline()).isEqualTo("No sender available");
+            assertThat(a.detail()).startsWith(expected);
+            assertThat(a.code()).isEqualTo("NO_SUITABLE_SENDER");
+        });
+        // The customer's order is not moved, and they are not told anything.
+        verify(orderService, never()).transition(any(), any(), any(), any(), anyString(), anyString());
+        assertThat(customerNotices()).isEmpty();
+        verify(vault, never()).purge(anyLong(), anyString());
+        // Waiting for an admin now: no longer asked about, so no second alert.
+        assertThat(ledger.openForPolling()).extracting(VendorOrderLedger.PollRow::orderId).doesNotContain(id);
+        poller.pollOnce();
+        assertThat(alerts()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("no suitable sender on a public-pool order says no seller is left in the pool")
+    void noSuitableSenderPublicPool() {
+        long id = tenK("GFS-26-NOSEND02", "vid-nosend-pool", "PUBLIC_POOL");
+        bulk(Map.of("vid-nosend-pool", report("partlyDelivered", "finished", "noSuitableSender", 10, 3, 0)));
+
+        poller.pollOnce();
+
+        assertThat(row(id).get("last_error_code")).isEqualTo("NO_SUITABLE_SENDER");
+        assertThat((String) row(id).get("review_reason"))
+                .startsWith("No seller available in the public pool for this order: 3K of 10K delivered, 7K remaining.");
+        assertThat(alerts()).singleElement().satisfies(a -> assertThat(a.headline()).isEqualTo("No seller available"));
+    }
+
     @Test
     @DisplayName("finished short: partly delivered, the amount kept, the order left alone, an admin told")
     void shortDelivery() {
