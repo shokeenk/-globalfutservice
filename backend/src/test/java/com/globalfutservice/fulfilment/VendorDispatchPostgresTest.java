@@ -226,7 +226,7 @@ class VendorDispatchPostgresTest {
     @DisplayName("a redeploy mid-request leaves SUBMITTING behind, and the next Approve sends nothing")
     void crashedMidRequest() {
         long id = insertOrder("GFS-26-CRASH001", "TRADING_SERVICE", "READY_FOR_DELIVERY", "1.0");
-        jdbc.update("insert into vendor_order (order_id, external_ref, state, amount_ordered_k) values (?, 'GFS-26-CRASH001', 'SUBMITTING', 1000)", id);
+        jdbc.update("insert into vendor_order (order_id, external_ref, state, amount_ordered_k, order_mode) values (?, 'GFS-26-CRASH001', 'SUBMITTING', 1000, 'OWN_SENDERS')", id);
         vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.ORDER_ACCEPTED));
 
         assertThat(instance().approveAndDispatch(order(id, "GFS-26-CRASH001", "1.0"), 1L).result())
@@ -321,7 +321,7 @@ class VendorDispatchPostgresTest {
     @DisplayName("out of attempts: refused without calling the vendor")
     void attemptsExhausted() {
         long id = insertOrder("GFS-26-TRIED003", "TRADING_SERVICE", "READY_FOR_DELIVERY", "1.0");
-        jdbc.update("insert into vendor_order (order_id, external_ref, state, amount_ordered_k, attempts) values (?, 'GFS-26-TRIED003', 'FAILED', 1000, 3)", id);
+        jdbc.update("insert into vendor_order (order_id, external_ref, state, amount_ordered_k, attempts, order_mode) values (?, 'GFS-26-TRIED003', 'FAILED', 1000, 3, 'OWN_SENDERS')", id);
 
         assertThat(instance().approveAndDispatch(order(id, "GFS-26-TRIED003", "1.0"), 1L).message())
                 .contains("tried 3 times");

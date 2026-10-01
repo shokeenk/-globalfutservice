@@ -65,24 +65,45 @@ public class VendorOrderLedger {
     }
 
     /**
+     * How an order is sent, recorded on its row when it is claimed: which endpoint, which
+     * vendor method, and what a public-pool order sent for {@code buyNowThreshold} and
+     * {@code maxPrice} (null: not sent).
+     */
+    public record SendTerms(String orderMode, String transferMethod, java.math.BigDecimal buyNowThreshold,
+                            java.math.BigDecimal maxPrice) {
+
+        public boolean publicPool() {
+            return "PUBLIC_POOL".equals(orderMode);
+        }
+    }
+
+    /**
      * Takes the right to send this order to the vendor.
      *
      * <p>A first send inserts the row; the unique constraint turns every other insert into
      * a no-op. A send after a definite refusal ({@code FAILED}) moves the row back to
      * SUBMITTING, while fewer than {@code maxAttempts} sends have been made. Every other
      * state -- in flight, sent, or waiting for an admin -- is not claimable.
+     *
+     * <p>Either way the row records {@code terms}: a retry is sent as configuration says
+     * now, which may not be how the first attempt went, and the row says which.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Claim claim(long orderId, String externalRef, long amountK, int maxAttempts) {
+    public Claim claim(long orderId, String externalRef, long amountK, int maxAttempts, SendTerms terms) {
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("orderId", orderId)
                 .addValue("ref", externalRef)
                 .addValue("k", amountK)
-                .addValue("max", maxAttempts);
+                .addValue("max", maxAttempts)
+                .addValue("mode", terms.orderMode())
+                .addValue("method", terms.transferMethod())
+                .addValue("threshold", terms.buyNowThreshold())
+                .addValue("maxPrice", terms.maxPrice());
 
         List<Integer> inserted = jdbc.queryForList("""
-                insert into vendor_order (order_id, external_ref, state, amount_ordered_k, attempts)
-                values (:orderId, :ref, 'SUBMITTING', :k, 1)
+                insert into vendor_order (order_id, external_ref, state, amount_ordered_k, attempts, order_mode,
+                                          transfer_method, buy_now_threshold_sent, max_price_sent)
+                values (:orderId, :ref, 'SUBMITTING', :k, 1, :mode, :method, :threshold, :maxPrice)
                 on conflict (order_id) do nothing
                 returning attempts
                 """, p, Integer.class);
@@ -93,7 +114,9 @@ public class VendorOrderLedger {
         List<Integer> reclaimed = jdbc.queryForList("""
                 update vendor_order
                    set state = 'SUBMITTING', attempts = attempts + 1, amount_ordered_k = :k,
-                       last_error_code = null, review_reason = null, updated_at = now()
+                       last_error_code = null, review_reason = null, order_mode = :mode,
+                       transfer_method = :method, buy_now_threshold_sent = :threshold,
+                       max_price_sent = :maxPrice, balance_at_send = null, updated_at = now()
                  where order_id = :orderId and state = 'FAILED' and attempts < :max
                 returning attempts
                 """, p, Integer.class);
@@ -169,6 +192,18 @@ public class VendorOrderLedger {
                 .addValue("coinsUsed", found.coinsUsed())
                 .addValue("toPay", found.toPay()));
         return n == 1;
+    }
+
+    /**
+     * The balance FUT Transfer reported just before this send, for margin tracking. Only
+     * while the row is still SUBMITTING: it belongs to this send and no other.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordBalanceAtSend(long orderId, java.math.BigDecimal balance) {
+        jdbc.update("""
+                update vendor_order set balance_at_send = :balance, updated_at = now()
+                 where order_id = :orderId and state = 'SUBMITTING'
+                """, new MapSqlParameterSource("orderId", orderId).addValue("balance", balance));
     }
 
     /** The vendor definitely created nothing. An admin may approve the order again. */
@@ -431,7 +466,9 @@ public class VendorOrderLedger {
                          String vendorEconomyState, Boolean aborted, Long coinsUsed, java.math.BigDecimal toPay,
                          int attempts, String lastErrorCode, String reviewReason, String customerAction,
                          int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
-                         Instant resubmittedAt, Instant updatedAt) {
+                         Instant resubmittedAt, Instant updatedAt, String orderMode, String transferMethod,
+                         java.math.BigDecimal buyNowThresholdSent, java.math.BigDecimal maxPriceSent,
+                         java.math.BigDecimal balanceAtSend) {
     }
 
     public Optional<Detail> detail(long orderId) {
@@ -446,7 +483,9 @@ public class VendorOrderLedger {
                 rs.getBigDecimal("to_pay"), rs.getInt("attempts"), rs.getString("last_error_code"),
                 rs.getString("review_reason"), rs.getString("customer_action"), rs.getInt("missing_polls"),
                 instant(rs, "submitted_at"), instant(rs, "last_polled_at"), instant(rs, "last_progress_at"),
-                instant(rs, "resubmitted_at"), instant(rs, "updated_at"))).stream().findFirst();
+                instant(rs, "resubmitted_at"), instant(rs, "updated_at"), rs.getString("order_mode"),
+                rs.getString("transfer_method"), rs.getBigDecimal("buy_now_threshold_sent"),
+                rs.getBigDecimal("max_price_sent"), rs.getBigDecimal("balance_at_send"))).stream().findFirst();
     }
 
     /** An order waiting for an admin's decision, for the review list on the Orders page. */

@@ -58,12 +58,17 @@ final class TestDatabase {
                 """, Long.class, ref, quantity, "{\"quantity\":" + quantity + "}", status, "q_" + ref);
     }
 
-    /** A vendor order in the given state, as if sent earlier. */
+    /** A vendor order in the given state, as if sent earlier through /orderAPI. */
     void vendorOrder(long orderId, String ref, String vendorId, String state, long amountK) {
+        vendorOrder(orderId, ref, vendorId, state, amountK, "OWN_SENDERS");
+    }
+
+    /** A vendor order in the given state, as if sent earlier in {@code mode}. */
+    void vendorOrder(long orderId, String ref, String vendorId, String state, long amountK, String mode) {
         jdbc.update("""
                 insert into vendor_order (order_id, external_ref, vendor_order_id, state, amount_ordered_k,
-                                          submitted_at, last_progress_at)
-                values (?, ?, ?, ?, ?, now(), now())
-                """, orderId, ref, vendorId, state, amountK);
+                                          submitted_at, last_progress_at, order_mode)
+                values (?, ?, ?, ?, ?, now(), now(), ?)
+                """, orderId, ref, vendorId, state, amountK, mode);
     }
 }

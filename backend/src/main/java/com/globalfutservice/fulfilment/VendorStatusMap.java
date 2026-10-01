@@ -15,6 +15,9 @@ import com.globalfutservice.domain.orders.CustomerAction;
  *
  * <p>The rules, in the order they are applied:
  * <ol>
+ *   <li>A report about a mother order: NEEDS_REVIEW. Its amounts would be a total over
+ *       child orders, which the collection documents only for its deprecated auto-buy;
+ *       nothing here sends one, so nothing is concluded from one.</li>
  *   <li>Any value not in the documentation: NEEDS_REVIEW.</li>
  *   <li>The vendor's ordered amount differs from ours: NEEDS_REVIEW.</li>
  *   <li>Aborted: PARTIALLY_DELIVERED if anything arrived, NEEDS_REVIEW if not.</li>
@@ -124,7 +127,13 @@ public final class VendorStatusMap {
 
     /** One status report, in our units: thousands of coins throughout. */
     public record Report(String status, String accountCheck, String economyState,
-                         Long vendorOrderedK, Long deliveredK, boolean aborted) {
+                         Long vendorOrderedK, Long deliveredK, boolean aborted, boolean motherOrder) {
+
+        /** A report about one order. */
+        public Report(String status, String accountCheck, String economyState,
+                      Long vendorOrderedK, Long deliveredK, boolean aborted) {
+            this(status, accountCheck, economyState, vendorOrderedK, deliveredK, aborted, false);
+        }
     }
 
     /** What the report means for an order we sent for {@code ourOrderedK} thousand coins. */
@@ -133,6 +142,7 @@ public final class VendorStatusMap {
         String accountCheck = norm(r.accountCheck());
         String economyState = norm(r.economyState());
 
+        if (r.motherOrder()) return Outcome.review("MOTHER_ORDER", CustomerAction.NONE);
         if (status.isEmpty()) return Outcome.review("NO_STATUS", CustomerAction.NONE);
         if (!STATUS.containsKey(status)) return Outcome.review("UNKNOWN_STATUS", CustomerAction.NONE);
         if (!accountCheck.isEmpty() && !ACCOUNT_CHECK.containsKey(accountCheck)) {

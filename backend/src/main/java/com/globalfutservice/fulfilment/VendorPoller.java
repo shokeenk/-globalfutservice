@@ -207,7 +207,7 @@ public class VendorPoller {
         ledger.recordReport(row.orderId(), s, progressed);
 
         VendorStatusMap.Outcome o = VendorStatusMap.map(new VendorStatusMap.Report(s.status(), s.accountCheck(),
-                s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted()), row.amountOrderedK());
+                s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted(), s.motherOrder()), row.amountOrderedK());
         if (staleAfterRestart(row, s, o)) {
             log.info("FUT Transfer: {} still reports what it did before it was restarted; waiting",
                     row.externalRef());

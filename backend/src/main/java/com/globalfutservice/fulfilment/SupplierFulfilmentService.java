@@ -15,6 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Sends a paid coin order to FUT Transfer, exactly once.
  *
+ * <p><b>Two ways to send.</b> By configuration, an order is bought from FUT Transfer's public
+ * seller pool ({@code /buyCoinsAPI}) or sent from our own sender accounts
+ * ({@code /orderAPI}). Everything below applies to both; the vendor order records which
+ * was used, and once sent, an order is followed the same way whichever is configured.
+ *
  * <p><b>Disabled is a supported state, not a broken one.</b> With no supplier configured
  * the order stops at {@code READY_FOR_DELIVERY} for an operator to work by hand, which is
  * how this system behaved before the integration existed.
@@ -129,6 +134,14 @@ public class SupplierFulfilmentService {
             return notClaimed(ref, existing.get());
         }
 
+        // How it would be sent, from configuration now. A setting that is needed and
+        // missing stops it here, before the vault is opened or anything is claimed.
+        PlacementTerms.Decision decision = PlacementTerms.decide(props.futTransfer(), amountK);
+        if (decision instanceof PlacementTerms.Refuse refuse) {
+            return new Release(Result.NOT_SENT, null, refuse.reason());
+        }
+        VendorOrderLedger.SendTerms terms = ((PlacementTerms.Send) decision).terms();
+
         CredentialDtos.RevealedCredentials creds;
         try {
             // As the system, not the operator: the vault attributes every read.
@@ -145,7 +158,7 @@ public class SupplierFulfilmentService {
             }
         }
 
-        VendorOrderLedger.Claim claim = ledger.claim(order.getId(), ref, amountK, maxAttempts);
+        VendorOrderLedger.Claim claim = ledger.claim(order.getId(), ref, amountK, maxAttempts, terms);
         if (claim instanceof VendorOrderLedger.NotClaimed nc) {
             return notClaimed(ref, nc.current());
         }
@@ -156,11 +169,17 @@ public class SupplierFulfilmentService {
          * sign-in, and the record of who authorised it must not depend on the request
          * coming back. Order reference and operator only -- never a credential.
          */
-        log.info("FULFILMENT APPROVAL: operator {} is releasing order {} ({}K) to the supplier",
-                operatorAccountId, ref, amountK);
+        log.info("FULFILMENT APPROVAL: operator {} is releasing order {} ({}K, {}) to the supplier",
+                operatorAccountId, ref, amountK, terms.orderMode());
 
-        FutTransferClient.Placement placement = client.submitOrder(
-                ref, customerNameFor(order), order.getPlatform(), amountK, creds);
+        FutTransferClient.Placement placement;
+        if (terms.publicPool()) {
+            recordBalance(order.getId(), ref);
+            placement = client.buyCoins(ref, customerNameFor(order), order.getPlatform(), amountK, creds,
+                    terms.buyNowThreshold(), terms.maxPrice());
+        } else {
+            placement = client.submitOrder(ref, customerNameFor(order), order.getPlatform(), amountK, creds);
+        }
 
         return switch (placement) {
             case FutTransferClient.Accepted a -> accepted(order, a.vendorOrderId());
@@ -171,6 +190,17 @@ public class SupplierFulfilmentService {
                             + "documentation does not explain, so we cannot tell whether the order was "
                             + "created. Check the FUT Transfer dashboard for " + ref + ".");
         };
+    }
+
+    /**
+     * The balance FUT Transfer reports, kept on the vendor order for margin tracking. Read
+     * just before the purchase; a failed read is noted in the call log and nothing else --
+     * it never stops or delays the send beyond the read itself.
+     */
+    private void recordBalance(long orderId, String ref) {
+        if (client.balance(ref) instanceof FutTransferClient.ReadOk<java.math.BigDecimal> ok) {
+            ledger.recordBalanceAtSend(orderId, ok.value());
+        }
     }
 
     /**
@@ -248,6 +278,38 @@ public class SupplierFulfilmentService {
                 ledger.markFailed(order.getId(), r.code(), "The same EA account was submitted too recently.");
                 return new Release(Result.FAILED, null, "The partner says this EA account was submitted too "
                         + "recently (HTTP 429). Nothing was created. Try again later.");
+            }
+            /*
+             * The public pool's own refusals. Nothing was created and the sign-in is kept:
+             * the cause is on our side or the market's, not the customer's, and once it is
+             * fixed an admin approves the order again. Never retried automatically.
+             */
+            case INSUFFICIENT_FUNDS -> {
+                ledger.markFailed(order.getId(), r.code(), "Our FUT Transfer balance does not cover this order.");
+                alert(ref, "FUT Transfer balance too low", "FUT Transfer refused " + ref + " because our balance "
+                        + "does not cover it (HTTP 402) and created nothing. The customer's sign-in is kept. Top up "
+                        + "the FUT Transfer balance, then approve the order again.", r.code());
+                return new Release(Result.FAILED, null, "FUT Transfer refused the order: our balance does not "
+                        + "cover it (HTTP 402). Nothing was created and the customer's sign-in is kept. Top up the "
+                        + "balance, then approve it again.");
+            }
+            case NO_STOCK -> {
+                ledger.markFailed(order.getId(), r.code(), "FUT Transfer's sellers do not have enough coins for it.");
+                alert(ref, "Not enough coins at FUT Transfer", "FUT Transfer refused " + ref + " because its "
+                        + "sellers do not have enough coins for it right now (HTTP 406) and created nothing. The "
+                        + "customer's sign-in is kept. Approve it again later.", r.code());
+                return new Release(Result.FAILED, null, "FUT Transfer's sellers do not have enough coins for this "
+                        + "order right now (HTTP 406). Nothing was created and the customer's sign-in is kept. "
+                        + "Approve it again later.");
+            }
+            case SUPPLIER_REFUSED -> {
+                ledger.markFailed(order.getId(), r.code(), "FUT Transfer refused the order (" + r.code() + ").");
+                alert(ref, "Order refused", "FUT Transfer refused " + ref + " (" + r.code() + ") and created "
+                        + "nothing. The customer's sign-in is kept. Check the public-pool settings, then approve "
+                        + "it again.", r.code());
+                return new Release(Result.FAILED, null, "FUT Transfer refused the order (" + r.code() + "). "
+                        + "Nothing was created and the customer's sign-in is kept. Check the public-pool settings, "
+                        + "then approve it again.");
             }
             default -> {
                 ledger.markFailed(order.getId(), r.code(), "The partner refused the order.");

@@ -60,7 +60,7 @@ class SupplierReleaseTest {
         vault = mock(CredentialVaultService.class);
         notifications = mock(NotificationService.class);
         when(vault.reveal(anyLong(), any())).thenReturn(VendorTestSupport.signIn());
-        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.Claimed(1));
+        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt(), any())).thenReturn(new VendorOrderLedger.Claimed(1));
         when(ledger.markSubmitted(anyLong(), anyString())).thenReturn(true);
         when(ledger.markConfirmedByLookup(anyLong(), anyString(), any())).thenReturn(true);
         control = VendorTestSupport.running();
@@ -97,7 +97,8 @@ class SupplierReleaseTest {
 
         assertThat(r.result()).isEqualTo(Result.SUBMITTED);
         assertThat(r.vendorOrderId()).isEqualTo(FakeFutTransfer.VENDOR_ID);
-        verify(ledger).claim(ORDER_ID, REF, 500, 3);
+        verify(ledger).claim(ORDER_ID, REF, 500, 3,
+                new VendorOrderLedger.SendTerms("OWN_SENDERS", "targetedSnipe", null, null));
         verify(ledger).markSubmitted(ORDER_ID, FakeFutTransfer.VENDOR_ID);
         assertThat(vendor.calls("/orderAPI")).isEqualTo(1);
     }
@@ -181,7 +182,7 @@ class SupplierReleaseTest {
 
     private void existing(VendorOrderLedger.Row row) {
         when(ledger.find(ORDER_ID)).thenReturn(java.util.Optional.of(row));
-        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt())).thenReturn(new VendorOrderLedger.NotClaimed(row));
+        when(ledger.claim(anyLong(), anyString(), anyLong(), anyInt(), any())).thenReturn(new VendorOrderLedger.NotClaimed(row));
     }
 
     @Test
@@ -245,7 +246,7 @@ class SupplierReleaseTest {
 
         assertThat(r.result()).isEqualTo(Result.NOT_SENT);
         assertThat(r.message()).contains("cooldown for another 2h 0m");
-        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
         assertThat(vendor.calls("/orderAPI")).isZero();
         assertThat(vendor.requests().get(0).body().get("account").asText()).isEqualTo("customer@example.test");
     }
@@ -258,7 +259,7 @@ class SupplierReleaseTest {
 
         vendor.on("/getCooldownStatus", Reply.of(404, "notFound"));
         assertThat(release().message()).contains("Could not check");
-        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
         assertThat(vendor.calls("/orderAPI")).isZero();
     }
 
@@ -269,7 +270,7 @@ class SupplierReleaseTest {
         when(o.getQuantity()).thenReturn(new BigDecimal("0.0005"));
 
         assertThat(service.approveAndDispatch(o, 99L).result()).isEqualTo(Result.NOT_SENT);
-        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
         assertThat(vendor.requests()).isEmpty();
     }
 
@@ -277,7 +278,7 @@ class SupplierReleaseTest {
     @DisplayName("never sends a boosting order to an API that only moves coins")
     void boostingNeverSent() {
         assertThat(service.approveAndDispatch(order(Sku.BOOST_CHAMPS), 99L).result()).isEqualTo(Result.NOT_SENT);
-        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt());
+        verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
         assertThat(vendor.requests()).isEmpty();
     }
 
