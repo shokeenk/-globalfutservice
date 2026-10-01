@@ -35,8 +35,8 @@ import org.springframework.stereotype.Component;
  * transitive dependency on a path that carries live EA credentials is supply-chain surface
  * that has to be justified.
  *
- * <p><b>Nothing on this class ever logs a body.</b> The request to {@code /orderAPI}
- * contains a customer's EA password and backup codes in clear -- that is the supplier's
+ * <p><b>Nothing on this class ever logs a body.</b> The requests to {@code /orderAPI} and
+ * {@code /buyCoinsAPI} contain a customer's EA password and backup codes in clear -- that is the supplier's
  * contract, not a choice -- and its status response can carry the backup codes back. Log
  * lines carry the endpoint, our reference, the HTTP status or failure, and the time taken.
  * Responses are read into named fields and nothing else.
@@ -48,7 +48,7 @@ import org.springframework.stereotype.Component;
  * is computed per request.
  *
  * <p><b>Placing an order never throws and is never retried here.</b> {@link #submitOrder}
- * says what happened as one of four outcomes, and the one that matters most is
+ * and {@link #buyCoins} say what happened as one of four outcomes, and the one that matters most is
  * {@link Uncertain}: a timeout or an unreadable answer means the order may exist, and the
  * only safe next step is {@link #lookupByReference}, never a second placement.
  */
@@ -66,6 +66,13 @@ public class FutTransferClient {
     /** The documented codes that mean the customer's sign-in itself was refused. */
     static final Set<String> SIGN_IN_CODES = Set.of(
             "invalidpassword", "invalidba1", "invalidba2", "invalidba3", "invalidba4", "invalidba5");
+
+    /**
+     * The 400 codes /buyCoinsAPI documents as refusals: no order is created. Any other 400
+     * from it -- including /orderAPI's own codes, which it has not documented -- goes to an
+     * admin with the sign-in kept, until FUT Transfer confirms what it means.
+     */
+    static final Set<String> BUY_REFUSAL_CODES = Set.of("suppliernotfound", "supplieroverpriced");
 
     /** An error code we are prepared to store and show: a bare identifier, never free text. */
     private static final Pattern CODE = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,63}");
@@ -119,7 +126,13 @@ public class FutTransferClient {
         /** 403: our API credentials failed, or order creation is blocked. */
         AUTH_FAILED,
         /** 429: the same EA account was submitted too recently. */
-        RATE_LIMITED
+        RATE_LIMITED,
+        /** 402 from /buyCoinsAPI: our FUT Transfer balance does not cover the order. */
+        INSUFFICIENT_FUNDS,
+        /** 406 from /buyCoinsAPI: not enough stock to fill the order. */
+        NO_STOCK,
+        /** 400 supplierNotFound or supplierOverpriced from /buyCoinsAPI. */
+        SUPPLIER_REFUSED
     }
 
     /** The vendor answered, but not with anything its documentation explains. */
@@ -144,24 +157,13 @@ public class FutTransferClient {
                                  long amountThousands,
                                  CredentialDtos.RevealedCredentials creds) {
 
-        List<String> codes = creds.backupCodes() == null ? List.of() : creds.backupCodes();
-        if (codes.isEmpty()) {
+        if (!hasBackupCode(creds)) {
             // Not sent: the supplier requires one, and we know it would be refused.
             log.warn("FUT Transfer /orderAPI for {} not sent: no backup code on file", publicRef);
             return new Refused(Reason.SIGN_IN_REJECTED, 0, "NoBackupCode");
         }
 
-        Map<String, Object> body = auth();
-        body.put("externalOrderID", publicRef);
-        body.put("customerName", customerName);
-        body.put("user", creds.eaEmail());
-        body.put("pass", creds.eaPassword());
-        body.put("platform", platformCode(platform));
-        body.put("amount", amountThousands);
-        // `ba` is required and `ba2`..`ba5` are not; positional, as the supplier documents.
-        for (int i = 0; i < Math.min(codes.size(), 5); i++) {
-            body.put(i == 0 ? "ba" : "ba" + (i + 1), codes.get(i));
-        }
+        Map<String, Object> body = customerFields(publicRef, customerName, platform, amountThousands, creds);
 
         // GFS Transfer Method 3.0: the same settings on every order, from configuration.
         AppProperties.FutTransfer cfg = props.futTransfer();
@@ -183,12 +185,92 @@ public class FutTransferClient {
         // The primary domain only, and once. Never the backup, never again: after a timeout
         // the order may exist, and sending it anywhere else could create a second one.
         Exchange ex = exchange(Kind.PLACEMENT, props.futTransfer().baseUrl(), "/orderAPI", body, List.of(publicRef));
-        Placement outcome = classifyPlacement(ex);
+        Placement outcome = classifyPlacement(ex, false);
         log.info("FUT Transfer /orderAPI for {}: {}", publicRef, describe(outcome));
         return outcome;
     }
 
-    private Placement classifyPlacement(Exchange ex) {
+    /**
+     * Buys one order's coins from FUT Transfer's public seller pool ({@code /buyCoinsAPI}).
+     * The same contract as {@link #submitOrder}: the primary domain only, once, and a lost
+     * answer is {@link Uncertain}, to be looked up and never placed again.
+     *
+     * <p>The Method 3.0 settings go as they do to /orderAPI -- the collection says every
+     * /orderAPI parameter applies here too -- except {@code senderGroup}, which restricts
+     * our own sender accounts and means nothing in the pool. {@code supplierID},
+     * {@code privateSupplier} and {@code playerToBuy} are never sent: targetedSnipe draws on
+     * the public pool without a supplier.
+     *
+     * @param buyNowThreshold sent as given; the collection calls it a price threshold per
+     *                        100K, required for targetedSnipe
+     * @param maxPrice        sent only when not null
+     */
+    public Placement buyCoins(String publicRef,
+                              String customerName,
+                              Platform platform,
+                              long amountThousands,
+                              CredentialDtos.RevealedCredentials creds,
+                              BigDecimal buyNowThreshold,
+                              BigDecimal maxPrice) {
+        if (!hasBackupCode(creds)) {
+            log.warn("FUT Transfer /buyCoinsAPI for {} not sent: no backup code on file", publicRef);
+            return new Refused(Reason.SIGN_IN_REJECTED, 0, "NoBackupCode");
+        }
+
+        Map<String, Object> body = customerFields(publicRef, customerName, platform, amountThousands, creds);
+
+        AppProperties.FutTransfer cfg = props.futTransfer();
+        AppProperties.FutTransferOrder method = cfg.order();
+        body.put("persona", method.persona());
+        body.put("updateCustomer", method.updateCustomer());
+        body.put("stopOrderAfterOnboarding", method.stopOrderAfterOnboarding());
+        body.put("lockOnboarding", method.lockOnboarding());
+        body.put("disableCustomerLock", method.disableCustomerLock());
+        body.put("skipCustomerCheck", method.skipCustomerCheck());
+        body.put("transferMethod", cfg.transferMethod());
+        body.put("topUpEnabled", method.topUpEnabled());
+        body.put("autoFinishCycle", method.autoFinishCycle());
+        body.put("minTransferAmount", method.minTransferAmount());
+        body.put("pauseIfBelowMinTransfer", method.pauseIfBelowMinTransfer());
+        body.put("riskLevel", cfg.riskLevel());
+        body.put("buyNowThreshold", buyNowThreshold);
+        if (maxPrice != null) {
+            body.put("maxPrice", maxPrice);
+        }
+
+        // The primary domain only, and once, for the same reason as /orderAPI.
+        Exchange ex = exchange(Kind.BUY, cfg.baseUrl(), "/buyCoinsAPI", body, List.of(publicRef));
+        Placement outcome = classifyPlacement(ex, true);
+        log.info("FUT Transfer /buyCoinsAPI for {}: {}", publicRef, describe(outcome));
+        return outcome;
+    }
+
+    private static boolean hasBackupCode(CredentialDtos.RevealedCredentials creds) {
+        return creds.backupCodes() != null && !creds.backupCodes().isEmpty();
+    }
+
+    /** Who and what, common to both ways of placing an order. */
+    private Map<String, Object> customerFields(String publicRef, String customerName, Platform platform,
+                                               long amountThousands, CredentialDtos.RevealedCredentials creds) {
+        Map<String, Object> body = auth();
+        body.put("externalOrderID", publicRef);
+        body.put("customerName", customerName);
+        body.put("user", creds.eaEmail());
+        body.put("pass", creds.eaPassword());
+        body.put("platform", platformCode(platform));
+        body.put("amount", amountThousands);
+        // `ba` is required and `ba2`..`ba5` are not; positional, as the supplier documents.
+        List<String> codes = creds.backupCodes();
+        for (int i = 0; i < Math.min(codes.size(), 5); i++) {
+            body.put(i == 0 ? "ba" : "ba" + (i + 1), codes.get(i));
+        }
+        return body;
+    }
+
+    /**
+     * @param publicPool /buyCoinsAPI's documented refusals rather than /orderAPI's
+     */
+    private Placement classifyPlacement(Exchange ex, boolean publicPool) {
         if (PAUSED.equals(ex.failure())) {
             // Stopped before anything was sent: a definite "not created".
             return new Refused(Reason.AUTH_FAILED, 0, PAUSED);
@@ -216,7 +298,17 @@ public class FutTransferClient {
             return new Uncertain("HTTP_" + status);
         }
         String code = ex.errorCode(mapper);
-        if (status == 400) {
+        if (publicPool) {
+            if (status == 402) return new Refused(Reason.INSUFFICIENT_FUNDS, 402, code == null ? "HTTP_402" : code);
+            if (status == 406) return new Refused(Reason.NO_STOCK, 406, code == null ? "HTTP_406" : code);
+            if (status == 400) {
+                if (code != null && BUY_REFUSAL_CODES.contains(code.toLowerCase(Locale.ROOT))) {
+                    return new Refused(Reason.SUPPLIER_REFUSED, 400, code);
+                }
+                // Not documented for /buyCoinsAPI. Nothing is assumed: an admin decides.
+                return new Unrecognised(400, code == null ? "UNPARSEABLE_ERROR" : code);
+            }
+        } else if (status == 400) {
             String permanent = permanentCode(code);
             if (permanent != null) {
                 Reason reason = SIGN_IN_CODES.contains(permanent.toLowerCase(Locale.ROOT))
@@ -340,6 +432,28 @@ public class FutTransferClient {
         return read;
     }
 
+    // ----------------------------------------------------------------- balance ---
+
+    /**
+     * The account balance FUT Transfer reports: {@code balance} from
+     * {@code /buyConditionAPI}. The collection documents it only as "your current account
+     * balance", with no unit and no currency, so it is shown as reported and labelled so.
+     * A read: it may fall back to the backup domain, and its value is never logged.
+     *
+     * @param publicRef the order it is read for, or null when an admin is only looking
+     */
+    public Read<BigDecimal> balance(String publicRef) {
+        Exchange ex = readExchange("/buyConditionAPI", auth(), publicRef == null ? List.of() : List.of(publicRef));
+        Read<BigDecimal> read = classifyRead(ex, json -> {
+            BigDecimal balance = asDecimal(json, "balance");
+            if (balance == null) throw new IllegalStateException("no balance");
+            return balance;
+        });
+        log.info("FUT Transfer balance{}: {}", publicRef == null ? "" : " for " + publicRef,
+                read instanceof ReadFailed<BigDecimal> f ? f.error() + " (" + f.code() + ")" : "read");
+        return read;
+    }
+
     // ------------------------------------------------------------------ status ---
 
     /**
@@ -354,7 +468,15 @@ public class FutTransferClient {
                                  Long amountDeliveredK,
                                  Long coinsUsed,
                                  BigDecimal toPay,
-                                 boolean aborted) {
+                                 boolean aborted,
+                                 boolean motherOrder) {
+
+        /** A report about one order, as every report so far has been. */
+        public SupplierStatus(String status, String accountCheck, String economyState, Long amountOrderedK,
+                              Long amountDeliveredK, Long coinsUsed, BigDecimal toPay, boolean aborted) {
+            this(status, accountCheck, economyState, amountOrderedK, amountDeliveredK, coinsUsed, toPay, aborted,
+                    false);
+        }
     }
 
     /**
@@ -638,7 +760,10 @@ public class FutTransferClient {
                 asLong(n, "amount"),
                 asLong(n, "coinsUsed"),
                 asDecimal(n, "toPay"),
-                n.path("wasAborted").asInt(0) == 1);
+                n.path("wasAborted").asInt(0) == 1,
+                // The collection's example carries "isMotherID": 0. A 1 would mean the
+                // amounts are a total over child orders, which nothing here expects.
+                n.path("isMotherID").asInt(0) == 1);
     }
 
     /** The two fields every request carries. A fresh map each time; never cached. */
@@ -654,8 +779,8 @@ public class FutTransferClient {
      * One request and its answer, or the name of what went wrong. Never throws, and never
      * lets a body reach a log line or an exception message.
      */
-    /** What a call is, for the audit trail: placing an order, reading, or writing. */
-    private enum Kind { PLACEMENT, READ, WRITE }
+    /** What a call is, for the audit trail: placing an order either way, reading, or writing. */
+    private enum Kind { PLACEMENT, BUY, READ, WRITE }
 
     private Exchange exchange(Kind kind, String domain, String path, Map<String, Object> body, List<String> refs) {
         String context = String.join(",", refs);
@@ -712,8 +837,8 @@ public class FutTransferClient {
         String result;
         String code;
         String vendorOrderId = null;
-        if (kind == Kind.PLACEMENT) {
-            Placement p = classifyPlacement(ex);
+        if (kind == Kind.PLACEMENT || kind == Kind.BUY) {
+            Placement p = classifyPlacement(ex, kind == Kind.BUY);
             switch (p) {
                 case Accepted a -> {
                     result = "ACCEPTED";
