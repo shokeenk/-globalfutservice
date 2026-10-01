@@ -70,6 +70,9 @@ const en = {
     cancel: 'Cancel',
     close: 'Close',
     comingSoon: 'Coming soon',
+    pricesUnavailable: 'Prices are unavailable',
+    /* A service with no live price: the season moved on before its prices did, or an admin closed them. */
+    notOnSale: 'This service has no prices right now, so it cannot be ordered. Please check back shortly.',
   },
 
   /*
@@ -802,7 +805,6 @@ const en = {
   order: {
     seoTitle: (season: string) => `Buy ${season} coins`,
     seoDescription: 'Choose your platform and amount. Live pricing, no hidden fees at checkout.',
-    pricesUnavailable: 'Prices are unavailable',
     title: 'Build your order',
     lead: 'Everything is priced up front. Nothing is added at the last step.',
     /*
@@ -1325,6 +1327,7 @@ const en = {
       'back. We analyse what happens in your matches and turn it into clear changes you can actually apply.',
     bookCta: 'Book a session',
     meetCta: 'Meet the coach',
+    pricesUpdating: 'Coaching prices are being updated.',
     badgeFeedback: 'Personalised feedback',
     badgeImprovements: 'Practical improvements',
     badgeConfidence: 'Play with more confidence',

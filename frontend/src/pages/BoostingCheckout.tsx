@@ -60,7 +60,7 @@ export default function BoostingCheckout() {
   useSeo({ title: b.seoTitle, noindex: true })
 
   const { account, loading: authLoading } = useAuth()
-  const { catalog, policy } = useCatalog()
+  const { catalog, policy, error: catalogError } = useCatalog()
   const labels = useCatalogLabels()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -133,7 +133,8 @@ export default function BoostingCheckout() {
    * own lines rather than arithmetic done here.
    */
   useEffect(() => {
-    if (!variant || !catalog || step === 'done') return
+    // Nothing to price: a quote would only come back "not available" behind the notice.
+    if (!variant || !catalog || options.length === 0 || step === 'done') return
     let live = true
     setQuoting(true)
     api.post<SignedQuote>('/api/v1/quotes', {
@@ -149,7 +150,7 @@ export default function BoostingCheckout() {
       .catch((e) => { if (live) setError(e instanceof ApiError ? e.message : b.placeFailed) })
       .finally(() => { if (live) setQuoting(false) })
     return () => { live = false }
-  }, [sku, variant, catalog, couponCode, step, b.placeFailed])
+  }, [sku, variant, catalog, options.length, couponCode, step, b.placeFailed])
 
   const payChoices: { key: PayChoice; title: string; body: string }[] = useMemo(() => {
     const list: { key: PayChoice; title: string; body: string }[] = []
@@ -223,6 +224,25 @@ export default function BoostingCheckout() {
   }
 
   const stepNumber = step === 'details' ? 1 : step === 'done' ? 3 : 2
+
+  /*
+   * Nothing to sell, said before anything is asked for.
+   *
+   * With no tier priced -- a season with no rate cards, or a catalogue that failed to
+   * load -- this page used to ask for a sign-in and a platform and then sit on an empty
+   * total with no reason given. An order already placed is priced by its own quote, so
+   * resuming or paying one carries on regardless.
+   */
+  const resuming = Boolean(params.get('order')) || created !== null || resumed !== null
+  if (!resuming && (catalogError || (catalog && options.length === 0))) {
+    return (
+      <Section className="rhythm-section">
+        <div className="mx-auto max-w-lg">
+          <Alert tone="warn" title={t.common.pricesUnavailable}>{catalogError ?? t.common.notOnSale}</Alert>
+        </div>
+      </Section>
+    )
+  }
 
   if (!authLoading && !account) {
     return (

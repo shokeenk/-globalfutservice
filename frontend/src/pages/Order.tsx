@@ -313,7 +313,7 @@ export default function Order() {
       <>
         {heading}
         <Section className="rhythm-section">
-          <Alert tone="warn" title={t.order.pricesUnavailable}>{error}</Alert>
+          <Alert tone="warn" title={t.common.pricesUnavailable}>{error}</Alert>
         </Section>
       </>
     )
@@ -330,6 +330,25 @@ export default function Order() {
   const landingPage = params.has('service') ? SERVICE_LANDING[requestedSku] : undefined
   if (catalog && landingPage && service?.sku !== requestedSku) {
     return <Navigate to={landingPage} replace />
+  }
+
+  /*
+   * Loaded, and nothing to sell.
+   *
+   * The catalogue answers 200 with every option empty when the configured season has no
+   * prices, which is how production lost checkout when GFS_SEASON moved to FC27 ahead of
+   * its rate cards. No option means no platform, no platform means no quote request, and
+   * the page sat there: no price, no error, and an Apply button that did nothing.
+   */
+  if (catalog && options.length === 0) {
+    return (
+      <>
+        {heading}
+        <Section className="rhythm-section">
+          <Alert tone="warn" title={t.common.pricesUnavailable}>{t.common.notOnSale}</Alert>
+        </Section>
+      </>
+    )
   }
 
   const maxRedeemable = policy && quote

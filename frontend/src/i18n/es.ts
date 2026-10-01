@@ -64,6 +64,8 @@ const es: Dictionary = {
     cancel: 'Cancelar',
     close: 'Cerrar',
     comingSoon: 'Próximamente',
+    pricesUnavailable: 'Los precios no están disponibles',
+    notOnSale: 'Este servicio no tiene precios ahora mismo, así que no se puede pedir. Vuelve a mirar en un rato.',
   },
 
   loyalty: {
@@ -713,7 +715,6 @@ const es: Dictionary = {
     seoTitle: (season) => `Comprar monedas de ${season}`,
     seoDescription:
       'Elige plataforma y cantidad. Precios en vivo, sin cargos ocultos al pagar.',
-    pricesUnavailable: 'Los precios no están disponibles',
     title: 'Configura tu pedido',
     lead: 'Todo tiene el precio por adelantado. No añadimos nada en el último paso.',
     stepPackage: (_n, service) => service,
@@ -1145,6 +1146,7 @@ const es: Dictionary = {
       'Analizamos lo que pasa en tus partidos y lo convertimos en cambios claros que puedes aplicar de verdad.',
     bookCta: 'Reservar una sesión',
     meetCta: 'Conoce al coach',
+    pricesUpdating: 'Estamos actualizando los precios de las clases.',
     badgeFeedback: 'Feedback personalizado',
     badgeImprovements: 'Mejoras prácticas',
     badgeConfidence: 'Juega con más confianza',
