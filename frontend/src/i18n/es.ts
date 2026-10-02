@@ -1447,7 +1447,7 @@ const es: Dictionary = {
     coachesFrom: (name, zone) => `${name} entrena desde ${zone}`,
     coachConnect:
       '¿Necesitas ayuda con tu pedido de clases o con una sesión? Conecta con tu entrenador y continúa ' +
-      'la conversación directamente desde tu cuenta de GFS. Elige «Conectar con el coach» en tu pedido de clases:',
+      'la conversación directamente desde tu cuenta de GFS. Elige «Conectar con el entrenador» en tu pedido de clases:',
     policyLine: (minutes, hours) =>
       `${minutes} minutos · puedes cambiarla gratis hasta ${hours} h antes`,
     policyLineBoth: (single, block, hours) =>
@@ -1532,7 +1532,7 @@ const es: Dictionary = {
   },
   orderSupport: {
     cardTitleOrder: 'Conecta con GFS',
-    cardTitleCoach: 'Conecta con tu coach',
+    cardTitleCoach: 'Conecta con tu entrenador',
     cardBodyBoosting:
       '¿Necesitas ayuda con tu pedido? Crea un ticket y nuestro equipo de soporte de GFS se pondrá en contacto '
       + 'contigo en breve y te guiará en los siguientes pasos.',
@@ -1540,11 +1540,11 @@ const es: Dictionary = {
       '¿Tienes un problema con tu pedido de monedas? Crea una solicitud de soporte y nuestro equipo de soporte '
       + 'de GFS revisará el pedido y te ayudará a resolverlo.',
     cardBodyCoaching:
-      '¿Necesitas ayuda con tu pedido de clases o con una sesión? Conecta con tu coach y continúa la '
+      '¿Necesitas ayuda con tu pedido de clases o con una sesión? Conecta con tu entrenador y continúa la '
       + 'conversación directamente desde tu cuenta de GFS.',
     ctaBoosting: 'Crear ticket del pedido',
     ctaCoins: 'Crear solicitud de soporte',
-    ctaCoaching: 'Conectar con el coach',
+    ctaCoaching: 'Conectar con el entrenador',
     eyebrow: 'Soporte del pedido',
     summaryReference: 'Pedido',
     summaryService: 'Servicio',
@@ -1552,7 +1552,7 @@ const es: Dictionary = {
     summaryStatus: 'Estado',
     summaryCoins: 'Monedas',
     summarySession: 'Sesión',
-    summaryCoach: 'Coach',
+    summaryCoach: 'Entrenador',
     chatNoticeTitle: 'Chat en vivo',
     chatNotice:
       'El chat en vivo lo ofrece tawk.to. Al iniciarlo, compartes con ellos tu nombre, tu correo y los datos '
