@@ -428,8 +428,9 @@ const fr: Dictionary = {
     title: 'Cookies sur ce site',
     body:
       'Nous utilisons un cookie, pour te garder connecté. Avec ton accord, nous retenons '
-      + 'aussi ta langue et ta devise dans ce navigateur. Aucun suivi, aucune publicité, '
-      + 'rien de partagé avec qui que ce soit.',
+      + 'aussi ta langue et ta devise dans ce navigateur. Aucun suivi, aucune publicité. '
+      + 'Le chat en direct de la page d’assistance d’une commande dépose ses propres '
+      + 'cookies, et seulement quand tu le lances.',
     policyLink: 'Lire la politique de confidentialité',
     accept: 'Accepter',
     decline: 'Refuser',
@@ -1248,6 +1249,7 @@ const fr: Dictionary = {
     discordDetailsPoint2: 'Notre équipe te guide étape par étape.',
     discordDetailsPoint3: 'C’est ce qui garde ton compte en sécurité.',
     afterPaymentNote: 'Passe ta commande pour continuer. Après le paiement, direction Discord pour finir la mise en place.',
+
     ticketCreated: 'Ton ticket est créé !',
 
     continueToPayment: 'Continuer vers le paiement',
@@ -1286,15 +1288,12 @@ const fr: Dictionary = {
     confirmedTitle: 'Commande confirmée !',
     confirmedBody: 'Ton paiement est bien passé.',
     confirmedEmailed: 'On t’a envoyé les détails par e-mail.',
-    confirmedLead:
-      'Notre équipe est prévenue. Rejoins notre Discord pour parler au joueur qui s’occupe '
-      + 'de ta commande et suivre son avancement.',
+    confirmedLead: 'Notre équipe est prévenue.',
     submittedTitle: 'Paiement envoyé',
     submittedBody: 'On le vérifie sur notre compte.',
     submittedLead:
       'Ta commande est enregistrée et notre équipe est prévenue. On confirme le paiement à la '
-      + 'main, en général en quelques minutes, et cette page se met à jour toute seule. Rejoins '
-      + 'notre Discord pour parler au joueur qui s’en occupe.',
+      + 'main, en général en quelques minutes, et cette page se met à jour toute seule.',
     joinDiscord: 'Rejoindre notre Discord',
     joinCaption: 'Clique sur le bouton pour entrer ; notre équipe prend ta commande là-bas.',
     orderId: 'N° de commande',
@@ -1304,8 +1303,6 @@ const fr: Dictionary = {
     amount: 'Montant',
     statusVerifying: 'Vérification',
     needHelp: 'Besoin d’aide ?',
-    joinOurDiscord: 'Rejoins notre Discord',
-    orWord: 'ou',
     contactSupport: 'contacte le support',
 
     loadFailed: 'Impossible de charger cette commande. Vérifie le lien ou contacte le support.',
@@ -1407,23 +1404,10 @@ const fr: Dictionary = {
     statusVerifying: 'Vérification du paiement',
     emailSent: (email: string): string => `Un e-mail de confirmation est en route vers ${email}.`,
     emailWhenConfirmed: (email: string): string => `Nous écrirons à ${email} dès que ce sera confirmé.`,
-    discordTitle: 'Rejoins notre Discord',
-    discordBody: 'Tes prochaines étapes et les détails de ta séance seront partagés sur Discord.',
-    discordSteps: [
-      'Clique sur le bouton ci-dessous pour rejoindre notre serveur',
-      'Vérifie ton compte',
-      'Tu auras accès au salon de coaching',
-      'Notre équipe te contactera avec la suite des instructions',
-      'Partage tes matchs si on te le demande',
-    ],
-    joinDiscord: 'Rejoindre le serveur Discord',
-    discordEmailed: 'Ce lien t’a aussi été envoyé par e-mail.',
-    discordEmailLater: 'Nous t’enverrons aussi ce lien par e-mail dès que ton paiement sera confirmé.',
     allSetTitle: 'Tout est prêt !',
     allSetLead: 'À toi de progresser.',
     allSetPaid: 'Paiement effectué',
     allSetVerifying: 'Paiement envoyé — confirmation très bientôt',
-    allSetDiscord: 'Accès Discord fourni',
     allSetGuide: 'Notre équipe te guide pour la suite',
     allSetReady: 'Prépare-toi pour ta séance de coaching',
     quote: 'Joue plus intelligemment. Progresse volontairement.',
@@ -1468,9 +1452,9 @@ const fr: Dictionary = {
     noSlotsInMonth: (month) => `Aucun créneau en ${month}`,
     timesShownIn: 'Horaires affichés en',
     coachesFrom: (name, zone) => `${name} coache depuis ${zone}`,
-    coachDiscord:
-      'Après la commande, contactez votre coach ou le support GFS sur notre Discord officiel ' +
-      'pour la planification et les échanges liés à la séance :',
+    coachConnect:
+      'Besoin d’aide avec ta commande de coaching ou une séance ? Contacte ton coach et poursuis la ' +
+      'conversation directement depuis ton compte GFS. Choisis « Contacter le coach » sur ta commande de coaching :',
     policyLine: (minutes, hours) =>
       `${minutes} minutes · déplaçable gratuitement jusqu’à ${hours} h avant`,
     policyLineBoth: (single, block, hours) =>
@@ -1552,6 +1536,44 @@ const fr: Dictionary = {
       privacy: { label: 'Politique de confidentialit\u00e9', blurb: 'Ce que nous collectons, combien de temps, et comment le faire supprimer.', keywords: 'confidentialite legal donnees informations personnelles cookies rgpd' },
       aml: { label: 'LCB-FT et KYC', blurb: 'Comment nous vérifions l’identité et pourquoi nous devons parfois demander.', keywords: 'aml kyc lcb-ft legal blanchiment identite verification' },
     },
+  },
+  orderSupport: {
+    cardTitleOrder: 'Contacter GFS',
+    cardTitleCoach: 'Contacter ton coach',
+    cardBodyBoosting:
+      'Besoin d’aide avec ta commande ? Crée un ticket et l’équipe Support de GFS te répondra rapidement '
+      + 'pour te guider dans les prochaines étapes.',
+    cardBodyCoins:
+      'Un problème avec ta commande de crédits ? Crée une demande d’assistance et l’équipe Support de GFS '
+      + 'vérifiera la commande et t’aidera à le résoudre.',
+    cardBodyCoaching:
+      'Besoin d’aide avec ta commande de coaching ou une séance ? Contacte ton coach et poursuis la conversation '
+      + 'directement depuis ton compte GFS.',
+    ctaBoosting: 'Créer un ticket de commande',
+    ctaCoins: 'Créer une demande d’assistance',
+    ctaCoaching: 'Contacter le coach',
+    eyebrow: 'Assistance commande',
+    summaryReference: 'Commande',
+    summaryService: 'Service',
+    summaryPlatform: 'Plateforme',
+    summaryStatus: 'Statut',
+    summaryCoins: 'Crédits',
+    summarySession: 'Séance',
+    summaryCoach: 'Coach',
+    chatNoticeTitle: 'Chat en direct',
+    chatNotice:
+      'Le chat en direct est fourni par tawk.to. En le lançant, tu partages avec eux ton nom, ton e-mail et les '
+      + 'informations de cette commande, et ils déposent leurs propres cookies.',
+    startChat: 'Lancer le chat',
+    unavailable: 'Le chat en direct n’est pas disponible pour le moment.',
+    unavailableLink: 'Aller à la page Support',
+    loadFailed: 'Le chat n’a pas pu se charger.',
+    pageFailed: 'Cette page n’a pas pu se charger. Réessaie.',
+    backToOrder: 'Retour à ta commande',
+    guestTitle: 'Besoin d’aide avec cette commande ?',
+    guestBody: (ref: string) =>
+      `Le chat en direct est réservé aux commandes passées depuis un compte. Ouvre un ticket d’assistance et indique la commande ${ref}.`,
+    guestCta: 'Ouvrir un ticket d’assistance',
   },
   catalog: {
     services: {

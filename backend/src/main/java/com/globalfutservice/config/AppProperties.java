@@ -70,7 +70,8 @@ public record AppProperties(
         @Valid @NotNull Coaching coaching,
         @Valid @NotNull ManualPayments manualPayments,
         @Valid @NotNull FutTransfer futTransfer,
-        @Valid @NotNull Campaigns campaigns) {
+        @Valid @NotNull Campaigns campaigns,
+        @Valid @NotNull Tawk tawk) {
 
     public record Security(
             /** HS256 signing key for access tokens. Minimum 32 bytes. */
@@ -407,6 +408,27 @@ public record AppProperties(
      */
     public record Campaigns(
             @DefaultValue("100") @Min(1) int dailyCap) {
+    }
+
+    /**
+     * tawk.to, the live chat on order support pages.
+     *
+     * @param secureKey the property's Secure Mode key (tawk.to: Administration, Overview,
+     *                  JavaScript API). Server only: it signs the signed-in customer's email
+     *                  so the chat cannot be given somebody else's name. Blank means Secure
+     *                  Mode is not used and the name and email go unsigned.
+     */
+    public record Tawk(String secureKey) {
+
+        public boolean secureModeConfigured() {
+            return secureKey != null && !secureKey.isBlank();
+        }
+
+        /** Never prints the key: a record's own toString would. */
+        @Override
+        public String toString() {
+            return "Tawk[secureKey=" + (secureModeConfigured() ? "[redacted]" : "unset") + "]";
+        }
     }
 
     /**

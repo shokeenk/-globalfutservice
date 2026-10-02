@@ -125,7 +125,7 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
 function Terms() {
   return (
     <>
-      <p className="text-chalk-faint">Last updated 3 September 2026</p>
+      <p className="text-chalk-faint">Last updated 2 October 2026</p>
 
       <Clause n={1} title="About GFS & Our Services">
         <p>
@@ -199,15 +199,17 @@ function Terms() {
           GFS coaching is provided through scheduled sessions. Package details and session
           duration are shown before purchase.
         </p>
+        {/*
+          Changed on the owner's instruction on 2 October 2026, with the order support
+          pages: coaching customers reach their coach on the order's Connect with Coach
+          page rather than on Discord. It replaces the client's two lines that named the
+          official Discord, so the confirmation email, the Coaching page and the terms say
+          the same thing.
+        */}
         <p>
-          After ordering, customers can connect with their coach or GFS Support through our
-          official Discord for scheduling and session-related communication.
-        </p>
-        <p>
-          Official Discord:{' '}
-          <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
-            {BUSINESS.discordName}
-          </a>
+          After ordering, customers connect with their coach from their GFS account: each
+          coaching order has a Connect with Coach page on this website for scheduling and
+          session-related communication.
         </p>
       </Clause>
 
@@ -567,7 +569,8 @@ function Privacy({ policy }: { policy: Policy | null }) {
         <p>
           Our payment provider processes your payment and sees what it needs to for that purpose;
           we never see or store your full card details. Our email provider delivers your receipts
-          and, if you have opted in to them, our promotional emails.
+          and, if you have opted in to them, our promotional emails. Live chat on an order's
+          support page is provided by tawk.to; section 8 says what it receives.
           We do not sell data, and we do not share it for advertising.
         </p>
         {/*
@@ -632,7 +635,9 @@ function Privacy({ policy }: { policy: Policy | null }) {
         <p>
           We use one cookie, and it exists to keep you signed in. It is not readable by scripts,
           is not sent to other sites, and is not used for tracking or advertising. There is no
-          analytics or advertising cookie on this site.
+          analytics or advertising cookie on this site. The live chat on an order's support
+          page is the exception: if you press Start chat, tawk.to sets its own cookies and
+          stores data in your browser (section 8).
         </p>
         {/*
           The banner is described rather than merely mentioned, because what it controls is
@@ -672,6 +677,39 @@ function Privacy({ policy }: { policy: Policy | null }) {
           time you click in it, and use them to see which campaigns are useful. Some email apps
           load images automatically, which can record an open you did not make; turning off
           images in your email app prevents it.
+        </p>
+      </Clause>
+
+      {/*
+        Added with the live chat on order support pages. Appended for the same reason as
+        section 7: each clause's anchor is its number. Every statement is what the software
+        does: the support page loads nothing from tawk.to until Start chat is pressed, and
+        the server sends tawk.to only the allowlisted fields named here
+        (SupportChatService) -- never the sign-in, backup codes or payment details.
+      */}
+      <Clause n={8} title="Live chat">
+        <p>
+          The chat on an order's support page is provided by tawk.to (
+          <a className="font-semibold text-brand-400 hover:underline"
+             href="https://www.tawk.to/privacy-policy/" target="_blank" rel="noreferrer">
+            tawk.to/privacy-policy
+          </a>
+          ). It appears only on that page, and nothing from tawk.to loads until you press
+          Start chat.
+        </p>
+        <p>
+          When you start it, tawk.to receives your name and email address; the order's
+          reference, service, platform and status; for a coin order, the amount; for a
+          coaching order, the session reference and your coach's name; and the messages you
+          and our team exchange in the chat. We never send it your password, EA sign-in,
+          backup codes or payment details. Please do not type them into the chat — our team
+          will not ask for them there.
+        </p>
+        <p>
+          tawk.to sets its own cookies and stores data in your browser to keep the
+          conversation going, including a visitor cookie that lasts about six months. It
+          processes data in the United States, and its own privacy policy governs its copy
+          of the chat.
         </p>
       </Clause>
     </>

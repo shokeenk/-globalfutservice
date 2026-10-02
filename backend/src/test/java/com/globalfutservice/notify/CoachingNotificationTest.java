@@ -23,8 +23,8 @@ import static org.mockito.Mockito.when;
 /**
  * What a coaching order tells the people who have to act on it.
  *
- * <p>Two audiences. The customer needs the Discord invite once their payment is confirmed,
- * because that is where the session is arranged. The coach and operator need the details
+ * <p>Two audiences. The customer needs the way to their coach once their payment is
+ * confirmed: the order's Connect with Coach page, on this site. The coach and operator need the details
  * the customer gave at checkout -- platform, in-game ID, rank, focus -- in the ticket they
  * work from, instead of asking for them again.
  */
@@ -55,20 +55,25 @@ class CoachingNotificationTest {
     }
 
     @Test
-    @DisplayName("the confirmation email carries the Discord invite and the order reference")
-    void confirmationEmailCarriesInvite() {
+    @DisplayName("the confirmation email links to the order's Connect with Coach page, not to Discord")
+    void confirmationEmailLinksToCoach() {
         JavaMailSender sender = mock(JavaMailSender.class);
         when(sender.createMimeMessage()).thenReturn(
                 new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
 
-        // The coaching customer's invite now arrives in the shared confirmation email,
-        // which covers Champs, boosting and coaching with one Discord branch.
+        // The shared confirmation email has a coaching branch of its own: the order's
+        // support page, where the customer talks to their coach.
         notifierSending(sender).orderConfirmed(coachingOrder());
 
         ArgumentCaptor<jakarta.mail.internet.MimeMessage> sent =
                 ArgumentCaptor.forClass(jakarta.mail.internet.MimeMessage.class);
         verify(sender).send(sent.capture());
-        assertThat(bodyOf(sent.getValue())).contains(INVITE).contains("GFS-26-COACH01");
+        assertThat(bodyOf(sent.getValue()))
+                .contains("https://globalfutservices.com/coaching/GFS-26-COACH01/support")
+                .contains("Connect with Your Coach")
+                .contains("GFS-26-COACH01")
+                .doesNotContain("Join our Discord server")
+                .doesNotContain("JOIN DISCORD");
     }
 
     /**
@@ -91,9 +96,10 @@ class CoachingNotificationTest {
         try {
             var out = new java.io.ByteArrayOutputStream();
             message.writeTo(out);
-            // Quoted-printable soft-wraps long URLs; unwrap before matching.
+            // Quoted-printable soft-wraps long lines with a trailing "=": drop those breaks
+            // whole, or a URL comes out as ".../s=upport".
             return out.toString(java.nio.charset.StandardCharsets.UTF_8)
-                    .replaceAll("[\\r\\n]", "").replace("=3D", "=");
+                    .replaceAll("=\\r?\\n", "").replaceAll("[\\r\\n]", "").replace("=3D", "=");
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

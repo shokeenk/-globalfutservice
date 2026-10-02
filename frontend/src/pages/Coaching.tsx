@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, endOfMonth, startOfMonth } from '../components/Calendar'
-import { BUSINESS } from '../content/business'
 import { CoachIcon } from '../components/CoachingIcons'
 import type { CoachIconName } from '../components/CoachingIcons'
 import { Reveal } from '../motion/Reveal'
@@ -844,23 +843,16 @@ function SlotPicker({
           </p>
         )}
         {/*
-          Where the session actually gets arranged.
-
-          The terms of service say scheduling and session communication happen on the
-          official Discord, so the booking screen is where that has to be said — a customer
-          who has just paid should not have to find clause 6 to learn how the coach reaches
-          them.
+          Where the customer reaches their coach: the Connect with Coach page of their
+          coaching order, on this site. This panel books from a balance of credits rather
+          than from one order, so it points to their orders, where each coaching order has
+          its own Connect with Coach button.
         */}
-        <p className="text-[13px] text-chalk-faint">
-          {t.coaching.coachDiscord}{' '}
-          <a
-            className="text-chalk underline"
-            href={BUSINESS.discordDm}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {BUSINESS.discordName}
-          </a>
+        <p className="text-[13px] text-chalk-faint" data-testid="coach-connect">
+          {t.coaching.coachConnect}{' '}
+          <Link className="text-chalk underline" to="/track">
+            {t.track.myOrdersTitle}
+          </Link>
         </p>
       </div>
 

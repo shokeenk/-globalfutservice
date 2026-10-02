@@ -28,6 +28,7 @@ class TransactionalEmailsTest {
 
     private static final String TRACK = "https://globalfutservices.com/track?ref=GFS-26-ABC123";
     private static final String DISCORD = "https://discord.com/invite/8FeP7C6tXt";
+    private static final String COACH = "https://globalfutservices.com/coaching/GFS-26-ABC123/support";
 
     private static OrderNotification order(String sku, String serviceLabel, String platform) {
         return new OrderNotification("GFS-26-ABC123", "PAID", serviceLabel, "₹1,640.00",
@@ -86,7 +87,7 @@ class TransactionalEmailsTest {
         @Test
         @DisplayName("coins get a tracking link and no Discord steps")
         void coins_branch() {
-            var r = TransactionalEmails.orderConfirmed(coins(), BRAND, TRACK, DISCORD);
+            var r = TransactionalEmails.orderConfirmed(coins(), BRAND, TRACK, DISCORD, COACH);
 
             assertThat(r.subject()).isEqualTo("Your GFS Order Is Confirmed");
             assertThat(r.html())
@@ -104,11 +105,11 @@ class TransactionalEmailsTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {"BOOST_CHAMPS", "BOOST_RIVALS", "COACHING"})
-        @DisplayName("everything else gets the three-step Discord block")
+        @ValueSource(strings = {"BOOST_CHAMPS", "BOOST_RIVALS"})
+        @DisplayName("boosting gets the three-step Discord block, where the EA login is handed over")
         void discord_branch(String sku) {
             var r = TransactionalEmails.orderConfirmed(
-                    order(sku, "A service", "PlayStation"), BRAND, TRACK, DISCORD);
+                    order(sku, "A service", "PlayStation"), BRAND, TRACK, DISCORD, COACH);
 
             assertThat(r.html())
                     .contains("NEXT STEPS")
@@ -121,14 +122,46 @@ class TransactionalEmailsTest {
 
             // The tracking button belongs to the coins branch only; these customers are
             // told to go to Discord, and two competing primary actions is one too many.
-            assertThat(r.html()).doesNotContain("TRACK YOUR ORDER");
+            assertThat(r.html()).doesNotContain("TRACK YOUR ORDER").doesNotContain("CONNECT WITH COACH");
+        }
+
+        @Test
+        @DisplayName("coaching gets the order's Connect with Coach page, in the brief's words, and no Discord")
+        void coaching_branch() {
+            var r = TransactionalEmails.orderConfirmed(
+                    order("COACHING", "FUT Classes — Single session", "PlayStation"), BRAND, TRACK, DISCORD, COACH);
+
+            assertThat(r.html())
+                    .contains("Connect with Your Coach")
+                    .contains("Need help with your coaching order or session? Connect with your coach and "
+                            + "continue the conversation directly from your GFS account.")
+                    .contains("CONNECT WITH COACH")
+                    .contains("href=\"" + COACH + "\"")
+                    .contains("signed in to the GFS account you placed this order from");
+            assertThat(r.text())
+                    .contains("CONNECT WITH YOUR COACH")
+                    .contains("Connect with Coach: " + COACH)
+                    .contains("signed in to the GFS account you placed this order from");
+
+            // Nothing of the Discord steps, and one primary action only. The footer's
+            // general Discord link is the shared shell's, the same on every email.
+            for (String part : new String[] {r.html(), r.text()}) {
+                assertThat(part)
+                        .doesNotContain("Join our Discord server")
+                        .doesNotContain("JOIN DISCORD")
+                        .doesNotContain("Your ticket will be created")
+                        .doesNotContain("same email/Discord account")
+                        .doesNotContain("TRACK YOUR ORDER")
+                        .doesNotContain("Track your order");
+            }
+            assertThat(r.html()).doesNotContain("NEXT STEPS");
         }
 
         @Test
         @DisplayName("platform is omitted rather than printed blank when the SKU has none")
         void platform_optional() {
             var r = TransactionalEmails.orderConfirmed(
-                    order("COACHING", "1-to-1 Coaching", null), BRAND, TRACK, DISCORD);
+                    order("COACHING", "1-to-1 Coaching", null), BRAND, TRACK, DISCORD, COACH);
             assertThat(r.html()).doesNotContain("Platform");
             assertThat(r.text()).doesNotContain("Platform");
         }
@@ -143,7 +176,7 @@ class TransactionalEmailsTest {
         void one_template_not_two() {
             for (var r : new TransactionalEmails.Rendered[]{
                     TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK),
-                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)}) {
+                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD, COACH)}) {
                 assertThat(r.html())
                         .contains("GLOBAL FUT SERVICES")
                         .contains("globalfutservices.com")
@@ -162,7 +195,7 @@ class TransactionalEmailsTest {
         void omits_unverified_claims() {
             for (var r : new TransactionalEmails.Rendered[]{
                     TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK),
-                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)}) {
+                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD, COACH)}) {
                 // Not claimed anywhere on the site. A founding year is a factual assertion
                 // about the business and this one has no source.
                 assertThat(r.html()).doesNotContain("2019");
@@ -179,7 +212,7 @@ class TransactionalEmailsTest {
         void header_carries_the_brand_lines() {
             for (var r : new TransactionalEmails.Rendered[]{
                     TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK),
-                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)}) {
+                    TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD, COACH)}) {
                 // Neither is a checkable claim about the business, unlike the founding
                 // year above: one is a slogan already in the trust bar, the other lists
                 // what the site sells.
@@ -195,7 +228,7 @@ class TransactionalEmailsTest {
         void tick_means_confirmed() {
             // U+2713. A tick on "awaiting verification" would tell somebody skimming that
             // their payment had been accepted, which is the opposite of what it says.
-            assertThat(TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)
+            assertThat(TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD, COACH)
                     .html()).contains("✓");
             assertThat(TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK)
                     .html()).doesNotContain("✓");
@@ -204,7 +237,7 @@ class TransactionalEmailsTest {
         @Test
         @DisplayName("transactional mail carries no unsubscribe link")
         void no_unsubscribe_on_transactional() {
-            var r = TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD);
+            var r = TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD, COACH);
             // Order email is sent because somebody ordered, not because they opted into
             // marketing. An unsubscribe link here would offer to turn off the message
             // that tells them their payment failed.
@@ -217,7 +250,7 @@ class TransactionalEmailsTest {
         void escapes_everything() {
             var hostile = order("TRADING_SERVICE",
                     "Coins <script>alert('x')</script> & \"more\"", "PC");
-            var r = TransactionalEmails.orderConfirmed(hostile, BRAND, TRACK, DISCORD);
+            var r = TransactionalEmails.orderConfirmed(hostile, BRAND, TRACK, DISCORD, COACH);
 
             // Promotional copy typed by an admin lands in this same template, so the
             // escaping has to hold for content the caller did not sanitise.
@@ -246,13 +279,13 @@ class TransactionalEmailsTest {
                     new Variant("1-awaiting-verification",
                             TransactionalEmails.awaitingVerification(coins(), BRAND, TRACK)),
                     new Variant("2-confirmed-coins",
-                            TransactionalEmails.orderConfirmed(coins(), BRAND, TRACK, DISCORD)),
+                            TransactionalEmails.orderConfirmed(coins(), BRAND, TRACK, DISCORD, COACH)),
                     new Variant("2-confirmed-champs",
-                            TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD)),
+                            TransactionalEmails.orderConfirmed(champs(), BRAND, TRACK, DISCORD, COACH)),
                     new Variant("2-confirmed-coaching",
                             TransactionalEmails.orderConfirmed(
                                     order("COACHING", "1-to-1 Coaching — Single session", null),
-                                    BRAND, TRACK, DISCORD)),
+                                    BRAND, TRACK, DISCORD, COACH)),
             };
             for (var v : variants) {
                 java.nio.file.Files.writeString(dir.resolve(v.name() + ".html"),

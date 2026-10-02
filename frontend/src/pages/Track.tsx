@@ -7,6 +7,7 @@ import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { ApiError, api } from '../lib/api'
+import { GuestSupportCard, SupportCard, supportModeFor } from '../components/support/SupportCard'
 import { ticketLink } from '../lib/discordTicket'
 import { dateTime } from '../lib/format'
 import { useSeo } from '../lib/seo'
@@ -282,31 +283,6 @@ export default function Track() {
 }
 
 /**
- * Where the conversation about this order happens.
- *
- * <p>Shown once the money is in and while there is still work to do -- which is exactly
- * the window in which a customer has something to say to the team and the team has
- * something to ask. Before payment the next action is to pay; after completion there is
- * nothing to coordinate, and a live "talk to us" panel on a finished order invites
- * questions the page has already answered.
- *
- * <p><b>Three panels, decided by the server.</b> Which one a customer sees depends on
- * whether we know their Discord account, and the storefront is deliberately not the place
- * that works that out -- it does not know how they signed in and should not learn.
- *
- * <ul>
- *   <li><b>DIRECT</b> -- they are already in the channel, so link straight to it.</li>
- *   <li><b>PENDING</b> -- they signed in with Discord and will be let in the moment the
- *       ticket opens. Nothing to do, and saying so beats an instruction they do not
- *       need.</li>
- *   <li><b>VERIFY</b> -- most people. Join the server, run the command, get let in.</li>
- * </ul>
- *
- * <p>A link to a channel is only ever offered to somebody who has actually been granted
- * it. Sending the rest to a channel they cannot see would read as the site being broken,
- * which is what the old shared-channel fallback was working around.
- */
-/**
  * The sessions this coaching order paid for.
  *
  * <p>Scoped to the order being looked at, not the account. A customer with two packs
@@ -423,6 +399,26 @@ function sessionWhen(iso: string, zone: string | null): string {
   }
 }
 
+/**
+ * The Discord ticket, for boosting orders only: it is where the customer hands over their
+ * EA login, as the boosting checkout tells them before they pay. Everything else about an
+ * order -- for every order type -- goes through its support page, below.
+ *
+ * <p><b>Three panels, decided by the server.</b> Which one a customer sees depends on
+ * whether we know their Discord account, and the storefront is deliberately not the place
+ * that works that out -- it does not know how they signed in and should not learn.
+ *
+ * <ul>
+ *   <li><b>DIRECT</b> -- they are already in the channel, so link straight to it.</li>
+ *   <li><b>PENDING</b> -- they signed in with Discord and will be let in the moment the
+ *       ticket opens. Nothing to do, and saying so beats an instruction they do not
+ *       need.</li>
+ *   <li><b>VERIFY</b> -- most people. Join the server, run the command, get let in.</li>
+ * </ul>
+ *
+ * <p>A link to a channel is only ever offered to somebody who has actually been granted
+ * it. Sending the rest to a channel they cannot see would read as the site being broken.
+ */
 function DiscordTicket({ order }: { order: Order }) {
   const t = useT()
   const [copied, setCopied] = useState(false)
@@ -523,6 +519,26 @@ function DiscordTicket({ order }: { order: Order }) {
       )}
     </div>
   )
+}
+
+/**
+ * Where the conversation about this order happens: its support page, on this site.
+ *
+ * <p>Shown once the money is in and while there is still work to do -- which is exactly
+ * the window in which a customer has something to say to the team and the team has
+ * something to ask. Before payment the next action is to pay; after completion there is
+ * nothing to coordinate. Replaces the Discord panel that used to sit here.
+ *
+ * <p>A guest order belongs to no account, and the chat is for the order's signed-in owner
+ * only, so a guest is pointed to a support ticket instead.
+ */
+function OrderSupportCard({ order, signedIn }: { order: Order; signedIn: boolean }) {
+  const open = ['PAID', 'CREDENTIALS_PENDING', 'READY_FOR_DELIVERY', 'IN_PROGRESS', 'ON_HOLD', 'DELIVERED']
+    .includes(order.status)
+  if (!open) return null
+  return signedIn
+    ? <SupportCard reference={order.publicRef} sku={order.sku} />
+    : <GuestSupportCard reference={order.publicRef} />
 }
 
 /**
@@ -658,7 +674,9 @@ export function OrderView({
       <div className="space-y-7 p-6">
         <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} />
 
-        <DiscordTicket order={order} />
+        {supportModeFor(order.sku) === 'BOOSTING' && <DiscordTicket order={order} />}
+
+        <OrderSupportCard order={order} signedIn={signedIn} />
 
         <BookedSessions order={order} signedIn={signedIn} />
 

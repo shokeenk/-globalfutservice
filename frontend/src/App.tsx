@@ -5,6 +5,7 @@ import { CookieNotice } from './components/CookieNotice'
 import { NotificationToasts } from './components/NotificationToasts'
 import { Footer } from './components/Footer'
 import { AskWidget } from './components/AskWidget'
+import { isSupportPage } from './components/support/SupportCard'
 import { CursorLight } from './components/CursorLight'
 import { Header } from './components/Header'
 import { Spinner } from './components/ui'
@@ -30,6 +31,7 @@ const ComingSoon = lazy(() => import('./pages/ComingSoon'))
 const Coaching = lazy(() => import('./pages/Coaching'))
 const BoostingCheckout = lazy(() => import('./pages/BoostingCheckout'))
 const CoachingBook = lazy(() => import('./pages/CoachingBook'))
+const OrderSupport = lazy(() => import('./pages/OrderSupport'))
 const Login = lazy(() => import('./pages/Login'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
 const Account = lazy(() => import('./pages/Account'))
@@ -194,6 +196,14 @@ export default function App() {
               <Route path="/auth/callback" element={<AuthCallback />} />
 
               <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
+              {/*
+                An order's support page, with the live chat inside it. Signed-in owners only:
+                sign-in comes first and returns here, and the server answers "not found" for
+                anyone else's order. One page for both addresses; it moves a coaching order to
+                /coaching/... and anything else to /orders/..., by what the order is.
+              */}
+              <Route path="/orders/:ref/support" element={<RequireAuth><OrderSupport /></RequireAuth>} />
+              <Route path="/coaching/:ref/support" element={<RequireAuth><OrderSupport /></RequireAuth>} />
 
             <Route path="*" element={<NotFound />} />
         </Route>
@@ -210,6 +220,7 @@ export default function App() {
  * The storefront's chrome, around every customer-facing route.
  */
 function PublicLayout() {
+  const location = useLocation()
   return (
     /*
       `isolate` matters here.
@@ -235,8 +246,9 @@ function PublicLayout() {
       {/* Real-time only: anything older than this page load is read in the bell. */}
       <NotificationToasts />
       {/* Outside <main> and fixed-positioned: it follows the reader across every
-          route rather than being a thing you have to navigate to. */}
-      <AskWidget />
+          route rather than being a thing you have to navigate to -- except an order's
+          support page, which has the live chat in the page and needs no second one. */}
+      {!isSupportPage(location.pathname) && <AskWidget />}
     </div>
   )
 }

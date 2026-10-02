@@ -948,6 +948,33 @@ export interface ApiErrorBody {
   traceId?: string
 }
 
+// ---- order support ---------------------------------------------------------------------
+
+/**
+ * An order's support page, from the server. The mode is the order's own, never the
+ * address's; the chat fields are the server's allowlist.
+ */
+export interface SupportContext {
+  mode: 'BOOSTING' | 'COINS' | 'COACHING'
+  summary: {
+    reference: string
+    service: string
+    platform?: string | null
+    status: string
+    coins?: string | null
+    session?: string | null
+    sessionStartsAt?: string | null
+    sessionTimezone?: string | null
+    coach?: string | null
+  }
+  chat: {
+    name?: string | null
+    email?: string | null
+    hash?: string | null
+    attributes: Record<string, string>
+  }
+}
+
 // ---- FUT Transfer, for admins -------------------------------------------------------
 
 /** What an admin can do to an order the partner has. The server decides which apply. */

@@ -504,8 +504,8 @@ const en = {
     title: 'Cookies on this site',
     body:
       'We use one cookie, to keep you signed in. With your agreement we also remember your '
-      + 'language and currency in this browser. No tracking, no advertising, nothing shared '
-      + 'with anyone else.',
+      + 'language and currency in this browser. No tracking and no advertising. The live chat '
+      + 'on an order’s support page sets its own cookies, and only once you start it.',
     policyLink: 'Read the privacy policy',
     accept: 'Accept',
     decline: 'Decline',
@@ -1431,6 +1431,7 @@ const en = {
     discordDetailsPoint2: 'Our team will guide you step by step.',
     discordDetailsPoint3: 'This keeps your account safe and secure.',
     afterPaymentNote: 'Place your order to continue. After payment you will be taken to Discord to finish setting up.',
+
     ticketCreated: 'Your ticket has been created!',
 
     continueToPayment: 'Continue to Payment',
@@ -1469,15 +1470,12 @@ const en = {
     confirmedTitle: 'Order Confirmed!',
     confirmedBody: 'Your payment has been successful.',
     confirmedEmailed: 'We have sent the details to your email.',
-    confirmedLead:
-      'Our team has been notified. Join our Discord server to talk to the player handling '
-      + 'your order and follow its progress.',
+    confirmedLead: 'Our team has been notified.',
     submittedTitle: 'Payment submitted',
     submittedBody: 'We are checking it against our account now.',
     submittedLead:
       'Your order is placed and our team has been notified. We confirm the payment by hand, '
-      + 'usually within minutes — this page updates itself when it lands. Join our Discord to '
-      + 'talk to the player handling your order.',
+      + 'usually within minutes — this page updates itself when it lands.',
     joinDiscord: 'Join Our Discord',
     joinCaption: 'Click the button above to join, and our team will pick up your order there.',
     orderId: 'Order ID',
@@ -1487,8 +1485,6 @@ const en = {
     amount: 'Amount',
     statusVerifying: 'Verifying',
     needHelp: 'Need help?',
-    joinOurDiscord: 'Join our Discord',
-    orWord: 'or',
     contactSupport: 'contact support',
 
     loadFailed: 'We could not load that order. Check the link, or contact support.',
@@ -1590,23 +1586,10 @@ const en = {
     statusVerifying: 'Verifying payment',
     emailSent: (email: string): string => `A confirmation email is on its way to ${email}.`,
     emailWhenConfirmed: (email: string): string => `We’ll email ${email} as soon as it is confirmed.`,
-    discordTitle: 'Join our Discord',
-    discordBody: 'Your next steps and session details will be shared on Discord.',
-    discordSteps: [
-      'Click the button below to join our server',
-      'Verify your account',
-      'You’ll get access to the coaching channel',
-      'Our team will reach out to you with further instructions',
-      'Share your gameplay if required',
-    ],
-    joinDiscord: 'Join Discord Server',
-    discordEmailed: 'This link has also been sent to your email.',
-    discordEmailLater: 'We’ll also email you this link once your payment is confirmed.',
     allSetTitle: 'You’re all set!',
     allSetLead: 'Time to improve.',
     allSetPaid: 'Payment completed',
     allSetVerifying: 'Payment submitted — we’ll confirm it shortly',
-    allSetDiscord: 'Discord access provided',
     allSetGuide: 'Our team will guide you further',
     allSetReady: 'Get ready for your coaching session',
     quote: 'Play smarter. Improve deliberately.',
@@ -1654,9 +1637,10 @@ const en = {
     noSlotsInMonth: (month: string): string => `Nothing free in ${month}`,
     timesShownIn: 'Times shown in',
     coachesFrom: (name: string, zone: string) => `${name} coaches from ${zone}`,
-    coachDiscord:
-      'After ordering, reach your coach or GFS Support on our official Discord for scheduling ' +
-      'and session communication:',
+    /* The brief's coaching copy, then where the button is: the panel books from credits, not one order. */
+    coachConnect:
+      'Need help with your coaching order or session? Connect with your coach and continue the ' +
+      'conversation directly from your GFS account. Choose Connect with Coach on your coaching order:',
     policyLine: (minutes: number, hours: number) =>
       `${minutes} minutes · free to move up to ${hours}h before`,
     /* Both lengths on the booking screen, where a customer is about to spend a credit. */
@@ -1751,6 +1735,48 @@ const en = {
       privacy: { label: 'Privacy policy', blurb: 'What we collect, how long we keep it, and how to have it deleted.', keywords: 'privacy legal data personal information cookies gdpr' },
       aml: { label: 'AML & KYC', blurb: 'How we verify identity and why we sometimes have to ask.', keywords: 'aml kyc legal anti money laundering identity verification' },
     },
+  },
+  /*
+    Order support: the card on an order, and the support page around the live chat.
+    The card copy is the client's, word for word.
+  */
+  orderSupport: {
+    cardTitleOrder: 'Connect with GFS',
+    cardTitleCoach: 'Connect with Your Coach',
+    cardBodyBoosting:
+      'Need help with your order? Create a ticket and our GFS Support team will connect with you shortly '
+      + 'and guide you through the next steps.',
+    cardBodyCoins:
+      'Having an issue with your coin order? Create a support request and our GFS Support team will check '
+      + 'the order and help you resolve it.',
+    cardBodyCoaching:
+      'Need help with your coaching order or session? Connect with your coach and continue the conversation '
+      + 'directly from your GFS account.',
+    ctaBoosting: 'Create Order Ticket',
+    ctaCoins: 'Create Order Support',
+    ctaCoaching: 'Connect with Coach',
+    eyebrow: 'Order support',
+    summaryReference: 'Order',
+    summaryService: 'Service',
+    summaryPlatform: 'Platform',
+    summaryStatus: 'Status',
+    summaryCoins: 'Coins',
+    summarySession: 'Session',
+    summaryCoach: 'Coach',
+    chatNoticeTitle: 'Live chat',
+    chatNotice:
+      'Live chat is provided by tawk.to. Starting it shares your name, email and this order’s details with '
+      + 'them, and they set their own cookies.',
+    startChat: 'Start chat',
+    unavailable: 'Live chat is unavailable right now.',
+    unavailableLink: 'Go to the Support page',
+    loadFailed: 'The chat could not be loaded.',
+    pageFailed: 'This page could not be loaded. Please try again.',
+    backToOrder: 'Back to your order',
+    guestTitle: 'Need help with this order?',
+    guestBody: (ref: string) =>
+      `Live chat is for orders placed from an account. Open a support ticket and mention order ${ref}.`,
+    guestCta: 'Open a support ticket',
   },
   /*
    * Server-supplied strings.

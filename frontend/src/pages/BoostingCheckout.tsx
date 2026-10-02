@@ -10,6 +10,7 @@ import { BUSINESS } from '../content/business'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
+import { SupportCard } from '../components/support/SupportCard'
 import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
@@ -729,7 +730,10 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
         {paid ? b.confirmedLead : b.submittedLead}
       </p>
 
-      {/* The bot opened a ticket for this order the moment the payment was submitted. */}
+      {/*
+        The Discord ticket the bot opened when the payment was submitted. It is where the
+        customer hands over their EA login, as the checkout told them before they paid.
+      */}
       <p className="mt-5 text-[13px] font-semibold text-ok">{b.ticketCreated}</p>
 
       <div className="mt-3">
@@ -767,6 +771,14 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
         )}
       </div>
 
+      {/*
+        Everything else about this order goes through its support page on this site, with
+        the chat inside it.
+      */}
+      <div className="mt-6">
+        <SupportCard reference={order.publicRef} sku={order.sku} />
+      </div>
+
       <dl className="mt-7 grid gap-px overflow-hidden rounded-panel bg-ink-400 text-left sm:grid-cols-4">
         <SummaryCell label={b.orderId} value={`#${order.publicRef}`} />
         <SummaryCell label={b.service} value={order.serviceLabel} />
@@ -780,11 +792,6 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
 
       <p className="mt-6 text-[12.5px] text-chalk-muted">
         {b.needHelp}{' '}
-        <a className="font-semibold text-brand-400 hover:underline"
-           href={ticket ? ticket.href : BUSINESS.discordInvite} target="_blank" rel="noreferrer">
-          {b.joinOurDiscord}
-        </a>{' '}
-        {b.orWord}{' '}
         <Link className="font-semibold text-brand-400 hover:underline" to="/support">{b.contactSupport}</Link>.
       </p>
     </div>

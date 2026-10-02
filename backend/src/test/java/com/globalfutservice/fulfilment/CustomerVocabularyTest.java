@@ -37,8 +37,9 @@ import static org.mockito.Mockito.when;
  * partner's name for a method, its settings or its status codes.
  *
  * <p>Scanned: every sentence {@link CustomerText} can produce, the storefront's three
- * translations, the customer emails and the order ticket's texts, and the email and ticket
- * message a held order actually sends. Comments are not scanned -- only what is shown.
+ * translations, the customer emails and the order ticket's texts, the order support pages
+ * and what their chat is told, and the email and ticket message a held order actually
+ * sends. Comments are not scanned -- only what is shown.
  *
  * <p>Not scanned: the privacy policy, which names the partner on purpose, because the law
  * requires saying who receives a customer's sign-in.
@@ -88,6 +89,21 @@ class CustomerVocabularyTest {
     void templates() throws Exception {
         for (Path file : templateFiles()) {
             assertClean(file.getFileName().toString(), literals(Files.readString(file)));
+        }
+    }
+
+    @Test
+    @DisplayName("the order support pages, and what the support chat is told, use none of the partner's words")
+    void supportPages() throws Exception {
+        List<Path> files = List.of(
+                FRONTEND.resolve("pages").resolve("OrderSupport.tsx"),
+                FRONTEND.resolve("components").resolve("support").resolve("SupportCard.tsx"),
+                FRONTEND.resolve("components").resolve("support").resolve("SupportChat.tsx"),
+                BACKEND.resolve("support").resolve("chat").resolve("SupportChatService.java"));
+        for (Path file : files) {
+            List<String> strings = literals(Files.readString(file));
+            assertThat(strings).as(file.getFileName().toString()).isNotEmpty();
+            assertClean(file.getFileName().toString(), strings);
         }
     }
 

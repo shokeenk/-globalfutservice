@@ -240,7 +240,8 @@ class CoachingHoldNotificationTest {
         @DisplayName("carries the session date and time in the customer's own time zone")
         void sessionInCustomerZone() {
             TransactionalEmails.Rendered email = TransactionalEmails.orderConfirmed(
-                    paid(START, "America/New_York"), BRAND, "https://x/track", "https://discord.gg/x");
+                    paid(START, "America/New_York"), BRAND, "https://x/track", "https://discord.gg/x",
+                    "https://x/coaching/GFS-26-COACH01/support");
 
             assertThat(email.text()).contains("Your session: Mon 5 Oct 2026, 9:30 AM (America/New_York)");
             assertThat(email.html()).contains("Your session").contains("9:30 AM");
@@ -250,7 +251,8 @@ class CoachingHoldNotificationTest {
         @DisplayName("says nothing about a session when the order has none")
         void noSession() {
             TransactionalEmails.Rendered email = TransactionalEmails.orderConfirmed(
-                    paid(null, null), BRAND, "https://x/track", "https://discord.gg/x");
+                    paid(null, null), BRAND, "https://x/track", "https://discord.gg/x",
+                    "https://x/coaching/GFS-26-COACH01/support");
 
             assertThat(email.text()).doesNotContain("Your session");
         }
