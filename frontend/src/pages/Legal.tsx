@@ -125,7 +125,7 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
 function Terms() {
   return (
     <>
-      <p className="text-chalk-faint">Last updated 3 September 2026</p>
+      <p className="text-chalk-faint">Last updated 2 October 2026</p>
 
       <Clause n={1} title="About GFS & Our Services">
         <p>
@@ -199,15 +199,17 @@ function Terms() {
           GFS coaching is provided through scheduled sessions. Package details and session
           duration are shown before purchase.
         </p>
+        {/*
+          Changed on the owner's instruction on 2 October 2026, with the order support
+          pages: coaching customers reach their coach on the order's Connect with Coach
+          page rather than on Discord. It replaces the client's two lines that named the
+          official Discord, so the confirmation email, the Coaching page and the terms say
+          the same thing.
+        */}
         <p>
-          After ordering, customers can connect with their coach or GFS Support through our
-          official Discord for scheduling and session-related communication.
-        </p>
-        <p>
-          Official Discord:{' '}
-          <a className="underline" href={BUSINESS.discordDm} target="_blank" rel="noreferrer">
-            {BUSINESS.discordName}
-          </a>
+          After ordering, customers connect with their coach from their GFS account: each
+          coaching order has a Connect with Coach page on this website for scheduling and
+          session-related communication.
         </p>
       </Clause>
 
