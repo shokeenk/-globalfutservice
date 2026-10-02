@@ -1637,9 +1637,10 @@ const en = {
     noSlotsInMonth: (month: string): string => `Nothing free in ${month}`,
     timesShownIn: 'Times shown in',
     coachesFrom: (name: string, zone: string) => `${name} coaches from ${zone}`,
-    coachDiscord:
-      'After ordering, reach your coach or GFS Support on our official Discord for scheduling ' +
-      'and session communication:',
+    /* The brief's coaching copy, then where the button is: the panel books from credits, not one order. */
+    coachConnect:
+      'Need help with your coaching order or session? Connect with your coach and continue the ' +
+      'conversation directly from your GFS account. Choose Connect with Coach on your coaching order:',
     policyLine: (minutes: number, hours: number) =>
       `${minutes} minutes · free to move up to ${hours}h before`,
     /* Both lengths on the booking screen, where a customer is about to spend a credit. */

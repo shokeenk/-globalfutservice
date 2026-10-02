@@ -25,8 +25,18 @@ import java.util.List;
  */
 public final class TransactionalEmails {
 
-    /** Coins go to order tracking; everything else goes to Discord. */
+    /** Coins go to order tracking, coaching to the order's support page, the rest to Discord. */
     private static final String COINS_SKU = "TRADING_SERVICE";
+    private static final String COACHING_SKU = "COACHING";
+
+    /** The brief's coaching copy, word for word, as the storefront's card has it. */
+    static final String COACH_TITLE = "Connect with Your Coach";
+    static final String COACH_BODY = "Need help with your coaching order or session? Connect with your coach "
+            + "and continue the conversation directly from your GFS account.";
+    static final String COACH_BUTTON = "CONNECT WITH COACH";
+    /** The support page is the owner's alone, so the link needs them signed in. */
+    static final String COACH_SIGN_IN =
+            "The page opens when you are signed in to the GFS account you placed this order from.";
 
     public record Rendered(String subject, String html, String text) {
     }
@@ -92,14 +102,6 @@ public final class TransactionalEmails {
     }
 
     /**
-     * Sent when an operator has verified the payment against the account.
-     *
-     * <p>Branches on the SKU, because what the customer does next genuinely differs.
-     * A coin order is fulfilled without them: the useful next step is watching it. Champs,
-     * boosting and coaching all need a conversation before anyone can start, and that
-     * conversation happens in a Discord ticket.
-     */
-    /**
      * The session a coaching order is booked into, in the customer's own time zone and
      * named, e.g. "Mon 5 Oct 2026, 7:00 PM (Europe/London)". Null when there is none.
      * An unreadable zone falls back to India's, where the business runs.
@@ -120,9 +122,22 @@ public final class TransactionalEmails {
                 .format(n.sessionStartsAt().atZone(zone)) + " (" + zone.getId() + ")";
     }
 
+    /**
+     * Sent when an operator has verified the payment against the account.
+     *
+     * <p>Branches on the SKU, because what the customer does next genuinely differs.
+     * A coin order is fulfilled without them: the useful next step is watching it. A
+     * coaching order is arranged with the coach on the order's own support page, on this
+     * site. Champs and boosting need a conversation before anyone can start, and that
+     * conversation happens in a Discord ticket, where the EA login is handed over.
+     *
+     * @param coachUrl the order's Connect with Coach page; used for coaching orders only
+     */
     public static Rendered orderConfirmed(OrderNotification n, EmailTemplate.Brand brand,
-                                          String trackUrl, String discordUrl) {
+                                          String trackUrl, String discordUrl, String coachUrl) {
         boolean coins = COINS_SKU.equals(n.sku());
+        boolean coaching = COACHING_SKU.equals(n.sku());
+        boolean discord = !coins && !coaching;
 
         List<EmailTemplate.InfoCard> cards = new ArrayList<>();
         cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
@@ -140,7 +155,7 @@ public final class TransactionalEmails {
             cards.add(EmailTemplate.InfoCard.accented("◷", "Your session", session));
         }
 
-        List<EmailTemplate.Step> steps = coins ? List.of() : List.of(
+        List<EmailTemplate.Step> steps = !discord ? List.of() : List.of(
                 new EmailTemplate.Step(
                         "Join our Discord server",
                         "Click the button below to join the GFS Discord server.",
@@ -161,18 +176,26 @@ public final class TransactionalEmails {
                 "Thank you for your order. Your order has been successfully received and is "
                         + "now being processed.",
                 cards,
-                null,
-                coins ? null : "NEXT STEPS",
+                coaching ? coachBlock() : null,
+                discord ? "NEXT STEPS" : null,
                 steps,
-                coins ? null
-                        : "Please make sure to join with the same email/Discord account used for "
-                          + "placing the order, to ensure a smooth and quick verification.",
-                coins ? "TRACK YOUR ORDER" : null,
-                coins ? trackUrl : null,
+                discord ? "Please make sure to join with the same email/Discord account used for "
+                          + "placing the order, to ensure a smooth and quick verification."
+                        : coaching ? COACH_SIGN_IN : null,
+                coins ? "TRACK YOUR ORDER" : coaching ? COACH_BUTTON : null,
+                coins ? trackUrl : coaching ? coachUrl : null,
                 orderFooterNote());
 
         String next = coins
                 ? "Track your order: " + trackUrl
+                : coaching
+                ? """
+                  CONNECT WITH YOUR COACH
+                  %s
+
+                  Connect with Coach: %s
+
+                  %s""".formatted(COACH_BODY, coachUrl, COACH_SIGN_IN)
                 : """
                   NEXT STEPS
                     1. Join our Discord server: %s
@@ -203,6 +226,12 @@ public final class TransactionalEmails {
 
         return new Rendered("Your GFS Order Is Confirmed",
                 EmailTemplate.render(content, brand), text);
+    }
+
+    /** The coaching title and the brief's text, above the Connect with Coach button. */
+    private static String coachBlock() {
+        return "<p style=\"margin:0 0 6px 0;font-size:18px;font-weight:800;\">" + COACH_TITLE + "</p>\n"
+                + EmailTemplate.paragraphs(COACH_BODY);
     }
 
     /**

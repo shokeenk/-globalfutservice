@@ -1445,9 +1445,9 @@ const es: Dictionary = {
     noSlotsInMonth: (month) => `No hay huecos en ${month}`,
     timesShownIn: 'Horas mostradas en',
     coachesFrom: (name, zone) => `${name} entrena desde ${zone}`,
-    coachDiscord:
-      'Tras el pedido, contacta con tu entrenador o con Soporte GFS en nuestro Discord ' +
-      'oficial para la programación y la comunicación de la sesión:',
+    coachConnect:
+      '¿Necesitas ayuda con tu pedido de clases o con una sesión? Conecta con tu entrenador y continúa ' +
+      'la conversación directamente desde tu cuenta de GFS. Elige «Conectar con el coach» en tu pedido de clases:',
     policyLine: (minutes, hours) =>
       `${minutes} minutos · puedes cambiarla gratis hasta ${hours} h antes`,
     policyLineBoth: (single, block, hours) =>

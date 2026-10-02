@@ -12,6 +12,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriUtils;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
@@ -81,7 +82,7 @@ public class EmailNotifier implements Notifier {
     @Override
     public void orderConfirmed(OrderNotification n) {
         var rendered = TransactionalEmails.orderConfirmed(
-                n, brand(), trackUrl(n), props.discordInvite());
+                n, brand(), trackUrl(n), props.discordInvite(), coachUrl(n));
         sendHtml(n, rendered);
     }
 
@@ -213,10 +214,10 @@ public class EmailNotifier implements Notifier {
      * Deliberately silent, for the same reason as {@link #orderPlaced}.
      *
      * <p>Coaching used to get its own "join us on Discord" mail at confirmation. The
-     * confirmation email now carries that: its Discord branch covers Champs, boosting and
-     * coaching alike, with the three-step block the reference design specifies. Leaving
-     * this one sending too would put two confirmations in a coaching customer's inbox
-     * within a second of each other. The event still fans out to the other channels.
+     * confirmation email now carries what the customer needs: for coaching, the link to the
+     * order's Connect with Coach page. Leaving this one sending too would put two
+     * confirmations in a coaching customer's inbox within a second of each other. The event
+     * still fans out to the other channels.
      */
     @Override
     public void coachingConfirmed(OrderNotification n) {
@@ -404,6 +405,12 @@ public class EmailNotifier implements Notifier {
      */
     private String trackUrl(OrderNotification n) {
         return publicUrl() + "/track?ref=" + n.publicRef();
+    }
+
+    /** The order's Connect with Coach page: where a coaching customer reaches their coach. */
+    private String coachUrl(OrderNotification n) {
+        return publicUrl() + "/coaching/"
+                + UriUtils.encodePathSegment(n.publicRef(), StandardCharsets.UTF_8) + "/support";
     }
 
     private static String hostOf(String url) {

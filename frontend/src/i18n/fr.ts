@@ -1452,9 +1452,9 @@ const fr: Dictionary = {
     noSlotsInMonth: (month) => `Aucun créneau en ${month}`,
     timesShownIn: 'Horaires affichés en',
     coachesFrom: (name, zone) => `${name} coache depuis ${zone}`,
-    coachDiscord:
-      'Après la commande, contactez votre coach ou le support GFS sur notre Discord officiel ' +
-      'pour la planification et les échanges liés à la séance :',
+    coachConnect:
+      'Besoin d’aide avec ta commande de coaching ou une séance ? Contacte ton coach et poursuis la ' +
+      'conversation directement depuis ton compte GFS. Choisis « Contacter le coach » sur ta commande de coaching :',
     policyLine: (minutes, hours) =>
       `${minutes} minutes · déplaçable gratuitement jusqu’à ${hours} h avant`,
     policyLineBoth: (single, block, hours) =>
