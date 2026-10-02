@@ -6,7 +6,8 @@ import type { Order } from '../lib/types'
 
 /*
  * After paying, the boosting and coaching checkouts point to the order's support page on
- * this site, where the Discord ticket used to be.
+ * this site. Boosting keeps its Discord ticket as well: it is where the EA login is handed
+ * over, as the checkout says before payment. Coaching has no Discord step any more.
  */
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
@@ -33,7 +34,7 @@ function paid(sku: string, publicRef: string): Order {
     publicRef, status: 'PAID', statusLabel: 'Queued', nextAction: 'NONE', serviceLabel: 'A service', sku,
     platform: 'PLAYSTATION', quantity: 1, currency: 'INR', totalMinor: 100000, totalFormatted: '₹1,000.00',
     lines: [], pointsRedeemed: 0, pointsEarned: 0, createdAt: '2026-10-01T10:00:00Z', timeline: [],
-    // What the server still sends for the bot's ticket: nothing here shows it any more.
+    // What the server sends for the bot's ticket: the boosting confirmation shows it.
     discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x', command: '/verify ABC' },
   } as unknown as Order
 }
@@ -44,7 +45,7 @@ beforeEach(() => {
 })
 
 describe('after paying', () => {
-  it('boosting: the confirmation offers the order\'s support page, and no Discord', async () => {
+  it('boosting: the confirmation offers the Discord ticket for the EA login, and the support page', async () => {
     api.get.mockImplementation(async (path: string) =>
       path.startsWith('/api/v1/orders/') ? paid('BOOST_CHAMPS', 'GFS-26-BOOST001') : [])
     render(
@@ -57,7 +58,8 @@ describe('after paying', () => {
     expect(cta).toHaveAttribute('href', '/orders/GFS-26-BOOST001/support')
     expect(screen.getByText('Connect with GFS')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'contact support' })).toHaveAttribute('href', '/support')
-    expect(document.body.textContent).not.toMatch(/discord|\/verify/i)
+    expect(screen.getByRole('link', { name: /Join Our Discord/ })).toHaveAttribute('href', 'https://discord.gg/x')
+    expect(screen.getByText('/verify ABC')).toBeInTheDocument()
   })
 
   it('coaching: the step after the confirmation connects with the coach, and no Discord', async () => {

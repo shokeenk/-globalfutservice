@@ -543,6 +543,23 @@ const en = {
     guestLookupClose: 'Hide the reference lookup',
     orderList: 'Order List',
     refreshedLive: 'This page updates itself.',
+    discordTicketTitle: 'Join Your Discord Ticket',
+    discordTicketBody: 'Continue your order on Discord. Our team is ready to assist you.',
+    discordTicketCta: 'Open Discord',
+    discordTicketCreated: 'Your ticket has been created!',
+    discordTicketQuote: (ref: string) => `Quote your order number, ${ref}, and the team will pick it up.`,
+    discordVerifyTitle: 'Get into your ticket',
+    discordVerifyBody:
+      'Join our Discord server, then run this command there. It opens your ticket and '
+      + 'nobody else can use it.',
+    discordVerifyJoin: 'Join Discord',
+    discordVerifyCopy: 'Copy command',
+    discordVerifyCopied: 'Copied',
+    discordPendingTitle: 'Your ticket opens automatically',
+    discordPendingBody:
+      'You signed in with Discord, so we already know your account. As soon as your '
+      + 'payment is submitted, your ticket appears in our server — nothing to do.',
+    discordOpenTicket: 'Open your ticket',
     sessionsTitle: 'Your sessions',
     sessionsBooked: (booked: number, total: number) => `${booked} of ${total} booked`,
     sessionsNoneYet:
@@ -1415,6 +1432,8 @@ const en = {
     discordDetailsPoint3: 'This keeps your account safe and secure.',
     afterPaymentNote: 'Place your order to continue. After payment you will be taken to Discord to finish setting up.',
 
+    ticketCreated: 'Your ticket has been created!',
+
     continueToPayment: 'Continue to Payment',
     termsLead: 'By continuing you agree to our',
     termsTerms: 'Terms of Service',
@@ -1457,6 +1476,8 @@ const en = {
     submittedLead:
       'Your order is placed and our team has been notified. We confirm the payment by hand, '
       + 'usually within minutes — this page updates itself when it lands.',
+    joinDiscord: 'Join Our Discord',
+    joinCaption: 'Click the button above to join, and our team will pick up your order there.',
     orderId: 'Order ID',
     service: 'Service',
     platformLabel: 'Platform',

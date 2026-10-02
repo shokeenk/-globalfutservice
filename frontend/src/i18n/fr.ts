@@ -461,6 +461,23 @@ const fr: Dictionary = {
     guestLookupClose: 'Masquer la recherche par référence',
     orderList: 'Liste des commandes',
     refreshedLive: 'Cette page se met à jour toute seule.',
+    discordTicketTitle: 'Rejoins ton ticket Discord',
+    discordTicketBody: 'Continue ta commande sur Discord. Notre équipe est prête à t’aider.',
+    discordTicketCta: 'Ouvrir Discord',
+    discordTicketCreated: 'Ton ticket est créé !',
+    discordTicketQuote: (ref) => `Donne ton numéro de commande, ${ref}, et l’équipe s’en occupe.`,
+    discordVerifyTitle: 'Accède à ton ticket',
+    discordVerifyBody:
+      'Rejoins notre serveur Discord, puis lance cette commande là-bas. Elle ouvre ton '
+      + 'ticket et personne d’autre ne peut l’utiliser.',
+    discordVerifyJoin: 'Rejoindre Discord',
+    discordVerifyCopy: 'Copier la commande',
+    discordVerifyCopied: 'Copié',
+    discordPendingTitle: 'Ton ticket s’ouvre tout seul',
+    discordPendingBody:
+      'Tu t’es connecté avec Discord, donc on connaît déjà ton compte. Dès que ton '
+      + 'paiement est envoyé, ton ticket apparaît sur le serveur : rien à faire.',
+    discordOpenTicket: 'Ouvrir ton ticket',
     sessionsTitle: 'Tes séances',
     sessionsBooked: (booked: number, total: number) => `${booked} sur ${total} réservées`,
     sessionsNoneYet:
@@ -1232,6 +1249,8 @@ const fr: Dictionary = {
     discordDetailsPoint3: 'C’est ce qui garde ton compte en sécurité.',
     afterPaymentNote: 'Passe ta commande pour continuer. Après le paiement, direction Discord pour finir la mise en place.',
 
+    ticketCreated: 'Ton ticket est créé !',
+
     continueToPayment: 'Continuer vers le paiement',
     termsLead: 'En continuant, tu acceptes nos',
     termsTerms: 'Conditions de service',
@@ -1274,6 +1293,8 @@ const fr: Dictionary = {
     submittedLead:
       'Ta commande est enregistrée et notre équipe est prévenue. On confirme le paiement à la '
       + 'main, en général en quelques minutes, et cette page se met à jour toute seule.',
+    joinDiscord: 'Rejoindre notre Discord',
+    joinCaption: 'Clique sur le bouton pour entrer ; notre équipe prend ta commande là-bas.',
     orderId: 'N° de commande',
     service: 'Service',
     platformLabel: 'Plateforme',

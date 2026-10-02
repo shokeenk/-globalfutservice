@@ -7,7 +7,8 @@ import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { ApiError, api } from '../lib/api'
-import { GuestSupportCard, SupportCard } from '../components/support/SupportCard'
+import { GuestSupportCard, SupportCard, supportModeFor } from '../components/support/SupportCard'
+import { ticketLink } from '../lib/discordTicket'
 import { dateTime } from '../lib/format'
 import { useSeo } from '../lib/seo'
 import type { MyCoaching, Order, OrderSummary } from '../lib/types'
@@ -399,6 +400,128 @@ function sessionWhen(iso: string, zone: string | null): string {
 }
 
 /**
+ * The Discord ticket, for boosting orders only: it is where the customer hands over their
+ * EA login, as the boosting checkout tells them before they pay. Everything else about an
+ * order -- for every order type -- goes through its support page, below.
+ *
+ * <p><b>Three panels, decided by the server.</b> Which one a customer sees depends on
+ * whether we know their Discord account, and the storefront is deliberately not the place
+ * that works that out -- it does not know how they signed in and should not learn.
+ *
+ * <ul>
+ *   <li><b>DIRECT</b> -- they are already in the channel, so link straight to it.</li>
+ *   <li><b>PENDING</b> -- they signed in with Discord and will be let in the moment the
+ *       ticket opens. Nothing to do, and saying so beats an instruction they do not
+ *       need.</li>
+ *   <li><b>VERIFY</b> -- most people. Join the server, run the command, get let in.</li>
+ * </ul>
+ *
+ * <p>A link to a channel is only ever offered to somebody who has actually been granted
+ * it. Sending the rest to a channel they cannot see would read as the site being broken.
+ */
+function DiscordTicket({ order }: { order: Order }) {
+  const t = useT()
+  const [copied, setCopied] = useState(false)
+  const open = ['PAID', 'CREDENTIALS_PENDING', 'READY_FOR_DELIVERY', 'IN_PROGRESS', 'ON_HOLD', 'DELIVERED']
+    .includes(order.status)
+  const access = order.discordAccess
+  const ticket = ticketLink(access)
+  if (!open || !access || !ticket) return null
+
+  const copyCommand = async () => {
+    if (!ticket?.command) return
+    try {
+      await navigator.clipboard.writeText(ticket.command)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard access is refused in some browsers and every insecure context. The
+      // command is on screen and selectable, so this costs a convenience, not the step.
+    }
+  }
+
+  return (
+    <div className="rounded-panel border border-[#5865F2]/30 bg-[#5865F2]/[0.06] p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#5865F2] text-paper">
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+            <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13.5px] font-semibold text-chalk">
+            {access.mode === 'DIRECT' || access.mode === 'QUOTE' ? t.track.discordTicketTitle
+              : access.mode === 'PENDING' ? t.track.discordPendingTitle
+              : t.track.discordVerifyTitle}
+          </p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-chalk-muted">
+            {access.mode === 'DIRECT' || access.mode === 'QUOTE' ? t.track.discordTicketBody
+              : access.mode === 'PENDING' ? t.track.discordPendingBody
+              : t.track.discordVerifyBody}
+          </p>
+        </div>
+        {ticket?.direct && (
+          <a
+            href={ticket.href}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 shrink-0 items-center rounded-edge bg-brand-500 px-4 text-[12.5px]
+                       font-semibold text-paper transition-colors duration-200 hover:bg-brand-400
+                       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-brand-400"
+          >
+            {t.track.discordOpenTicket}
+          </a>
+        )}
+        {ticket && !ticket.direct && (
+          <a
+            href={ticket.href}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 shrink-0 items-center rounded-edge bg-brand-500 px-4 text-[12.5px]
+                       font-semibold text-paper transition-colors duration-200 hover:bg-brand-400
+                       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-brand-400"
+          >
+            {access.mode === 'QUOTE' ? t.track.discordTicketCta : t.track.discordVerifyJoin}
+          </a>
+        )}
+      </div>
+
+      {/*
+        The command, on its own line and copyable. It already has the reference in it:
+        a customer assembling one from two places on the page is a customer who mistypes
+        it, and every mistype is a failed attempt against their own rate limit.
+      */}
+      {access.mode === 'QUOTE' && (
+        <p className="mt-2 text-[11.5px] text-chalk-faint">
+          {t.track.discordTicketQuote(order.publicRef)}
+        </p>
+      )}
+
+      {ticket?.command && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <code className="tnum min-w-0 flex-1 overflow-x-auto rounded-edge bg-ink-700/60 px-3 py-2
+                           text-[12.5px] font-semibold text-chalk">
+            {ticket.command}
+          </code>
+          <button
+            type="button"
+            onClick={() => { void copyCommand() }}
+            className="inline-flex h-9 shrink-0 items-center rounded-edge border border-ink-300 px-3
+                       text-[12px] font-semibold text-chalk-muted transition-colors duration-200
+                       hover:text-chalk focus-visible:outline focus-visible:outline-2
+                       focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+          >
+            {copied ? t.track.discordVerifyCopied : t.track.discordVerifyCopy}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Where the conversation about this order happens: its support page, on this site.
  *
  * <p>Shown once the money is in and while there is still work to do -- which is exactly
@@ -550,6 +673,8 @@ export function OrderView({
 
       <div className="space-y-7 p-6">
         <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} />
+
+        {supportModeFor(order.sku) === 'BOOSTING' && <DiscordTicket order={order} />}
 
         <OrderSupportCard order={order} signedIn={signedIn} />
 
