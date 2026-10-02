@@ -68,6 +68,28 @@ describe('starting the chat', () => {
     expect(addEvent).toHaveBeenCalledWith('order-support-opened', { 'order-id': 'GFS-26-70C4DPWH' }, expect.any(Function))
   })
 
+  it('a call tawk.to refuses is reported in the console, by its error code alone', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), document.createElement('div'), vi.fn())
+    const setAttributes = vi.fn()
+    const addEvent = vi.fn()
+    Object.assign(window.Tawk_API!, { setAttributes, addEvent })
+    window.Tawk_API?.onLoad?.()
+
+    const answer = setAttributes.mock.calls[0]?.[1] as (error?: unknown) => void
+    answer(undefined)
+    expect(warn).not.toHaveBeenCalled()
+
+    answer('ACCESS_ERROR')
+    expect(warn).toHaveBeenCalledWith('Live chat: tawk.to did not accept the order details:', 'ACCESS_ERROR')
+    // Nothing that was sent goes into the log.
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/rahul|GFS-26-70C4DPWH|Champs/i)
+
+    ;(addEvent.mock.calls[0]?.[2] as (error?: unknown) => void)(new Error('SERVER_ERROR'))
+    expect(warn).toHaveBeenLastCalledWith('Live chat: tawk.to did not accept the order event:', 'SERVER_ERROR')
+    warn.mockRestore()
+  })
+
   it('the same order again puts the same chat back, without a second script', () => {
     const first = document.createElement('div')
     startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), first, vi.fn())

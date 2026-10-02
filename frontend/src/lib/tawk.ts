@@ -86,6 +86,17 @@ export function allowedAttributes(attributes: Record<string, string>): Record<st
 }
 
 /**
+ * tawk.to answers each call with an error code, or nothing. Without this a refusal is
+ * silent, and the agent simply does not see the order. Only the code is logged, never
+ * what was sent.
+ */
+function refused(what: string): (error?: unknown) => void {
+  return (error) => {
+    if (error) console.warn(`Live chat: tawk.to did not accept ${what}:`, String(error instanceof Error ? error.message : error))
+  }
+}
+
+/**
  * Starts the chat for one order, inside {@code host}.
  *
  * @return 'started' when the script was added; 'attached' when it was already running for
@@ -114,9 +125,10 @@ export function startTawk(config: TawkConfig, reference: string, chat: TawkChat,
   api.visitor = visitor
   const attributes = allowedAttributes(chat.attributes)
   api.onLoad = () => {
-    api.setAttributes?.(attributes, () => {})
+    api.setAttributes?.(attributes, refused('the order details'))
     // Marks the conversation with the order it was opened from, for the agent.
-    api.addEvent?.('order-support-opened', { 'order-id': attributes['order-id'] ?? reference }, () => {})
+    api.addEvent?.('order-support-opened', { 'order-id': attributes['order-id'] ?? reference },
+      refused('the order event'))
   }
   window.Tawk_LoadStart = new Date()
 
