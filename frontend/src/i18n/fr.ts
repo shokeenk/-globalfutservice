@@ -428,8 +428,9 @@ const fr: Dictionary = {
     title: 'Cookies sur ce site',
     body:
       'Nous utilisons un cookie, pour te garder connecté. Avec ton accord, nous retenons '
-      + 'aussi ta langue et ta devise dans ce navigateur. Aucun suivi, aucune publicité, '
-      + 'rien de partagé avec qui que ce soit.',
+      + 'aussi ta langue et ta devise dans ce navigateur. Aucun suivi, aucune publicité. '
+      + 'Le chat en direct de la page d’assistance d’une commande dépose ses propres '
+      + 'cookies, et seulement quand tu le lances.',
     policyLink: 'Lire la politique de confidentialité',
     accept: 'Accepter',
     decline: 'Refuser',
