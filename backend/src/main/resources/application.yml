@@ -435,6 +435,11 @@ gfs:
     # Read out on the builder's review step; the provider is what enforces it.
     daily-cap: ${GFS_EMAIL_DAILY_CAP:100}
 
+  # The live chat on order support pages. The storefront has the property and widget ids;
+  # only the Secure Mode key lives here, because it signs who the customer is.
+  tawk:
+    secure-key: ${GFS_TAWK_SECURE_KEY:}
+
   rate-limit:
     enabled: true
     quotes-per-minute: 30          # the price-scraping surface
