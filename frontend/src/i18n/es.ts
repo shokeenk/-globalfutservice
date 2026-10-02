@@ -1037,7 +1037,7 @@ const es: Dictionary = {
       'lugar de esconderlo en el precio, para que la cifra que ves sea la que se te cobra. ' +
       'No se añade nada después.',
 
-    qPayment: '¿Qué métodos de pago aceptÃ¡is?',
+    qPayment: '¿Qué métodos de pago aceptáis?',
     aPayment:
       'UPI — incluidos GPay, PhonePe, Paytm y CRED — además de tarjetas de débito y ' +
       'crédito y banca online, todo gestionado por Razorpay. PayPal está disponible bajo ' +

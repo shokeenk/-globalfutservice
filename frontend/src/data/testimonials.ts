@@ -104,7 +104,7 @@ export const TESTIMONIALS: Testimonial[] = [
       + 'process took much less time than I expected.',
     translated: {
       es:
-        'Segundo pedido con GFS y otra vez todo fue rápido y sencillo. CogÃ­ 1,6 M de monedas durante la promo TOTS. Los precios estaban bien y todo el proceso llevó mucho menos tiempo del que esperaba.',
+        'Segundo pedido con GFS y otra vez todo fue rápido y sencillo. Cogí 1,6 M de monedas durante la promo TOTS. Los precios estaban bien y todo el proceso llevó mucho menos tiempo del que esperaba.',
       fr:
         'Deuxième commande chez GFS et une fois de plus tout a été rapide et simple. J’ai pris 1,6 M de coins pendant la promo TOTS. Les prix étaient bons et l’ensemble a pris bien moins de temps que prévu.',
     },
