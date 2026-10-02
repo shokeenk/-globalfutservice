@@ -425,8 +425,9 @@ const es: Dictionary = {
     title: 'Cookies en este sitio',
     body:
       'Usamos una cookie para mantener tu sesión iniciada. Si nos lo permites, también '
-      + 'recordamos tu idioma y tu moneda en este navegador. Sin rastreo, sin publicidad y '
-      + 'sin compartir nada con nadie.',
+      + 'recordamos tu idioma y tu moneda en este navegador. Sin rastreo y sin publicidad. '
+      + 'El chat en vivo de la página de soporte de un pedido usa sus propias cookies, y solo '
+      + 'cuando lo inicias.',
     policyLink: 'Leer la política de privacidad',
     accept: 'Aceptar',
     decline: 'Rechazar',

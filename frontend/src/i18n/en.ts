@@ -504,8 +504,8 @@ const en = {
     title: 'Cookies on this site',
     body:
       'We use one cookie, to keep you signed in. With your agreement we also remember your '
-      + 'language and currency in this browser. No tracking, no advertising, nothing shared '
-      + 'with anyone else.',
+      + 'language and currency in this browser. No tracking and no advertising. The live chat '
+      + 'on an order’s support page sets its own cookies, and only once you start it.',
     policyLink: 'Read the privacy policy',
     accept: 'Accept',
     decline: 'Decline',
