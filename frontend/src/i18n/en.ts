@@ -543,23 +543,6 @@ const en = {
     guestLookupClose: 'Hide the reference lookup',
     orderList: 'Order List',
     refreshedLive: 'This page updates itself.',
-    discordTicketTitle: 'Join Your Discord Ticket',
-    discordTicketBody: 'Continue your order on Discord. Our team is ready to assist you.',
-    discordTicketCta: 'Open Discord',
-    discordTicketCreated: 'Your ticket has been created!',
-    discordTicketQuote: (ref: string) => `Quote your order number, ${ref}, and the team will pick it up.`,
-    discordVerifyTitle: 'Get into your ticket',
-    discordVerifyBody:
-      'Join our Discord server, then run this command there. It opens your ticket and '
-      + 'nobody else can use it.',
-    discordVerifyJoin: 'Join Discord',
-    discordVerifyCopy: 'Copy command',
-    discordVerifyCopied: 'Copied',
-    discordPendingTitle: 'Your ticket opens automatically',
-    discordPendingBody:
-      'You signed in with Discord, so we already know your account. As soon as your '
-      + 'payment is submitted, your ticket appears in our server — nothing to do.',
-    discordOpenTicket: 'Open your ticket',
     sessionsTitle: 'Your sessions',
     sessionsBooked: (booked: number, total: number) => `${booked} of ${total} booked`,
     sessionsNoneYet:
@@ -1431,7 +1414,6 @@ const en = {
     discordDetailsPoint2: 'Our team will guide you step by step.',
     discordDetailsPoint3: 'This keeps your account safe and secure.',
     afterPaymentNote: 'Place your order to continue. After payment you will be taken to Discord to finish setting up.',
-    ticketCreated: 'Your ticket has been created!',
 
     continueToPayment: 'Continue to Payment',
     termsLead: 'By continuing you agree to our',
@@ -1469,17 +1451,12 @@ const en = {
     confirmedTitle: 'Order Confirmed!',
     confirmedBody: 'Your payment has been successful.',
     confirmedEmailed: 'We have sent the details to your email.',
-    confirmedLead:
-      'Our team has been notified. Join our Discord server to talk to the player handling '
-      + 'your order and follow its progress.',
+    confirmedLead: 'Our team has been notified.',
     submittedTitle: 'Payment submitted',
     submittedBody: 'We are checking it against our account now.',
     submittedLead:
       'Your order is placed and our team has been notified. We confirm the payment by hand, '
-      + 'usually within minutes — this page updates itself when it lands. Join our Discord to '
-      + 'talk to the player handling your order.',
-    joinDiscord: 'Join Our Discord',
-    joinCaption: 'Click the button above to join, and our team will pick up your order there.',
+      + 'usually within minutes — this page updates itself when it lands.',
     orderId: 'Order ID',
     service: 'Service',
     platformLabel: 'Platform',
@@ -1487,8 +1464,6 @@ const en = {
     amount: 'Amount',
     statusVerifying: 'Verifying',
     needHelp: 'Need help?',
-    joinOurDiscord: 'Join our Discord',
-    orWord: 'or',
     contactSupport: 'contact support',
 
     loadFailed: 'We could not load that order. Check the link, or contact support.',
@@ -1590,23 +1565,10 @@ const en = {
     statusVerifying: 'Verifying payment',
     emailSent: (email: string): string => `A confirmation email is on its way to ${email}.`,
     emailWhenConfirmed: (email: string): string => `We’ll email ${email} as soon as it is confirmed.`,
-    discordTitle: 'Join our Discord',
-    discordBody: 'Your next steps and session details will be shared on Discord.',
-    discordSteps: [
-      'Click the button below to join our server',
-      'Verify your account',
-      'You’ll get access to the coaching channel',
-      'Our team will reach out to you with further instructions',
-      'Share your gameplay if required',
-    ],
-    joinDiscord: 'Join Discord Server',
-    discordEmailed: 'This link has also been sent to your email.',
-    discordEmailLater: 'We’ll also email you this link once your payment is confirmed.',
     allSetTitle: 'You’re all set!',
     allSetLead: 'Time to improve.',
     allSetPaid: 'Payment completed',
     allSetVerifying: 'Payment submitted — we’ll confirm it shortly',
-    allSetDiscord: 'Discord access provided',
     allSetGuide: 'Our team will guide you further',
     allSetReady: 'Get ready for your coaching session',
     quote: 'Play smarter. Improve deliberately.',

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { CoachIcon, DiscordMark } from '../components/CoachingIcons'
+import { CoachIcon } from '../components/CoachingIcons'
 import type { CoachIconName } from '../components/CoachingIcons'
 import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
@@ -9,7 +9,7 @@ import { Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, Sele
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
-import { ticketLink } from '../lib/discordTicket'
+import { SupportCard } from '../components/support/SupportCard'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { useSeo } from '../lib/seo'
 import { ScheduleStep, formatSlot, type ChosenSlot } from './coaching/ScheduleStep'
@@ -20,7 +20,7 @@ import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 
 /**
- * Coaching, from choosing a package to joining Discord.
+ * Coaching, from choosing a package to the order's support page.
  *
  * <p>One page and a step machine rather than a route per step. The first three steps hold
  * nothing but choices, so losing them to a refresh costs a few clicks; once an order exists
@@ -37,7 +37,7 @@ import { useCatalog } from '../state/CatalogContext'
  * it say "submitted" and switch to "confirmed" on their own when that happens.
  */
 
-type Step = 'option' | 'details' | 'schedule' | 'review' | 'pay' | 'processing' | 'success' | 'discord' | 'done'
+type Step = 'option' | 'details' | 'schedule' | 'review' | 'pay' | 'processing' | 'success' | 'support' | 'done'
 type PayChoice = 'ONLINE' | ManualPaymentMethod
 type Variant = 'SINGLE_SESSION' | 'MONTHLY_6_SESSIONS'
 type CoachingPlatform = 'PLAYSTATION' | 'XBOX' | 'PC'
@@ -386,7 +386,7 @@ export default function CoachingBook() {
           <ProcessingStep orderRef={orderRef} onConfirmed={() => setStep('success')} />
         )}
 
-        {(step === 'success' || step === 'discord' || step === 'done') && orderRef && (
+        {(step === 'success' || step === 'support' || step === 'done') && orderRef && (
           <ConfirmedSteps
             step={step}
             orderRef={orderRef}
@@ -925,7 +925,7 @@ function ProcessingStep({ orderRef, onConfirmed }: { orderRef: string; onConfirm
 /* ------------------------------------------------------------------ steps 6–8 --- */
 
 /**
- * The confirmation, Discord and "all set" screens, sharing one live view of the order.
+ * The confirmation, support and "all set" screens, sharing one live view of the order.
  *
  * <p>Polled while the payment is unconfirmed and left alone once it is, so a customer who
  * paid by scan-and-pay and stays on this page watches "submitted" become "confirmed"
@@ -934,11 +934,11 @@ function ProcessingStep({ orderRef, onConfirmed }: { orderRef: string; onConfirm
 function ConfirmedSteps({
   step, orderRef, email, emailsEnabled, onStep,
 }: {
-  step: 'success' | 'discord' | 'done'
+  step: 'success' | 'support' | 'done'
   orderRef: string
   email: string
   emailsEnabled: boolean
-  onStep: (next: 'success' | 'discord' | 'done') => void
+  onStep: (next: 'success' | 'support' | 'done') => void
 }) {
   const t = useT()
   const b = t.coachingBook
@@ -963,7 +963,6 @@ function ConfirmedSteps({
   }, [orderRef])
 
   const paid = isPaid(order)
-  const ticket = ticketLink(order?.discordAccess)
 
   if (!order) {
     return <div className="grid min-h-[40vh] place-items-center"><Spinner size={32} /></div>
@@ -1007,7 +1006,7 @@ function ConfirmedSteps({
           </SummaryRow>
         </dl>
 
-        <Button full size="lg" className="mt-6" onClick={() => onStep('discord')}>
+        <Button full size="lg" className="mt-6" onClick={() => onStep('support')}>
           {b.continue} <CoachIcon name="arrowRight" className="ml-1.5 h-4 w-4" />
         </Button>
         {emailsEnabled && email && (
@@ -1020,60 +1019,14 @@ function ConfirmedSteps({
     )
   }
 
-  if (step === 'discord') {
+  if (step === 'support') {
+    /*
+      Where the conversation with the coach happens now: this order's support page on
+      this site, with the chat inside it. It replaces the step that sent people to Discord.
+    */
     return (
-      <div className="mx-auto max-w-xl rounded-panel border border-ink-400 bg-paper p-6 text-center shadow-e2 sm:p-8">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[#5865F2] text-white">
-          <DiscordMark className="h-9 w-9" />
-        </span>
-        <h1 className="display mt-5 text-display-md text-chalk">{b.discordTitle}</h1>
-        <p className="mt-2 text-body-sm text-chalk-muted">{b.discordBody}</p>
-
-        <ul className="mt-6 space-y-2.5 text-left">
-          {b.discordSteps.map((line) => (
-            <li key={line} className="flex items-start gap-2.5 text-[13px] text-chalk-muted">
-              <CoachIcon name="checkCircle" className="h-5 w-5 shrink-0 text-ok" />
-              {line}
-            </li>
-          ))}
-        </ul>
-
-        {/*
-          This order's ticket, not the shared order channel.
-
-          It used to be a hardcoded channel id, which sent every customer to the same
-          lobby regardless of what they had just paid for — the bot had already opened a
-          ticket for this order and nothing linked to it.
-        */}
-        {ticket && (
-          <>
-            <a
-              href={ticket.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-press bg-[#5865F2]
-                         text-body-sm font-semibold text-white shadow-e2 transition-colors duration-200
-                         hover:bg-[#4752C4] focus-visible:outline focus-visible:outline-2
-                         focus-visible:outline-offset-2 focus-visible:outline-[#5865F2]"
-            >
-              <DiscordMark className="h-5 w-5" />
-              {ticket.direct ? t.track.discordOpenTicket : b.joinDiscord}
-              <span aria-hidden="true">&#8599;</span>
-            </a>
-            {ticket.command && (
-              <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
-                {t.track.discordVerifyBody}{' '}
-                <code className="rounded bg-ink-700/60 px-1.5 py-0.5 font-semibold text-chalk">
-                  {ticket.command}
-                </code>
-              </p>
-            )}
-          </>
-        )}
-        {emailsEnabled && (
-          <p className="mt-3 text-[12px] text-chalk-faint">{paid ? b.discordEmailed : b.discordEmailLater}</p>
-        )}
-
+      <div className="mx-auto max-w-xl rounded-panel border border-ink-400 bg-paper p-6 shadow-e2 sm:p-8">
+        <SupportCard reference={order.publicRef} sku={order.sku} />
         <Button variant="secondary" full className="mt-5" onClick={() => onStep('done')}>
           {b.continue}
         </Button>
@@ -1088,7 +1041,6 @@ function ConfirmedSteps({
         <p className="mt-1 text-body-sm text-chalk-muted">{b.allSetLead}</p>
         <ul className="mt-6 space-y-3">
           <AllSetRow done={paid} label={paid ? b.allSetPaid : b.allSetVerifying} />
-          <AllSetRow done label={b.allSetDiscord} />
           <AllSetRow done label={b.allSetGuide} />
           <AllSetRow done label={b.allSetReady} />
         </ul>

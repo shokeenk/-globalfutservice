@@ -461,23 +461,6 @@ const fr: Dictionary = {
     guestLookupClose: 'Masquer la recherche par référence',
     orderList: 'Liste des commandes',
     refreshedLive: 'Cette page se met à jour toute seule.',
-    discordTicketTitle: 'Rejoins ton ticket Discord',
-    discordTicketBody: 'Continue ta commande sur Discord. Notre équipe est prête à t’aider.',
-    discordTicketCta: 'Ouvrir Discord',
-    discordTicketCreated: 'Ton ticket est créé !',
-    discordTicketQuote: (ref) => `Donne ton numéro de commande, ${ref}, et l’équipe s’en occupe.`,
-    discordVerifyTitle: 'Accède à ton ticket',
-    discordVerifyBody:
-      'Rejoins notre serveur Discord, puis lance cette commande là-bas. Elle ouvre ton '
-      + 'ticket et personne d’autre ne peut l’utiliser.',
-    discordVerifyJoin: 'Rejoindre Discord',
-    discordVerifyCopy: 'Copier la commande',
-    discordVerifyCopied: 'Copié',
-    discordPendingTitle: 'Ton ticket s’ouvre tout seul',
-    discordPendingBody:
-      'Tu t’es connecté avec Discord, donc on connaît déjà ton compte. Dès que ton '
-      + 'paiement est envoyé, ton ticket apparaît sur le serveur : rien à faire.',
-    discordOpenTicket: 'Ouvrir ton ticket',
     sessionsTitle: 'Tes séances',
     sessionsBooked: (booked: number, total: number) => `${booked} sur ${total} réservées`,
     sessionsNoneYet:
@@ -1248,7 +1231,6 @@ const fr: Dictionary = {
     discordDetailsPoint2: 'Notre équipe te guide étape par étape.',
     discordDetailsPoint3: 'C’est ce qui garde ton compte en sécurité.',
     afterPaymentNote: 'Passe ta commande pour continuer. Après le paiement, direction Discord pour finir la mise en place.',
-    ticketCreated: 'Ton ticket est créé !',
 
     continueToPayment: 'Continuer vers le paiement',
     termsLead: 'En continuant, tu acceptes nos',
@@ -1286,17 +1268,12 @@ const fr: Dictionary = {
     confirmedTitle: 'Commande confirmée !',
     confirmedBody: 'Ton paiement est bien passé.',
     confirmedEmailed: 'On t’a envoyé les détails par e-mail.',
-    confirmedLead:
-      'Notre équipe est prévenue. Rejoins notre Discord pour parler au joueur qui s’occupe '
-      + 'de ta commande et suivre son avancement.',
+    confirmedLead: 'Notre équipe est prévenue.',
     submittedTitle: 'Paiement envoyé',
     submittedBody: 'On le vérifie sur notre compte.',
     submittedLead:
       'Ta commande est enregistrée et notre équipe est prévenue. On confirme le paiement à la '
-      + 'main, en général en quelques minutes, et cette page se met à jour toute seule. Rejoins '
-      + 'notre Discord pour parler au joueur qui s’en occupe.',
-    joinDiscord: 'Rejoindre notre Discord',
-    joinCaption: 'Clique sur le bouton pour entrer ; notre équipe prend ta commande là-bas.',
+      + 'main, en général en quelques minutes, et cette page se met à jour toute seule.',
     orderId: 'N° de commande',
     service: 'Service',
     platformLabel: 'Plateforme',
@@ -1304,8 +1281,6 @@ const fr: Dictionary = {
     amount: 'Montant',
     statusVerifying: 'Vérification',
     needHelp: 'Besoin d’aide ?',
-    joinOurDiscord: 'Rejoins notre Discord',
-    orWord: 'ou',
     contactSupport: 'contacte le support',
 
     loadFailed: 'Impossible de charger cette commande. Vérifie le lien ou contacte le support.',
@@ -1407,23 +1382,10 @@ const fr: Dictionary = {
     statusVerifying: 'Vérification du paiement',
     emailSent: (email: string): string => `Un e-mail de confirmation est en route vers ${email}.`,
     emailWhenConfirmed: (email: string): string => `Nous écrirons à ${email} dès que ce sera confirmé.`,
-    discordTitle: 'Rejoins notre Discord',
-    discordBody: 'Tes prochaines étapes et les détails de ta séance seront partagés sur Discord.',
-    discordSteps: [
-      'Clique sur le bouton ci-dessous pour rejoindre notre serveur',
-      'Vérifie ton compte',
-      'Tu auras accès au salon de coaching',
-      'Notre équipe te contactera avec la suite des instructions',
-      'Partage tes matchs si on te le demande',
-    ],
-    joinDiscord: 'Rejoindre le serveur Discord',
-    discordEmailed: 'Ce lien t’a aussi été envoyé par e-mail.',
-    discordEmailLater: 'Nous t’enverrons aussi ce lien par e-mail dès que ton paiement sera confirmé.',
     allSetTitle: 'Tout est prêt !',
     allSetLead: 'À toi de progresser.',
     allSetPaid: 'Paiement effectué',
     allSetVerifying: 'Paiement envoyé — confirmation très bientôt',
-    allSetDiscord: 'Accès Discord fourni',
     allSetGuide: 'Notre équipe te guide pour la suite',
     allSetReady: 'Prépare-toi pour ta séance de coaching',
     quote: 'Joue plus intelligemment. Progresse volontairement.',
