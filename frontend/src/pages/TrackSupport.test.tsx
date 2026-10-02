@@ -6,6 +6,7 @@ import type { Order } from '../lib/types'
 /*
  * The order page offers the support card where the Discord panel used to be: the signed-in
  * owner gets the way to the order's support page, a guest the way to a support ticket.
+ * Boosting orders keep their Discord ticket too, as the place the EA login is handed over.
  */
 
 const api = vi.hoisted(() => ({ get: vi.fn(async () => ({ creditBalance: 0, upcoming: [] })), post: vi.fn() }))
@@ -30,7 +31,7 @@ function order(sku: string, status: string): Order {
     credentialsRequired: false, credentialsSubmitted: false, currency: 'INR', totalMinor: 100000,
     totalFormatted: '₹1,000.00', lines: [], pointsRedeemed: 0, pointsEarned: 0, createdAt: '2026-10-01T10:00:00Z',
     timeline: [],
-    // The Discord access the server still sends: the page no longer shows it.
+    // The Discord access the server sends: shown for boosting orders only.
     discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x', command: '/verify ABC' },
   } as unknown as Order
 }
@@ -40,8 +41,15 @@ function view(o: Order, signedIn: boolean) {
 }
 
 describe('the order page\'s support card', () => {
+  it('BOOST_CHAMPS, signed in: the support card, and the Discord ticket for the EA login', () => {
+    view(order('BOOST_CHAMPS', 'IN_PROGRESS'), true)
+    expect(screen.getByRole('link', { name: 'Create Order Ticket' }))
+      .toHaveAttribute('href', '/orders/GFS-26-70C4DPWH/support')
+    expect(screen.getByRole('link', { name: 'Join Discord' })).toHaveAttribute('href', 'https://discord.gg/x')
+    expect(screen.getByText('/verify ABC')).toBeInTheDocument()
+  })
+
   it.each([
-    ['BOOST_CHAMPS', 'Create Order Ticket', '/orders/GFS-26-70C4DPWH/support'],
     ['TRADING_SERVICE', 'Create Order Support', '/orders/GFS-26-70C4DPWH/support'],
     ['COACHING', 'Connect with Coach', '/coaching/GFS-26-70C4DPWH/support'],
   ])('%s, signed in: the support card, and no Discord', (sku, cta, path) => {

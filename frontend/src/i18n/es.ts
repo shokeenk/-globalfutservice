@@ -458,6 +458,23 @@ const es: Dictionary = {
     guestLookupClose: 'Ocultar la búsqueda por referencia',
     orderList: 'Lista de pedidos',
     refreshedLive: 'Esta página se actualiza sola.',
+    discordTicketTitle: 'Entra en tu ticket de Discord',
+    discordTicketBody: 'Continúa tu pedido en Discord. Nuestro equipo está listo para ayudarte.',
+    discordTicketCta: 'Abrir Discord',
+    discordTicketCreated: '¡Tu ticket está creado!',
+    discordTicketQuote: (ref) => `Indica tu número de pedido, ${ref}, y el equipo lo atenderá.`,
+    discordVerifyTitle: 'Entra en tu ticket',
+    discordVerifyBody:
+      'Entra en nuestro servidor de Discord y ejecuta allí este comando. Abrirá tu '
+      + 'ticket y nadie más podrá usarlo.',
+    discordVerifyJoin: 'Entrar en Discord',
+    discordVerifyCopy: 'Copiar comando',
+    discordVerifyCopied: 'Copiado',
+    discordPendingTitle: 'Tu ticket se abre solo',
+    discordPendingBody:
+      'Iniciaste sesión con Discord, así que ya conocemos tu cuenta. En cuanto se envíe '
+      + 'tu pago, tu ticket aparecerá en el servidor: no tienes que hacer nada.',
+    discordOpenTicket: 'Abrir tu ticket',
     sessionsTitle: 'Tus sesiones',
     sessionsBooked: (booked: number, total: number) => `${booked} de ${total} reservadas`,
     sessionsNoneYet:
@@ -1225,6 +1242,8 @@ const es: Dictionary = {
     discordDetailsPoint3: 'Así tu cuenta está más segura.',
     afterPaymentNote: 'Haz el pedido para continuar. Tras el pago te llevamos a Discord para terminar de prepararlo.',
 
+    ticketCreated: '¡Tu ticket está creado!',
+
     continueToPayment: 'Continuar al pago',
     termsLead: 'Al continuar aceptas nuestros',
     termsTerms: 'Términos del servicio',
@@ -1267,6 +1286,8 @@ const es: Dictionary = {
     submittedLead:
       'Tu pedido está hecho y nuestro equipo ya está avisado. Confirmamos el pago a mano, '
       + 'normalmente en minutos, y esta página se actualiza sola cuando llega.',
+    joinDiscord: 'Únete a nuestro Discord',
+    joinCaption: 'Pulsa el botón para entrar; nuestro equipo atenderá allí tu pedido.',
     orderId: 'Nº de pedido',
     service: 'Servicio',
     platformLabel: 'Plataforma',
