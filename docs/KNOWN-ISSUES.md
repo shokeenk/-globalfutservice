@@ -177,3 +177,33 @@ longer `timeout`, or wait on what the save renders (`findByRole('status')`, whic
 test already checks afterwards) before asserting on the call.
 
 **Evidence:** observed once; the cause is read, not confirmed.
+
+---
+
+## 8. The live storefront sends no Content-Security-Policy
+
+**Where:** the `gfs-web` storefront on Render, a static site behind Cloudflare. The policy
+in `frontend/nginx.conf.template` and `frontend/vercel.json` never reaches it: a static
+site does not run nginx, and the Docker service `render.yaml` describes is not the one
+serving the domain.
+
+So the policy in the repository -- including the tawk.to sources added for the order
+support chat -- is enforced nowhere a customer is. The same goes for the template's other
+headers: the live response carries `x-content-type-options: nosniff` and none of
+`X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` or `Strict-Transport-Security`.
+
+**When it bites:** a script that should not be there -- a compromised third-party script,
+an injection -- runs with nothing to stop it, and the pages can be framed by another site.
+Nothing breaks day to day, which is why it goes unnoticed: payments and the chat work
+either way.
+
+**What it would take:** add the header in Render's settings for the static site, on `/*`,
+as `Content-Security-Policy-Report-Only` first, with the policy from `frontend/vercel.json`
+(the API is proxied on the same origin, so `'self'` covers it). Watch what it reports it
+would block -- Cloudflare-injected scripts, the Razorpay checkout, Google sign-in, the
+tawk.to chat -- adjust, then send the same value as `Content-Security-Policy`. The other
+headers in the nginx template can go in at the same time.
+
+**Evidence:** observed. On 2 October 2026 `https://globalfutservices.com/` and a deep route
+both answered with `rndr-id` and `Server: cloudflare`, `x-content-type-options: nosniff`, and
+no `Content-Security-Policy`; `/api/v1/catalog` answered JSON on the same origin.
