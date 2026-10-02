@@ -1553,6 +1553,44 @@ const fr: Dictionary = {
       aml: { label: 'LCB-FT et KYC', blurb: 'Comment nous vérifions l’identité et pourquoi nous devons parfois demander.', keywords: 'aml kyc lcb-ft legal blanchiment identite verification' },
     },
   },
+  orderSupport: {
+    cardTitleOrder: 'Contacter GFS',
+    cardTitleCoach: 'Contacter ton coach',
+    cardBodyBoosting:
+      'Besoin d’aide avec ta commande ? Crée un ticket et l’équipe Support de GFS te répondra rapidement '
+      + 'pour te guider dans les prochaines étapes.',
+    cardBodyCoins:
+      'Un problème avec ta commande de crédits ? Crée une demande d’assistance et l’équipe Support de GFS '
+      + 'vérifiera la commande et t’aidera à le résoudre.',
+    cardBodyCoaching:
+      'Besoin d’aide avec ta commande de coaching ou une séance ? Contacte ton coach et poursuis la conversation '
+      + 'directement depuis ton compte GFS.',
+    ctaBoosting: 'Créer un ticket de commande',
+    ctaCoins: 'Créer une demande d’assistance',
+    ctaCoaching: 'Contacter le coach',
+    eyebrow: 'Assistance commande',
+    summaryReference: 'Commande',
+    summaryService: 'Service',
+    summaryPlatform: 'Plateforme',
+    summaryStatus: 'Statut',
+    summaryCoins: 'Crédits',
+    summarySession: 'Séance',
+    summaryCoach: 'Coach',
+    chatNoticeTitle: 'Chat en direct',
+    chatNotice:
+      'Le chat en direct est fourni par tawk.to. En le lançant, tu partages avec eux ton nom, ton e-mail et les '
+      + 'informations de cette commande, et ils déposent leurs propres cookies.',
+    startChat: 'Lancer le chat',
+    unavailable: 'Le chat en direct n’est pas disponible pour le moment.',
+    unavailableLink: 'Aller à la page Support',
+    loadFailed: 'Le chat n’a pas pu se charger.',
+    pageFailed: 'Cette page n’a pas pu se charger. Réessaie.',
+    backToOrder: 'Retour à ta commande',
+    guestTitle: 'Besoin d’aide avec cette commande ?',
+    guestBody: (ref: string) =>
+      `Le chat en direct est réservé aux commandes passées depuis un compte. Ouvre un ticket d’assistance et indique la commande ${ref}.`,
+    guestCta: 'Ouvrir un ticket d’assistance',
+  },
   catalog: {
     services: {
       TRADING_SERVICE: 'Acheter des crédits',

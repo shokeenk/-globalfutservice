@@ -1546,6 +1546,44 @@ const es: Dictionary = {
       aml: { label: 'AML y KYC', blurb: 'Cómo verificamos la identidad y por qué a veces tenemos que preguntar.', keywords: 'aml kyc legal blanqueo de capitales identidad verificacion' },
     },
   },
+  orderSupport: {
+    cardTitleOrder: 'Conecta con GFS',
+    cardTitleCoach: 'Conecta con tu coach',
+    cardBodyBoosting:
+      '¿Necesitas ayuda con tu pedido? Crea un ticket y nuestro equipo de soporte de GFS se pondrá en contacto '
+      + 'contigo en breve y te guiará en los siguientes pasos.',
+    cardBodyCoins:
+      '¿Tienes un problema con tu pedido de monedas? Crea una solicitud de soporte y nuestro equipo de soporte '
+      + 'de GFS revisará el pedido y te ayudará a resolverlo.',
+    cardBodyCoaching:
+      '¿Necesitas ayuda con tu pedido de clases o con una sesión? Conecta con tu coach y continúa la '
+      + 'conversación directamente desde tu cuenta de GFS.',
+    ctaBoosting: 'Crear ticket del pedido',
+    ctaCoins: 'Crear solicitud de soporte',
+    ctaCoaching: 'Conectar con el coach',
+    eyebrow: 'Soporte del pedido',
+    summaryReference: 'Pedido',
+    summaryService: 'Servicio',
+    summaryPlatform: 'Plataforma',
+    summaryStatus: 'Estado',
+    summaryCoins: 'Monedas',
+    summarySession: 'Sesión',
+    summaryCoach: 'Coach',
+    chatNoticeTitle: 'Chat en vivo',
+    chatNotice:
+      'El chat en vivo lo ofrece tawk.to. Al iniciarlo, compartes con ellos tu nombre, tu correo y los datos '
+      + 'de este pedido, y usan sus propias cookies.',
+    startChat: 'Iniciar chat',
+    unavailable: 'El chat en vivo no está disponible ahora mismo.',
+    unavailableLink: 'Ir a la página de soporte',
+    loadFailed: 'No se pudo cargar el chat.',
+    pageFailed: 'No se pudo cargar esta página. Inténtalo de nuevo.',
+    backToOrder: 'Volver a tu pedido',
+    guestTitle: '¿Necesitas ayuda con este pedido?',
+    guestBody: (ref: string) =>
+      `El chat en vivo es para pedidos hechos desde una cuenta. Abre un ticket de soporte e indica el pedido ${ref}.`,
+    guestCta: 'Abrir un ticket de soporte',
+  },
   catalog: {
     services: {
       TRADING_SERVICE: 'Comprar monedas',

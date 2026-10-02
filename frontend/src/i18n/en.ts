@@ -1753,6 +1753,48 @@ const en = {
     },
   },
   /*
+    Order support: the card on an order, and the support page around the live chat.
+    The card copy is the client's, word for word.
+  */
+  orderSupport: {
+    cardTitleOrder: 'Connect with GFS',
+    cardTitleCoach: 'Connect with Your Coach',
+    cardBodyBoosting:
+      'Need help with your order? Create a ticket and our GFS Support team will connect with you shortly '
+      + 'and guide you through the next steps.',
+    cardBodyCoins:
+      'Having an issue with your coin order? Create a support request and our GFS Support team will check '
+      + 'the order and help you resolve it.',
+    cardBodyCoaching:
+      'Need help with your coaching order or session? Connect with your coach and continue the conversation '
+      + 'directly from your GFS account.',
+    ctaBoosting: 'Create Order Ticket',
+    ctaCoins: 'Create Order Support',
+    ctaCoaching: 'Connect with Coach',
+    eyebrow: 'Order support',
+    summaryReference: 'Order',
+    summaryService: 'Service',
+    summaryPlatform: 'Platform',
+    summaryStatus: 'Status',
+    summaryCoins: 'Coins',
+    summarySession: 'Session',
+    summaryCoach: 'Coach',
+    chatNoticeTitle: 'Live chat',
+    chatNotice:
+      'Live chat is provided by tawk.to. Starting it shares your name, email and this order’s details with '
+      + 'them, and they set their own cookies.',
+    startChat: 'Start chat',
+    unavailable: 'Live chat is unavailable right now.',
+    unavailableLink: 'Go to the Support page',
+    loadFailed: 'The chat could not be loaded.',
+    pageFailed: 'This page could not be loaded. Please try again.',
+    backToOrder: 'Back to your order',
+    guestTitle: 'Need help with this order?',
+    guestBody: (ref: string) =>
+      `Live chat is for orders placed from an account. Open a support ticket and mention order ${ref}.`,
+    guestCta: 'Open a support ticket',
+  },
+  /*
    * Server-supplied strings.
    *
    * The API builds service names, variant labels and price-breakdown lines in Java, in
