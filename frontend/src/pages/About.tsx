@@ -133,9 +133,8 @@ export default function About() {
             <h2 className="display text-display-sm text-chalk">The business</h2>
             <p>
               This website is operated by <strong className="text-chalk">{BUSINESS.legalName}</strong>{' '}
-              (Discord: {BUSINESS.discordName}), trading as {BUSINESS.tradingName}, from
-              Jodhpur, Rajasthan. It is a small
-              operation rather than a marketplace: the people answering support are the
+              (Discord: {BUSINESS.discordName}), trading as {BUSINESS.tradingName}. It is a
+              small operation rather than a marketplace: the people answering support are the
               people working the orders.
             </p>
 
