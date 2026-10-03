@@ -147,10 +147,9 @@ export default function About() {
                   <dd className="text-chalk-muted">{BUSINESS.legalName}</dd>
                 </div>
                 {/*
-                  No registered address here. This block exists so a reader knows who they
-                  are dealing with and how to reach them, and the name, Discord and email
-                  do that. The address is on /contact and in the policy documents, where it is
-                  part of the contract rather than part of an introduction.
+                  This block exists so a reader knows who they are dealing with and how to
+                  reach them, and the name, Discord and email do that. Where the operator
+                  lives is not published anywhere on the site, at the owner's instruction.
                 */}
                 <div className="flex gap-2">
                   <dt className="w-[132px] shrink-0 text-chalk-faint">Discord</dt>

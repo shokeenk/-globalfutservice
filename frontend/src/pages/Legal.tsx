@@ -1166,11 +1166,8 @@ function updatedOn() {
  * policy that never names its operator is one a reader has to take on trust, and a
  * gateway reviewing these pages checks each of them for the entity rather than just one.
  *
- * <p>The registered address is not among them, at the owner's instruction. It is a
- * residential one, and it is published in full on /contact -- which is where the
- * gateway's verification points, and where a reader following "who operates this" from
- * any policy page arrives. Named, phoned and emailed is enough to identify the operator
- * here; the address is one page away rather than on all six.
+ * <p>Named, on Discord and emailed is enough to identify the operator. Where the
+ * operator lives is not published anywhere on the site, at the owner's instruction.
  */
 function Operator() {
   return (
