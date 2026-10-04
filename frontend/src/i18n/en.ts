@@ -973,7 +973,7 @@ const en = {
     deliveryInfoTitle: 'Delivery information',
     deliveryInfoLead:
       'For this type of delivery, the trader signs in to your account and hands over the '
-      + 'FC 26 coins, players, packs or SBCs.',
+      + 'FC 27 coins, players, packs or SBCs.',
     deliveryInfoPacks:
       'If you buy packs, we transfer the matching number of coins to your account and you '
       + 'open the packs yourself.',

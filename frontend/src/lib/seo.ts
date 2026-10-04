@@ -14,7 +14,7 @@ import { useEffect } from 'react'
  * every heading says FC 26. That is what hard-coding a season costs, every
  * September.
  */
-export const SEASON = 'FC 26'
+export const SEASON = 'FC 27'
 
 type SeoOptions = {
   title: string

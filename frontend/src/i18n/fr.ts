@@ -828,7 +828,7 @@ const fr: Dictionary = {
     deliveryInfoTitle: 'Informations de livraison',
     deliveryInfoLead:
       'Pour ce type de livraison, le trader se connecte à ton compte et te remet les '
-      + 'crédits, joueurs, packs ou DCE de FC 26.',
+      + 'crédits, joueurs, packs ou DCE de FC 27.',
     deliveryInfoPacks:
       'Si tu achètes des packs, nous transférons les crédits correspondants et tu les ouvres toi-même.',
     deliveryInfoWait:
