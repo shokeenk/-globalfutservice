@@ -1,6 +1,7 @@
 package com.globalfutservice.config;
 
 import com.globalfutservice.catalog.SeasonPriceCheck;
+import com.globalfutservice.payments.payop.PayopStartupCheck;
 import com.globalfutservice.domain.crypto.SecureIds;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
@@ -39,16 +40,18 @@ public class BootstrapRunner implements ApplicationRunner {
     /** Spring's own mail binding, for the relay account the app actually signs in as. */
     private final MailProperties mail;
     private final SeasonPriceCheck seasonPrices;
+    private final PayopStartupCheck payop;
 
     public BootstrapRunner(AccountRepository accounts, PasswordEncoder passwordEncoder,
                            PaymentGateway gateway, AppProperties props, MailProperties mail,
-                           SeasonPriceCheck seasonPrices) {
+                           SeasonPriceCheck seasonPrices, PayopStartupCheck payop) {
         this.accounts = accounts;
         this.passwordEncoder = passwordEncoder;
         this.gateway = gateway;
         this.props = props;
         this.mail = mail;
         this.seasonPrices = seasonPrices;
+        this.payop = payop;
     }
 
     @Override
@@ -57,6 +60,8 @@ public class BootstrapRunner implements ApplicationRunner {
         // First, so a season with nothing on sale stops the start before anything is
         // written. See SeasonPriceCheck for the outage this is here because of.
         seasonPrices.verify();
+        // Payop on without its credentials, or an unreadable token expiry, stops here too.
+        payop.verify();
         createBootstrapAdmin();
         reportConfiguration();
     }

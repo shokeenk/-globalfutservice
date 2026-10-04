@@ -71,7 +71,9 @@ public record AppProperties(
         @Valid @NotNull ManualPayments manualPayments,
         @Valid @NotNull FutTransfer futTransfer,
         @Valid @NotNull Campaigns campaigns,
-        @Valid @NotNull Tawk tawk) {
+        @Valid @NotNull Tawk tawk,
+        @Valid @NotNull Payop payop,
+        @Valid @NotNull Fx fx) {
 
     public record Security(
             /** HS256 signing key for access tokens. Minimum 32 bytes. */
@@ -148,7 +150,15 @@ public record AppProperties(
              * while two at 9am on consecutive days count as one. The customer's intuition
              * about "today" is the one the streak has to match.
              */
-            @DefaultValue("Asia/Kolkata") ZoneId bonusZone) {
+            @DefaultValue("Asia/Kolkata") ZoneId bonusZone,
+
+            /**
+             * Whether orders outside the loyalty currency earn or spend points. Off, and it
+             * stays off until the client decides what a point is worth in USD, EUR and GBP:
+             * points are rupees, and no rule for converting them exists. Switching it on
+             * before then stops the application at start-up rather than guessing.
+             */
+            @DefaultValue("false") boolean internationalPoints) {
     }
 
     public record Coaching(
@@ -429,6 +439,88 @@ public record AppProperties(
         public String toString() {
             return "Tawk[secureKey=" + (secureModeConfigured() ? "[redacted]" : "unset") + "]";
         }
+    }
+
+    /**
+     * Payop, the gateway behind the checkout's International tab, for orders outside INR.
+     *
+     * <p>Off by default. Switched on, it refuses to start without its four credentials, so a
+     * half-configured gateway never reaches a customer. No credential is ever logged or
+     * returned by the API.
+     *
+     * <p><b>Payop's commission must stay "merchant pays"</b> in Payop's panel. The checkout
+     * adds each method's fee to the customer's total itself; if Payop were also set to charge
+     * the payer, every customer would pay the fee twice.
+     *
+     * @param apiUrl          Payop's API, https://api.payop.com
+     * @param checkoutUrl     where the payer is sent to pay, https://checkout.payop.com
+     * @param publicKey       the project's public key, sent with every invoice
+     * @param secretKey       the project's secret key: signs invoices. Server only
+     * @param jwtToken        the API token from the Payop dashboard, for transaction and
+     *                        method lookups. Server only
+     * @param applicationId   the project ID the available-methods lookup is keyed by
+     * @param jwtExpiresAt    when that token stops working, as chosen when it was created
+     *                        (2027-03-31 or 2027-03-31T00:00:00Z). Staff are warned 7 days
+     *                        before, and on any 401 from Payop
+     * @param ipnAllowedIps   where Payop sends IPNs from (5.IPN/ipn.md). A first filter only:
+     *                        an order is paid only on Payop's transaction API's word
+     * @param trustedProxies  proxies in front of the API whose X-Forwarded-For entries are
+     *                        believed when finding an IPN's real source: Cloudflare's
+     *                        published ranges (cloudflare.com/ips)
+     * @param methodsCache    how long Payop's live list of methods is kept
+     * @param invoiceLifetime how long a Payop invoice stays payable: fixed by Payop at 24
+     *                        hours. Manual payment claims are refused for that long
+     * @param timeout         per request to Payop
+     */
+    public record Payop(
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("https://api.payop.com") String apiUrl,
+            @DefaultValue("https://checkout.payop.com") String checkoutUrl,
+            String publicKey,
+            String secretKey,
+            String jwtToken,
+            String applicationId,
+            String jwtExpiresAt,
+            @DefaultValue("18.199.249.46,35.158.36.143,3.125.109.58,3.127.103.117") List<String> ipnAllowedIps,
+            @DefaultValue("173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32") List<String> trustedProxies,
+            @DefaultValue("1h") Duration methodsCache,
+            @DefaultValue("24h") Duration invoiceLifetime,
+            @DefaultValue("15s") Duration timeout) {
+
+        /** All four credentials are present. */
+        public boolean configured() {
+            return present(publicKey) && present(secretKey) && present(jwtToken) && present(applicationId);
+        }
+
+        private static boolean present(String s) {
+            return s != null && !s.isBlank();
+        }
+
+        /** Never prints a credential: a record's own toString would. */
+        @Override
+        public String toString() {
+            return "Payop[enabled=" + enabled + ", apiUrl=" + apiUrl + ", checkoutUrl=" + checkoutUrl
+                    + ", publicKey=" + (present(publicKey) ? "[set]" : "unset")
+                    + ", secretKey=" + (present(secretKey) ? "[redacted]" : "unset")
+                    + ", jwtToken=" + (present(jwtToken) ? "[redacted]" : "unset")
+                    + ", applicationId=" + (present(applicationId) ? "[set]" : "unset")
+                    + ", jwtExpiresAt=" + jwtExpiresAt + ", methodsCache=" + methodsCache
+                    + ", invoiceLifetime=" + invoiceLifetime + "]";
+        }
+    }
+
+    /**
+     * Exchange rates, for one purpose only: turning Payop's fixed fee, quoted in EUR, into
+     * the order's currency. Prices are still authored per currency and never converted.
+     *
+     * @param ecbUrl the European Central Bank's daily reference rates (EUR base)
+     * @param maxAge the oldest ECB rate a fee may use. The ECB publishes on working days
+     *               only, so this spans a weekend plus Easter's two holidays. Past it, an
+     *               admin-entered rate is used; with neither, Payop is not offered
+     */
+    public record Fx(
+            @DefaultValue("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml") String ecbUrl,
+            @DefaultValue("5d") Duration maxAge) {
     }
 
     /**
