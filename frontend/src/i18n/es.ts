@@ -828,7 +828,7 @@ const es: Dictionary = {
     deliveryInfoTitle: 'Información de entrega',
     deliveryInfoLead:
       'En este tipo de entrega, el trader inicia sesión en tu cuenta y te entrega las '
-      + 'monedas, jugadores, sobres o SBC de FC 26.',
+      + 'monedas, jugadores, sobres o SBC de FC 27.',
     deliveryInfoPacks:
       'Si compras sobres, te transferimos las monedas equivalentes y los abres tú.',
     deliveryInfoWait:
