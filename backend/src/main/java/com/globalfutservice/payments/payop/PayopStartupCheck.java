@@ -38,7 +38,8 @@ public class PayopStartupCheck {
     /** How long before the token expires staff are warned. */
     public static final Duration TOKEN_WARNING = Duration.ofDays(7);
 
-    static final String MERCHANT_PAYS = "Payop is on. Its commission must stay \"merchant pays\" in "
+    /** Said at startup and on the admin page: the one Payop setting this code depends on. */
+    public static final String MERCHANT_PAYS = "Payop's commission must stay \"merchant pays\" in "
             + "Payop's panel: the checkout already adds each method's fee to the customer's total, "
             + "so \"payer pays\" would charge every customer twice.";
 
@@ -76,7 +77,7 @@ public class PayopStartupCheck {
             log.error("The Payop API token expires {} (GFS_PAYOP_JWT_EXPIRES_AT). Create a new one in "
                     + "Payop's dashboard and update GFS_PAYOP_JWT_TOKEN and GFS_PAYOP_JWT_EXPIRES_AT.", expires);
         }
-        log.warn(MERCHANT_PAYS);
+        log.warn("Payop is on. {}", MERCHANT_PAYS);
     }
 
     /**

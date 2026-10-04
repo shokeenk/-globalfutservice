@@ -1,0 +1,151 @@
+package com.globalfutservice.admin;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+import com.globalfutservice.config.SecurityConfig;
+import com.globalfutservice.identity.AccountRole;
+import com.globalfutservice.orders.OrderRepository;
+import com.globalfutservice.payments.WebhookEventRepository;
+import com.globalfutservice.payments.payop.FxRateEntity;
+import com.globalfutservice.payments.payop.FxRateService;
+import com.globalfutservice.payments.payop.PayopCallbackService;
+import com.globalfutservice.payments.payop.PayopFeeMethodEntity;
+import com.globalfutservice.payments.payop.PayopFeeTableService;
+import com.globalfutservice.payments.payop.PayopInvoiceRepository;
+import com.globalfutservice.payments.payop.PayopMethodsService;
+import com.globalfutservice.security.AccountPrincipal;
+import com.globalfutservice.security.JwtService;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Payop administration: operators see it all; changing what customers pay is an admin's. */
+@WebMvcTest(AdminPayopController.class)
+@Import(SecurityConfig.class)
+@TestPropertySource(properties = {
+        "GFS_JWT_SECRET=test-only-jwt-secret-000000000000000000000000000000",
+        "GFS_QUOTE_SECRET=test-only-quote-secret-00000000000000000000000000000",
+        "GFS_CREDENTIAL_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+})
+class AdminPayopSecurityTest {
+
+    private static final String BASE = "/api/v1/admin/payop";
+    private static final String FEE_EDIT = """
+            {"fixedEur":0.35,"percent":2.5,"countries":["DE"],"currencies":["EUR"],"active":true}
+            """;
+    private static final String RATE = """
+            {"currency":"AED","rate":4.1224,"date":"2026-10-04"}
+            """;
+
+    @Autowired
+    private MockMvc mvc;
+
+    @MockBean private PayopFeeTableService fees;
+    @MockBean private FxRateService fx;
+    @MockBean private PayopInvoiceRepository invoices;
+    @MockBean private OrderRepository orders;
+    @MockBean private PayopCallbackService callbacks;
+    @MockBean private PayopMethodsService methods;
+    @MockBean private WebhookEventRepository webhooks;
+    @MockBean private JwtService jwtService;
+
+    private static UsernamePasswordAuthenticationToken as(AccountRole role) {
+        AccountPrincipal p = new AccountPrincipal(1L, "acc_staff", "t@example.test", role);
+        return new UsernamePasswordAuthenticationToken(p, null, p.authorities());
+    }
+
+    private static PayopFeeMethodEntity row() {
+        return new PayopFeeMethodEntity(381, "Bank transfer", "bank_transfer", "Europe", new BigDecimal("0.30"),
+                new BigDecimal("2.4"), List.of("DE"), List.of("EUR"), null, Instant.EPOCH);
+    }
+
+    @Test
+    @DisplayName("nobody signed in, and no customer, gets any of it")
+    void outsiders() throws Exception {
+        for (String path : List.of(BASE, BASE + "/fees", BASE + "/fx", BASE + "/invoices", BASE + "/rejected")) {
+            mvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mvc.perform(get(path).with(authentication(as(AccountRole.CUSTOMER)))).andExpect(status().isForbidden());
+        }
+        mvc.perform(post(BASE + "/invoices/1/verify").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"txid\":\"dca59ca5-be19-470d-9494-9b76944e0241\"}")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("an operator sees the overview, fees, rates and payments, and can ask Payop about one")
+    void operatorReads() throws Exception {
+        when(fees.list()).thenReturn(List.of(row()));
+        when(fx.recent()).thenReturn(List.<FxRateEntity>of());
+        when(fx.eurTo(any())).thenReturn(Optional.empty());
+        when(invoices.findById(1L)).thenReturn(Optional.empty());
+        for (String path : List.of(BASE, BASE + "/fees", BASE + "/fees/audit", BASE + "/fx", BASE + "/invoices",
+                BASE + "/rejected")) {
+            mvc.perform(get(path).with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isOk());
+        }
+        mvc.perform(get(BASE).with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.merchantPaysNote").value(org.hamcrest.Matchers.containsString("merchant pays")));
+        mvc.perform(post(BASE + "/invoices/1/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"txid\":\"dca59ca5-be19-470d-9494-9b76944e0241\"}")
+                        .with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("an operator cannot change a fee, import a sheet, enter a rate or accept a payment by hand")
+    void operatorCannot() throws Exception {
+        mvc.perform(put(BASE + "/fees/381").contentType(MediaType.APPLICATION_JSON).content(FEE_EDIT)
+                .with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isForbidden());
+        mvc.perform(multipart(BASE + "/fees/import").file(new MockMultipartFile("file", "x.xlsx",
+                "application/octet-stream", new byte[] {1})).with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(BASE + "/fx").contentType(MediaType.APPLICATION_JSON).content(RATE)
+                .with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isForbidden());
+        mvc.perform(post(BASE + "/fx/refresh").with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(BASE + "/invoices/1/accept").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"txid\":\"dca59ca5-be19-470d-9494-9b76944e0241\",\"note\":\"checked\"}")
+                .with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isForbidden());
+        verify(fees, never()).update(anyLong(), any(), any());
+        verify(fees, never()).importSheet(any(), any(), any());
+        verify(fx, never()).enterAdminRate(any(), any(), any(), any());
+        verify(callbacks, never()).acceptByHand(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("an admin can change a fee and enter a rate, recorded against their account")
+    void adminChanges() throws Exception {
+        when(fees.update(anyLong(), any(), any())).thenReturn(row());
+        when(fx.enterAdminRate(any(), any(), any(), any())).thenReturn(new FxRateEntity("AED",
+                new BigDecimal("4.1224"), FxRateEntity.ADMIN, java.time.LocalDate.of(2026, 10, 4), Instant.EPOCH, 1L));
+        mvc.perform(put(BASE + "/fees/381").contentType(MediaType.APPLICATION_JSON).content(FEE_EDIT)
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isOk());
+        verify(fees).update(org.mockito.ArgumentMatchers.eq(381L), any(), org.mockito.ArgumentMatchers.eq(1L));
+        verify(methods).refresh();
+        mvc.perform(post(BASE + "/fx").contentType(MediaType.APPLICATION_JSON).content(RATE)
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isOk());
+    }
+}

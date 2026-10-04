@@ -55,7 +55,7 @@ public class PayopClient {
         private final int httpStatus;
         private final List<String> fields;
 
-        PayopException(String call, ErrorCode code, int httpStatus, List<String> fields) {
+        public PayopException(String call, ErrorCode code, int httpStatus, List<String> fields) {
             super("Payop " + call + " failed: " + code + (httpStatus > 0 ? " (HTTP " + httpStatus + ")" : "")
                     + (fields.isEmpty() ? "" : " fields=" + fields));
             this.code = code;
