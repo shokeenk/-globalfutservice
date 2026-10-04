@@ -54,7 +54,8 @@ class ManualPaymentCoachingHoldTest {
         service = new ManualPaymentService(claims, mock(ManualPaymentProofRepository.class),
                 mock(OrderService.class), mock(com.globalfutservice.credentials.CredentialVaultService.class),
                 mock(com.globalfutservice.notify.NotificationService.class),
-                mock(CustomerFeedService.class), props, coaching, com.globalfutservice.coaching.AfterCommit.immediate());
+                mock(CustomerFeedService.class), props, coaching, com.globalfutservice.coaching.AfterCommit.immediate(),
+                org.mockito.Mockito.mock(com.globalfutservice.payments.payop.PayopCheckoutService.class));
     }
 
     private static OrderEntity order(Sku sku) {

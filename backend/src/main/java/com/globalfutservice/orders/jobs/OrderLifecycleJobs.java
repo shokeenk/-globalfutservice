@@ -82,7 +82,8 @@ public class OrderLifecycleJobs {
     public void sweepAbandoned() {
         try {
             Instant cutoff = clock.instant().minus(props.fulfilment().deliverySla());
-            List<OrderEntity> stale = orders.findStaleUnpaid(cutoff);
+            List<OrderEntity> stale = orders.findStaleUnpaid(cutoff, clock.instant(),
+                    com.globalfutservice.payments.payop.PayopInvoiceEntity.Status.CREATING);
             for (OrderEntity order : stale) {
                 try {
                     orderService.transition(order, OrderStatus.ABANDONED, Actor.SYSTEM, null,

@@ -45,6 +45,7 @@ class ManualPaymentServiceTest {
     private com.globalfutservice.notify.NotificationService notifications;
     private final CustomerFeedService feed = mock(CustomerFeedService.class);
     private ManualPaymentService service;
+    private com.globalfutservice.payments.payop.PayopCheckoutService payop;
 
     private static final AppProperties.ManualPayments DESTINATIONS =
             new AppProperties.ManualPayments(
@@ -70,7 +71,9 @@ class ManualPaymentServiceTest {
         vault = mock(com.globalfutservice.credentials.CredentialVaultService.class);
         notifications = mock(com.globalfutservice.notify.NotificationService.class);
 
-        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, props, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate());
+        payop = mock(com.globalfutservice.payments.payop.PayopCheckoutService.class);
+        service = new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, props, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate(),
+                payop);
     }
 
     private static OrderEntity order(OrderStatus status, Sku sku) {
@@ -148,13 +151,32 @@ class ManualPaymentServiceTest {
         }
 
         @Test
+        @DisplayName("waits while a Payop invoice for the order can still be paid, and nothing is recorded")
+        void refusedWhilePayopInvoiceOpen() {
+            OrderEntity awaiting = order(OrderStatus.AWAITING_PAYMENT, Sku.TRADING_SERVICE);
+            when(payop.claimsBlockedUntil(7L)).thenReturn(Optional.of(java.time.Instant.parse("2026-10-05T12:00:00Z")));
+
+            assertThatThrownBy(() -> service.submit(awaiting, ManualPaymentMethod.UPI, "123456789012"))
+                    .isInstanceOfSatisfying(ApiExceptions.ConflictException.class,
+                            e -> assertThat(e.code()).isEqualTo("payop_invoice_open"));
+            verify(claims, never()).saveAndFlush(any());
+            verify(notifications, never()).paymentClaimed(any());
+
+            // Once it has lapsed, the claim goes through as before.
+            when(payop.claimsBlockedUntil(7L)).thenReturn(Optional.empty());
+            service.submit(awaiting, ManualPaymentMethod.UPI, "123456789012");
+            verify(claims).saveAndFlush(any());
+        }
+
+        @Test
         @DisplayName("is refused for a method with no configured address")
         void refusedForUnconfiguredMethod() {
             AppProperties bare = mock(AppProperties.class);
             when(bare.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, null));
             ManualPaymentService noDestinations =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, bare, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate());
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, bare, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate(),
+                org.mockito.Mockito.mock(com.globalfutservice.payments.payop.PayopCheckoutService.class));
 
             assertThatThrownBy(() -> noDestinations.submit(
                     order(OrderStatus.AWAITING_PAYMENT, Sku.COACHING),
@@ -232,7 +254,8 @@ class ManualPaymentServiceTest {
             // An account with no link is payable; a link with no account is not. Dropping
             // PayPal here would take away the method over a missing convenience.
             List<ManualPaymentService.PaymentOption> options =
-                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, emailOnly, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate())
+                    new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, emailOnly, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate(),
+                org.mockito.Mockito.mock(com.globalfutservice.payments.payop.PayopCheckoutService.class))
                             .optionsFor("COACHING");
 
             assertThat(options).singleElement()
@@ -250,7 +273,8 @@ class ManualPaymentServiceTest {
             when(partial.manualPayments()).thenReturn(new AppProperties.ManualPayments(
                     null, null, null, null, null, null, "TWALLET"));
 
-            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, partial, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate())
+            assertThat(new ManualPaymentService(claims, proofs, orderService, vault, notifications, feed, partial, org.mockito.Mockito.mock(com.globalfutservice.coaching.CoachingService.class), com.globalfutservice.coaching.AfterCommit.immediate(),
+                org.mockito.Mockito.mock(com.globalfutservice.payments.payop.PayopCheckoutService.class))
                     .optionsFor("COACHING"))
                     .extracting(ManualPaymentService.PaymentOption::method)
                     .containsExactly(ManualPaymentMethod.CRYPTO);
