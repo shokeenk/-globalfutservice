@@ -125,7 +125,7 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
 function Terms() {
   return (
     <>
-      <p className="text-chalk-faint">Last updated 2 October 2026</p>
+      <p className="text-chalk-faint">Last updated 4 October 2026</p>
 
       <Clause n={1} title="About GFS & Our Services">
         <p>
@@ -495,7 +495,11 @@ function Terms() {
             </a>
           </li>
         </ul>
-        <p>The current business/legal address is maintained in the website footer.</p>
+        {/*
+          The client's closing line, pointing to the operator's location in the footer, was
+          removed on the owner's instruction on 4 October 2026: no location is published
+          anywhere on the site.
+        */}
       </Clause>
 
       <Operator />
