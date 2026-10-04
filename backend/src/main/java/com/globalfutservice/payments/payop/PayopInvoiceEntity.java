@@ -156,8 +156,10 @@ public class PayopInvoiceEntity {
         this.updatedAt = at;
     }
 
-    public void expired(Instant at) {
+    /** No longer offered: its 24 hours are up, or the customer chose another method. */
+    public void expired(String reason, Instant at) {
         this.status = Status.EXPIRED;
+        this.reviewReason = reason;
         this.updatedAt = at;
     }
 

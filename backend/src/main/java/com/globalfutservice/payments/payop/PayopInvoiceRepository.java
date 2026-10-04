@@ -8,6 +8,8 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface PayopInvoiceRepository extends JpaRepository<PayopInvoiceEntity, Long> {
 
@@ -21,12 +23,29 @@ public interface PayopInvoiceRepository extends JpaRepository<PayopInvoiceEntity
 
     List<PayopInvoiceEntity> findByOrderIdOrderByCreatedAtDesc(Long orderId);
 
-    /** Any attempt on the order still inside its 24 hours: manual claims wait for these. */
-    boolean existsByOrderIdAndCreatedAtAfterAndStatusIn(Long orderId, Instant after,
-                                                        Collection<PayopInvoiceEntity.Status> statuses);
+    /**
+     * When the order's last Payop invoice stops being payable, if one still is: an invoice
+     * Payop holds, or one being created, until its 24 hours are up. Payop cannot cancel an
+     * invoice, so whatever its status here, it can be paid until then.
+     */
+    @Query("""
+            select max(i.expiresAt) from PayopInvoiceEntity i
+            where i.orderId = :orderId and i.expiresAt > :now
+              and (i.invoiceId is not null or i.status = :creating)
+            """)
+    Optional<Instant> payableUntil(@Param("orderId") Long orderId, @Param("now") Instant now,
+                                   @Param("creating") PayopInvoiceEntity.Status creating);
+
+    /** Open invoices whose 24 hours are up: the same instant {@link #payableUntil} stops counting them. */
+    List<PayopInvoiceEntity> findByStatusAndExpiresAtLessThanEqual(PayopInvoiceEntity.Status status, Instant now);
+
+    /** Attempts whose creation never finished: the request to Payop was interrupted. */
+    List<PayopInvoiceEntity> findByStatusAndUpdatedAtBefore(PayopInvoiceEntity.Status status, Instant before);
 
     List<PayopInvoiceEntity> findByStatusInOrderByUpdatedAtDesc(Collection<PayopInvoiceEntity.Status> statuses,
                                                                Pageable page);
 
     List<PayopInvoiceEntity> findAllByOrderByCreatedAtDesc(Pageable page);
+
+    long countByStatusIn(Collection<PayopInvoiceEntity.Status> statuses);
 }
