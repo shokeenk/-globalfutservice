@@ -125,7 +125,7 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
 function Terms() {
   return (
     <>
-      <p className="text-chalk-faint">Last updated 2 October 2026</p>
+      <p className="text-chalk-faint">Last updated 4 October 2026</p>
 
       <Clause n={1} title="About GFS & Our Services">
         <p>
@@ -495,7 +495,11 @@ function Terms() {
             </a>
           </li>
         </ul>
-        <p>The current business/legal address is maintained in the website footer.</p>
+        {/*
+          The client's closing line, pointing to the operator's location in the footer, was
+          removed on the owner's instruction on 4 October 2026: no location is published
+          anywhere on the site.
+        */}
       </Clause>
 
       <Operator />
@@ -1166,11 +1170,8 @@ function updatedOn() {
  * policy that never names its operator is one a reader has to take on trust, and a
  * gateway reviewing these pages checks each of them for the entity rather than just one.
  *
- * <p>The registered address is not among them, at the owner's instruction. It is a
- * residential one, and it is published in full on /contact -- which is where the
- * gateway's verification points, and where a reader following "who operates this" from
- * any policy page arrives. Named, phoned and emailed is enough to identify the operator
- * here; the address is one page away rather than on all six.
+ * <p>Named, on Discord and emailed is enough to identify the operator. Where the
+ * operator lives is not published anywhere on the site, at the owner's instruction.
  */
 function Operator() {
   return (

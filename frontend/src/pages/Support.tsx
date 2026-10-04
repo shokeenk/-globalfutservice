@@ -18,7 +18,7 @@ export default function Support() {
    *
    * This was `noindex` when it was only a support form — a page with nothing on it a
    * search engine should rank. It is now also the contact page: it carries the operating
-   * entity, the registered address and a phone number, and it is linked from the footer
+   * entity and every way to reach it, and it is linked from the footer
    * of every page as "Contact us". A contact page that tells crawlers to ignore it is
    * one a payment gateway's reviewer may not find, and one that cannot corroborate the
    * business behind the site.
@@ -151,7 +151,7 @@ export default function Support() {
 
             A support page offering a form and a chat widget but never saying which legal
             entity is on the other end is the shape of every scam in this market. Naming
-            the operator, the registered address and a phone number a person answers is
+            the operator and the ways to reach a person is
             the cheapest trust signal available — and it is what a payment gateway's
             reviewer opens this page to find.
           */}
@@ -195,12 +195,6 @@ export default function Support() {
             </p>
             <dl className="mt-4 space-y-2.5 text-[13px]">
               <div>
-                <dt className="text-chalk-faint">Registered address</dt>
-                <dd className="mt-0.5 leading-relaxed text-chalk-muted">
-                  {BUSINESS.registeredAddress}
-                </dd>
-              </div>
-              <div>
                 <dt className="text-chalk-faint">Email</dt>
                 <dd className="mt-0.5">
                   <a className="break-all text-chalk underline" href={EMAIL_HREF}>
@@ -209,7 +203,7 @@ export default function Support() {
                 </dd>
               </div>
               {/*
-                Listed with the address and the phone number, not with the social icons.
+                Listed with the email, not with the social icons.
                 The terms of service route coaching scheduling, safety-policy claims and
                 disputes through it, so for a customer with a problem it is a support
                 channel first and a community second.

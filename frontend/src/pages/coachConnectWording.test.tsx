@@ -44,7 +44,7 @@ describe('the terms, clause 6', () => {
   it('sends a coaching customer to Connect with Coach in their account, not to Discord', () => {
     render(<MemoryRouter><Legal doc="terms" /></MemoryRouter>)
 
-    expect(screen.getByText('Last updated 2 October 2026')).toBeInTheDocument()
+    expect(screen.getByText('Last updated 4 October 2026')).toBeInTheDocument()
     const clause = document.getElementById('clause-6')
     expect(clause).toHaveTextContent(
       'After ordering, customers connect with their coach from their GFS account: each coaching order has a '
