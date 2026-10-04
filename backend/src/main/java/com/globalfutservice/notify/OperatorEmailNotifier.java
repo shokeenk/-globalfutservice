@@ -151,6 +151,20 @@ public class OperatorEmailNotifier implements Notifier {
                 """.formatted(a.detail(), a.code() == null ? "-" : a.code(), a.adminDeepLink()));
     }
 
+    @Override
+    public void paymentAlert(PaymentAlert a) {
+        send(a.subject(), "[PAYMENT] " + a.subject() + " " + a.headline(),
+                """
+                %s
+
+                Code:     %s
+
+                Open it here:
+                %s
+                """.formatted(a.detail(), a.code() == null ? "-" : a.code(),
+                        a.adminDeepLink() == null ? "-" : a.adminDeepLink()));
+    }
+
     private void send(OrderNotification n, String subject, String body) {
         send(n.publicRef(), subject, body);
     }
