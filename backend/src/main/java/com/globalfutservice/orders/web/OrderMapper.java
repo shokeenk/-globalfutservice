@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.domain.money.Money;
+import com.globalfutservice.domain.pricing.LineCode;
 import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
@@ -199,12 +201,25 @@ public class OrderMapper {
                 transitions);
     }
 
-    /** Reads the frozen quote back out of the snapshot column. */
-    private List<OrderDtos.OrderLineDto> lines(OrderEntity order) {
+    /** What a line is called when it is the fee of the payment method the customer used. */
+    static final String PAYMENT_FEE = "PAYMENT_FEE";
+
+    /**
+     * Reads the frozen quote back out of the snapshot column.
+     *
+     * <p>An order paid through Payop was charged its method's own fee instead of the flat
+     * card fee the quote carries: that line is replaced by the fee actually charged, so the
+     * lines add up to the total the customer paid.
+     */
+    List<OrderDtos.OrderLineDto> lines(OrderEntity order) {
         List<OrderDtos.OrderLineDto> out = new ArrayList<>();
+        JsonNode paymentFee = paymentFee(order);
         try {
             JsonNode root = mapper.readTree(order.getPriceBreakdown());
             for (JsonNode line : root.path("lines")) {
+                if (paymentFee != null && LineCode.GATEWAY_FEE.name().equals(line.path("code").asText())) {
+                    continue;
+                }
                 out.add(new OrderDtos.OrderLineDto(
                         line.path("code").asText(),
                         line.path("label").asText(),
@@ -216,7 +231,25 @@ public class OrderMapper {
             // gets the total, which is the number that matters to them.
             log.warn("Could not read price breakdown for order {}", order.getPublicRef());
         }
+        if (paymentFee != null) {
+            long fee = paymentFee.path("feeMinor").asLong();
+            out.add(new OrderDtos.OrderLineDto(PAYMENT_FEE, paymentFee.path("label").asText("Payment processing fee"),
+                    fee, Money.ofMinor(fee, order.getCurrency()).format()));
+        }
         return out;
+    }
+
+    private JsonNode paymentFee(OrderEntity order) {
+        if (order.getPaymentFee() == null || order.getPaymentFee().isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode fee = mapper.readTree(order.getPaymentFee());
+            return fee.path("feeMinor").canConvertToLong() ? fee : null;
+        } catch (Exception e) {
+            log.warn("Could not read the payment fee for order {}", order.getPublicRef());
+            return null;
+        }
     }
 
     /**
