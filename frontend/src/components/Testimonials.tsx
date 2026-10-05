@@ -172,7 +172,7 @@ export function Testimonials({
       {pageCount > 1 && (
         <nav
           aria-label={t.proof.title}
-          className="mt-8 flex items-center justify-between gap-4"
+          className="mt-8 flex items-center justify-between gap-2 sm:gap-4"
         >
           <PagerButton
             onClick={() => go(safePage - 1)}
@@ -359,7 +359,12 @@ function PagerButton({
       ].join(' ')}
     >
       {direction === 'prev' && <Arrow d={arrow} />}
-      {label}
+      {/*
+        Arrows only below 360px, the label kept for screen readers: "Anteriores · Página
+        1 de 3 · Siguientes" needs more than a 320px phone has, and the row would otherwise
+        push the page wider than the screen. The arrow and the 44px target stay.
+      */}
+      <span className="max-[359px]:sr-only">{label}</span>
       {direction === 'next' && <Arrow d={arrow} />}
     </button>
   )

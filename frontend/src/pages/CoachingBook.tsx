@@ -294,7 +294,7 @@ export default function CoachingBook() {
     <Section className="rhythm-section">
       <div className="mx-auto max-w-4xl">
         {showIndicator && (
-          <div className="mb-8 flex items-center justify-between gap-4">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
             {step === 'details' || step === 'schedule' || step === 'review' ? (
               <button
                 type="button"
@@ -426,7 +426,7 @@ function StepIndicator({ current, labels }: { current: number; labels: string[] 
                 {label}
               </span>
             </span>
-            {n < labels.length && <span aria-hidden="true" className="mb-5 h-px w-6 bg-ink-400 sm:w-12" />}
+            {n < labels.length && <span aria-hidden="true" className="mb-5 h-px w-4 bg-ink-400 sm:w-12" />}
           </li>
         )
       })}
@@ -460,7 +460,7 @@ function OptionStep({
       <h1 className="display text-display-md text-chalk">{b.chooseTitle}</h1>
       <p className="mt-2 text-body-sm text-chalk-muted">{b.chooseLead}</p>
 
-      <div role="radiogroup" aria-label={b.chooseTitle} className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div role="radiogroup" aria-label={b.chooseTitle} className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {options.length === 0 && <Spinner />}
         {options.map((option) => {
           const isPack = option.variant === 'MONTHLY_6_SESSIONS'
@@ -703,7 +703,7 @@ function ReviewStep({
     <div>
       <h1 className="display text-display-md text-chalk">{b.reviewTitle}</h1>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start">
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start">
         <div className="space-y-5">
           <div className="rounded-panel border border-ink-400 bg-paper p-5 shadow-e1">
             <p className="text-[12.5px] font-semibold text-chalk-faint">{b.coachingSession}</p>
@@ -1036,7 +1036,7 @@ function ConfirmedSteps({
   }
 
   return (
-    <div className="mx-auto grid max-w-3xl overflow-hidden rounded-panel border border-ink-400 bg-paper shadow-e2 md:grid-cols-[1.2fr_1fr]">
+    <div className="mx-auto grid max-w-3xl grid-cols-1 overflow-hidden rounded-panel border border-ink-400 bg-paper shadow-e2 md:grid-cols-[1.2fr_1fr]">
       <div className="p-6 sm:p-8">
         <h1 className="display text-display-md text-chalk">{b.allSetTitle}</h1>
         <p className="mt-1 text-body-sm text-chalk-muted">{b.allSetLead}</p>

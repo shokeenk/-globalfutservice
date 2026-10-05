@@ -277,7 +277,7 @@ export default function BoostingCheckout() {
         {step === 'done' && orderRef ? (
           <Confirmation orderRef={orderRef} emailsEnabled={!!policy?.customerEmailsEnabled} />
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
             <div className="space-y-5">
               {step === 'details' && (
                 <DetailsStep
@@ -424,7 +424,7 @@ function DetailsStep({
       <h1 className="display text-display-sm text-chalk">{b.platformTitle}</h1>
       <p className="mt-1 text-body-sm text-chalk-muted">{b.platformLead}</p>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <ChoiceCard
           active={platform === 'PLAYSTATION'}
           onSelect={() => onPlatform('PLAYSTATION')}
@@ -452,7 +452,7 @@ function DetailsStep({
         <div className="mt-6 border-t border-ink-400 pt-6">
           <h2 className="display text-[16px] text-chalk">{b.pcTitle}</h2>
           <p className="mt-1 text-body-sm text-chalk-muted">{b.pcLead}</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {LAUNCHERS.map((option) => (
               <ChoiceCard
                 key={option}
@@ -615,7 +615,7 @@ function PayChoices({
   return (
     <div className="hairline rounded-panel bg-paper p-5">
       <h2 className="display text-[16px] text-chalk">{t.boostingCheckout.payTitle}</h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {choices.map((entry) => (
           <ChoiceCard
             key={entry.key}
@@ -780,7 +780,7 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
         <SupportCard reference={order.publicRef} sku={order.sku} />
       </div>
 
-      <dl className="mt-7 grid gap-px overflow-hidden rounded-panel bg-ink-400 text-left sm:grid-cols-4">
+      <dl className="mt-7 grid grid-cols-1 gap-px overflow-hidden rounded-panel bg-ink-400 text-left sm:grid-cols-4">
         <SummaryCell label={b.orderId} value={`#${order.publicRef}`} />
         <SummaryCell label={b.service} value={order.serviceLabel} />
         <SummaryCell label={b.platformLabel} value={platformLabel} />
@@ -907,7 +907,7 @@ function OrderPanel({
         </p>
       </div>
 
-      <ul className="mt-5 grid gap-4 border-t border-ink-400 pt-5 sm:grid-cols-3">
+      <ul className="mt-5 grid grid-cols-1 gap-4 border-t border-ink-400 pt-5 sm:grid-cols-3">
         <TrustBadge title={b.trustSecureTitle} body={b.trustSecureBody} />
         <TrustBadge title={b.trustFastTitle} body={b.trustFastBody} />
         <TrustBadge title={b.trustSupportTitle} body={b.trustSupportBody} />
