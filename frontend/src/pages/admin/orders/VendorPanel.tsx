@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, Field, Input, Textarea } from '../../../components/ui'
 import { ApiError, api } from '../../../lib/api'
 import { dateTime } from '../../../lib/format'
-import type { VendorActionName, VendorBalance, VendorSection } from '../../../lib/types'
+import type { VendorActionName, VendorBalance, VendorNextSend, VendorSection } from '../../../lib/types'
 import {
   VENDOR_ACTION_LABEL, VENDOR_ACTION_PATH, VENDOR_ACTIONS, VENDOR_FINAL_ACTIONS, VENDOR_STATE_LABEL,
   asReported, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
@@ -113,6 +113,14 @@ export function VendorPanel({
         </div>
       )}
 
+      {/*
+        What Approve would send, before anyone clicks it: only where Approve sends something,
+        which is before the first send or after a definite refusal. Once the partner has the
+        order, Approve sends nothing, and "Sent as / Configured now" below says the rest.
+      */}
+      {section.enabled && section.nextSend && (!v || v.state === 'FAILED') && (
+        <NextSend next={section.nextSend} />
+      )}
       {!v ? (
         <p className="mt-3 text-[13px] text-chalk-muted">Not sent to the partner.</p>
       ) : (
@@ -250,6 +258,44 @@ export function VendorPanel({
       )}
     </Card>
     </section>
+  )
+}
+
+/** The mode Approve will use, and exactly what it sends, in the partner's own field names. */
+function NextSend({ next }: { next: VendorNextSend }) {
+  const own = next.orderMode === 'OWN_SENDERS'
+  const warn = own || next.refusal != null
+  const fields = [
+    `transferMethod ${next.transferMethod}`,
+    ...(own ? [] : [`buyNowThreshold ${asReported(next.buyNowThreshold)}${next.buyNowThresholdSource
+      ? ` (${next.buyNowThresholdSource})` : ''}`]),
+    `topUpEnabled ${next.topUpEnabled}`,
+    `autoFinishCycle ${next.autoFinishCycle}`,
+    own ? `senderGroup ${next.senderGroup}` : 'no senderGroup, no supplierID',
+    ...(own ? [] : [next.maxPrice == null ? 'maxPrice not sent' : `maxPrice ${asReported(next.maxPrice)}`]),
+  ]
+  return (
+    <div
+      role="note"
+      aria-label="What Approve sends"
+      className={`mt-4 rounded-edge border p-4 ${warn ? 'border-warn/40 bg-warn/10' : 'border-ink-400 bg-ink-700/40'}`}
+    >
+      <p className="text-[10.5px] uppercase tracking-[0.14em] text-chalk-faint">Approve sends this order to</p>
+      <p className="mt-1 text-[15px] font-semibold text-chalk">
+        {orderModeLabel(next.orderMode)} · <span className="font-mono">{next.endpoint}</span>
+      </p>
+      {next.refusal ? (
+        <p className="mt-1.5 text-[13px] text-warn">Approve would send nothing: {next.refusal}</p>
+      ) : (
+        <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-chalk-muted">{fields.join(' · ')}</p>
+      )}
+      {own && !next.refusal && (
+        <p className="mt-1.5 text-[12.5px] text-warn">
+          This is our own sender accounts, not the public pool. To buy from the public pool, set
+          GFS_FUTTRANSFER_ORDER_MODE=PUBLIC_POOL and redeploy.
+        </p>
+      )}
+    </div>
   )
 }
 

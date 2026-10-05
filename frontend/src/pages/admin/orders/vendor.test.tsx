@@ -115,6 +115,46 @@ describe('VendorPanel', () => {
     expect(screen.queryByText(/approving it again would use/)).toBeNull()
   })
 
+  const POOL_SEND = {
+    orderMode: 'PUBLIC_POOL', endpoint: '/buyCoinsAPI', transferMethod: 'targetedSnipe', buyNowThreshold: 500,
+    buyNowThresholdSource: "the order's amount in K", maxPrice: null, topUpEnabled: 300, autoFinishCycle: 1,
+    senderGroup: null, refusal: null,
+  }
+
+  it('before anything is sent, says what Approve will send, field by field', () => {
+    renderPanel(section({ vendorOrder: null, currentOrderMode: 'PUBLIC_POOL', nextSend: POOL_SEND }))
+    const note = screen.getByRole('note', { name: 'What Approve sends' })
+    expect(note).toHaveTextContent('Approve sends this order to')
+    expect(note).toHaveTextContent('Public pool · /buyCoinsAPI')
+    expect(note).toHaveTextContent("transferMethod targetedSnipe · buyNowThreshold 500 (the order's amount in K) · "
+      + 'topUpEnabled 300 · autoFinishCycle 1 · no senderGroup, no supplierID · maxPrice not sent')
+    expect(note).not.toHaveTextContent('own sender accounts')
+  })
+
+  it('own senders is said as a warning, with how to switch', () => {
+    renderPanel(section({ vendorOrder: null, nextSend: { ...POOL_SEND, orderMode: 'OWN_SENDERS', endpoint: '/orderAPI',
+      buyNowThreshold: null, buyNowThresholdSource: null, senderGroup: '-1' } }))
+    const note = screen.getByRole('note', { name: 'What Approve sends' })
+    expect(note).toHaveTextContent('Own senders · /orderAPI')
+    expect(note).toHaveTextContent('senderGroup -1')
+    expect(note).not.toHaveTextContent('buyNowThreshold')
+    expect(note).toHaveTextContent('GFS_FUTTRANSFER_ORDER_MODE=PUBLIC_POOL')
+  })
+
+  it('a setting that stops the send is shown before Approve, as the reason', () => {
+    renderPanel(section({ vendorOrder: null, nextSend: { ...POOL_SEND, buyNowThreshold: null,
+      refusal: 'GFS_FUTTRANSFER_METHOD is cycle.' } }))
+    expect(screen.getByRole('note', { name: 'What Approve sends' }))
+      .toHaveTextContent('Approve would send nothing: GFS_FUTTRANSFER_METHOD is cycle.')
+  })
+
+  it('once the partner has the order, Approve sends nothing, so the note is not shown', () => {
+    renderPanel(section({ nextSend: POOL_SEND }))
+    expect(screen.queryByRole('note', { name: 'What Approve sends' })).toBeNull()
+    renderPanel(section({ vendorOrder: detail({ state: 'FAILED' }), nextSend: POOL_SEND }))
+    expect(screen.getByRole('note', { name: 'What Approve sends' })).toBeInTheDocument()
+  })
+
   it('says Unavailable, never zero, when the balance cannot be read', async () => {
     api.get.mockRejectedValue(new Error('offline'))
     renderPanel(section())
