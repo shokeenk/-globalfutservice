@@ -34,8 +34,8 @@ function paid(sku: string, publicRef: string): Order {
     publicRef, status: 'PAID', statusLabel: 'Queued', nextAction: 'NONE', serviceLabel: 'A service', sku,
     platform: 'PLAYSTATION', quantity: 1, currency: 'INR', totalMinor: 100000, totalFormatted: '₹1,000.00',
     lines: [], pointsRedeemed: 0, pointsEarned: 0, createdAt: '2026-10-01T10:00:00Z', timeline: [],
-    // What the server sends for the bot's ticket: the boosting confirmation shows it.
-    discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x', command: '/verify ABC' },
+    // A customer whose Discord account we do not know: the confirmation asks them to message us.
+    discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x' },
   } as unknown as Order
 }
 
@@ -58,8 +58,15 @@ describe('after paying', () => {
     expect(cta).toHaveAttribute('href', '/orders/GFS-26-BOOST001/support')
     expect(screen.getByText('Connect with GFS')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'contact support' })).toHaveAttribute('href', '/support')
-    expect(screen.getByRole('link', { name: /Join Our Discord/ })).toHaveAttribute('href', 'https://discord.gg/x')
-    expect(screen.getByText('/verify ABC')).toBeInTheDocument()
+    // Message us on Discord, with the reference to paste in: the site's own direct-message link.
+    expect(screen.getByRole('link', { name: 'Message us on Discord' }))
+      .toHaveAttribute('href', 'https://discord.com/users/1300551868174569595')
+    expect(screen.getByText('globalfutservices')).toBeInTheDocument()
+    expect(screen.getByText('Include your order reference:')).toBeInTheDocument()
+    expect(screen.getByText('GFS-26-BOOST001', { selector: 'code' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy order reference GFS-26-BOOST001' })).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\/verify|run this command/i)
+    expect(screen.queryByRole('link', { name: /Join Our Discord/ })).toBeNull()
   })
 
   it('coaching: the step after the confirmation connects with the coach, and no Discord', async () => {

@@ -32,7 +32,7 @@ function order(sku: string, status: string): Order {
     totalFormatted: '₹1,000.00', lines: [], pointsRedeemed: 0, pointsEarned: 0, createdAt: '2026-10-01T10:00:00Z',
     timeline: [],
     // The Discord access the server sends: shown for boosting orders only.
-    discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x', command: '/verify ABC' },
+    discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x' },
   } as unknown as Order
 }
 
@@ -45,8 +45,31 @@ describe('the order page\'s support card', () => {
     view(order('BOOST_CHAMPS', 'IN_PROGRESS'), true)
     expect(screen.getByRole('link', { name: 'Connect to booster' }))
       .toHaveAttribute('href', '/orders/GFS-26-70C4DPWH/support')
+    expect(screen.getByRole('link', { name: 'Message us on Discord' }))
+      .toHaveAttribute('href', 'https://discord.com/users/1300551868174569595')
+    expect(screen.getByText('globalfutservices')).toBeInTheDocument()
+    expect(screen.getByText('GFS-26-70C4DPWH', { selector: 'code' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy order reference GFS-26-70C4DPWH' })).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\/verify|run this command/i)
+  })
+
+  it('the Discord step for each case: message us, join (ticket opens itself), or open the ticket', () => {
+    const withAccess = (discordAccess: object) => ({ ...order('BOOST_CHAMPS', 'IN_PROGRESS'), discordAccess } as Order)
+
+    const quote = view(withAccess({ mode: 'QUOTE', channelUrl: null, inviteUrl: 'https://discord.gg/x' }), true)
+    expect(screen.getByRole('link', { name: 'Message us on Discord' }))
+      .toHaveAttribute('href', 'https://discord.com/users/1300551868174569595')
+    quote.unmount()
+
+    const pending = view(withAccess({ mode: 'PENDING', channelUrl: null, inviteUrl: 'https://discord.gg/x' }), true)
     expect(screen.getByRole('link', { name: 'Join Discord' })).toHaveAttribute('href', 'https://discord.gg/x')
-    expect(screen.getByText('/verify ABC')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Message us on Discord' })).toBeNull()
+    pending.unmount()
+
+    view(withAccess({ mode: 'DIRECT', channelUrl: 'https://discord.com/channels/1/2', inviteUrl: 'https://discord.gg/x' }), true)
+    expect(screen.getByRole('link', { name: 'Open your ticket' }))
+      .toHaveAttribute('href', 'https://discord.com/channels/1/2')
+    expect(document.body.textContent).not.toMatch(/\/verify/i)
   })
 
   it.each([

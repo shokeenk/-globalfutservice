@@ -547,14 +547,7 @@ const en = {
     discordTicketBody: 'Continue your order on Discord. Our team is ready to assist you.',
     discordTicketCta: 'Open Discord',
     discordTicketCreated: 'Your ticket has been created!',
-    discordTicketQuote: (ref: string) => `Quote your order number, ${ref}, and the team will pick it up.`,
-    discordVerifyTitle: 'Get into your ticket',
-    discordVerifyBody:
-      'Join our Discord server, then run this command there. It opens your ticket and '
-      + 'nobody else can use it.',
-    discordVerifyJoin: 'Join Discord',
-    discordVerifyCopy: 'Copy command',
-    discordVerifyCopied: 'Copied',
+    discordJoin: 'Join Discord',
     discordPendingTitle: 'Your ticket opens automatically',
     discordPendingBody:
       'You signed in with Discord, so we already know your account. As soon as your '
@@ -802,6 +795,19 @@ const en = {
     yourTickets: 'Support requests',
   },
 
+  /*
+    The way to us on Discord for an order: a direct message to our account, with the order
+    reference. Replaces the /verify command, which Discord refuses to register.
+  */
+  discordDm: {
+    title: 'Message us on Discord',
+    messageUs: 'Message us on Discord:',
+    includeReference: 'Include your order reference:',
+    button: 'Message us on Discord',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyLabel: (ref: string) => `Copy order reference ${ref}`,
+  },
   payopReturn: {
     eyebrow: 'Payment',
     checking: 'Checking your payment…',

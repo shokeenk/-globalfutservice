@@ -1,59 +1,42 @@
+import { BUSINESS } from '../content/business'
 import type { DiscordAccess } from './types'
 
 /**
- * Where a "Join Discord" button should actually point, for one order.
+ * Where the Discord step for one order should send the customer.
  *
- * <p>Four screens ask this question — the tracking page and the three checkout
- * confirmations — and they answer it identically or they are a bug. Before this, each
- * one linked a hardcoded shared channel, so a customer who had just paid for coaching
- * landed in the general order channel rather than the ticket opened for their order
- * seconds earlier.
+ * <p>Two screens ask this -- the tracking page and the boosting confirmation -- and they
+ * answer it identically or they are a bug. The rendering stays with each screen; only the
+ * branching lives here.
  *
- * <p>The rendering deliberately stays with each screen: they look nothing alike, and a
- * component that unified the markup would have to win an argument with three designs.
- * It is the branching that must not drift, so only the branching lives here.
+ * <ul>
+ *   <li>{@code TICKET}: they have been let into their ticket, so the button opens it.</li>
+ *   <li>{@code JOIN}: they signed in with Discord, so their ticket opens for them by itself
+ *       once they are in the server.</li>
+ *   <li>{@code MESSAGE}: we do not know their Discord account. They message us directly,
+ *       with their order reference, through the same direct-message link every Discord
+ *       link on the site uses. (The /verify command is not offered: Discord refuses to
+ *       register it.)</li>
+ * </ul>
  */
-export type TicketLink = {
-  /** Where the button goes. */
-  href: string
-  /**
-   * True when this opens the customer's own ticket.
-   *
-   * <p>False means the server's front door, which is as far as we can send somebody
-   * whose Discord account we do not yet know. The label should say so — promising "your
-   * ticket" and delivering a lobby is worse than saying "join the server".
-   */
-  direct: boolean
-  /** The command that gets them the rest of the way, already carrying their reference. */
-  command: string | null
-}
+export type TicketLink =
+  | { kind: 'TICKET'; href: string }
+  | { kind: 'JOIN'; href: string }
+  | { kind: 'MESSAGE'; href: string }
 
 /**
  * @param access the order's {@code discordAccess}, decided server-side
- * @returns null when there is no Discord step for this order at all — a coin order, or
- *          a deployment with no invite configured. The caller renders nothing.
+ * @returns null when there is no Discord step for this order at all -- a coin order. The
+ *          caller renders nothing.
  */
 export function ticketLink(access: DiscordAccess | null | undefined): TicketLink | null {
   if (!access || access.mode === 'NONE') {
     return null
   }
-
-  // Already granted the channel: link straight in. This is the only branch that can
-  // honestly call itself the customer's ticket.
   if (access.mode === 'DIRECT' && access.channelUrl) {
-    return { href: access.channelUrl, direct: true, command: null }
+    return { kind: 'TICKET', href: access.channelUrl }
   }
-
-  if (!access.inviteUrl) {
-    return null
+  if (access.mode === 'PENDING' && access.inviteUrl) {
+    return { kind: 'JOIN', href: access.inviteUrl }
   }
-
-  // VERIFY carries the command; PENDING and QUOTE do not — PENDING because the grant is
-  // automatic once the ticket exists, QUOTE because the command is not registered on
-  // this deployment and pointing at one that does not answer is worse than silence.
-  return {
-    href: access.inviteUrl,
-    direct: false,
-    command: access.mode === 'VERIFY' ? access.command : null,
-  }
+  return { kind: 'MESSAGE', href: BUSINESS.discordDm }
 }
