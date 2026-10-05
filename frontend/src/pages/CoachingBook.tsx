@@ -376,6 +376,7 @@ export default function CoachingBook() {
               email={account.email}
               sku="COACHING"
               totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? ''}
+              currency={created?.currency ?? resumed?.currency}
               initialMethod={payChoice && payChoice !== 'ONLINE' ? payChoice : undefined}
               onSubmitted={() => { setStep('success'); window.scrollTo({ top: 0 }) }}
             />

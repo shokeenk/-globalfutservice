@@ -3,6 +3,7 @@ import { Alert, Button, Field, Input } from './ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { ManualPaymentClaim, ManualPaymentMethod, ManualPaymentOption } from '../lib/types'
+import { PayopPayment } from './PayopPayment'
 
 /**
  * Paying outside the gateway, and telling us you did.
@@ -38,19 +39,22 @@ function qrFor(method: ManualPaymentMethod, sku: string): string {
 }
 
 /**
- * The tabs across the top. `INTERNATIONAL` is the storefront's own: nothing sits behind it
- * on the API yet, which is why it is not a ManualPaymentMethod.
+ * The tabs across the top. `INTERNATIONAL` is the storefront's own, not a
+ * ManualPaymentMethod: behind it is Payop, for orders in a currency other than INR, and
+ * the "coming soon" panel wherever Payop is not on offer.
  */
 type PaymentTab = ManualPaymentMethod | 'INTERNATIONAL'
 
 export function ManualPayment({
-  publicRef, email, sku, totalFormatted, initialMethod, onSubmitted,
+  publicRef, email, sku, totalFormatted, currency, initialMethod, onSubmitted,
 }: {
   publicRef: string
   /** The email on the order. Guest auth for the claim, exactly as order tracking. */
   email: string
   sku: string
   totalFormatted: string
+  /** The order's currency. INR orders never see Payop. */
+  currency?: string
   /** Opens on this tab when it is on offer, for a flow that already asked. */
   initialMethod?: ManualPaymentMethod
   /**
@@ -78,6 +82,10 @@ export function ManualPayment({
   // the reference, and flagging it missing before anyone has reached it is nagging.
   const [attempted, setAttempted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set when the API says Payop is not on: the tab then says it is coming, as before.
+  const [payopOff, setPayopOff] = useState(false)
+  const payopUnavailable = useCallback(() => setPayopOff(true), [])
+  const offersPayop = !!currency && currency !== 'INR' && !payopOff
 
   useEffect(() => {
     let live = true
@@ -154,7 +162,9 @@ export function ManualPayment({
       setClaim(recorded)
       if (landed) onSubmitted?.()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t.order.payClaimFailed)
+      // A Payop invoice for this order can still be paid: said in the customer's language.
+      setError(e instanceof ApiError && e.code === 'payop_invoice_open' ? t.order.payopClaimBlocked
+        : e instanceof ApiError ? e.message : t.order.payClaimFailed)
     } finally {
       setSubmitting(false)
     }
@@ -224,7 +234,8 @@ export function ManualPayment({
       </div>
 
       {/*
-        Always a choice now: whatever the API offers, plus International. That one is a
+        Always a choice now: whatever the API offers, plus International. For an order in
+        a currency other than INR that is Payop, when it is switched on. Otherwise it is a
         placeholder -- selectable, so the customer can read what it says, but with no
         destination, no reference and no submit behind it, so it cannot pass for a way
         to pay that silently does nothing.
@@ -255,7 +266,9 @@ export function ManualPayment({
         ))}
       </div>
 
-      {method === 'INTERNATIONAL' ? (
+      {method === 'INTERNATIONAL' && offersPayop ? (
+        <PayopPayment publicRef={publicRef} email={email} onUnavailable={payopUnavailable} />
+      ) : method === 'INTERNATIONAL' ? (
         <InternationalSoon
           alternatives={options
             .filter((option) => option.method === 'PAYPAL' || option.method === 'CRYPTO')
