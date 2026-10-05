@@ -38,8 +38,9 @@ import static org.mockito.Mockito.when;
  *
  * <p>Scanned: every sentence {@link CustomerText} can produce, the storefront's three
  * translations, the customer emails and the order ticket's texts, the order support pages
- * and what their chat is told, and the email and ticket message a held order actually
- * sends. Comments are not scanned -- only what is shown.
+ * and what their chat is told, the international payment pages and what the server tells
+ * a paying customer, and the email and ticket message a held order actually sends.
+ * Comments are not scanned -- only what is shown.
  *
  * <p>Not scanned: the privacy policy, which names the partner on purpose, because the law
  * requires saying who receives a customer's sign-in.
@@ -100,6 +101,22 @@ class CustomerVocabularyTest {
                 FRONTEND.resolve("components").resolve("support").resolve("SupportCard.tsx"),
                 FRONTEND.resolve("components").resolve("support").resolve("SupportChat.tsx"),
                 BACKEND.resolve("support").resolve("chat").resolve("SupportChatService.java"));
+        for (Path file : files) {
+            List<String> strings = literals(Files.readString(file));
+            assertThat(strings).as(file.getFileName().toString()).isNotEmpty();
+            assertClean(file.getFileName().toString(), strings);
+        }
+    }
+
+    @Test
+    @DisplayName("the international payment pages, and what the server tells a paying customer, use none of the partner's words")
+    void paymentPages() throws Exception {
+        List<Path> files = List.of(
+                FRONTEND.resolve("components").resolve("ManualPayment.tsx"),
+                FRONTEND.resolve("components").resolve("PayopPayment.tsx"),
+                FRONTEND.resolve("pages").resolve("PayopReturn.tsx"),
+                BACKEND.resolve("payments").resolve("payop").resolve("PayopCheckoutService.java"),
+                BACKEND.resolve("payments").resolve("web").resolve("PayopController.java"));
         for (Path file : files) {
             List<String> strings = literals(Files.readString(file));
             assertThat(strings).as(file.getFileName().toString()).isNotEmpty();
