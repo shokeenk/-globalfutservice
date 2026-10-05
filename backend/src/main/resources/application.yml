@@ -279,6 +279,9 @@ gfs:
     # over at 05:30 local, so checking in at 11pm and again at 6am counts as two
     # days while 9am on consecutive days counts as one.
     bonus-zone: ${GFS_LOYALTY_BONUS_ZONE:Asia/Kolkata}
+    # Whether USD/EUR/GBP orders earn or spend points. Off until the client decides
+    # what a point is worth outside INR; switching it on before then stops start-up.
+    international-points: ${GFS_LOYALTY_INTERNATIONAL_POINTS:false}
 
   coaching:
     # Two lengths, because there are two products. A single session is an hour; a
@@ -439,6 +442,27 @@ gfs:
   # only the Secure Mode key lives here, because it signs who the customer is.
   tawk:
     secure-key: ${GFS_TAWK_SECURE_KEY:}
+
+  # Payop, behind the checkout's International tab (non-INR orders only). Off until
+  # switched on; on, it will not start without the four credentials. Payop's own panel
+  # must keep its commission as "merchant pays" -- the checkout adds the fee itself.
+  payop:
+    enabled: ${GFS_PAYOP_ENABLED:false}
+    api-url: ${GFS_PAYOP_API_URL:https://api.payop.com}
+    checkout-url: ${GFS_PAYOP_CHECKOUT_URL:https://checkout.payop.com}
+    public-key: ${GFS_PAYOP_PUBLIC_KEY:}
+    secret-key: ${GFS_PAYOP_SECRET_KEY:}
+    jwt-token: ${GFS_PAYOP_JWT_TOKEN:}
+    application-id: ${GFS_PAYOP_APPLICATION_ID:}
+    jwt-expires-at: ${GFS_PAYOP_JWT_EXPIRES_AT:}
+    ipn-allowed-ips: ${GFS_PAYOP_IPN_ALLOWED_IPS:18.199.249.46,35.158.36.143,3.125.109.58,3.127.103.117}
+    trusted-proxies: ${GFS_TRUSTED_PROXIES:173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32}
+    methods-cache: ${GFS_PAYOP_METHODS_CACHE:1h}
+
+  # Exchange rates: only for Payop's fixed fee, which is quoted in EUR.
+  fx:
+    ecb-url: ${GFS_FX_ECB_URL:https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml}
+    max-age: ${GFS_FX_MAX_AGE:5d}
 
   rate-limit:
     enabled: true

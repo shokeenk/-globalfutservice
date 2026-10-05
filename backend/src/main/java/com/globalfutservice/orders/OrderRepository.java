@@ -71,14 +71,24 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>,
             """)
     List<OrderEntity> findGuaranteeElapsed(@Param("now") Instant now);
 
-    /** Abandoned-checkout sweep. */
+    /**
+     * Abandoned-checkout sweep.
+     *
+     * <p>Skips an order while a Payop invoice for it can still be paid: Payop cannot cancel
+     * an invoice, so abandoning the order under it would turn a customer's payment into a
+     * refund.
+     */
     @Query("""
             select o from OrderEntity o
             where o.status in (com.globalfutservice.domain.orders.OrderStatus.DRAFT,
                                com.globalfutservice.domain.orders.OrderStatus.AWAITING_PAYMENT)
               and o.createdAt < :cutoff
+              and not exists (select 1 from PayopInvoiceEntity i
+                              where i.orderId = o.id and i.expiresAt > :now
+                                and (i.invoiceId is not null or i.status = :creating))
             """)
-    List<OrderEntity> findStaleUnpaid(@Param("cutoff") Instant cutoff);
+    List<OrderEntity> findStaleUnpaid(@Param("cutoff") Instant cutoff, @Param("now") Instant now,
+                                      @Param("creating") com.globalfutservice.payments.payop.PayopInvoiceEntity.Status creating);
 
     @Query("select count(o) from OrderEntity o where o.status = :status")
     long countByStatus(@Param("status") OrderStatus status);

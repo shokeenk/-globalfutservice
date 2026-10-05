@@ -61,6 +61,29 @@ public class WebhookLedger {
         }
     }
 
+    /**
+     * Like {@link #record}, except that a delivery recorded before but never processed --
+     * the provider could not be asked to confirm it, say -- is handed back to process again.
+     * For providers that retry until they get a 200 and whose events can only be applied
+     * idempotently; Razorpay's path keeps {@link #record}.
+     *
+     * @return the row's id to process, or empty if this delivery was already processed
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<Long> recordOrRetry(String provider, String eventId, String eventType, String rawBody) {
+        Optional<WebhookEventEntity> seen = repository.findByProviderAndProviderEventId(provider, eventId);
+        if (seen.isPresent()) {
+            return seen.get().getProcessedAt() == null ? Optional.of(seen.get().getId()) : Optional.empty();
+        }
+        try {
+            return Optional.of(repository.saveAndFlush(
+                    new WebhookEventEntity(provider, eventId, eventType, rawBody)).getId());
+        } catch (DataIntegrityViolationException e) {
+            log.debug("Webhook {} raced a duplicate; ignoring", eventId);
+            return Optional.empty();
+        }
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markProcessed(Long id) {
         repository.findById(id).ifPresent(event -> {

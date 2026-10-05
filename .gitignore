@@ -11,6 +11,13 @@
 application-local.properties
 application-local.yml
 
+# --- client documents ----------------------------------------------------------
+# Local only, never committed: the client's pricing sheets (Payop's fee table among
+# them) and working notes. The fee table reaches the system through its import, not
+# through git -- this repository is public.
+local/
+docs/*pricing*.xlsx
+
 # --- java --------------------------------------------------------------------
 target/
 *.class

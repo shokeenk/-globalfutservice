@@ -76,6 +76,22 @@ public class WebhookEventEntity {
         return processedAt;
     }
 
+    public String getProvider() {
+        return provider;
+    }
+
+    public String getProviderEventId() {
+        return providerEventId;
+    }
+
+    public Instant getReceivedAt() {
+        return receivedAt;
+    }
+
+    public String getProcessError() {
+        return processError;
+    }
+
     public void markProcessed(Instant at) {
         this.processedAt = at;
         this.processError = null;

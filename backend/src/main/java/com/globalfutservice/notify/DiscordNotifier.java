@@ -242,6 +242,16 @@ public class DiscordNotifier implements Notifier {
                 a.publicRef());
     }
 
+    @Override
+    public void paymentAlert(PaymentAlert a) {
+        send(mention() + " ⚠️ **Payment needs review**",
+                embed(a.subject() + " — " + a.headline(), AMBER, List.of(
+                        field("What happened", a.detail(), false),
+                        field("Code", a.code(), true)
+                ), a.adminDeepLink(), null),
+                a.subject());
+    }
+
     private String mention() {
         String id = props.notifications().discordAdminId();
         if (id == null || id.isBlank()) {

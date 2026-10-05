@@ -73,6 +73,11 @@ public class NotificationService {
     }
 
     @Async
+    public void paymentAlert(PaymentAlert alert) {
+        each(notifier -> notifier.paymentAlert(alert));
+    }
+
+    @Async
     public void customerActionNeeded(CustomerActionNotification n) {
         each(notifier -> notifier.customerActionNeeded(n));
     }

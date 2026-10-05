@@ -258,6 +258,27 @@ public class SecurityConfig {
                     // Signed by Razorpay, verified in the handler. Authentication here
                     // would be meaningless — the caller is a server, not a person.
                     .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
+                    /*
+                      Payop, for international orders. Enumerated, like the rest of /payments.
+
+                        * `options` and `invoices` are authenticated inside the handler by
+                          reference plus the email on the order, sent in the body. They
+                          return server-computed prices and a page to send the customer to;
+                          neither can mark anything paid.
+                        * `return-status` is where Payop sends the customer back. It needs
+                          the order reference and Payop's invoice ID together and only
+                          reads a status.
+                        * `country` echoes Cloudflare's guess at the visitor's country.
+                        * `callback` is Payop's IPN. Payop signs nothing, so the handler
+                          checks the source address against Payop's list -- from our own
+                          proxies' record, never a header the caller sets -- and then
+                          confirms the transaction with Payop's API before anything moves.
+                    */
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/payop/options").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/payop/invoices").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/payments/payop/return-status").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/payments/payop/country").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/payop/callback").permitAll()
 
                     // --- operations ---------------------------------------------------
                     .requestMatchers("/api/v1/admin/**").hasRole("OPERATOR")

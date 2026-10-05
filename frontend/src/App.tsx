@@ -22,6 +22,7 @@ const Order = lazy(() => import('./pages/Order'))
 const Boosting = lazy(() => import('./pages/Boosting'))
 const Rewards = lazy(() => import('./pages/Rewards'))
 const Track = lazy(() => import('./pages/Track'))
+const PayopReturn = lazy(() => import('./pages/PayopReturn'))
 const Help = lazy(() => import('./pages/Help'))
 const Support = lazy(() => import('./pages/Support'))
 const SupportTicket = lazy(() => import('./pages/SupportTicket'))
@@ -47,6 +48,7 @@ const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminPayop = lazy(() => import('./pages/admin/AdminPayop'))
 const AdminListings = lazy(() => import('./pages/admin/AdminListings'))
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'))
 const AdminComingSoon = lazy(() =>
@@ -98,6 +100,10 @@ export default function App() {
               guards — that call is ADMIN and refuses an operator. */}
           <Route path="services/coaching" element={<AdminCoaching />} />
           <Route path="payments" element={<AdminPayments />} />
+          {/* Operators see it and can check a payment with Payop; the controls that change
+              fees, rates or accept a payment by hand are drawn for admins only, and their
+              endpoints are ADMIN. Beneath Payments, so that item lights. */}
+          <Route path="payments/payop" element={<AdminPayop />} />
           <Route
             path="discord"
             element={<AdminComingSoon eyebrow="Discord Integration" title="Discord Integration" />}
@@ -150,6 +156,9 @@ export default function App() {
               <Route path="/boosting" element={<Boosting />} />
               <Route path="/rewards" element={<Rewards />} />
               <Route path="/track" element={<Track />} />
+              {/* Where Payop sends the customer back. Unguarded and read-only: it shows what
+                  the server says about the payment and can change nothing. */}
+              <Route path="/payment/payop/return" element={<PayopReturn />} />
               {/* Public and unguarded on purpose: this is opened from an email by
                   somebody who is not signed in, and making them sign in to leave a
                   mailing list is how people report mail as spam instead. */}

@@ -64,6 +64,16 @@ public interface Notifier {
     }
 
     /**
+     * Taking a payment needs a person: a Payop payment that could not be confirmed, a
+     * second payment for an order already paid, or a Payop credential about to expire.
+     *
+     * <p>For the operator channels only. The customer is never contacted about it first.
+     */
+    default void paymentAlert(PaymentAlert alert) {
+        // Channels opt in by overriding.
+    }
+
+    /**
      * The customer's order is on hold until they fix something on their EA account.
      *
      * <p>For the customer's own channels only: their email, and the order's ticket, which

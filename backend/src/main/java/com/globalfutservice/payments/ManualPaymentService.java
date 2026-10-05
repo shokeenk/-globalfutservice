@@ -16,6 +16,7 @@ import com.globalfutservice.domain.payments.ImageType;
 import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.payments.payop.PayopCheckoutService;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +53,8 @@ public class ManualPaymentService {
     /** Keeps a coaching order's held slot alive while its payment is reviewed. */
     private final CoachingService coaching;
     private final AfterCommit afterCommit;
+    /** Says when a Payop invoice for an order stops being payable; claims wait until then. */
+    private final PayopCheckoutService payop;
 
     public ManualPaymentService(ManualPaymentClaimRepository claims,
                                 ManualPaymentProofRepository proofs,
@@ -61,7 +64,9 @@ public class ManualPaymentService {
                                 CustomerFeedService feed,
                                 AppProperties props,
                                 CoachingService coaching,
-                                AfterCommit afterCommit) {
+                                AfterCommit afterCommit,
+                                PayopCheckoutService payop) {
+        this.payop = payop;
         this.coaching = coaching;
         this.afterCommit = afterCommit;
         this.feed = feed;
@@ -129,6 +134,19 @@ public class ManualPaymentService {
             throw new ApiExceptions.ConflictException(
                     "payment_not_pending",
                     "This order is not waiting for payment. Contact support if you have paid twice.");
+        }
+
+        /*
+         * While a Payop invoice for this order can still be paid, a second way of paying
+         * invites paying twice -- and Payop cannot cancel an invoice. So the claim waits
+         * until the invoice's 24 hours are up. The storefront says so in the customer's own
+         * language, keyed on the code.
+         */
+        if (payop.claimsBlockedUntil(order.getId()).isPresent()) {
+            throw new ApiExceptions.ConflictException(
+                    "payop_invoice_open",
+                    "A payment you started with another method can still be completed. Finish it, or "
+                            + "send your payment reference once it has expired.");
         }
 
         String destination = optionsFor(order.getSku().name()).stream()

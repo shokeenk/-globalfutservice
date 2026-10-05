@@ -76,6 +76,12 @@ public class PaymentEntity {
         this.currency = currency;
     }
 
+    /** A payment taken by a provider other than Razorpay, recorded once it is confirmed. */
+    public PaymentEntity(Long orderId, String provider, String providerOrderId, long amountMinor, Currency currency) {
+        this(orderId, providerOrderId, amountMinor, currency);
+        this.provider = provider;
+    }
+
     @PreUpdate
     void touch() {
         this.updatedAt = Instant.now();

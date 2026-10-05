@@ -108,6 +108,18 @@ public class OrderEntity {
     @Column(name = "price_breakdown", nullable = false, columnDefinition = "jsonb")
     private String priceBreakdown;
 
+    /**
+     * The Payop attempt that paid this order, and that payment's fee, exactly as charged.
+     * Null for every other way of paying. {@code priceBreakdown} keeps the quote the order
+     * was accepted at; these say how the payment differed from it.
+     */
+    @Column(name = "payop_invoice_id")
+    private Long payopInvoiceId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "payment_fee", columnDefinition = "jsonb")
+    private String paymentFee;
+
     @Column(name = "points_redeemed", nullable = false)
     private long pointsRedeemed;
 
@@ -386,6 +398,25 @@ public class OrderEntity {
 
     public long getTotalMinor() {
         return totalMinor;
+    }
+
+    public Long getPayopInvoiceId() {
+        return payopInvoiceId;
+    }
+
+    public String getPaymentFee() {
+        return paymentFee;
+    }
+
+    /**
+     * Paid through Payop: the total becomes what was actually charged -- the quote's price
+     * without the 2.5% card fee, plus the chosen method's own fee -- and the fee's details
+     * are kept with it. Called once, just before the order is marked paid.
+     */
+    public void recordPayopPayment(long payopInvoiceId, long chargedTotalMinor, String paymentFeeJson) {
+        this.payopInvoiceId = payopInvoiceId;
+        this.totalMinor = chargedTotalMinor;
+        this.paymentFee = paymentFeeJson;
     }
 
     public String getPriceBreakdown() {

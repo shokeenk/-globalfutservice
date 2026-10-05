@@ -14,7 +14,7 @@ import { PaymentPanel } from './payments/PaymentPanel'
 import { RecordRefund } from './payments/RecordRefund'
 import { ALL_STATUSES, formatMinor, otherCurrencies, sum } from './payments/totals'
 import { StatusBadge } from './ui/Badge'
-import { AdminButton, MenuItem, RowMenu } from './ui/controls'
+import { AdminButton, buttonClasses, MenuItem, RowMenu } from './ui/controls'
 import { shortDateTime, todayInIndia } from './ui/format'
 import { MethodMark } from './ui/MethodMark'
 import { StatCard, TrendLine } from './ui/StatCard'
@@ -172,12 +172,17 @@ export default function AdminPayments() {
       eyebrow="Payments"
       title="Payments"
       description="View all payment transactions, check status and manage refunds."
-      action={isAdmin ? (
-        <AdminButton variant="attention" onClick={() => setRefundFor('new')}>
-          <LuRotateCcw aria-hidden="true" className="h-4 w-4" />
-          Record Refund
-        </AdminButton>
-      ) : undefined}
+      action={(
+        <>
+          <Link to="/admin/payments/payop" className={buttonClasses('outline')}>International (Payop)</Link>
+          {isAdmin && (
+            <AdminButton variant="attention" onClick={() => setRefundFor('new')}>
+              <LuRotateCcw aria-hidden="true" className="h-4 w-4" />
+              Record Refund
+            </AdminButton>
+          )}
+        </>
+      )}
     >
       {notice && (
         <div role={notice.tone === 'error' ? 'alert' : 'status'}

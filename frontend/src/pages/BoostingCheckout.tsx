@@ -307,6 +307,7 @@ export default function BoostingCheckout() {
                     email={account.email}
                     sku={sku}
                     totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? ''}
+                    currency={created?.currency ?? resumed?.currency}
                     initialMethod={payChoice && payChoice !== 'ONLINE' ? payChoice : undefined}
                     onSubmitted={() => { setStep('done'); window.scrollTo({ top: 0 }) }}
                   />

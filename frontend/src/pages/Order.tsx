@@ -2324,6 +2324,7 @@ function PaymentStage({
         email={email}
         sku={sku}
         totalFormatted={order.totalFormatted}
+        currency={order.currency}
       />
 
       {/*

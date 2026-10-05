@@ -94,6 +94,23 @@ class DiscordNotifierTest {
     }
 
     @Test
+    @DisplayName("a payment alert pings the operator, filed under the order or under Payop itself")
+    void paymentAlert() throws Exception {
+        enabled().paymentAlert(new PaymentAlert("GFS-26-000123", "Duplicate payment, refund needed",
+                "A second Payop payment arrived for an order already paid.", "DUPLICATE_PAYMENT",
+                "https://globalfutservices.com/admin/payments/payop"));
+        JsonNode first = posted();
+        assertThat(first.get("content").asText()).isEqualTo("<@" + ADMIN_ID + ">  ⚠️ **Payment needs review**");
+        assertThat(first.at("/embeds/0/title").asText())
+                .isEqualTo("GFS-26-000123 — Duplicate payment, refund needed");
+        assertThat(first.at("/embeds/0/fields/1/value").asText()).isEqualTo("DUPLICATE_PAYMENT");
+
+        enabled().paymentAlert(new PaymentAlert(null, "Payop token expires in 6 days",
+                "Issue a new one in Payop's dashboard.", "TOKEN_EXPIRING", null));
+        assertThat(posted().at("/embeds/0/title").asText()).isEqualTo("Payop — Payop token expires in 6 days");
+    }
+
+    @Test
     @DisplayName("sends the payment screenshot to the webhook as an attachment when there is no ticket")
     void screenshotReachesTheWebhook() throws Exception {
         byte[] image = "PNG-fake-image-bytes".getBytes(StandardCharsets.ISO_8859_1);
@@ -230,7 +247,8 @@ class DiscordNotifierTest {
         @Test
         @DisplayName("have no field to travel in")
         void notificationsCannotCarryThem() {
-            for (Class<?> type : List.of(PaymentClaimNotification.class, OrderNotification.class)) {
+            for (Class<?> type : List.of(PaymentClaimNotification.class, OrderNotification.class,
+                    PaymentAlert.class)) {
                 for (RecordComponent component : type.getRecordComponents()) {
                     String name = component.getName().toLowerCase(Locale.ROOT);
                     boolean looksLikeASecret =
