@@ -40,10 +40,12 @@ public class VendorOrderActions {
     private final CredentialVaultService vault;
     private final OrderService orderService;
     private final AppProperties props;
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
 
     public VendorOrderActions(FutTransferClient client, VendorControl control, VendorOrderLedger ledger,
                               VendorOrderActionLog actions, CredentialVaultService vault, OrderService orderService,
-                              AppProperties props) {
+                              AppProperties props, com.fasterxml.jackson.databind.ObjectMapper mapper) {
+        this.mapper = mapper;
         this.client = client;
         this.control = control;
         this.ledger = ledger;
@@ -358,16 +360,36 @@ public class VendorOrderActions {
     /**
      * Everything the admin's order page shows about the vendor, and which actions apply now.
      * {@code currentOrderMode} is configuration now; the vendor order says how it was sent.
+     * {@code nextSend} is what Approve would send for this order right now -- the same
+     * decision Approve takes -- shown before anyone clicks it. Null when FUT Transfer is off or
+     * the order is not a coin order.
      */
     public record Section(boolean enabled, boolean paused, VendorOrderLedger.Detail vendorOrder,
                           List<String> available, List<VendorCallLog.Call> calls,
-                          List<VendorOrderActionLog.Entry> actions, String currentOrderMode) {
+                          List<VendorOrderActionLog.Entry> actions, String currentOrderMode,
+                          OrderModeReport.NextSend nextSend) {
     }
 
     public Section section(OrderEntity order, List<VendorCallLog.Call> calls) {
         VendorOrderLedger.Detail d = ledger.detail(order.getId()).orElse(null);
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
-                actions.forOrder(order.getId()), props.futTransfer().orderMode().name());
+                actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order));
+    }
+
+    private OrderModeReport.NextSend nextSend(OrderEntity order) {
+        if (!client.isEnabled() || !order.getSku().isCoinTransfer()) {
+            return null;
+        }
+        long amountK;
+        try {
+            amountK = VendorAmount.forOrder(order, mapper);
+        } catch (VendorAmount.InvalidAmountException e) {
+            OrderModeReport.NextSend shape = OrderModeReport.nextSend(props.futTransfer(), 1);
+            return new OrderModeReport.NextSend(shape.orderMode(), shape.endpoint(), shape.transferMethod(), null,
+                    null, null, shape.topUpEnabled(), shape.autoFinishCycle(), shape.senderGroup(),
+                    e.getMessage() + " Nothing would be sent.");
+        }
+        return OrderModeReport.nextSend(props.futTransfer(), amountK);
     }
 
     /** The same rules each action checks, so the page offers only what would be tried. */

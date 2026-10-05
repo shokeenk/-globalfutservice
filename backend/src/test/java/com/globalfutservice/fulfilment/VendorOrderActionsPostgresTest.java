@@ -97,7 +97,8 @@ class VendorOrderActionsPostgresTest {
             statuses.put(o.getPublicRef(), inv.getArgument(1));
             return order(o.getPublicRef());
         });
-        actions = new VendorOrderActions(client, control, ledger, actionLog, vault, orderService, props);
+        actions = new VendorOrderActions(client, control, ledger, actionLog, vault, orderService, props,
+                new ObjectMapper());
     }
 
     @AfterEach
@@ -318,7 +319,8 @@ class VendorOrderActionsPostgresTest {
                 Duration.ofMillis(800), AppProperties.FutTransferOrderMode.PUBLIC_POOL,
                 VendorTestSupport.ORDER_AMOUNT_POOL);
         VendorOrderActions afterSwitch = new VendorOrderActions(new FutTransferClient(pool, new ObjectMapper(), control,
-                new VendorCallLog(db.named)).withoutRetryPauses(), control, ledger, actionLog, vault, orderService, pool);
+                new VendorCallLog(db.named)).withoutRetryPauses(), control, ledger, actionLog, vault, orderService, pool,
+                new ObjectMapper());
         vendor.on("/correctCredentialsAPI", Reply.ok(CONTINUED));
 
         assertThat(afterSwitch.sendCorrectedSignIn(o, ADMIN).status()).isEqualTo(Status.DONE);

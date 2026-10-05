@@ -1,6 +1,7 @@
 package com.globalfutservice.config;
 
 import com.globalfutservice.catalog.SeasonPriceCheck;
+import com.globalfutservice.fulfilment.OrderModeReport;
 import com.globalfutservice.payments.payop.PayopStartupCheck;
 import com.globalfutservice.domain.crypto.SecureIds;
 import com.globalfutservice.identity.AccountEntity;
@@ -155,6 +156,15 @@ public class BootstrapRunner implements ApplicationRunner {
         log.info("Global FUT Services starting — season {}, currencies {}, delivery default {}",
                 props.season(), props.pricing().enabledCurrencies(),
                 props.fulfilment().defaultDeliveryMethod());
+
+        // How coin orders will be placed, on its own line every start: which endpoint and
+        // with what, so "which mode is this instance running" is one log search away.
+        String orderMode = OrderModeReport.startupLine(props.futTransfer());
+        if (OrderModeReport.isWarning(props.futTransfer())) {
+            log.warn(orderMode);
+        } else {
+            log.info(orderMode);
+        }
 
         if (!warnings.isEmpty()) {
             log.warn("\nConfiguration warnings:\n{}", warnings);
