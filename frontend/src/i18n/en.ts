@@ -1787,15 +1787,15 @@ const en = {
     cardTitleOrder: 'Connect with GFS',
     cardTitleCoach: 'Connect with Your Coach',
     cardBodyBoosting:
-      'Need help with your order? Create a ticket and our GFS Support team will connect with you shortly '
-      + 'and guide you through the next steps.',
+      'Need help with your order? Create a ticket and our GFS Support team will connect you with your booster '
+      + 'shortly.',
     cardBodyCoins:
       'Having an issue with your coin order? Create a support request and our GFS Support team will check '
       + 'the order and help you resolve it.',
     cardBodyCoaching:
       'Need help with your coaching order or session? Connect with your coach and continue the conversation '
       + 'directly from your GFS account.',
-    ctaBoosting: 'Create Order Ticket',
+    ctaBoosting: 'Connect to booster',
     ctaCoins: 'Create Order Support',
     ctaCoaching: 'Connect with Coach',
     eyebrow: 'Order support',

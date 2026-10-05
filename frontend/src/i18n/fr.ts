@@ -1584,15 +1584,15 @@ const fr: Dictionary = {
     cardTitleOrder: 'Contacter GFS',
     cardTitleCoach: 'Contacter ton coach',
     cardBodyBoosting:
-      'Besoin d’aide avec ta commande ? Crée un ticket et l’équipe Support de GFS te répondra rapidement '
-      + 'pour te guider dans les prochaines étapes.',
+      'Besoin d’aide avec ta commande ? Crée un ticket et l’équipe Support de GFS te mettra rapidement en '
+      + 'relation avec ton booster.',
     cardBodyCoins:
       'Un problème avec ta commande de crédits ? Crée une demande d’assistance et l’équipe Support de GFS '
       + 'vérifiera la commande et t’aidera à le résoudre.',
     cardBodyCoaching:
       'Besoin d’aide avec ta commande de coaching ou une séance ? Contacte ton coach et poursuis la conversation '
       + 'directement depuis ton compte GFS.',
-    ctaBoosting: 'Créer un ticket de commande',
+    ctaBoosting: 'Contacter le booster',
     ctaCoins: 'Créer une demande d’assistance',
     ctaCoaching: 'Contacter le coach',
     eyebrow: 'Assistance commande',

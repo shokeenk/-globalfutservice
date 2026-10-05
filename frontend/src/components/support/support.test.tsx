@@ -35,8 +35,8 @@ afterEach(() => {
 describe('the card on an order', () => {
   it.each([
     ['BOOST_CHAMPS', 'Connect with GFS',
-      'Need help with your order? Create a ticket and our GFS Support team will connect with you shortly and guide '
-      + 'you through the next steps.', 'Create Order Ticket', '/orders/GFS-26-70C4DPWH/support'],
+      'Need help with your order? Create a ticket and our GFS Support team will connect you with your booster '
+      + 'shortly.', 'Connect to booster', '/orders/GFS-26-70C4DPWH/support'],
     ['TRADING_SERVICE', 'Connect with GFS',
       'Having an issue with your coin order? Create a support request and our GFS Support team will check the order '
       + 'and help you resolve it.', 'Create Order Support', '/orders/GFS-26-70C4DPWH/support'],

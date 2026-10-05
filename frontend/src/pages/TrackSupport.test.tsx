@@ -43,7 +43,7 @@ function view(o: Order, signedIn: boolean) {
 describe('the order page\'s support card', () => {
   it('BOOST_CHAMPS, signed in: the support card, and the Discord ticket for the EA login', () => {
     view(order('BOOST_CHAMPS', 'IN_PROGRESS'), true)
-    expect(screen.getByRole('link', { name: 'Create Order Ticket' }))
+    expect(screen.getByRole('link', { name: 'Connect to booster' }))
       .toHaveAttribute('href', '/orders/GFS-26-70C4DPWH/support')
     expect(screen.getByRole('link', { name: 'Join Discord' })).toHaveAttribute('href', 'https://discord.gg/x')
     expect(screen.getByText('/verify ABC')).toBeInTheDocument()
