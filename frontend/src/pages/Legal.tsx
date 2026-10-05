@@ -536,6 +536,11 @@ function Privacy({ policy }: { policy: Policy | null }) {
           screenshot of the payment you upload, which we use to match the payment to your
           order.
         </p>
+        <p>
+          If you pay through Payop: the country you choose, the payment method you pick, and
+          Payop's references for the payment, which we use to confirm it and match it to your
+          order.
+        </p>
       </Clause>
 
       <Clause n={2} title="Your EA sign-in">
@@ -576,6 +581,18 @@ function Privacy({ policy }: { policy: Policy | null }) {
           and, if you have opted in to them, our promotional emails. Live chat on an order's
           support page is provided by tawk.to; section 8 says what it receives.
           We do not sell data, and we do not share it for advertising.
+        </p>
+        {/*
+          Payop handles payments for orders in other currencies. Named because it receives
+          the customer's email with each invoice -- the one payer detail the API requires.
+          Its legal name goes here once the client confirms it.
+        */}
+        <p>
+          If you pay an order in a currency other than Indian rupees through Payop, Payop
+          processes that payment. We send it your order reference, the amount and currency,
+          and your email address. Anything else its payment page asks for, you give to Payop
+          directly, under Payop's own privacy policy. We receive the result of the payment and
+          Payop's references for it, never your bank or card details.
         </p>
         {/*
           Added because the software now does this and the policy did not say so.
