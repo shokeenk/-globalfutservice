@@ -127,17 +127,19 @@ function Wordmark({ large = false }: { large?: boolean }) {
         Smaller on a phone. One line is wider than two by definition, and at 19px the
         lockup plus the burger cluster came to two pixels more than a 375px viewport —
         enough for the page to scroll sideways, which is the one thing it must never
-        do. It steps up at `sm`, where there is room.
+        do. It steps up at `sm`, where there is room, and down once more below 360px:
+        at 15.5px the lockup and the two buttons need 345px, so on a 320px phone the
+        menu button was cut in half at the right edge.
       */
       className={`display whitespace-nowrap leading-none text-chalk ${
-        large ? 'text-[15.5px] sm:text-[19px]' : 'text-[13px]'
+        large ? 'text-[15.5px] max-[359px]:text-[13px] sm:text-[19px]' : 'text-[13px]'
       }`}
     >
       GLOBAL FUT{' '}
       <span
         className={`font-semibold uppercase text-brand-400 ${
           large
-            ? 'text-[10.5px] tracking-[0.14em] sm:text-[13px] sm:tracking-[0.16em]'
+            ? 'text-[10.5px] tracking-[0.14em] max-[359px]:text-[9px] sm:text-[13px] sm:tracking-[0.16em]'
             : 'text-[9.5px] tracking-[0.14em]'
         }`}
       >

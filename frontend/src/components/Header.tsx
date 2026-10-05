@@ -152,7 +152,7 @@ export function Header() {
           Both shrank once the wordmark went to one line: stacked, it was as tall as
           the crest and the bar could not be shorter than it.
         */}
-        <div className="mx-auto flex h-[56px] max-w-[1320px] items-center gap-6 px-5 sm:px-8 lg:px-10">
+        <div className="mx-auto flex h-[56px] max-w-[1320px] items-center gap-2 px-5 sm:gap-6 sm:px-8 lg:px-10">
           <Link to="/" aria-label={t.nav.home} className="shrink-0">
             <Logo />
           </Link>
