@@ -62,11 +62,15 @@ export function SupportCard({ reference, sku }: { reference: string; sku: string
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-paper">
           <ChatIcon />
         </span>
-        <div className="min-w-0 flex-1">
+        {/*
+          A 14rem floor on the text, so on a phone the button wraps onto its own line
+          instead of the text being squeezed to a word per line beside it.
+        */}
+        <div className="min-w-0 flex-1 basis-56">
           <p className="text-body-sm font-semibold text-chalk">{copy.title}</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-chalk-muted">{copy.body}</p>
         </div>
-        <ButtonLink to={supportPath(mode, reference)} size="md">{copy.cta}</ButtonLink>
+        <ButtonLink to={supportPath(mode, reference)} size="md" className="w-full sm:w-auto">{copy.cta}</ButtonLink>
       </div>
     </div>
   )
