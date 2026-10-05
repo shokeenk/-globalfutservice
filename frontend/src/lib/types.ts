@@ -889,7 +889,6 @@ export interface DiscordAccess {
   mode: 'DIRECT' | 'PENDING' | 'VERIFY' | 'QUOTE' | 'NONE'
   channelUrl: string | null
   inviteUrl: string | null
-  command: string | null
 }
 
 export interface CampaignStats {

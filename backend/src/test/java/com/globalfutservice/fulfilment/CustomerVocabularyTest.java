@@ -124,6 +124,54 @@ class CustomerVocabularyTest {
         }
     }
 
+    /**
+     * Customers are never told to run /verify: Discord refuses to register the command.
+     * Emails, the order ticket's texts, what the order page is sent, and the storefront's
+     * three translations -- what is shown, not comments.
+     */
+    @Test
+    @DisplayName("nothing a customer reads tells them to run /verify")
+    void noVerifyCommand() throws Exception {
+        List<Path> files = new ArrayList<>(templateFiles());
+        for (String lang : List.of("en", "es", "fr")) {
+            files.add(FRONTEND.resolve("i18n").resolve(lang + ".ts"));
+        }
+        files.add(FRONTEND.resolve("pages").resolve("BoostingCheckout.tsx"));
+        files.add(FRONTEND.resolve("pages").resolve("Track.tsx"));
+        files.add(FRONTEND.resolve("components").resolve("DiscordMessageUs.tsx"));
+        Pattern verify = Pattern.compile("(?i)/verify\\b|run this command|ejecuta allí este comando"
+                + "|lance cette commande");
+        Map<String, String> hits = new LinkedHashMap<>();
+        for (Path file : files) {
+            for (String text : literals(Files.readString(file))) {
+                if (verify.matcher(text).find()) {
+                    hits.put(file.getFileName() + ": " + text, "/verify");
+                }
+            }
+        }
+        assertThat(hits).as("customer text that still points at /verify").isEmpty();
+    }
+
+    @Test
+    @DisplayName("instead, the boosting confirmation names globalfutservices and opens a direct message to it")
+    void discordDirectMessage() {
+        String dm = "https://discord.com/users/1300551868174569595";
+        com.globalfutservice.notify.email.TransactionalEmails.Rendered email =
+                com.globalfutservice.notify.email.TransactionalEmails.orderConfirmed(
+                        new OrderNotification("GFS-26-DMCHECK1", "PAID", "Champs Boosting — 15 wins", "₹1,000.00",
+                                "player@example.test", null, "PLAYER_AUCTION", "BOOST_CHAMPS", "PlayStation",
+                                "https://globalfutservices.com/admin/orders/GFS-26-DMCHECK1", null, null, null),
+                        new com.globalfutservice.notify.email.EmailTemplate.Brand("https://globalfutservices.com",
+                                "globalfutservices.com", "https://discord.com/invite/x", "Join the GFS Discord",
+                                "https://instagram.com/x", "@x"),
+                        "https://globalfutservices.com/track?ref=GFS-26-DMCHECK1", dm,
+                        "https://globalfutservices.com/coaching/GFS-26-DMCHECK1/support");
+        for (String part : List.of(email.html(), email.text())) {
+            assertThat(part).contains("globalfutservices").contains(dm)
+                    .contains("Include your order reference: GFS-26-DMCHECK1");
+        }
+    }
+
     private static List<String> customerTextSentences() {
         List<String> sentences = new ArrayList<>();
         for (VendorStatusMap.State state : VendorStatusMap.State.values()) {

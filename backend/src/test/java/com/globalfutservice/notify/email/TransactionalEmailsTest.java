@@ -27,7 +27,10 @@ class TransactionalEmailsTest {
             "https://www.instagram.com/global_fut_services/", "@global_fut_services");
 
     private static final String TRACK = "https://globalfutservices.com/track?ref=GFS-26-ABC123";
+    /** The footer's server link, the same on every email. */
     private static final String DISCORD = "https://discord.com/invite/8FeP7C6tXt";
+    /** What the order-confirmed email's Discord step links: a direct message to our account. */
+    private static final String DISCORD_DM = "https://discord.com/users/1300551868174569595";
     private static final String COACH = "https://globalfutservices.com/coaching/GFS-26-ABC123/support";
 
     private static OrderNotification order(String sku, String serviceLabel, String platform) {
@@ -106,19 +109,29 @@ class TransactionalEmailsTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"BOOST_CHAMPS", "BOOST_RIVALS"})
-        @DisplayName("boosting gets the three-step Discord block, where the EA login is handed over")
+        @DisplayName("boosting: message us on Discord, with the order reference -- never /verify")
         void discord_branch(String sku) {
             var r = TransactionalEmails.orderConfirmed(
-                    order(sku, "A service", "PlayStation"), BRAND, TRACK, DISCORD, COACH);
+                    order(sku, "A service", "PlayStation"), BRAND, TRACK, DISCORD_DM, COACH);
 
             assertThat(r.html())
                     .contains("NEXT STEPS")
-                    .contains("Join our Discord server")
-                    .contains("Your ticket will be created")
-                    .contains("Our Operations Executive will contact you")
-                    .contains("JOIN DISCORD")
-                    .contains(DISCORD)
-                    .contains("same email/Discord account used for placing the order");
+                    .contains("Message us on Discord: globalfutservices")
+                    .contains("MESSAGE US ON DISCORD")
+                    .contains("href=\"" + DISCORD_DM + "\"")
+                    .contains("Include your order reference: GFS-26-ABC123")
+                    .contains("Our Operations Executive will reply");
+            assertThat(r.text())
+                    .contains("1. Message us on Discord: globalfutservices")
+                    .contains(DISCORD_DM)
+                    .contains("2. Include your order reference: GFS-26-ABC123");
+            for (String part : new String[] {r.html(), r.text()}) {
+                assertThat(part)
+                        .doesNotContainIgnoringCase("/verify")
+                        .doesNotContain("Join our Discord server")
+                        .doesNotContain("Your ticket will be created")
+                        .doesNotContain("verification");
+            }
 
             // The tracking button belongs to the coins branch only; these customers are
             // told to go to Discord, and two competing primary actions is one too many.

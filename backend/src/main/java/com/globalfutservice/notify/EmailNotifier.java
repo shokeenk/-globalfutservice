@@ -82,8 +82,20 @@ public class EmailNotifier implements Notifier {
     @Override
     public void orderConfirmed(OrderNotification n) {
         var rendered = TransactionalEmails.orderConfirmed(
-                n, brand(), trackUrl(n), props.discordInvite(), coachUrl(n));
+                n, brand(), trackUrl(n), discordDmUrl(), coachUrl(n));
         sendHtml(n, rendered);
+    }
+
+    /**
+     * A direct message to our Discord account: discord.com/users/{GFS_DISCORD_ADMIN_ID},
+     * the same account the storefront's Discord links open. Discord has no link that opens a
+     * DM from a username, so without the id the server invite stands in -- the email still
+     * names the account to message.
+     */
+    String discordDmUrl() {
+        String id = props.notifications().discordAdminId();
+        return id != null && id.trim().matches("\\d{5,25}")
+                ? "https://discord.com/users/" + id.trim() : props.discordInvite();
     }
 
     @Override

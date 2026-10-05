@@ -221,18 +221,16 @@ public final class OrderDtos {
      * The Discord half of the tracking page.
      *
      * @param mode        {@code DIRECT} when the customer signed in with Discord and has
-     *                    already been let into the channel, {@code VERIFY} when they have
-     *                    to join and run the command, {@code NONE} when there is no
-     *                    ticket to reach
+     *                    already been let into the channel, {@code PENDING} when they will
+     *                    be as soon as the ticket opens, {@code VERIFY} or {@code QUOTE} when
+     *                    we do not know their Discord account and they message us with their
+     *                    reference, {@code NONE} when there is no ticket to reach
      * @param channelUrl  straight into the ticket. Only set for {@code DIRECT} — for
      *                    anyone else it would be a link to a channel they cannot see,
      *                    which reads as the site being broken
-     * @param inviteUrl   the server invite, for {@code VERIFY}
-     * @param command     the exact thing to type, reference already filled in, so it can
-     *                    be copied rather than assembled
+     * @param inviteUrl   the server invite
      */
-    public record DiscordAccessDto(String mode, String channelUrl, String inviteUrl,
-                                   String command) {
+    public record DiscordAccessDto(String mode, String channelUrl, String inviteUrl) {
     }
 
     /**

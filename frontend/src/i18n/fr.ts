@@ -466,14 +466,7 @@ const fr: Dictionary = {
     discordTicketBody: 'Continue ta commande sur Discord. Notre équipe est prête à t’aider.',
     discordTicketCta: 'Ouvrir Discord',
     discordTicketCreated: 'Ton ticket est créé !',
-    discordTicketQuote: (ref) => `Donne ton numéro de commande, ${ref}, et l’équipe s’en occupe.`,
-    discordVerifyTitle: 'Accède à ton ticket',
-    discordVerifyBody:
-      'Rejoins notre serveur Discord, puis lance cette commande là-bas. Elle ouvre ton '
-      + 'ticket et personne d’autre ne peut l’utiliser.',
-    discordVerifyJoin: 'Rejoindre Discord',
-    discordVerifyCopy: 'Copier la commande',
-    discordVerifyCopied: 'Copié',
+    discordJoin: 'Rejoindre Discord',
     discordPendingTitle: 'Ton ticket s’ouvre tout seul',
     discordPendingBody:
       'Tu t’es connecté avec Discord, donc on connaît déjà ton compte. Dès que ton '
@@ -716,6 +709,15 @@ const fr: Dictionary = {
     withReference: 'avec la référence.',
   },
 
+  discordDm: {
+    title: 'Écris-nous sur Discord',
+    messageUs: 'Écris-nous sur Discord :',
+    includeReference: 'Indique ta référence de commande :',
+    button: 'Écris-nous sur Discord',
+    copy: 'Copier',
+    copied: 'Copié',
+    copyLabel: (ref: string) => `Copier la référence de commande ${ref}`,
+  },
   payopReturn: {
     eyebrow: 'Paiement',
     checking: 'Vérification de ton paiement…',
