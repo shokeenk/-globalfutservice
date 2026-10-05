@@ -54,7 +54,7 @@ describe('after paying', () => {
       </MemoryRouter>,
     )
 
-    const cta = await screen.findByRole('link', { name: 'Create Order Ticket' })
+    const cta = await screen.findByRole('link', { name: 'Connect to booster' })
     expect(cta).toHaveAttribute('href', '/orders/GFS-26-BOOST001/support')
     expect(screen.getByText('Connect with GFS')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'contact support' })).toHaveAttribute('href', '/support')

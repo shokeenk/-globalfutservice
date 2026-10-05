@@ -1577,15 +1577,15 @@ const es: Dictionary = {
     cardTitleOrder: 'Conecta con GFS',
     cardTitleCoach: 'Conecta con tu entrenador',
     cardBodyBoosting:
-      '¿Necesitas ayuda con tu pedido? Crea un ticket y nuestro equipo de soporte de GFS se pondrá en contacto '
-      + 'contigo en breve y te guiará en los siguientes pasos.',
+      '¿Necesitas ayuda con tu pedido? Crea un ticket y nuestro equipo de soporte de GFS te pondrá en contacto '
+      + 'con tu booster en breve.',
     cardBodyCoins:
       '¿Tienes un problema con tu pedido de monedas? Crea una solicitud de soporte y nuestro equipo de soporte '
       + 'de GFS revisará el pedido y te ayudará a resolverlo.',
     cardBodyCoaching:
       '¿Necesitas ayuda con tu pedido de clases o con una sesión? Conecta con tu entrenador y continúa la '
       + 'conversación directamente desde tu cuenta de GFS.',
-    ctaBoosting: 'Crear ticket del pedido',
+    ctaBoosting: 'Conectar con el booster',
     ctaCoins: 'Crear solicitud de soporte',
     ctaCoaching: 'Conectar con el entrenador',
     eyebrow: 'Soporte del pedido',
