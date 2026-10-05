@@ -79,7 +79,7 @@ class VendorAdminActionsPostgresTest {
             return order(o.getPublicRef());
         });
         actions = new VendorOrderActions(client, control, ledger, new VendorOrderActionLog(db.named),
-                mock(CredentialVaultService.class), orderService, props);
+                mock(CredentialVaultService.class), orderService, props, new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @AfterEach
@@ -92,6 +92,10 @@ class VendorAdminActionsPostgresTest {
         when(o.getId()).thenReturn(ids.get(ref));
         when(o.getPublicRef()).thenReturn(ref);
         when(o.getStatus()).thenAnswer(inv -> statuses.get(ref));
+        // A 500K coin order, as db.order writes it.
+        when(o.getSku()).thenReturn(com.globalfutservice.domain.catalog.Sku.TRADING_SERVICE);
+        when(o.getQuantity()).thenReturn(new java.math.BigDecimal("0.5"));
+        when(o.getPriceBreakdown()).thenReturn("{\"quantity\":0.5}");
         return o;
     }
 
@@ -332,6 +336,35 @@ class VendorAdminActionsPostgresTest {
         // How it was sent, and how a send now would go.
         assertThat(s.vendorOrder().orderMode()).isEqualTo("OWN_SENDERS");
         assertThat(s.currentOrderMode()).isEqualTo("OWN_SENDERS");
+        // What Approve would send for this order, before anyone clicks it.
+        assertThat(s.nextSend().orderMode()).isEqualTo("OWN_SENDERS");
+        assertThat(s.nextSend().endpoint()).isEqualTo("/orderAPI");
+        assertThat(s.nextSend().refusal()).isNull();
+    }
+
+    @Test
+    @DisplayName("before an order is ever sent, the section already says what Approve would send, for its amount")
+    void nextSendBeforeApprove() {
+        long id = db.order("GFS-26-NEXTSND1", "READY_FOR_DELIVERY", "0.5");
+        ids.put("GFS-26-NEXTSND1", id);
+        statuses.put("GFS-26-NEXTSND1", OrderStatus.READY_FOR_DELIVERY);
+        AppProperties pool = VendorTestSupport.publicPool(vendor.baseUrl(), Duration.ofMillis(800),
+                VendorTestSupport.ORDER_AMOUNT_POOL);
+        VendorControl control = VendorTestSupport.running();
+        VendorOrderActions poolActions = new VendorOrderActions(VendorTestSupport.client(pool, control), control,
+                ledger, new VendorOrderActionLog(db.named), mock(CredentialVaultService.class), orderService, pool,
+                new com.fasterxml.jackson.databind.ObjectMapper());
+
+        VendorOrderActions.Section s = poolActions.section(order("GFS-26-NEXTSND1"), List.of());
+
+        assertThat(s.vendorOrder()).isNull();
+        assertThat(s.nextSend().orderMode()).isEqualTo("PUBLIC_POOL");
+        assertThat(s.nextSend().endpoint()).isEqualTo("/buyCoinsAPI");
+        assertThat(s.nextSend().transferMethod()).isEqualTo("targetedSnipe");
+        assertThat(s.nextSend().buyNowThreshold()).isEqualByComparingTo("500");
+        assertThat(s.nextSend().senderGroup()).isNull();
+        assertThat(s.nextSend().topUpEnabled()).isEqualTo(300);
+        assertThat(s.nextSend().autoFinishCycle()).isEqualTo(1);
     }
 
     @Test

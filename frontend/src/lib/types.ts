@@ -1049,6 +1049,25 @@ export interface VendorSection {
   actions: VendorActionEntry[]
   /** How a send now would go, from configuration: PUBLIC_POOL or OWN_SENDERS. */
   currentOrderMode?: string | null
+  /** What Approve would send for this order right now; null when FUT Transfer is off. */
+  nextSend?: VendorNextSend | null
+}
+
+/** How Approve would place one coin order, from the same decision Approve itself takes. */
+export interface VendorNextSend {
+  orderMode: string
+  endpoint: string
+  transferMethod: string
+  /** Public pool only; null for own senders or when nothing would be sent. */
+  buyNowThreshold: number | null
+  buyNowThresholdSource: string | null
+  maxPrice: number | null
+  topUpEnabled: number
+  autoFinishCycle: number
+  /** Own senders only. */
+  senderGroup: string | null
+  /** Why Approve would send nothing at all, or null. */
+  refusal: string | null
 }
 
 /** The balance FUT Transfer reports, read live. Its currency is not confirmed. */
