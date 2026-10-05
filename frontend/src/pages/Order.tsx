@@ -359,7 +359,7 @@ export default function Order() {
     <>
       {heading}
       <Section className="rhythm-section">
-      <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr] lg:items-start">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.25fr_1fr] lg:items-start">
         <div className="space-y-5">
           {/*
             Past the configure step the left column becomes the cart and the forms, and
@@ -390,7 +390,7 @@ export default function Order() {
           {step === 'configure' && (isFlat ? (
             /* Boosting tiers and coaching packs: one choice, no slider. */
             <StepCard step={1} title={t.order.stepPackage(1, labels.service(service?.sku, service?.displayName))}>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {options.map((option) => (
                   <SelectTile
                     key={option.variant}
@@ -412,7 +412,7 @@ export default function Order() {
           ) : (
             <>
               <StepCard step={1} title={t.order.stepPlatform(1)}>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {options.map((option) => (
                     <PlatformCard
                       key={option.platform}
@@ -2097,7 +2097,7 @@ function RequirementsPanel() {
       <p className="measure mb-4 text-[13px] leading-relaxed text-chalk-muted">
         {t.order.requirementsLead}
       </p>
-      <ul className="grid gap-3 sm:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {items.map((item) => (
           <li key={item.title} className="flex gap-2.5">
             {/*
@@ -2361,7 +2361,7 @@ function PaymentStage({
 function ConfiguratorSkeleton() {
   return (
     <Section className="rhythm-section">
-      <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">
         <div className="space-y-6">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-56 w-full" />
