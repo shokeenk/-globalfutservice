@@ -74,41 +74,37 @@ public class OrderMapper {
      */
     private OrderDtos.DiscordAccessDto discordAccess(OrderEntity order) {
         if (order.getSku() == Sku.TRADING_SERVICE) {
-            return new OrderDtos.DiscordAccessDto("NONE", null, null, null);
+            return new OrderDtos.DiscordAccessDto("NONE", null, null);
         }
         String invite = props.discordInvite();
-        String command = "/verify " + order.getPublicRef();
 
         /*
-         * If the slash command is not actually registered, do not tell anybody to run it.
-         *
-         * The command only exists once the bot is configured and an application id is
-         * set, and until then a customer following these instructions types something
-         * Discord does not recognise and concludes the site is broken. The older panel --
-         * join, and quote your reference to the team -- is worse than /verify and works
-         * without any of this, so it is what an unconfigured deployment keeps showing.
+         * Without the bot there is no ticket to let anybody into: the customer messages us
+         * with their reference (QUOTE), as they do when we do not know their account.
          */
         if (!bot.isEnabled() || isBlank(props.notifications().discordApplicationId())) {
-            return new OrderDtos.DiscordAccessDto("QUOTE", null, invite, null);
+            return new OrderDtos.DiscordAccessDto("QUOTE", null, invite);
         }
 
         /*
          * A deep link is only offered to somebody who has actually been granted the
-         * channel -- which is every Discord-authenticated customer once the ticket
-         * exists, and anybody else who has already run /verify. Linking a channel the
-         * reader cannot open would look like the site was broken.
+         * channel -- every Discord-authenticated customer once the ticket exists, and
+         * anybody staff have let in. Linking a channel the reader cannot open would look
+         * like the site was broken.
          */
         Optional<String> ticket = verification.ticketUrl(
                 order.getId(), props.notifications().discordGuildId());
         if (ticket.isPresent()) {
-            return new OrderDtos.DiscordAccessDto("DIRECT", ticket.get(), invite, null);
+            return new OrderDtos.DiscordAccessDto("DIRECT", ticket.get(), invite);
         }
         if (verification.isDiscordAuthenticated(order.getAccountId())) {
             // Signed in with Discord, but the ticket is not open yet -- the payment has
             // not been submitted. They will be let in without doing anything.
-            return new OrderDtos.DiscordAccessDto("PENDING", null, invite, null);
+            return new OrderDtos.DiscordAccessDto("PENDING", null, invite);
         }
-        return new OrderDtos.DiscordAccessDto("VERIFY", null, invite, command);
+        // We do not know their Discord account: they message us, with their reference.
+        // (The /verify command is not offered: Discord refuses to register it.)
+        return new OrderDtos.DiscordAccessDto("VERIFY", null, invite);
     }
 
     /** The order as its customer reads it: the timeline in {@link #toCustomerEventDto} form. */

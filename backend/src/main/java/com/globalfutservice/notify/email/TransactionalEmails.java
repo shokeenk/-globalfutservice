@@ -25,6 +25,9 @@ import java.util.List;
  */
 public final class TransactionalEmails {
 
+    /** The Discord account customers message, as the storefront names it. */
+    static final String DISCORD_NAME = "globalfutservices";
+
     /** Coins go to order tracking, coaching to the order's support page, the rest to Discord. */
     private static final String COINS_SKU = "TRADING_SERVICE";
     private static final String COACHING_SKU = "COACHING";
@@ -134,7 +137,7 @@ public final class TransactionalEmails {
      * @param coachUrl the order's Connect with Coach page; used for coaching orders only
      */
     public static Rendered orderConfirmed(OrderNotification n, EmailTemplate.Brand brand,
-                                          String trackUrl, String discordUrl, String coachUrl) {
+                                          String trackUrl, String discordDmUrl, String coachUrl) {
         boolean coins = COINS_SKU.equals(n.sku());
         boolean coaching = COACHING_SKU.equals(n.sku());
         boolean discord = !coins && !coaching;
@@ -155,18 +158,20 @@ public final class TransactionalEmails {
             cards.add(EmailTemplate.InfoCard.accented("◷", "Your session", session));
         }
 
+        // A direct message to our account, with the reference in it. The /verify command
+        // this used to lead to is not offered to customers any more.
         List<EmailTemplate.Step> steps = !discord ? List.of() : List.of(
                 new EmailTemplate.Step(
-                        "Join our Discord server",
-                        "Click the button below to join the GFS Discord server.",
-                        "JOIN DISCORD", discordUrl),
+                        "Message us on Discord: " + DISCORD_NAME,
+                        "Send a direct message to " + DISCORD_NAME + " on Discord.",
+                        "MESSAGE US ON DISCORD", discordDmUrl),
                 EmailTemplate.Step.of(
-                        "Your ticket will be created",
-                        "Once you join, you'll be directed to your order ticket automatically."),
+                        "Include your order reference: " + n.publicRef(),
+                        "Put it in your message so we can find your order straight away."),
                 EmailTemplate.Step.of(
-                        "Our Operations Executive will contact you",
-                        "One of our operations executives will connect with you through your "
-                                + "ticket and guide you through the next steps."));
+                        "Our Operations Executive will reply",
+                        "One of our operations executives will connect with you and guide you "
+                                + "through the next steps."));
 
         EmailTemplate.Content content = new EmailTemplate.Content(
                 "Your payment is verified and your order is confirmed.",
@@ -179,9 +184,7 @@ public final class TransactionalEmails {
                 coaching ? coachBlock() : null,
                 discord ? "NEXT STEPS" : null,
                 steps,
-                discord ? "Please make sure to join with the same email/Discord account used for "
-                          + "placing the order, to ensure a smooth and quick verification."
-                        : coaching ? COACH_SIGN_IN : null,
+                coaching ? COACH_SIGN_IN : null,
                 coins ? "TRACK YOUR ORDER" : coaching ? COACH_BUTTON : null,
                 coins ? trackUrl : coaching ? coachUrl : null,
                 orderFooterNote());
@@ -198,12 +201,11 @@ public final class TransactionalEmails {
                   %s""".formatted(COACH_BODY, coachUrl, COACH_SIGN_IN)
                 : """
                   NEXT STEPS
-                    1. Join our Discord server: %s
-                    2. Your ticket will be created automatically once you join.
-                    3. Our Operations Executive will contact you through your ticket.
-
-                  Please join with the same email/Discord account used for placing the
-                  order, to ensure a smooth and quick verification.""".formatted(discordUrl);
+                    1. Message us on Discord: %s
+                       %s
+                    2. Include your order reference: %s
+                    3. Our Operations Executive will reply and guide you through the next steps."""
+                  .formatted(DISCORD_NAME, discordDmUrl, n.publicRef());
 
         String text = """
                 YOUR GFS ORDER IS CONFIRMED
