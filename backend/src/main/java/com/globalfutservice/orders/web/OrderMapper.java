@@ -12,6 +12,7 @@ import com.globalfutservice.domain.pricing.LineCode;
 import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
+import com.globalfutservice.orders.OrderPaymentState;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.notify.DiscordBotClient;
 import com.globalfutservice.notify.discord.DiscordVerificationService;
@@ -44,7 +45,9 @@ public class OrderMapper {
 
     public OrderMapper(ObjectMapper mapper, AppProperties props,
                        DiscordVerificationService verification, DiscordBotClient bot,
-                       CoachingService coachingService, VendorOrderLedger vendorOrders) {
+                       CoachingService coachingService, VendorOrderLedger vendorOrders,
+                       OrderPaymentState paymentState) {
+        this.paymentState = paymentState;
         this.vendorOrders = vendorOrders;
         this.mapper = mapper;
         this.props = props;
@@ -55,6 +58,8 @@ public class OrderMapper {
 
     /** What a held coin order is waiting for the customer to do. */
     private final VendorOrderLedger vendorOrders;
+
+    private final OrderPaymentState paymentState;
 
     /** For a coaching order's "1 of 6 booked". */
     private final CoachingService coachingService;
@@ -126,6 +131,7 @@ public class OrderMapper {
                                                boolean credentialsSubmitted,
                                                java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events) {
         boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
+        OrderPaymentState.View payment = paymentState.of(order);
         return new OrderDtos.OrderResponse(
                 order.getPublicRef(),
                 order.getStatus().name(),
@@ -159,7 +165,9 @@ public class OrderMapper {
                 coaching ? order.getCoachingFocus() : null,
                 order.getPcLauncher() == null ? null : order.getPcLauncher().name(),
                 discordAccess(order),
-                coaching ? coachingProgress(order) : null);
+                coaching ? coachingProgress(order) : null,
+                payment.state(),
+                payment.payBy());
     }
 
     private OrderDtos.CoachingProgressDto coachingProgress(OrderEntity order) {
@@ -194,7 +202,8 @@ public class OrderMapper {
                 order.getCurrency().name(),
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
-                transitions);
+                transitions,
+                paymentState.of(order).state());
     }
 
     /** What a line is called when it is the fee of the payment method the customer used. */
@@ -208,12 +217,23 @@ public class OrderMapper {
      * lines add up to the total the customer paid.
      */
     List<OrderDtos.OrderLineDto> lines(OrderEntity order) {
-        List<OrderDtos.OrderLineDto> out = new ArrayList<>();
         JsonNode paymentFee = paymentFee(order);
+        return paymentFee == null ? paymentLines(order, null, null)
+                : paymentLines(order, paymentFee.path("feeMinor").asLong(),
+                        paymentFee.path("label").asText("Payment processing fee"));
+    }
+
+    /**
+     * The frozen quote's lines, as they read when paid with a method that charges its own
+     * fee of {@code feeMinor} instead of the quote's flat card fee: that line is replaced,
+     * never added to. Null keeps the quote's own lines, card fee included.
+     */
+    public List<OrderDtos.OrderLineDto> paymentLines(OrderEntity order, Long feeMinor, String feeLabel) {
+        List<OrderDtos.OrderLineDto> out = new ArrayList<>();
         try {
             JsonNode root = mapper.readTree(order.getPriceBreakdown());
             for (JsonNode line : root.path("lines")) {
-                if (paymentFee != null && LineCode.GATEWAY_FEE.name().equals(line.path("code").asText())) {
+                if (feeMinor != null && LineCode.GATEWAY_FEE.name().equals(line.path("code").asText())) {
                     continue;
                 }
                 out.add(new OrderDtos.OrderLineDto(
@@ -227,10 +247,9 @@ public class OrderMapper {
             // gets the total, which is the number that matters to them.
             log.warn("Could not read price breakdown for order {}", order.getPublicRef());
         }
-        if (paymentFee != null) {
-            long fee = paymentFee.path("feeMinor").asLong();
-            out.add(new OrderDtos.OrderLineDto(PAYMENT_FEE, paymentFee.path("label").asText("Payment processing fee"),
-                    fee, Money.ofMinor(fee, order.getCurrency()).format()));
+        if (feeMinor != null) {
+            out.add(new OrderDtos.OrderLineDto(PAYMENT_FEE, feeLabel, feeMinor,
+                    Money.ofMinor(feeMinor, order.getCurrency()).format()));
         }
         return out;
     }
