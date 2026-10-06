@@ -37,6 +37,35 @@ describe('tawk.to is reachable from the support page only', () => {
   })
 })
 
+/** Source without its comments, which may name these calls in order to say they are not made. */
+function withoutComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+}
+
+/** tawk.to's calls that end the chat, drop its connection or sign the visitor out. */
+const ENDS_THE_CHAT = /\b(endChat|shutdown|logout)\b/
+
+describe('nothing on this site ends a chat conversation', () => {
+  it('no source calls tawk.to\'s endChat, and the one module that talks to tawk.to never disconnects it', () => {
+    const endChat = Object.entries(SOURCES).filter(([, text]) => /\bendChat\b/.test(withoutComments(text)))
+    expect(endChat.map(([path]) => path)).toEqual([])
+    expect(indexHtml).not.toMatch(/endChat/)
+    // "logout" is an ordinary word on the rest of the site; only here is it tawk.to's.
+    expect(withoutComments(SOURCES['lib/tawk.ts'] ?? '')).not.toMatch(ENDS_THE_CHAT)
+    expect(SOURCES['lib/tawk.ts']).toBeDefined()
+  })
+
+  it('the check itself catches each way of making the call', () => {
+    for (const call of ['window.Tawk_API.endChat()', 'api.endChat?.()', "api['endChat']()", 'Tawk_API.shutdown()',
+      'api.logout?.(cb)']) {
+      expect(ENDS_THE_CHAT.test(withoutComments(call))).toBe(true)
+    }
+    expect(ENDS_THE_CHAT.test(withoutComments('// never calls endChat\nconst x = 1'))).toBe(false)
+  })
+})
+
 /** The policy before tawk.to, directive by directive, as both configs had it. */
 const BEFORE: Record<string, string[]> = {
   'default-src': ["'self'"],

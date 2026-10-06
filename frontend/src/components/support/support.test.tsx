@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,6 +23,11 @@ const tawkScripts = () => [...document.querySelectorAll('script')].filter((s) =>
 
 function inRouter(node: React.ReactNode) {
   return render(<MemoryRouter>{node}</MemoryRouter>)
+}
+
+function configured() {
+  vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
+  vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
 }
 
 beforeEach(() => {
@@ -80,46 +86,63 @@ describe('the chat block', () => {
     inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
     expect(screen.getByText('Live chat is unavailable right now.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Go to the Support page' })).toHaveAttribute('href', '/support')
-    expect(screen.queryByRole('button', { name: 'Start chat' })).toBeNull()
+    expect(screen.queryByTestId('chat-host')).toBeNull()
     expect(tawkScripts()).toHaveLength(0)
   })
 
-  it('loads nothing from tawk.to until the customer, told who provides it, presses Start chat', () => {
-    vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-    vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+  it('loads and opens as the page opens, under the notice saying who provides it -- no Start chat step', () => {
+    configured()
     inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
 
-    expect(screen.getByText(/Live chat is provided by tawk.to/)).toBeInTheDocument()
-    expect(tawkScripts()).toHaveLength(0)
-    expect(window.Tawk_API).toBeUndefined()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }))
-
+    const notice = screen.getByTestId('chat-notice')
+    expect(notice).toHaveTextContent('Live chat is provided by tawk.to.')
+    expect(screen.queryByRole('button')).toBeNull()
     expect(tawkScripts()).toHaveLength(1)
-    expect(screen.getByTestId('chat-host').querySelector('#tawk_prop123')).not.toBeNull()
-    expect(screen.queryByTestId('chat-consent')).toBeNull()
+    const host = screen.getByTestId('chat-host')
+    expect(host.querySelector('#tawk_prop123')).not.toBeNull()
+    expect(host).not.toHaveClass('hidden')
+    // The notice is above the chat.
+    expect(notice.compareDocumentPosition(host) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('leaving takes the chat off the page; coming back to the same order puts it back without a second script',
-    () => {
-      vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-      vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
-      const first = inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Start chat' }))
-      first.unmount()
-      expect(document.getElementById('tawk_prop123')).toBeNull()
+  it('React\'s development double mount still gives one script and one chat, in place', () => {
+    configured()
+    render(<StrictMode><MemoryRouter><SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} /></MemoryRouter></StrictMode>)
+    expect(tawkScripts()).toHaveLength(1)
+    expect(document.querySelectorAll('#tawk_prop123')).toHaveLength(1)
+    expect(screen.getByTestId('chat-host').querySelector('#tawk_prop123')).not.toBeNull()
+    expect(reloadPage).not.toHaveBeenCalled()
+  })
 
-      inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
-      expect(screen.getByTestId('chat-host').querySelector('#tawk_prop123')).not.toBeNull()
-      expect(tawkScripts()).toHaveLength(1)
-      expect(reloadPage).not.toHaveBeenCalled()
-    })
+  it('leaving takes the chat out of view and does not end the conversation', () => {
+    configured()
+    const first = inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
+    const enders = { endChat: vi.fn(), shutdown: vi.fn(), logout: vi.fn(), hideWidget: vi.fn() }
+    Object.assign(window.Tawk_API!, enders, { setAttributes: vi.fn(), addEvent: vi.fn() })
+    window.Tawk_API?.onLoad?.()
+
+    first.unmount()
+
+    expect(document.getElementById('tawk_prop123')).toBeNull()
+    for (const call of Object.values(enders)) expect(call).not.toHaveBeenCalled()
+  })
+
+  it('coming back to the same order, once the chat is drawn, reloads the page so tawk.to brings the conversation '
+    + 'back', () => {
+    configured()
+    const first = inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
+    window.Tawk_API?.onLoad?.()
+    first.unmount()
+
+    inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
+
+    expect(reloadPage).toHaveBeenCalledTimes(1)
+    expect(tawkScripts()).toHaveLength(1)
+  })
 
   it('another order\'s support page reloads the page rather than carry the first order\'s details', () => {
-    vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-    vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+    configured()
     const first = inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }))
     first.unmount()
 
     inRouter(<SupportChat reference="GFS-26-OTHER001" chat={{ ...CHAT, email: 'x@example.test' }} />)
@@ -129,12 +152,33 @@ describe('the chat block', () => {
     expect(window.Tawk_API?.visitor?.email).toBe('rahul@example.test')
   })
 
-  it('a chat that cannot load says so, with the way to the Support page', () => {
-    vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-    vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+  it('after that reload, the second order\'s chat has the same verified visitor and its own order details', () => {
+    configured()
+    const verified = { ...CHAT, hash: 'f'.repeat(64) }
+    const first = inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={verified} />)
+    first.unmount()
+    resetTawkForTests() // the fresh page load
+
+    const second = { ...verified, attributes: { ...verified.attributes, 'order-id': 'GFS-26-OTHER001',
+      service: '500K coins', 'order-status': 'Processing', 'coin-amount': '500K' } }
+    inRouter(<SupportChat reference="GFS-26-OTHER001" chat={second} />)
+    const setAttributes = vi.fn()
+    const addEvent = vi.fn()
+    Object.assign(window.Tawk_API!, { setAttributes, addEvent })
+    window.Tawk_API?.onLoad?.()
+
+    expect(window.Tawk_API?.visitor).toEqual({ name: 'Rahul', email: 'rahul@example.test', hash: 'f'.repeat(64) })
+    expect(setAttributes.mock.calls[0]?.[0]).toMatchObject({
+      'order-id': 'GFS-26-OTHER001', service: '500K coins', 'order-status': 'Processing', 'coin-amount': '500K' })
+    expect(addEvent).toHaveBeenCalledWith('order-support-opened', { 'order-id': 'GFS-26-OTHER001' }, expect.any(Function))
+  })
+
+  it('a chat that cannot load says so, with the way to the Support page, and leaves no empty box', () => {
+    configured()
     inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }))
     fireEvent(tawkScripts()[0]!, new Event('error'))
     expect(screen.getByText('The chat could not be loaded.')).toBeInTheDocument()
+    expect(screen.getByTestId('chat-host')).toHaveClass('hidden')
+    expect(screen.queryByTestId('chat-notice')).toBeNull()
   })
 })

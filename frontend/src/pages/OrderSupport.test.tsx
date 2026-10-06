@@ -163,12 +163,15 @@ describe('tawk.to stays on support pages', () => {
       expect(tawkLoaded()).toBe(false)
     })
 
-  it('and even on a support page, nothing until Start chat', async () => {
-    vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-    vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
-    api.get.mockResolvedValue(context('BOOSTING'))
-    renderAt('/orders/GFS-26-70C4DPWH/support')
-    expect(await screen.findByRole('button', { name: 'Start chat' })).toBeInTheDocument()
-    expect(tawkLoaded()).toBe(false)
-  })
+  it('on a support page it loads as the page opens, below the order and the notice, with no Start chat step',
+    async () => {
+      vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
+      vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+      api.get.mockResolvedValue(context('BOOSTING'))
+      renderAt('/orders/GFS-26-70C4DPWH/support')
+      expect(await screen.findByTestId('chat-notice')).toHaveTextContent('Live chat is provided by tawk.to.')
+      expect(screen.queryByRole('button', { name: /start chat/i })).toBeNull()
+      expect(tawkLoaded()).toBe(true)
+      expect(screen.getByTestId('chat-host').querySelector('#tawk_prop123')).not.toBeNull()
+    })
 })
