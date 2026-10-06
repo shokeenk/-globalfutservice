@@ -471,6 +471,13 @@ public record AppProperties(
      * @param invoiceLifetime how long a Payop invoice stays payable: fixed by Payop at 24
      *                        hours. Manual payment claims are refused for that long
      * @param timeout         per request to Payop
+     * @param invoicesPerOrder           new invoices one order may open within
+     *                                   {@code invoicesPerOrderWindow}; asking again for one
+     *                                   already open does not count
+     * @param invoicesPerOrderWindow     the window for {@code invoicesPerOrder}
+     * @param invoicesPerAccount         new invoices one account may open, across its
+     *                                   orders, within {@code invoicesPerAccountWindow}
+     * @param invoicesPerAccountWindow   the window for {@code invoicesPerAccount}
      */
     public record Payop(
             @DefaultValue("false") boolean enabled,
@@ -485,7 +492,11 @@ public record AppProperties(
             @DefaultValue("173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32") List<String> trustedProxies,
             @DefaultValue("1h") Duration methodsCache,
             @DefaultValue("24h") Duration invoiceLifetime,
-            @DefaultValue("15s") Duration timeout) {
+            @DefaultValue("15s") Duration timeout,
+            @DefaultValue("5") int invoicesPerOrder,
+            @DefaultValue("24h") Duration invoicesPerOrderWindow,
+            @DefaultValue("10") int invoicesPerAccount,
+            @DefaultValue("1h") Duration invoicesPerAccountWindow) {
 
         /** All four credentials are present. */
         public boolean configured() {
@@ -505,7 +516,9 @@ public record AppProperties(
                     + ", jwtToken=" + (present(jwtToken) ? "[redacted]" : "unset")
                     + ", applicationId=" + (present(applicationId) ? "[set]" : "unset")
                     + ", jwtExpiresAt=" + jwtExpiresAt + ", methodsCache=" + methodsCache
-                    + ", invoiceLifetime=" + invoiceLifetime + "]";
+                    + ", invoiceLifetime=" + invoiceLifetime
+                    + ", invoicesPerOrder=" + invoicesPerOrder + "/" + invoicesPerOrderWindow
+                    + ", invoicesPerAccount=" + invoicesPerAccount + "/" + invoicesPerAccountWindow + "]";
         }
     }
 

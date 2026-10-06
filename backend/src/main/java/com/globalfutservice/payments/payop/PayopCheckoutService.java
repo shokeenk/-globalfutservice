@@ -42,7 +42,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * hands back the invoice already made, so a double click or a retry never creates a second
  * charge. Choosing another method replaces the attempt: Payop cannot cancel an invoice, so
  * the old one stays payable until its 24 hours are up, and a payment on it is still taken --
- * but only one payment is ever applied to an order (see {@link PayopCallbackService}).
+ * but only one payment is ever applied to an order (see {@link PayopCallbackService}). Going
+ * back to that method at the same price reopens the old invoice rather than making another.
+ *
+ * <p>New invoices are limited per order and per account ({@code gfs.payop.invoices-per-*}),
+ * counted from this table rather than by the caller's address. Reopening or handing back an
+ * invoice already made is never limited.
  *
  * <p>Nothing here marks an order paid. Only a confirmed IPN does.
  */
@@ -73,6 +78,11 @@ public class PayopCheckoutService {
 
     /** A payment ready for the customer: where to send them. */
     public record Started(String redirectUrl, String invoiceId, long totalMinor, Instant payableUntil) {
+    }
+
+    /** An invoice the customer can still pay at Payop, and the page to pay it on. */
+    public record PayableInvoice(String invoiceId, String methodName, long totalMinor, Currency currency,
+                                 Instant payableUntil, String url) {
     }
 
     /** What a return page may show: statuses and the amount, nothing that moves anything. */
@@ -177,15 +187,37 @@ public class PayopCheckoutService {
         }
 
         Instant now = clock.instant();
+
+        // Back to a method whose invoice Payop can still take, at the same price: that one.
+        Optional<PayopInvoiceEntity> earlier = invoices.findByOrderIdOrderByCreatedAtDesc(order.getId()).stream()
+                .filter(a -> a.isReplacedButPayable(now) && a.getMethodId() == methodId
+                        && a.getTotalMinor() == fee.totalMinor() && a.getCurrency() == currency)
+                .findFirst();
+        if (earlier.isPresent()) {
+            PayopInvoiceEntity reopened;
+            try {
+                reopened = tx.execute(status -> {
+                    replace(active, now);
+                    PayopInvoiceEntity a = invoices.findById(earlier.get().getId()).orElseThrow();
+                    a.reopened(now);
+                    return invoices.saveAndFlush(a);
+                });
+            } catch (DataIntegrityViolationException e) {
+                throw new ApiExceptions.ConflictException("payment_starting",
+                        "Your payment is already being set up. Wait a moment and try again.");
+            }
+            log.info("Payop invoice {} reopened for order {}: method {}", reopened.getInvoiceId(),
+                    order.getPublicRef(), methodId);
+            return new Started(redirectUrl(lang, reopened.getInvoiceId()), reopened.getInvoiceId(),
+                    reopened.getTotalMinor(), reopened.getExpiresAt());
+        }
+
+        requireWithinLimits(order, now);
+
         PayopInvoiceEntity attempt;
         try {
             attempt = tx.execute(status -> {
-                active.ifPresent(old -> invoices.findById(old.getId()).ifPresent(o -> {
-                    if (o.isActive()) {
-                        o.expired("REPLACED", now);
-                        invoices.saveAndFlush(o);
-                    }
-                }));
+                replace(active, now);
                 return invoices.saveAndFlush(new PayopInvoiceEntity(order.getId(), UUID.randomUUID(), method.fee(),
                         rate, currency, fee, amount, iso, now, now.plus(props.payop().invoiceLifetime())));
             });
@@ -228,6 +260,46 @@ public class PayopCheckoutService {
         return new Started(redirectUrl(lang, invoiceId), invoiceId, saved.getTotalMinor(), saved.getExpiresAt());
     }
 
+    /** Closes the order's active attempt, if any: the customer chose another method. */
+    private void replace(Optional<PayopInvoiceEntity> active, Instant now) {
+        active.ifPresent(old -> invoices.findById(old.getId()).ifPresent(o -> {
+            if (o.isActive()) {
+                o.expired(PayopInvoiceEntity.REPLACED, now);
+                invoices.saveAndFlush(o);
+            }
+        }));
+    }
+
+    /**
+     * A new invoice is within both limits, or the customer is told when the next can be
+     * opened. Counted by order and by account, never by address: a caller's address is
+     * theirs to choose.
+     */
+    private void requireWithinLimits(OrderEntity order, Instant now) {
+        AppProperties.Payop p = props.payop();
+        Instant orderSince = now.minus(p.invoicesPerOrderWindow());
+        if (invoices.countByOrderIdAndCreatedAtAfter(order.getId(), orderSince) >= p.invoicesPerOrder()) {
+            Instant retryAt = invoices.firstForOrderSince(order.getId(), orderSince)
+                    .orElse(now).plus(p.invoicesPerOrderWindow());
+            log.info("Payop invoice limit reached for order {}", order.getPublicRef());
+            throw new ApiExceptions.TooManyRequestsException("payment_attempts_order",
+                    "This payment has been started several times. Complete one you have already opened, "
+                            + "or try again later.", retryAt);
+        }
+        if (order.getAccountId() == null) {
+            return;
+        }
+        Instant accountSince = now.minus(p.invoicesPerAccountWindow());
+        if (invoices.countForAccountSince(order.getAccountId(), accountSince) >= p.invoicesPerAccount()) {
+            Instant retryAt = invoices.firstForAccountSince(order.getAccountId(), accountSince)
+                    .orElse(now).plus(p.invoicesPerAccountWindow());
+            log.info("Payop invoice limit reached for the account on order {}", order.getPublicRef());
+            throw new ApiExceptions.TooManyRequestsException("payment_attempts_account",
+                    "Several payments have been started from your account recently. Complete one you have "
+                            + "already opened, or try again later.", retryAt);
+        }
+    }
+
     /* ------------------------------------------------------------------ return --- */
 
     /**
@@ -255,6 +327,27 @@ public class PayopCheckoutService {
     }
 
     /* ------------------------------------------------------------- the rest --- */
+
+    /**
+     * The invoice to send the customer back to, if Payop can still take one for this order:
+     * the active attempt, or else the latest the customer moved away from.
+     */
+    public Optional<PayableInvoice> payableInvoice(OrderEntity order, String language) {
+        String lang = language == null ? "en" : language.trim().toLowerCase(Locale.ROOT);
+        if (!LANGUAGES.contains(lang)) {
+            lang = "en";
+        }
+        Instant now = clock.instant();
+        List<PayopInvoiceEntity> all = invoices.findByOrderIdOrderByCreatedAtDesc(order.getId());
+        Optional<PayopInvoiceEntity> found = all.stream()
+                .filter(a -> a.getStatus() == PayopInvoiceEntity.Status.OPEN && a.getInvoiceId() != null
+                        && a.getExpiresAt().isAfter(now))
+                .findFirst()
+                .or(() -> all.stream().filter(a -> a.isReplacedButPayable(now)).findFirst());
+        final String l = lang;
+        return found.map(a -> new PayableInvoice(a.getInvoiceId(), a.getMethodName(), a.getTotalMinor(),
+                a.getCurrency(), a.getExpiresAt(), redirectUrl(l, a.getInvoiceId())));
+    }
 
     /**
      * Until when manual payment claims for this order wait: while a Payop invoice for it can

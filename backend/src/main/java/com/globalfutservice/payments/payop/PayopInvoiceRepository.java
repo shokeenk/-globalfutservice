@@ -23,6 +23,26 @@ public interface PayopInvoiceRepository extends JpaRepository<PayopInvoiceEntity
 
     List<PayopInvoiceEntity> findByOrderIdOrderByCreatedAtDesc(Long orderId);
 
+    /** Invoices opened for one order since {@code since}: the per-order limit. */
+    long countByOrderIdAndCreatedAtAfter(Long orderId, Instant since);
+
+    /** The first of them, whose leaving the window is when another may be opened. */
+    @Query("select min(i.createdAt) from PayopInvoiceEntity i where i.orderId = :orderId and i.createdAt > :since")
+    Optional<Instant> firstForOrderSince(@Param("orderId") Long orderId, @Param("since") Instant since);
+
+    /** Invoices opened across one account's orders since {@code since}: the per-account limit. */
+    @Query("""
+            select count(i) from PayopInvoiceEntity i, com.globalfutservice.orders.OrderEntity o
+            where o.id = i.orderId and o.accountId = :accountId and i.createdAt > :since
+            """)
+    long countForAccountSince(@Param("accountId") Long accountId, @Param("since") Instant since);
+
+    @Query("""
+            select min(i.createdAt) from PayopInvoiceEntity i, com.globalfutservice.orders.OrderEntity o
+            where o.id = i.orderId and o.accountId = :accountId and i.createdAt > :since
+            """)
+    Optional<Instant> firstForAccountSince(@Param("accountId") Long accountId, @Param("since") Instant since);
+
     /**
      * When the order's last Payop invoice stops being payable, if one still is: an invoice
      * Payop holds, or one being created, until its 24 hours are up. Payop cannot cancel an

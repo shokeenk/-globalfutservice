@@ -307,6 +307,124 @@ class PayopCheckoutServiceTest {
     }
 
     @Nested
+    @DisplayName("going back to a method, and the limits on new invoices")
+    class Resume {
+
+        private static final String INVOICE_3 = "33333333-aaaa-4bbb-8ccc-000000000003";
+
+        /** Attempts already made for an order at these times, all closed. */
+        private void madeAt(long orderId, Instant... times) {
+            for (Instant t : times) {
+                invoices.open(orderId, java.util.UUID.randomUUID().toString(), 381, Currency.EUR, 9000, 407, "94.07", t)
+                        .expired("EXPIRED", t.plusSeconds(1));
+            }
+        }
+
+        private Instant hoursAgo(long h) {
+            return now.get().minusSeconds(h * 3600);
+        }
+
+        @Test
+        @DisplayName("back to the first method at the same price: that invoice again, not a third one")
+        void reopensTheEarlierInvoice() {
+            checkout.start(eur, 381, "DE", 9407, "en");
+            checkout.start(eur, 700001, "DE", 9485, "en");
+
+            PayopCheckoutService.Started back = checkout.start(eur, 381, "DE", 9407, "en");
+
+            assertThat(back.invoiceId()).isEqualTo(INVOICE_1);
+            verify(client, times(2)).createInvoice(any());
+            List<PayopInvoiceEntity> all = invoices.forOrder(7);
+            assertThat(all).extracting(PayopInvoiceEntity::getInvoiceId, PayopInvoiceEntity::getStatus).containsExactly(
+                    org.assertj.core.groups.Tuple.tuple(INVOICE_1, PayopInvoiceEntity.Status.OPEN),
+                    org.assertj.core.groups.Tuple.tuple(INVOICE_2, PayopInvoiceEntity.Status.EXPIRED));
+            assertThat(all.get(1).getReviewReason()).isEqualTo(PayopInvoiceEntity.REPLACED);
+            assertThat(all.get(0).getReviewReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("once the earlier invoice's 24 hours are up, going back makes a new attempt")
+        void newAttemptWhenExpired() {
+            when(client.createInvoice(any())).thenReturn(INVOICE_1, INVOICE_2, INVOICE_3);
+            checkout.start(eur, 381, "DE", 9407, "en");
+            checkout.start(eur, 700001, "DE", 9485, "en");
+            now.set(now.get().plusSeconds(24 * 3600 + 1));
+
+            assertThat(checkout.start(eur, 381, "DE", 9407, "en").invoiceId()).isEqualTo(INVOICE_3);
+            verify(client, times(3)).createInvoice(any());
+        }
+
+        @Test
+        @DisplayName("when the price has moved, going back makes a new attempt at the new price")
+        void newAttemptWhenThePriceChanged() {
+            when(client.createInvoice(any())).thenReturn(INVOICE_1, INVOICE_2, INVOICE_3);
+            when(orders.findById(8L)).thenReturn(Optional.of(usd));
+            checkout.start(usd, 381, "DE", totalFor(usd, 381), "en");
+            checkout.start(usd, 700001, "DE", totalFor(usd, 700001), "en");
+            when(fx.eurTo(Currency.USD)).thenReturn(Optional.of(
+                    new FxRateService.RateUsed(new BigDecimal("1.3000"), "ECB", LocalDate.of(2026, 10, 3))));
+
+            PayopCheckoutService.Started back = checkout.start(usd, 381, "DE", totalFor(usd, 381), "en");
+
+            assertThat(back.invoiceId()).isEqualTo(INVOICE_3);
+            assertThat(back.totalMinor()).isNotEqualTo(9411);
+        }
+
+        @Test
+        @DisplayName("five new invoices per order in 24 hours: the sixth is refused with when the next can be opened")
+        void perOrderLimit() {
+            madeAt(7, hoursAgo(23), hoursAgo(20), hoursAgo(10), hoursAgo(5), hoursAgo(1));
+
+            assertThatThrownBy(() -> checkout.start(eur, 381, "DE", 9407, "en"))
+                    .isInstanceOfSatisfying(ApiExceptions.TooManyRequestsException.class, e -> {
+                        assertThat(e.code()).isEqualTo("payment_attempts_order");
+                        assertThat(e.retryAt()).isEqualTo(hoursAgo(23).plusSeconds(24 * 3600));
+                    });
+            verify(client, never()).createInvoice(any());
+        }
+
+        @Test
+        @DisplayName("attempts older than the window do not count")
+        void oldAttemptsDoNotCount() {
+            madeAt(7, hoursAgo(30), hoursAgo(29), hoursAgo(28), hoursAgo(27), hoursAgo(26));
+            assertThat(checkout.start(eur, 381, "DE", 9407, "en").invoiceId()).isEqualTo(INVOICE_1);
+        }
+
+        @Test
+        @DisplayName("ten new invoices per account in an hour, across its orders: the next is refused")
+        void perAccountLimit() {
+            org.springframework.test.util.ReflectionTestUtils.setField(eur, "accountId", 42L);
+            org.springframework.test.util.ReflectionTestUtils.setField(usd, "accountId", 42L);
+            invoices.accountOf.put(7L, 42L);
+            invoices.accountOf.put(8L, 42L);
+            Instant first = now.get().minusSeconds(50 * 60);
+            madeAt(7, first, now.get().minusSeconds(40 * 60), now.get().minusSeconds(30 * 60),
+                    now.get().minusSeconds(20 * 60));
+            madeAt(8, now.get().minusSeconds(45 * 60), now.get().minusSeconds(35 * 60),
+                    now.get().minusSeconds(25 * 60), now.get().minusSeconds(15 * 60),
+                    now.get().minusSeconds(10 * 60), now.get().minusSeconds(5 * 60));
+
+            assertThatThrownBy(() -> checkout.start(eur, 381, "DE", 9407, "en"))
+                    .isInstanceOfSatisfying(ApiExceptions.TooManyRequestsException.class, e -> {
+                        assertThat(e.code()).isEqualTo("payment_attempts_account");
+                        assertThat(e.retryAt()).isEqualTo(first.plusSeconds(3600));
+                    });
+        }
+
+        @Test
+        @DisplayName("handing back or reopening an invoice is never limited; only a new one is")
+        void reuseIsNotLimited() {
+            madeAt(7, hoursAgo(20), hoursAgo(10), hoursAgo(5), hoursAgo(1));
+            PayopCheckoutService.Started fifth = checkout.start(eur, 381, "DE", 9407, "en");
+
+            assertThat(checkout.start(eur, 381, "DE", 9407, "en").invoiceId()).isEqualTo(fifth.invoiceId());
+            assertThatThrownBy(() -> checkout.start(eur, 700001, "DE", 9485, "en"))
+                    .isInstanceOf(ApiExceptions.TooManyRequestsException.class);
+            verify(client, times(1)).createInvoice(any());
+        }
+    }
+
+    @Nested
     @DisplayName("the 24 hours")
     class Lifetime {
 

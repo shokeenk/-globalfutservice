@@ -76,6 +76,15 @@ public class GlobalExceptionHandler {
                 .body(ApiError.of(e.code(), e.getMessage(), traceId()));
     }
 
+    /** A limit was reached. When it frees up travels in {@code details.retryAt}, as an instant. */
+    @ExceptionHandler(ApiExceptions.TooManyRequestsException.class)
+    public ResponseEntity<ApiError> tooManyRequests(ApiExceptions.TooManyRequestsException e) {
+        Map<String, List<String>> details = e.retryAt() == null ? null
+                : Map.of("retryAt", List.of(e.retryAt().toString()));
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiError.of(e.code(), e.getMessage(), details, traceId()));
+    }
+
     @ExceptionHandler({ApiExceptions.ForbiddenException.class, AccessDeniedException.class})
     public ResponseEntity<ApiError> forbidden(Exception e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)

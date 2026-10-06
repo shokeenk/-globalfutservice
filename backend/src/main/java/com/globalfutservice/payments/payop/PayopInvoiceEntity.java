@@ -30,6 +30,9 @@ public class PayopInvoiceEntity {
     /** Where an attempt stands. CREATING and OPEN are the "active" ones: at most one per order. */
     public enum Status { CREATING, OPEN, PAID, FAILED, EXPIRED, REVIEW, DUPLICATE }
 
+    /** Why an attempt was closed when the customer chose another method. */
+    public static final String REPLACED = "REPLACED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -181,6 +184,26 @@ public class PayopInvoiceEntity {
 
     public boolean isActive() {
         return status == Status.CREATING || status == Status.OPEN;
+    }
+
+    /**
+     * Superseded here -- the customer chose another method -- but still payable at Payop,
+     * which cannot cancel an invoice until its 24 hours are up.
+     */
+    public boolean isReplacedButPayable(Instant now) {
+        return status == Status.EXPIRED && REPLACED.equals(reviewReason) && invoiceId != null
+                && expiresAt.isAfter(now);
+    }
+
+    /**
+     * Chosen again: the customer went back to the method this invoice is for, at the same
+     * price, while Payop can still take it. It is the active attempt again rather than a
+     * second invoice beside it.
+     */
+    public void reopened(Instant at) {
+        this.status = Status.OPEN;
+        this.reviewReason = null;
+        this.updatedAt = at;
     }
 
     public Long getId() {
