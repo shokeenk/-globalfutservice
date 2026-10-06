@@ -427,7 +427,7 @@ const es: Dictionary = {
       'Usamos una cookie para mantener tu sesión iniciada. Si nos lo permites, también '
       + 'recordamos tu idioma y tu moneda en este navegador. Sin rastreo y sin publicidad. '
       + 'El chat en vivo de la página de soporte de un pedido usa sus propias cookies, y solo '
-      + 'cuando lo inicias.',
+      + 'cuando abres esa página.',
     policyLink: 'Leer la política de privacidad',
     accept: 'Aceptar',
     decline: 'Rechazar',
@@ -1600,9 +1600,8 @@ const es: Dictionary = {
     summaryCoach: 'Entrenador',
     chatNoticeTitle: 'Chat en vivo',
     chatNotice:
-      'El chat en vivo lo ofrece tawk.to. Al iniciarlo, compartes con ellos tu nombre, tu correo y los datos '
-      + 'de este pedido, y usan sus propias cookies.',
-    startChat: 'Iniciar chat',
+      'El chat en vivo lo ofrece tawk.to. Al abrir esta página, compartes con ellos tu nombre, tu correo y los '
+      + 'datos de este pedido, y usan sus propias cookies.',
     unavailable: 'El chat en vivo no está disponible ahora mismo.',
     unavailableLink: 'Ir a la página de soporte',
     loadFailed: 'No se pudo cargar el chat.',

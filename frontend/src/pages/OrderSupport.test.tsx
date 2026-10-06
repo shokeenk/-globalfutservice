@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Account, SupportContext } from '../lib/types'
 
@@ -150,6 +150,30 @@ describe('the page', () => {
     expect(await screen.findByText('help page')).toBeInTheDocument()
     expect(screen.getByTestId('ask-widget')).toBeInTheDocument()
   })
+
+  it('going straight from one order\'s support page to another\'s shows the second order, and stays there',
+    async () => {
+      api.get.mockImplementation((url: string) => Promise.resolve(url.includes('GFS-26-OTHER001')
+        ? context('COINS', { reference: 'GFS-26-OTHER001', service: 'FC 26 Coins', coins: '500K', status: 'Processing' })
+        : context('BOOSTING')))
+      function GoToOther() {
+        const navigate = useNavigate()
+        return <button type="button" onClick={() => navigate('/orders/GFS-26-OTHER001/support')}>other order</button>
+      }
+      render(
+        <MemoryRouter initialEntries={['/orders/GFS-26-70C4DPWH/support']}>
+          <App /><WhereAmI /><GoToOther />
+        </MemoryRouter>,
+      )
+      expect(await screen.findByTestId('support-summary')).toHaveTextContent('#GFS-26-70C4DPWH')
+
+      fireEvent.click(screen.getByRole('button', { name: 'other order' }))
+
+      await waitFor(() => expect(screen.getByTestId('support-summary')).toHaveTextContent('#GFS-26-OTHER001'))
+      expect(screen.getByTestId('support-summary')).toHaveTextContent('500K')
+      expect(screen.getByTestId('path')).toHaveTextContent('/orders/GFS-26-OTHER001/support')
+      expect(api.get).toHaveBeenLastCalledWith('/api/v1/orders/GFS-26-OTHER001/support-context')
+    })
 })
 
 describe('tawk.to stays on support pages', () => {
@@ -163,12 +187,15 @@ describe('tawk.to stays on support pages', () => {
       expect(tawkLoaded()).toBe(false)
     })
 
-  it('and even on a support page, nothing until Start chat', async () => {
-    vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-    vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
-    api.get.mockResolvedValue(context('BOOSTING'))
-    renderAt('/orders/GFS-26-70C4DPWH/support')
-    expect(await screen.findByRole('button', { name: 'Start chat' })).toBeInTheDocument()
-    expect(tawkLoaded()).toBe(false)
-  })
+  it('on a support page it loads as the page opens, below the order and the notice, with no Start chat step',
+    async () => {
+      vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
+      vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+      api.get.mockResolvedValue(context('BOOSTING'))
+      renderAt('/orders/GFS-26-70C4DPWH/support')
+      expect(await screen.findByTestId('chat-notice')).toHaveTextContent('Live chat is provided by tawk.to.')
+      expect(screen.queryByRole('button', { name: /start chat/i })).toBeNull()
+      expect(tawkLoaded()).toBe(true)
+      expect(screen.getByTestId('chat-host').querySelector('#tawk_prop123')).not.toBeNull()
+    })
 })

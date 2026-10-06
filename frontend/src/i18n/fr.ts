@@ -430,7 +430,7 @@ const fr: Dictionary = {
       'Nous utilisons un cookie, pour te garder connecté. Avec ton accord, nous retenons '
       + 'aussi ta langue et ta devise dans ce navigateur. Aucun suivi, aucune publicité. '
       + 'Le chat en direct de la page d’assistance d’une commande dépose ses propres '
-      + 'cookies, et seulement quand tu le lances.',
+      + 'cookies, et seulement quand tu ouvres cette page.',
     policyLink: 'Lire la politique de confidentialité',
     accept: 'Accepter',
     decline: 'Refuser',
@@ -1607,9 +1607,8 @@ const fr: Dictionary = {
     summaryCoach: 'Coach',
     chatNoticeTitle: 'Chat en direct',
     chatNotice:
-      'Le chat en direct est fourni par tawk.to. En le lançant, tu partages avec eux ton nom, ton e-mail et les '
-      + 'informations de cette commande, et ils déposent leurs propres cookies.',
-    startChat: 'Lancer le chat',
+      'Le chat en direct est fourni par tawk.to. En ouvrant cette page, tu partages avec eux ton nom, ton e-mail '
+      + 'et les informations de cette commande, et ils déposent leurs propres cookies.',
     unavailable: 'Le chat en direct n’est pas disponible pour le moment.',
     unavailableLink: 'Aller à la page Support',
     loadFailed: 'Le chat n’a pas pu se charger.',

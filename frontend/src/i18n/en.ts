@@ -505,7 +505,7 @@ const en = {
     body:
       'We use one cookie, to keep you signed in. With your agreement we also remember your '
       + 'language and currency in this browser. No tracking and no advertising. The live chat '
-      + 'on an order’s support page sets its own cookies, and only once you start it.',
+      + 'on an order’s support page sets its own cookies, and only when you open that page.',
     policyLink: 'Read the privacy policy',
     accept: 'Accept',
     decline: 'Decline',
@@ -1814,9 +1814,8 @@ const en = {
     summaryCoach: 'Coach',
     chatNoticeTitle: 'Live chat',
     chatNotice:
-      'Live chat is provided by tawk.to. Starting it shares your name, email and this order’s details with '
-      + 'them, and they set their own cookies.',
-    startChat: 'Start chat',
+      'Live chat is provided by tawk.to. Opening this page shares your name, email and this order’s details '
+      + 'with them, and they set their own cookies.',
     unavailable: 'Live chat is unavailable right now.',
     unavailableLink: 'Go to the Support page',
     loadFailed: 'The chat could not be loaded.',

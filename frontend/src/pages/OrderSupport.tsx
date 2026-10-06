@@ -27,8 +27,12 @@ export default function OrderSupport() {
   const s = t.orderSupport
   const { ref = '' } = useParams()
   const location = useLocation()
-  const [context, setContext] = useState<SupportContext | null>(null)
+  const [loaded, setLoaded] = useState<{ ref: string; context: SupportContext } | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'not-found' | 'failed'>('loading')
+  // Only ever the order in the address. Going straight from one order's support page to
+  // another's keeps this page mounted, and the first order's details -- still loaded for a
+  // moment -- would otherwise redirect straight back to the first order.
+  const context = loaded?.ref === ref ? loaded.context : null
   const copy = useSupportCopy(context?.mode ?? 'BOOSTING')
   useSeo({ title: s.eyebrow, noindex: true })
 
@@ -38,7 +42,7 @@ export default function OrderSupport() {
     api.get<SupportContext>(`/api/v1/orders/${encodeURIComponent(ref)}/support-context`)
       .then((found) => {
         if (!live) return
-        setContext(found)
+        setLoaded({ ref, context: found })
         setState('ready')
       })
       .catch((e) => {

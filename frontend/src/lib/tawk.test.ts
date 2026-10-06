@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  TAWK_ATTRIBUTES, allowedAttributes, attachTawk, detachTawk, resetTawkForTests, startTawk, tawkConfig,
-  tawkStartedFor,
+  TAWK_ATTRIBUTES, allowedAttributes, detachTawk, resetTawkForTests, startTawk, tawkConfig, tawkStartedFor,
 } from './tawk'
 import type { TawkChat } from './tawk'
 
@@ -90,7 +89,7 @@ describe('starting the chat', () => {
     warn.mockRestore()
   })
 
-  it('the same order again puts the same chat back, without a second script', () => {
+  it('the same order again, before tawk.to has drawn anything, puts the same empty element back', () => {
     const first = document.createElement('div')
     startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), first, vi.fn())
     detachTawk()
@@ -100,11 +99,44 @@ describe('starting the chat', () => {
     document.body.appendChild(second)
     expect(startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), second, vi.fn())).toBe('attached')
     expect(second.querySelector(`#tawk_${CONFIG.propertyId}`)).not.toBeNull()
+    expect(document.querySelectorAll(`#tawk_${CONFIG.propertyId}`)).toHaveLength(1)
     expect(scripts()).toHaveLength(1)
+  })
 
+  /*
+   * tawk.to's chat window is an iframe it fills once, on its first load. Taken out of the
+   * page and put back, the iframe reloads empty and is not filled again -- so a drawn chat
+   * is never put back; the page reloads and tawk.to draws it afresh, conversation included.
+   */
+  it.each([
+    ['its load callback has run', () => window.Tawk_API?.onLoad?.()],
+    ['its frames are in the element', () => {
+      document.getElementById(`tawk_${CONFIG.propertyId}`)?.appendChild(document.createElement('iframe'))
+    }],
+    ['its script failed to load', () => scripts()[0]?.dispatchEvent(new Event('error'))],
+  ])('the same order again, once %s, asks for a fresh page load instead', (_, draw) => {
+    const first = document.createElement('div')
+    document.body.appendChild(first)
+    startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), first, vi.fn())
+    draw()
     detachTawk()
-    attachTawk(second)
-    expect(second.childElementCount).toBe(1)
+
+    const second = document.createElement('div')
+    expect(startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), second, vi.fn())).toBe('reload')
+    expect(second.childElementCount).toBe(0)
+    expect(scripts()).toHaveLength(1)
+  })
+
+  it('never ends the conversation, disconnects or signs the visitor out -- not on leaving, not on coming back', () => {
+    const enders = { endChat: vi.fn(), shutdown: vi.fn(), logout: vi.fn() }
+    startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), document.createElement('div'), vi.fn())
+    Object.assign(window.Tawk_API!, enders, { setAttributes: vi.fn(), addEvent: vi.fn() })
+    window.Tawk_API?.onLoad?.()
+    detachTawk()
+    startTawk(CONFIG, 'GFS-26-70C4DPWH', chat(), document.createElement('div'), vi.fn())
+    startTawk(CONFIG, 'GFS-26-OTHER001', chat(), document.createElement('div'), vi.fn())
+    detachTawk()
+    for (const call of Object.values(enders)) expect(call).not.toHaveBeenCalled()
   })
 
   it('another order in the same page load is refused, so the page reloads instead of mixing the two', () => {

@@ -1,16 +1,26 @@
 /**
  * tawk.to, the live chat on order support pages -- and only there.
  *
- * <p><b>Loaded once, by the support page, after the customer asks.</b> Nothing here runs on
- * any other page: no other module imports this one, and the script is only added when the
- * customer presses Start chat. tawk.to's own loader guards against a second copy, and so
- * does this one, so going back and forth between support pages never adds it twice.
+ * <p><b>Loaded once, by the support page, as it opens.</b> Nothing here runs on any other
+ * page: no other module imports this one, and the script is only added when a support page
+ * opens. tawk.to's own loader guards against a second copy, and so does this one.
  *
  * <p><b>Embedded, never floating.</b> tawk.to reads {@code Tawk_API.embedded} once, when it
- * starts, and renders into the element with that id. That element is made here and kept for
- * the life of the page: the support page puts it in place, and takes it out of the page
- * when the customer leaves, so nothing of the chat is left on other pages. Coming back to
- * the same order puts the same element back.
+ * starts, and renders into the element with that id -- already open, since an embedded
+ * widget has no minimised state. That element is made here: the support page puts it in
+ * place, and takes it out of the page when the customer leaves, so nothing of the chat is
+ * left on other pages.
+ *
+ * <p><b>The conversation is never ended from here.</b> Leaving takes the chat out of view
+ * and does nothing else. This module never asks tawk.to to end the chat, disconnect or sign
+ * the visitor out; the conversation stays open on tawk.to's side.
+ *
+ * <p><b>Coming back loads it afresh.</b> Once tawk.to has drawn the chat, its window is an
+ * iframe it fills only once, and an iframe taken out of the page and put back comes back
+ * empty. So the drawn element is never put back: the page reloads instead, and tawk.to,
+ * starting again for the same visitor, fetches the conversation from its server and shows
+ * it where it left off. Before anything is drawn -- React's development double mount, or
+ * leaving and coming back within a moment -- the empty element is simply put back.
  *
  * <p><b>One order per page load.</b> tawk.to's name, email and order fields belong to the
  * visitor, and an attribute cannot be removed once set. So the chat is started for one
@@ -70,6 +80,11 @@ export function tawkConfig(env: Record<string, string | undefined> = import.meta
 let startedFor: string | null = null
 /** The element tawk.to renders into, kept while the page lives. */
 let container: HTMLDivElement | null = null
+/**
+ * tawk.to has drawn the chat, or its script failed to load. Either way, only a fresh page
+ * load shows it again.
+ */
+let settled = false
 
 export function tawkStartedFor(): string | null {
   return startedFor
@@ -99,13 +114,14 @@ function refused(what: string): (error?: unknown) => void {
 /**
  * Starts the chat for one order, inside {@code host}.
  *
- * @return 'started' when the script was added; 'attached' when it was already running for
- *         this order and has been put back; 'reload' when it is running for another order,
- *         in which case nothing was done and the caller reloads the page
+ * @return 'started' when the script was added; 'attached' when it was already starting for
+ *         this order and nothing had been drawn yet, so the element has been put back;
+ *         'reload' when nothing was done and the caller reloads the page: the chat in this
+ *         page load is another order's, or this order's and already drawn
  */
 export function startTawk(config: TawkConfig, reference: string, chat: TawkChat, host: HTMLElement,
                           onError: () => void): 'started' | 'attached' | 'reload' {
-  if (startedFor !== null && startedFor !== reference) return 'reload'
+  if (startedFor !== null && (startedFor !== reference || drawn())) return 'reload'
   if (!container) {
     container = document.createElement('div')
     container.id = `tawk_${config.propertyId}`
@@ -125,6 +141,7 @@ export function startTawk(config: TawkConfig, reference: string, chat: TawkChat,
   api.visitor = visitor
   const attributes = allowedAttributes(chat.attributes)
   api.onLoad = () => {
+    settled = true
     api.setAttributes?.(attributes, refused('the order details'))
     // Marks the conversation with the order it was opened from, for the agent.
     api.addEvent?.('order-support-opened', { 'order-id': attributes['order-id'] ?? reference },
@@ -138,17 +155,23 @@ export function startTawk(config: TawkConfig, reference: string, chat: TawkChat,
   script.charset = 'UTF-8'
   script.setAttribute('crossorigin', '*')
   script.dataset.gfsTawk = 'true'
-  script.onerror = onError
+  script.onerror = () => {
+    settled = true
+    onError()
+  }
   document.body.appendChild(script)
   return 'started'
 }
 
-/** Puts the running chat back on the page, for the order it was started for. */
-export function attachTawk(host: HTMLElement): void {
-  if (container) host.appendChild(container)
+/** Whether tawk.to has put anything in the element: its load callback ran, or its frames are there. */
+function drawn(): boolean {
+  return settled || (container?.childElementCount ?? 0) > 0
 }
 
-/** Takes the chat off the page. It is kept, out of sight, in case the customer comes back. */
+/**
+ * Takes the chat off the page, when the customer leaves it. Out of view and nothing more:
+ * the conversation is not ended, and comes back with the page.
+ */
 export function detachTawk(): void {
   container?.remove()
 }
@@ -161,6 +184,7 @@ export function reloadPage(): void {
 /** For tests: forget everything, as a fresh page load would. */
 export function resetTawkForTests(): void {
   startedFor = null
+  settled = false
   container?.remove()
   container = null
   delete window.Tawk_API

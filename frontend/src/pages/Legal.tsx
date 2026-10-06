@@ -657,7 +657,7 @@ function Privacy({ policy }: { policy: Policy | null }) {
           We use one cookie, and it exists to keep you signed in. It is not readable by scripts,
           is not sent to other sites, and is not used for tracking or advertising. There is no
           analytics or advertising cookie on this site. The live chat on an order's support
-          page is the exception: if you press Start chat, tawk.to sets its own cookies and
+          page is the exception: when you open that page, tawk.to sets its own cookies and
           stores data in your browser (section 8).
         </p>
         {/*
@@ -704,7 +704,7 @@ function Privacy({ policy }: { policy: Policy | null }) {
       {/*
         Added with the live chat on order support pages. Appended for the same reason as
         section 7: each clause's anchor is its number. Every statement is what the software
-        does: the support page loads nothing from tawk.to until Start chat is pressed, and
+        does: tawk.to loads on an order's support page as it opens, and on no other page, and
         the server sends tawk.to only the allowlisted fields named here
         (SupportChatService) -- never the sign-in, backup codes or payment details.
       */}
@@ -715,11 +715,11 @@ function Privacy({ policy }: { policy: Policy | null }) {
              href="https://www.tawk.to/privacy-policy/" target="_blank" rel="noreferrer">
             tawk.to/privacy-policy
           </a>
-          ). It appears only on that page, and nothing from tawk.to loads until you press
-          Start chat.
+          ). It appears only on that page, and loads when you open it; nothing from tawk.to
+          loads on any other page.
         </p>
         <p>
-          When you start it, tawk.to receives your name and email address; the order's
+          When it loads, tawk.to receives your name and email address; the order's
           reference, service, platform and status; for a coin order, the amount; for a
           coaching order, the session reference and your coach's name; and the messages you
           and our team exchange in the chat. We never send it your password, EA sign-in,
