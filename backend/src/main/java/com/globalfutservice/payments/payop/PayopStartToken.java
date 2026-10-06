@@ -5,6 +5,7 @@ import com.globalfutservice.domain.crypto.Hmac;
 import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.web.ApiExceptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -39,6 +40,11 @@ public class PayopStartToken {
     private final String secret;
     private final Clock clock;
 
+    /**
+     * The constructor Spring uses. Marked, because there are two: with two and neither marked,
+     * Spring looks for a no-argument one, finds none, and the application does not start.
+     */
+    @Autowired
     public PayopStartToken(AppProperties props, Clock clock) {
         this(props.security().quoteSigningSecret(), clock);
     }
