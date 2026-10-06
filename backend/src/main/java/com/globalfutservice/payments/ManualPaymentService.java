@@ -179,8 +179,10 @@ public class ManualPaymentService {
         /*
          * Proof is in, so the slot this coaching order picked is kept until somebody has
          * looked at it -- a two-hour hold would otherwise lapse overnight while a paying
-         * customer waited for a bank transfer to be checked. Capped at the point an unpaid
-         * order is abandoned, which releases it anyway.
+         * customer waited for a bank transfer to be checked. Capped at the order's original
+         * pay-by time: a claim still unchecked then keeps the order open (the sweep waits for
+         * it), but not the coach's slot -- once the payment is verified the customer books
+         * with the credit it grants.
          */
         if (order.getSku() == Sku.COACHING) {
             // Everything computed inside the action, so nothing about the hold -- not even

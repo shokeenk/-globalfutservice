@@ -13,6 +13,10 @@ public interface ManualPaymentClaimRepository extends JpaRepository<ManualPaymen
 
     Optional<ManualPaymentClaimEntity> findByOrderIdAndStatus(Long orderId, ClaimStatus status);
 
+    /** The order's most recently reviewed claim with this outcome: the last rejection, say. */
+    Optional<ManualPaymentClaimEntity> findFirstByOrderIdAndStatusOrderByReviewedAtDesc(Long orderId,
+                                                                                       ClaimStatus status);
+
     /** Everything on one order, newest first: the current claim plus any rejected attempts. */
     List<ManualPaymentClaimEntity> findByOrderIdOrderBySubmittedAtDesc(Long orderId);
 
