@@ -77,8 +77,12 @@ public class ResumePaymentService {
                               Breakdown breakdown, String token) {
     }
 
-    public record PayopOptions(String currency, String unavailable, List<PayopMethod> methods,
-                               Instant manualBlockedUntil) {
+    /**
+     * @param netFormatted the order's price without the card fee: what every method's fee is
+     *                     added to
+     */
+    public record PayopOptions(String currency, long netMinor, String netFormatted, String unavailable,
+                               List<PayopMethod> methods, Instant manualBlockedUntil) {
     }
 
     /**
@@ -205,8 +209,8 @@ public class ResumePaymentService {
                                 m.totalMinor(), Money.ofMinor(m.totalMinor(), o.currency()).format()),
                         tokens.issue(order, m.methodId(), iso, m.totalMinor())))
                 .toList();
-        return new PayopOptions(o.currency().name(), o.unavailable(), methods,
-                payop.claimsBlockedUntil(order.getId()).orElse(null));
+        return new PayopOptions(o.currency().name(), o.netMinor(), Money.ofMinor(o.netMinor(), o.currency()).format(),
+                o.unavailable(), methods, payop.claimsBlockedUntil(order.getId()).orElse(null));
     }
 
     /**

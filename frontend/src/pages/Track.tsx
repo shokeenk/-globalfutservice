@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { CompletePayment, OrderExpired, PaymentSubmitted } from '../components/CompletePayment'
 import { CredentialForm } from '../components/CredentialForm'
 import { PageHeader } from '../components/PageHeader'
 import { Alert, Badge, Button, ButtonLink, Field, Input, Section, Skeleton } from '../components/ui'
@@ -52,6 +53,8 @@ export default function Track() {
   const [mine, setMine] = useState<OrderSummary[] | null>(null)
   const [tab, setTab] = useState<Tab>('ALL')
   const [showLookup, setShowLookup] = useState(false)
+  /** Opened from "Complete your payment" in the list: the payment step starts open. */
+  const [payNow, setPayNow] = useState(false)
 
   const lookup = useCallback(async (ref: string, mail: string) => {
     setLoading(true)
@@ -205,14 +208,14 @@ export default function Track() {
             <div className="space-y-5">
               <button
                 type="button"
-                onClick={() => { setOrder(null); loadMine() }}
+                onClick={() => { setOrder(null); setPayNow(false); loadMine() }}
                 className="inline-flex items-center gap-2 text-body-sm font-semibold text-brand-400
                            hover:underline focus-visible:outline focus-visible:outline-2
                            focus-visible:outline-offset-2 focus-visible:outline-brand-400"
               >
                 <span aria-hidden="true">&larr;</span> {t.track.backToOrders}
               </button>
-              <OrderView order={order} signedIn onSubmitted={setOrder} />
+              <OrderView order={order} signedIn onSubmitted={setOrder} startPayment={payNow} />
             </div>
           ) : (
             <div className="space-y-5">
@@ -233,7 +236,8 @@ export default function Track() {
               {visible.length > 0 && (
                 <ul className="space-y-3">
                   {visible.map((row) => (
-                    <OrderRow key={row.publicRef} row={row} onOpen={() => void openOrder(row.publicRef)} />
+                    <OrderRow key={row.publicRef} row={row} onOpen={() => void openOrder(row.publicRef)}
+                              onPay={() => { setPayNow(true); void openOrder(row.publicRef) }} />
                   ))}
                 </ul>
               )}
@@ -568,7 +572,7 @@ function OrderTabs({ current, onTab }: { current: Tab; onTab: (next: Tab) => voi
  * question a customer scanning this list is answering is "which of these is my coaching
  * order" — and that is a shape-and-colour question, not a reading one.
  */
-function OrderRow({ row, onOpen }: { row: OrderSummary; onOpen: () => void }) {
+function OrderRow({ row, onOpen, onPay }: { row: OrderSummary; onOpen: () => void; onPay: () => void }) {
   const t = useT()
   return (
     <li className="hairline flex flex-wrap items-center gap-x-4 gap-y-3 rounded-panel bg-paper p-4">
@@ -582,6 +586,10 @@ function OrderRow({ row, onOpen }: { row: OrderSummary; onOpen: () => void }) {
       </div>
 
       <Badge tone={statusTone(row.status)}>{row.statusLabel}</Badge>
+
+      {row.paymentState === 'UNPAID' && (
+        <Button size="sm" onClick={onPay}>{t.completePayment.button}</Button>
+      )}
 
       <button
         type="button"
@@ -615,6 +623,7 @@ export function OrderView({
   order,
   signedIn = false,
   onSubmitted,
+  startPayment = false,
 }: {
   order: Order
   /*
@@ -624,6 +633,8 @@ export function OrderView({
   */
   signedIn?: boolean
   onSubmitted?: (order: Order) => void
+  /** Open the payment step of an unpaid order straight away. */
+  startPayment?: boolean
 }) {
   const t = useT()
   const labels = useCatalogLabels()
@@ -639,7 +650,7 @@ export function OrderView({
       </div>
 
       <div className="space-y-7 p-6">
-        <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} />
+        <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} startPayment={startPayment} />
 
         {supportModeFor(order.sku) === 'BOOSTING' && <DiscordTicket order={order} />}
 
@@ -755,15 +766,23 @@ function NextAction({
   order,
   signedIn,
   onSubmitted,
+  startPayment = false,
 }: {
   order: Order
   signedIn: boolean
   onSubmitted?: (order: Order) => void
+  startPayment?: boolean
 }) {
   const t = useT()
+  // Payment first: details sent and being checked, or too late to pay, say so before
+  // anything else -- the server works both out (paymentState).
+  if (order.paymentState === 'EXPIRED') return <OrderExpired sku={order.sku} />
+  if (order.paymentState === 'SUBMITTED') return <PaymentSubmitted />
   switch (order.nextAction) {
     case 'PAY':
-      return <Alert tone="warn" title={t.track.payTitle}>{t.track.payBody}</Alert>
+      return (
+        <CompletePayment order={order} signedIn={signedIn} onChanged={onSubmitted} startOpen={startPayment} />
+      )
     case 'SUBMIT_CREDENTIALS':
       /*
         The form, not a notice about the form.

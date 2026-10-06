@@ -66,3 +66,35 @@ describe('the tracking link in an order email', () => {
       { publicRef: 'GFS-26-COIN0001', email: 'player@example.test' }))
   })
 })
+
+describe('My Orders', () => {
+  const row = (ref: string, paymentState: string | null, status: string) => ({
+    publicRef: ref, status, sku: 'COACHING', statusLabel: status === 'AWAITING_PAYMENT' ? 'Waiting for payment' : 'Queued',
+    serviceLabel: 'FUT Classes — Single session', platform: null, quantity: '1', deliveryMethod: 'SCHEDULED_SESSION',
+    credentialsHeld: false, customerEmail: 'rahul@example.test', totalMinor: 9225, totalFormatted: '€92.25',
+    currency: 'EUR', createdAt: '2026-10-05T10:00:00Z', deliveredAt: null, availableTransitions: [], paymentState,
+  })
+
+  it('offers "Complete your payment" on an unpaid order only, and opens it on its payment step', async () => {
+    auth.account = OWNER
+    api.get.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/orders') {
+        return [row('GFS-26-UNPAID01', 'UNPAID', 'AWAITING_PAYMENT'), row('GFS-26-PAIDXX01', null, 'READY_FOR_DELIVERY')]
+      }
+      if (url === '/api/v1/orders/GFS-26-UNPAID01') {
+        return { ...row('GFS-26-UNPAID01', 'UNPAID', 'AWAITING_PAYMENT'), nextAction: 'PAY', lines: [], timeline: [],
+          payBy: '2026-10-07T10:00:00Z', credentialsRequired: false, credentialsSubmitted: false, discordAccess: null }
+      }
+      return new Promise(() => {})
+    })
+    render(<MemoryRouter initialEntries={['/track']}><Track /></MemoryRouter>)
+
+    const buttons = await screen.findAllByRole('button', { name: 'Complete your payment' })
+    expect(buttons).toHaveLength(1)
+    fireEvent.click(buttons[0]!)
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/orders/GFS-26-UNPAID01'))
+    // Opened on the payment step: the step is already loading, no second press needed.
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/orders/GFS-26-UNPAID01/payment?lang=en'))
+  })
+})
