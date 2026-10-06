@@ -3,14 +3,11 @@ package com.globalfutservice.notify;
 import com.globalfutservice.config.AppProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -38,23 +35,27 @@ class CredentialReminderEmailTest {
         when(notifications.emailFromName()).thenReturn("Global FUT Services");
         when(props.publicUrl()).thenReturn("https://globalfutservices.com");
         when(props.instagramUrl()).thenReturn("https://www.instagram.com/global_fut_services/");
+        when(props.discordInvite()).thenReturn("https://discord.gg/8FeP7C6tXt");
         return new EmailNotifier(props, sender);
     }
 
     @Test
     @DisplayName("says it is a reminder, and asks for the same thing the first email did")
     void customerEmail() {
-        JavaMailSender sender = mock(JavaMailSender.class);
+        JavaMailSender sender = SentEmail.sender();
 
         notifier(sender).credentialsReminder(order());
 
-        ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(sender).send(message.capture());
-        assertThat(message.getValue().getSubject()).isEqualTo("Reminder: action needed on order GFS-26-REMIND01");
-        assertThat(message.getValue().getTo()).containsExactly("player@example.test");
-        assertThat(message.getValue().getText())
+        // A coin order: the branded email, with the order's own tracking page in both parts.
+        SentEmail mail = SentEmail.captured(sender);
+        assertThat(mail.subject()).isEqualTo("Reminder: action needed on order GFS-26-REMIND01");
+        assertThat(mail.to()).isEqualTo("player@example.test");
+        assertThat(mail.text())
                 .contains("Reference: GFS-26-REMIND01")
-                .contains("Add them here: https://globalfutservices.com/track");
+                .contains("Add them here: https://globalfutservices.com/track?ref=GFS-26-REMIND01");
+        assertThat(mail.html())
+                .contains("TRACK YOUR ORDER")
+                .contains("https://globalfutservices.com/track?ref=GFS-26-REMIND01");
     }
 
     @Test

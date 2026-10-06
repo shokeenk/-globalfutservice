@@ -18,10 +18,10 @@ import com.globalfutservice.notify.DiscordBotClient;
 import com.globalfutservice.notify.DiscordNotifier;
 import com.globalfutservice.notify.EmailNotifier;
 import com.globalfutservice.notify.OrderNotification;
+import com.globalfutservice.notify.SentEmail;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -239,18 +239,22 @@ class CustomerVocabularyTest {
         when(props.publicUrl()).thenReturn("https://globalfutservices.com");
         when(props.notifications().emailEnabled()).thenReturn(true);
         when(props.notifications().emailFrom()).thenReturn("orders@globalfutservices.com");
+        when(props.instagramUrl()).thenReturn("https://www.instagram.com/global_fut_services/");
         List<String> out = new ArrayList<>();
         for (CustomerAction action : CustomerAction.values()) {
             CustomerActionNotification n = new CustomerActionNotification(new OrderNotification(
                     "GFS-26-VOCAB001", "ON_HOLD", "Buy Coins — 500K (PC)", "₹8,250.00", "p@example.test", null,
                     "PLAYER_AUCTION", "TRADING_SERVICE", "PC", null, null, null, null), CustomerText.forAction(action));
 
-            JavaMailSender sender = mock(JavaMailSender.class);
+            // The email as sent: its subject, and both its parts.
+            JavaMailSender sender = SentEmail.sender();
             new EmailNotifier(props, sender).customerActionNeeded(n);
-            ArgumentCaptor<SimpleMailMessage> mail = ArgumentCaptor.forClass(SimpleMailMessage.class);
-            verify(sender).send(mail.capture());
-            out.add(mail.getValue().getSubject());
-            out.add(mail.getValue().getText());
+            SentEmail mail = SentEmail.captured(sender);
+            assertThat(mail.text()).as("the plain-text part").isNotBlank();
+            assertThat(mail.html()).as("the HTML part").isNotBlank();
+            out.add(mail.subject());
+            out.add(mail.text());
+            out.add(mail.html());
 
             DiscordBotClient bot = mock(DiscordBotClient.class);
             when(bot.isEnabled()).thenReturn(true);
