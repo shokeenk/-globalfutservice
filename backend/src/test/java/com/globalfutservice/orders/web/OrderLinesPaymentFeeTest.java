@@ -32,7 +32,7 @@ class OrderLinesPaymentFeeTest {
 
     private final OrderMapper mapper = new OrderMapper(new ObjectMapper(), mock(AppProperties.class),
             mock(DiscordVerificationService.class), mock(DiscordBotClient.class), mock(CoachingService.class),
-            mock(VendorOrderLedger.class));
+            mock(VendorOrderLedger.class), mock(com.globalfutservice.orders.OrderPaymentState.class));
 
     private static OrderEntity order() {
         return new OrderEntity("GFS-26-EUR00001", "q_1", "FC27", Sku.TRADING_SERVICE, null, null, BigDecimal.ONE,

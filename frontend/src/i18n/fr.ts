@@ -498,10 +498,6 @@ const fr: Dictionary = {
     deliveryCoaching: 'Séance programmée',
     breakdown: 'Détail',
     history: 'Historique',
-    payTitle: 'En attente de paiement',
-    payBody:
-      'Cette commande n’a pas encore été payée. Si tu as fermé la fenêtre de paiement, ' +
-      'recommence depuis la page de commande : ta référence sera réutilisée.',
     // -- livraison en cours -------------------------------------------------
     progressTitle: 'Coins livrés',
     progressOf: (done: string, total: string) => `${done} sur ${total}`,
@@ -1618,6 +1614,35 @@ const fr: Dictionary = {
     guestBody: (ref: string) =>
       `Le chat en direct est réservé aux commandes passées depuis un compte. Ouvre un ticket d’assistance et indique la commande ${ref}.`,
     guestCta: 'Ouvrir un ticket d’assistance',
+  },
+  completePayment: {
+    banner: 'Cette commande n’a pas encore été payée. Termine ton paiement pour la confirmer. La référence de ta commande reste la même.',
+    button: 'Terminer le paiement',
+    amountDue: 'Montant à payer',
+    payBy: (when: string) => `À payer avant le ${when}`,
+    signIn: 'Connecte-toi pour terminer ton paiement',
+    loading: 'Chargement de ton paiement…',
+    loadFailed: 'Ton paiement n’a pas pu être chargé. Réessaie.',
+    retry: 'Réessayer',
+    submittedTitle: 'Informations de paiement reçues',
+    submittedBody: 'Nous avons bien reçu les informations de ton paiement et nous les vérifions.',
+    expiredTitle: 'Cette commande a expiré',
+    expiredBody: 'Elle n’a pas été payée à temps, elle a donc été clôturée.',
+    placeNew: 'Passer une nouvelle commande',
+    blockedLead: 'Tu as commencé un paiement avec un moyen de paiement local.',
+    blockedLink: 'Termine-le ici',
+    blockedTail: (when: string) => `, ou choisis un autre moyen de paiement après le ${when}.`,
+    limitOrder: (when: string) =>
+      `Ce paiement a été lancé plusieurs fois. Termine un paiement déjà ouvert, ou lance-en un autre après le ${when}.`,
+    limitAccount: (when: string) =>
+      `Plusieurs paiements ont été lancés depuis ton compte récemment. Termine un paiement déjà ouvert, ou lance-en un autre après le ${when}.`,
+    tokenExpired: 'Les prix sont actualisés toutes les quelques minutes. Choisis à nouveau ton moyen de paiement.',
+    payByPassed: 'Le délai pour payer cette commande est dépassé.',
+    slotChecking: 'L’horaire de ta séance a été libéré pendant que la commande n’était pas payée. Vérification qu’il est toujours libre…',
+    slotKept: (when: string) => `Ta séance : ${when}`,
+    slotTaken: 'Cet horaire a été pris entre-temps. Choisis un nouvel horaire pour ta séance, puis paie.',
+    signInAgain:
+      'Avant de payer, nous avons de nouveau besoin de tes identifiants EA. Ceux que tu as envoyés sont supprimés 24 heures après, pour ta sécurité.',
   },
   catalog: {
     services: {

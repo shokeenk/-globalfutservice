@@ -319,6 +319,42 @@ class PayopCallbackServiceTest {
     }
 
     @Test
+    @DisplayName("a payment on an invoice the customer moved away from still counts once: applied if the order is "
+            + "unpaid")
+    void supersededInvoicePaidFirst() {
+        // The customer opened INVOICE, switched to another method, then paid the first invoice anyway.
+        attempt.expired(PayopInvoiceEntity.REPLACED, NOW.instant().minusSeconds(300));
+        invoices.open(7, "e0000000-ba2d-456f-910e-4d7fdfd338dd", 700001, Currency.EUR, 9000, 485, "94.85",
+                NOW.instant().minusSeconds(300));
+        payopSays(2, "94.07", "EUR", REF, null);
+
+        assertThat(deliver(ipn(INVOICE, TXID, 2, null))).isEqualTo(PayopCallbackService.Outcome.PAID);
+        assertThat(attempt.getStatus()).isEqualTo(PayopInvoiceEntity.Status.PAID);
+        assertThat(order.getTotalMinor()).isEqualTo(9407);
+        verify(orderService, times(1)).markPaid(any(), anyString());
+    }
+
+    @Test
+    @DisplayName("a payment on a superseded invoice after the order was paid with the new one: 'duplicate payment, "
+            + "refund needed'")
+    void supersededInvoicePaidSecond() {
+        attempt.expired(PayopInvoiceEntity.REPLACED, NOW.instant().minusSeconds(300));
+        String invoice2 = "e0000000-ba2d-456f-910e-4d7fdfd338dd";
+        String txid2 = "f0000000-be19-470d-9494-9b76944e0241";
+        invoices.open(7, invoice2, 700001, Currency.EUR, 9000, 485, "94.85", NOW.instant().minusSeconds(300));
+        when(client.transaction(txid2)).thenReturn(new PayopClient.Transaction(txid2, 2, null, REF,
+                new BigDecimal("94.85"), "EUR", null));
+        assertThat(deliver(ipn(invoice2, txid2, 2, null))).isEqualTo(PayopCallbackService.Outcome.PAID);
+
+        payopSays(2, "94.07", "EUR", REF, null);
+        assertThat(deliver(ipn(INVOICE, TXID, 2, null))).isEqualTo(PayopCallbackService.Outcome.DUPLICATE);
+        assertThat(attempt.getStatus()).isEqualTo(PayopInvoiceEntity.Status.DUPLICATE);
+        assertThat(alert().headline()).isEqualTo("Duplicate payment, refund needed");
+        assertThat(paymentRows).hasSize(1);
+        verify(orderService, times(1)).markPaid(any(), anyString());
+    }
+
+    @Test
     @DisplayName("a payment for an abandoned order: not applied, held for a person to decide")
     void closedOrder() {
         ReflectionTestUtils.setField(order, "status", OrderStatus.ABANDONED);

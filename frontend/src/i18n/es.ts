@@ -495,10 +495,6 @@ const es: Dictionary = {
     deliveryCoaching: 'Sesión programada',
     breakdown: 'Desglose',
     history: 'Historial',
-    payTitle: 'Esperando el pago',
-    payBody:
-      'Este pedido aún no se ha pagado. Si cerraste la ventana de pago, empieza de nuevo ' +
-      'desde la página del pedido y se reutilizará tu referencia.',
     // -- entrega en curso ---------------------------------------------------
     progressTitle: 'Monedas entregadas',
     progressOf: (done: string, total: string) => `${done} de ${total}`,
@@ -1611,6 +1607,35 @@ const es: Dictionary = {
     guestBody: (ref: string) =>
       `El chat en vivo es para pedidos hechos desde una cuenta. Abre un ticket de soporte e indica el pedido ${ref}.`,
     guestCta: 'Abrir un ticket de soporte',
+  },
+  completePayment: {
+    banner: 'Este pedido aún no se ha pagado. Completa el pago para confirmarlo. La referencia de tu pedido no cambia.',
+    button: 'Completar el pago',
+    amountDue: 'Importe pendiente',
+    payBy: (when: string) => `Paga antes del ${when}`,
+    signIn: 'Inicia sesión para completar el pago',
+    loading: 'Cargando tu pago…',
+    loadFailed: 'No se pudo cargar tu pago. Inténtalo de nuevo.',
+    retry: 'Reintentar',
+    submittedTitle: 'Datos de pago recibidos',
+    submittedBody: 'Hemos recibido los datos de tu pago y los estamos verificando.',
+    expiredTitle: 'Este pedido ha caducado',
+    expiredBody: 'No se pagó a tiempo, así que se cerró.',
+    placeNew: 'Hacer un pedido nuevo',
+    blockedLead: 'Has iniciado un pago con un método local.',
+    blockedLink: 'Complétalo aquí',
+    blockedTail: (when: string) => ` o podrás elegir otro método a partir del ${when}.`,
+    limitOrder: (when: string) =>
+      `Este pago se ha iniciado varias veces. Completa uno que ya hayas abierto o inicia otro a partir del ${when}.`,
+    limitAccount: (when: string) =>
+      `Se han iniciado varios pagos desde tu cuenta hace poco. Completa uno que ya hayas abierto o inicia otro a partir del ${when}.`,
+    tokenExpired: 'Los precios se actualizan cada pocos minutos. Vuelve a elegir el método de pago.',
+    payByPassed: 'Ha pasado el plazo para pagar este pedido.',
+    slotChecking: 'La hora de tu sesión se liberó mientras el pedido estaba sin pagar. Comprobando si sigue libre…',
+    slotKept: (when: string) => `Tu sesión: ${when}`,
+    slotTaken: 'Esa hora ya está ocupada. Elige una nueva hora para tu sesión y luego paga.',
+    signInAgain:
+      'Antes de pagar necesitamos de nuevo tus datos de acceso de EA. Los que enviaste se borran 24 horas después, por tu seguridad.',
   },
   catalog: {
     services: {

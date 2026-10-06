@@ -60,6 +60,29 @@ public final class ApiExceptions {
     }
 
     /** 502 — an upstream we depend on misbehaved. */
+    /**
+     * Something was done as often as it may be for now. {@code retryAt} is when it can be
+     * done again, sent to the browser so the customer is told a time rather than "later".
+     */
+    public static class TooManyRequestsException extends RuntimeException {
+        private final String code;
+        private final java.time.Instant retryAt;
+
+        public TooManyRequestsException(String code, String message, java.time.Instant retryAt) {
+            super(message);
+            this.code = code;
+            this.retryAt = retryAt;
+        }
+
+        public String code() {
+            return code;
+        }
+
+        public java.time.Instant retryAt() {
+            return retryAt;
+        }
+    }
+
     public static class UpstreamException extends RuntimeException {
         public UpstreamException(String message, Throwable cause) {
             super(message, cause);

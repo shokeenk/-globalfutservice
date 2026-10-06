@@ -128,7 +128,9 @@ export default function Account() {
                     {orders.map((order) => (
                       <li key={order.publicRef}>
                         <Link
-                          to={`/track?ref=${order.publicRef}`}
+                          // An unpaid order opens on its payment step.
+                          to={order.paymentState === 'UNPAID'
+                            ? `/track?ref=${order.publicRef}&pay=1` : `/track?ref=${order.publicRef}`}
                           className="group flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4
                                      transition-colors duration-200 hover:bg-ink-500/40"
                         >
@@ -144,6 +146,13 @@ export default function Account() {
                           <Badge tone={statusTone(order.status)}>
                             {order.status.replace(/_/g, ' ')}
                           </Badge>
+
+                          {order.paymentState === 'UNPAID' && (
+                            <span className="shrink-0 text-[12.5px] font-semibold text-brand-400"
+                                  data-testid="complete-payment-link">
+                              {t.completePayment.button}
+                            </span>
+                          )}
 
                           <span className="tnum shrink-0 text-[14px] font-semibold text-chalk">
                             {order.totalFormatted}

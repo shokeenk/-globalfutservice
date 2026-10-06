@@ -115,6 +115,11 @@ class CustomerVocabularyTest {
                 FRONTEND.resolve("components").resolve("ManualPayment.tsx"),
                 FRONTEND.resolve("components").resolve("PayopPayment.tsx"),
                 FRONTEND.resolve("pages").resolve("PayopReturn.tsx"),
+                // Completing the payment of an unpaid order: the page, and what the server says.
+                FRONTEND.resolve("components").resolve("CompletePayment.tsx"),
+                BACKEND.resolve("payments").resolve("ResumePaymentService.java"),
+                BACKEND.resolve("payments").resolve("web").resolve("OrderPaymentController.java"),
+                BACKEND.resolve("payments").resolve("payop").resolve("PayopStartToken.java"),
                 BACKEND.resolve("payments").resolve("payop").resolve("PayopCheckoutService.java"),
                 BACKEND.resolve("payments").resolve("web").resolve("PayopController.java"));
         for (Path file : files) {

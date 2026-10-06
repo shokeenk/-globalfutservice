@@ -12,9 +12,13 @@ import { COUNTRY_CODES, countryCode, countryFromLocale, countryName } from '../l
  * only the method and the total that was on screen, which the server checks against its
  * own. Nothing here marks anything paid: the customer goes to Payop's page, and the order
  * moves when Payop's confirmation reaches the server.
+ *
+ * Two sets of routes: checkout's, authenticated by reference and email, and a signed-in
+ * owner's own ({@link ownerPayopRoutes}), used to complete the payment of an unpaid order,
+ * where a method is started from a token the server issued and no amount is sent at all.
  */
 
-interface MethodOption {
+export interface MethodOption {
   methodId: number
   name: string
   type: string
@@ -22,9 +26,11 @@ interface MethodOption {
   feeFormatted: string
   totalMinor: number
   totalFormatted: string
+  /** The owner's routes only: the server's sealed price for this method, which starts it. */
+  token?: string
 }
 
-interface Options {
+export interface Options {
   currency: string
   netMinor: number
   netFormatted: string
@@ -36,7 +42,7 @@ interface Options {
   claimsBlockedUntil: string | null
 }
 
-interface Started {
+export interface Started {
   redirectUrl: string
   invoiceId: string
   totalMinor: number
@@ -44,15 +50,80 @@ interface Started {
   payableUntil: string
 }
 
+/** Where the methods come from and where a payment is started. */
+export interface PayopRoutes {
+  options: (country: string) => Promise<Options>
+  start: (method: MethodOption, country: string, language: string) => Promise<Started>
+}
+
+/** Checkout's routes: the order is named by its reference and the email on it. */
+function guestPayopRoutes(publicRef: string, email: string): PayopRoutes {
+  return {
+    options: (country) => api.post<Options>('/api/v1/payments/payop/options', { order: publicRef, email, country }),
+    start: (method, country, language) => api.post<Started>('/api/v1/payments/payop/invoices', {
+      order: publicRef, email, methodId: method.methodId, country, expectedTotalMinor: method.totalMinor, language,
+    }),
+  }
+}
+
+interface OwnerOptions {
+  currency: string
+  netMinor: number
+  netFormatted: string
+  unavailable: string | null
+  methods: {
+    methodId: number; name: string; type: string; feeMinor: number; feeFormatted: string
+    breakdown: { totalMinor: number; totalFormatted: string }
+    token: string
+  }[]
+  manualBlockedUntil: string | null
+}
+
+/**
+ * A signed-in owner's routes, for an order of theirs. Each method comes with the token the
+ * server sealed its price into; starting a payment sends that token and nothing else.
+ */
+export function ownerPayopRoutes(publicRef: string): PayopRoutes {
+  const base = `/api/v1/orders/${encodeURIComponent(publicRef)}/payment/payop`
+  return {
+    options: async (country) => {
+      const o = await api.post<OwnerOptions>(`${base}/options`, { country })
+      return {
+        currency: o.currency,
+        netMinor: o.netMinor,
+        netFormatted: o.netFormatted,
+        feeLabel: '',
+        unavailable: o.unavailable,
+        claimsBlockedUntil: o.manualBlockedUntil,
+        methods: o.methods.map((m) => ({
+          methodId: m.methodId, name: m.name, type: m.type, feeMinor: m.feeMinor, feeFormatted: m.feeFormatted,
+          totalMinor: m.breakdown.totalMinor, totalFormatted: m.breakdown.totalFormatted, token: m.token,
+        })),
+      }
+    },
+    start: (method, _country, language) => api.post<Started>(`${base}/invoices`, { token: method.token, language }),
+  }
+}
+
+/** When a limit or a time frees up, from the error's `details.retryAt`, in the customer's own time. */
+export function retryTime(e: ApiError, lang: string): string {
+  const at = e.details?.retryAt?.[0]
+  return at ? new Date(at).toLocaleString(lang, { dateStyle: 'medium', timeStyle: 'short' }) : ''
+}
+
 export function PayopPayment({
-  publicRef, email, onUnavailable,
+  publicRef, email, onUnavailable, routes,
 }: {
   publicRef: string
-  email: string
+  /** The email on the order: checkout's routes only. */
+  email?: string
   /** Payop is switched off: the tab goes back to saying it is coming. */
   onUnavailable: () => void
+  /** Another way to reach the order than checkout's; see {@link ownerPayopRoutes}. */
+  routes?: PayopRoutes
 }) {
   const { t, lang } = useI18n()
+  const via = useMemo(() => routes ?? guestPayopRoutes(publicRef, email ?? ''), [routes, publicRef, email])
   const [country, setCountry] = useState<string | null>(null)
   const [guessed, setGuessed] = useState(false)
   const [options, setOptions] = useState<Options | null>(null)
@@ -83,7 +154,7 @@ export function PayopPayment({
     let live = true
     setLoading(true)
     setFailed(false)
-    api.post<Options>('/api/v1/payments/payop/options', { order: publicRef, email, country })
+    via.options(country)
       .then((found) => {
         if (!live) return
         setOptions(found)
@@ -99,7 +170,7 @@ export function PayopPayment({
       })
       .finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [country, publicRef, email, reload, onUnavailable])
+  }, [country, via, reload, onUnavailable])
 
   const names = useMemo(
     () => COUNTRY_CODES
@@ -114,14 +185,7 @@ export function PayopPayment({
     setStarting(true)
     setError(null)
     try {
-      const started = await api.post<Started>('/api/v1/payments/payop/invoices', {
-        order: publicRef,
-        email,
-        methodId: chosen.methodId,
-        country,
-        expectedTotalMinor: chosen.totalMinor,
-        language: lang,
-      })
+      const started = await via.start(chosen, country, lang)
       // Only ever off to an https page the server named: never a value from this page.
       if (!started.redirectUrl.startsWith('https://')) {
         setError(t.order.payopStartFailed)
@@ -137,6 +201,15 @@ export function PayopPayment({
         setReload((n) => n + 1)
       } else if (e instanceof ApiError && e.code === 'payment_starting') {
         setError(t.order.payopStarting)
+      } else if (e instanceof ApiError && e.code === 'payment_token_expired') {
+        setError(t.completePayment.tokenExpired)
+        setReload((n) => n + 1)
+      } else if (e instanceof ApiError && e.code === 'payment_attempts_order') {
+        setError(t.completePayment.limitOrder(retryTime(e, lang)))
+      } else if (e instanceof ApiError && e.code === 'payment_attempts_account') {
+        setError(t.completePayment.limitAccount(retryTime(e, lang)))
+      } else if (e instanceof ApiError && e.code === 'pay_by_passed') {
+        setError(t.completePayment.payByPassed)
       } else {
         setError(t.order.payopStartFailed)
       }

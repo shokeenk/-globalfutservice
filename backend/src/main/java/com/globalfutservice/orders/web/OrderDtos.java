@@ -205,7 +205,15 @@ public final class OrderDtos {
             DiscordAccessDto discordAccess,
 
             /** Coaching only: how many of the order's sessions are booked, and the next. */
-            CoachingProgressDto coaching) {
+            CoachingProgressDto coaching,
+
+            /*
+              Where the order stands on payment (OrderPaymentState): UNPAID, SUBMITTED,
+              EXPIRED, or null once payment is behind it. `payBy` is when an unpaid order
+              stops being payable.
+            */
+            String paymentState,
+            Instant payBy) {
     }
 
     /**
@@ -274,7 +282,10 @@ public final class OrderDtos {
             String currency,
             Instant createdAt,
             Instant deliveredAt,
-            List<String> availableTransitions) {
+            List<String> availableTransitions,
+            /* UNPAID, SUBMITTED, EXPIRED or null, as on the order itself: the customer's list
+               offers "Complete your payment" on the unpaid ones. */
+            String paymentState) {
     }
 
     public record TransitionRequest(

@@ -579,10 +579,6 @@ const en = {
     deliveryCoaching: 'Scheduled session',
     breakdown: 'Breakdown',
     history: 'History',
-    payTitle: 'Waiting for payment',
-    payBody:
-      'This order has not been paid yet. If you closed the payment window, start again from ' +
-      'the order page and your reference will be reused.',
     // -- live fulfilment ----------------------------------------------------
     progressTitle: 'Coins delivered',
     progressOf: (done: string, total: string) => `${done} of ${total}`,
@@ -1825,6 +1821,39 @@ const en = {
     guestBody: (ref: string) =>
       `Live chat is for orders placed from an account. Open a support ticket and mention order ${ref}.`,
     guestCta: 'Open a support ticket',
+  },
+  /*
+    Completing the payment of an order placed and not paid, from the order page and My
+    Orders. The banner is the client's text, word for word.
+  */
+  completePayment: {
+    banner: 'This order hasn’t been paid yet. Complete your payment to confirm it. Your order reference stays the same.',
+    button: 'Complete your payment',
+    amountDue: 'Amount due',
+    payBy: (when: string) => `Pay by ${when}`,
+    signIn: 'Sign in to complete your payment',
+    loading: 'Loading your payment…',
+    loadFailed: 'Your payment could not be loaded. Please try again.',
+    retry: 'Try again',
+    submittedTitle: 'Payment details received',
+    submittedBody: 'We’ve received your payment details and are verifying them.',
+    expiredTitle: 'This order has expired',
+    expiredBody: 'It wasn’t paid in time, so it was closed.',
+    placeNew: 'Place a new order',
+    blockedLead: 'You’ve started a payment with a local method.',
+    blockedLink: 'Complete it here',
+    blockedTail: (when: string) => `, or you can choose another method after ${when}.`,
+    limitOrder: (when: string) =>
+      `This payment has been started several times. Complete one you’ve already opened, or start another after ${when}.`,
+    limitAccount: (when: string) =>
+      `Several payments have been started from your account recently. Complete one you’ve already opened, or start another after ${when}.`,
+    tokenExpired: 'Prices are refreshed every few minutes. Choose your payment method again.',
+    payByPassed: 'The time to pay for this order has passed.',
+    slotChecking: 'Your session time was released while the order was unpaid. Checking it is still free…',
+    slotKept: (when: string) => `Your session: ${when}`,
+    slotTaken: 'That time has been taken since. Pick a new time for your session, then pay.',
+    signInAgain:
+      'Before you pay, we need your EA sign-in again. The one you gave is deleted 24 hours after it was sent, for your safety.',
   },
   /*
    * Server-supplied strings.

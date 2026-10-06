@@ -61,6 +61,8 @@ final class PayopFakes {
     static final class Invoices {
         final Map<Long, PayopInvoiceEntity> rows = new LinkedHashMap<>();
         final PayopInvoiceRepository repo = mock(PayopInvoiceRepository.class);
+        /** Which account each order belongs to, for the per-account limit. */
+        final Map<Long, Long> accountOf = new java.util.HashMap<>();
         private long nextId = 100;
 
         Invoices() {
@@ -81,6 +83,25 @@ final class PayopFakes {
             when(repo.findByStatusAndUpdatedAtBefore(any(), any())).thenAnswer(inv -> rows.values().stream()
                     .filter(r -> r.getStatus() == inv.getArgument(0)
                             && r.getUpdatedAt().isBefore(inv.getArgument(1))).toList());
+            when(repo.findByOrderIdOrderByCreatedAtDesc(anyLong())).thenAnswer(inv -> rows.values().stream()
+                    .filter(r -> r.getOrderId().equals(inv.getArgument(0)))
+                    .sorted(Comparator.comparing(PayopInvoiceEntity::getCreatedAt).reversed()
+                            .thenComparing(PayopInvoiceEntity::getId, Comparator.reverseOrder()))
+                    .toList());
+            when(repo.countByOrderIdAndCreatedAtAfter(anyLong(), any())).thenAnswer(inv -> rows.values().stream()
+                    .filter(r -> r.getOrderId().equals(inv.getArgument(0))
+                            && r.getCreatedAt().isAfter(inv.getArgument(1))).count());
+            when(repo.firstForOrderSince(anyLong(), any())).thenAnswer(inv -> rows.values().stream()
+                    .filter(r -> r.getOrderId().equals(inv.getArgument(0))
+                            && r.getCreatedAt().isAfter(inv.getArgument(1)))
+                    .map(PayopInvoiceEntity::getCreatedAt).min(Comparator.naturalOrder()));
+            when(repo.countForAccountSince(anyLong(), any())).thenAnswer(inv -> rows.values().stream()
+                    .filter(r -> inv.getArgument(0).equals(accountOf.get(r.getOrderId()))
+                            && r.getCreatedAt().isAfter(inv.getArgument(1))).count());
+            when(repo.firstForAccountSince(anyLong(), any())).thenAnswer(inv -> rows.values().stream()
+                    .filter(r -> inv.getArgument(0).equals(accountOf.get(r.getOrderId()))
+                            && r.getCreatedAt().isAfter(inv.getArgument(1)))
+                    .map(PayopInvoiceEntity::getCreatedAt).min(Comparator.naturalOrder()));
             when(repo.payableUntil(anyLong(), any(), any())).thenAnswer(inv -> rows.values().stream()
                     .filter(r -> r.getOrderId().equals(inv.getArgument(0))
                             && r.getExpiresAt().isAfter(inv.getArgument(1))

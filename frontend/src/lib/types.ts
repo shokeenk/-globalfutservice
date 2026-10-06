@@ -231,7 +231,15 @@ export interface Order {
    * awaiting payment, SCHEDULED once it is booked. Absent on every other service.
    */
   coaching?: CoachingProgress | null
+  /**
+   * Where the order stands on payment: UNPAID (payable until `payBy`), SUBMITTED (payment
+   * details sent, being checked), EXPIRED, or null once payment is behind it.
+   */
+  paymentState?: PaymentState | null
+  payBy?: string | null
 }
+
+export type PaymentState = 'UNPAID' | 'SUBMITTED' | 'EXPIRED'
 
 /**
  * The supplier's stall reasons, as things a person can act on.
@@ -271,6 +279,8 @@ export interface OrderSummary {
   createdAt: string
   deliveredAt: string | null
   availableTransitions: string[]
+  /** As on the order: "Complete your payment" is offered on the UNPAID ones. */
+  paymentState?: PaymentState | null
 }
 
 export interface Account {
@@ -1100,4 +1110,80 @@ export interface VendorControlState {
   pausedAt?: string | null
   reason?: string | null
   resumedAt?: string | null
+}
+
+/* --------------------------------------------------- completing a payment --- */
+
+export interface OrderLine {
+  code: string
+  label: string
+  amountMinor: number
+  amountFormatted: string
+}
+
+export interface PaymentBreakdown {
+  lines: OrderLine[]
+  totalMinor: number
+  totalFormatted: string
+}
+
+/** A Payop invoice the customer can still pay, and the page to pay it on. */
+export interface PayableInvoice {
+  invoiceId: string
+  methodName: string
+  totalMinor: number
+  currency: string
+  payableUntil: string
+  url: string
+}
+
+/** The slot a coaching order holds, or held before its hold ran out. */
+export interface PaymentCoachingSlot {
+  state: 'HELD' | 'EXPIRED' | 'NONE'
+  coachId: string | null
+  coachName: string | null
+  startsAt: string | null
+  endsAt: string | null
+  timezone: string | null
+  holdExpiresAt: string | null
+  variant: string | null
+}
+
+/** Everything the "Complete your payment" step needs, from GET /orders/{ref}/payment. */
+export interface OrderPaymentView {
+  publicRef: string
+  status: string
+  paymentState: PaymentState | null
+  payBy: string | null
+  currency: string
+  amountDueMinor: number
+  amountDueFormatted: string
+  manual: PaymentBreakdown | null
+  payopOffered: boolean
+  payableInvoice: PayableInvoice | null
+  manualBlockedUntil: string | null
+  claimSubmittedAt: string | null
+  coaching: PaymentCoachingSlot | null
+  signInNeeded: boolean
+}
+
+/** Staff: one way the customer tried to pay -- a Payop invoice or a payment claim. */
+export interface PaymentAttempt {
+  kind: 'PAYOP' | 'MANUAL'
+  method: string
+  status: string
+  note: string | null
+  totalMinor: number
+  totalFormatted: string
+  feeMinor: number | null
+  feeFormatted: string | null
+  at: string | null
+  payableUntil: string | null
+  superseded: boolean
+}
+
+export interface OrderPaymentStaffView {
+  current: PaymentAttempt | null
+  currentBreakdown: PaymentBreakdown | null
+  attempts: PaymentAttempt[]
 }

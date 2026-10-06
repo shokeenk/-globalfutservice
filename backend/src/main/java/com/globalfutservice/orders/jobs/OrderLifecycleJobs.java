@@ -3,9 +3,11 @@ package com.globalfutservice.orders.jobs;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.domain.payments.ClaimStatus;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.orders.PayByDeadline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,13 +34,15 @@ public class OrderLifecycleJobs {
     private final OrderRepository orders;
     private final OrderService orderService;
     private final AppProperties props;
+    private final PayByDeadline payBy;
     private final Clock clock;
 
     public OrderLifecycleJobs(OrderRepository orders, OrderService orderService,
-                              AppProperties props, Clock clock) {
+                              AppProperties props, PayByDeadline payBy, Clock clock) {
         this.orders = orders;
         this.orderService = orderService;
         this.props = props;
+        this.payBy = payBy;
         this.clock = clock;
     }
 
@@ -77,13 +81,22 @@ public class OrderLifecycleJobs {
      * window. People start a checkout, go and find their card, and come back twenty
      * minutes later; cancelling under them is the most irritating thing a storefront can
      * do, and an abandoned row costs nothing to keep for a day.
+     *
+     * <p>Never under a payment the customer says they have made and nobody has checked yet,
+     * nor one Payop can still take (both left out by the query). And when staff reject a
+     * claim after the deadline, the customer gets {@link PayByDeadline#AFTER_REJECTION} to
+     * pay again before the order closes.
      */
     @Scheduled(cron = "0 45 * * * *")
     public void sweepAbandoned() {
         try {
-            Instant cutoff = clock.instant().minus(props.fulfilment().deliverySla());
-            List<OrderEntity> stale = orders.findStaleUnpaid(cutoff, clock.instant(),
-                    com.globalfutservice.payments.payop.PayopInvoiceEntity.Status.CREATING);
+            Instant now = clock.instant();
+            Instant cutoff = now.minus(props.fulfilment().deliverySla());
+            List<OrderEntity> stale = orders.findStaleUnpaid(cutoff, now,
+                    com.globalfutservice.payments.payop.PayopInvoiceEntity.Status.CREATING, ClaimStatus.SUBMITTED)
+                    .stream()
+                    .filter(order -> !now.isBefore(payBy.forOrder(order)))
+                    .toList();
             for (OrderEntity order : stale) {
                 try {
                     orderService.transition(order, OrderStatus.ABANDONED, Actor.SYSTEM, null,

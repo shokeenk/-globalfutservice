@@ -1,9 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Field, Input } from './ui'
-import { useT } from '../i18n'
+import { useI18n, useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { ManualPaymentClaim, ManualPaymentMethod, ManualPaymentOption } from '../lib/types'
-import { PayopPayment } from './PayopPayment'
+import { PayopPayment, type PayopRoutes } from './PayopPayment'
+
+/** Where a payment claim and its screenshot are sent. */
+export interface ManualRoutes {
+  claim: (method: ManualPaymentMethod, reference: string) => Promise<ManualPaymentClaim>
+  proof: (file: File) => Promise<unknown>
+}
+
+/** Checkout's routes: the order is named by its reference and the email on it. */
+function guestManualRoutes(publicRef: string, email: string): ManualRoutes {
+  const base = `/api/v1/payments/claims/${encodeURIComponent(publicRef)}`
+  return {
+    claim: (method, reference) => api.post<ManualPaymentClaim>(base, { email, method, reference }),
+    proof: (file) => {
+      const form = new FormData()
+      form.append('email', email)
+      form.append('file', file)
+      return api.upload(`${base}/proof`, form)
+    },
+  }
+}
+
+/** A signed-in owner's routes, for completing the payment of an unpaid order of theirs. */
+export function ownerManualRoutes(publicRef: string): ManualRoutes {
+  const base = `/api/v1/orders/${encodeURIComponent(publicRef)}/payment/claims`
+  return {
+    claim: (method, reference) => api.post<ManualPaymentClaim>(base, { method, reference }),
+    proof: (file) => {
+      const form = new FormData()
+      form.append('file', file)
+      return api.upload(`${base}/proof`, form)
+    },
+  }
+}
+
+/**
+ * A Payop invoice for the order can still be paid: manual methods wait until `until`, and
+ * the customer is sent back to the invoice meanwhile.
+ */
+export interface ManualBlock {
+  until: string
+  invoiceUrl: string | null
+}
 
 /**
  * Paying outside the gateway, and telling us you did.
@@ -46,11 +88,17 @@ function qrFor(method: ManualPaymentMethod, sku: string): string {
 type PaymentTab = ManualPaymentMethod | 'INTERNATIONAL'
 
 export function ManualPayment({
-  publicRef, email, sku, totalFormatted, currency, initialMethod, onSubmitted,
+  publicRef, email, sku, totalFormatted, currency, initialMethod, onSubmitted, routes, payopRoutes, blocked,
 }: {
   publicRef: string
-  /** The email on the order. Guest auth for the claim, exactly as order tracking. */
-  email: string
+  /** The email on the order. Guest auth for the claim, exactly as order tracking: checkout's routes only. */
+  email?: string
+  /** Another way to reach the order than checkout's; see {@link ownerManualRoutes}. */
+  routes?: ManualRoutes
+  /** The same, for the International tab. */
+  payopRoutes?: PayopRoutes
+  /** Manual methods wait while a Payop invoice for the order can be paid. */
+  blocked?: ManualBlock | null
   sku: string
   totalFormatted: string
   /** The order's currency. INR orders never see Payop. */
@@ -64,7 +112,8 @@ export function ManualPayment({
    */
   onSubmitted?: () => void
 }) {
-  const t = useT()
+  const { t, lang } = useI18n()
+  const via = useMemo(() => routes ?? guestManualRoutes(publicRef, email ?? ''), [routes, publicRef, email])
 
   const [options, setOptions] = useState<ManualPaymentOption[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -111,11 +160,7 @@ export function ManualPayment({
   /** Whether the screenshot landed. A failure is shown with a retry, never thrown. */
   async function uploadProof(picked: File): Promise<boolean> {
     try {
-      const form = new FormData()
-      form.append('email', email)
-      form.append('file', picked)
-      await api.upload(
-        `/api/v1/payments/claims/${encodeURIComponent(publicRef)}/proof`, form)
+      await via.proof(picked)
       setProofError(null)
       return true
     } catch (uploadFailed) {
@@ -143,10 +188,7 @@ export function ManualPayment({
     setSubmitting(true)
     setError(null)
     try {
-      const recorded = await api.post<ManualPaymentClaim>(
-        `/api/v1/payments/claims/${encodeURIComponent(publicRef)}`,
-        { email, method: active.method, reference: reference.trim() },
-      )
+      const recorded = await via.claim(active.method, reference.trim())
 
       /*
        * The screenshot is required, but it still goes second.
@@ -267,7 +309,7 @@ export function ManualPayment({
       </div>
 
       {method === 'INTERNATIONAL' && offersPayop ? (
-        <PayopPayment publicRef={publicRef} email={email} onUnavailable={payopUnavailable} />
+        <PayopPayment publicRef={publicRef} email={email} onUnavailable={payopUnavailable} routes={payopRoutes} />
       ) : method === 'INTERNATIONAL' ? (
         <InternationalSoon
           alternatives={options
@@ -275,6 +317,8 @@ export function ManualPayment({
             .map((option) => ({ method: option.method, name: label[option.method] }))}
           onUse={(next) => { setMethod(next); setError(null) }}
         />
+      ) : active && blocked ? (
+        <LocalMethodOpen blocked={blocked} lang={lang} />
       ) : active && (
         <>
           <Destination option={active} sku={sku} totalFormatted={totalFormatted} />
@@ -320,6 +364,28 @@ export function ManualPayment({
           </Button>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * A Payop invoice is open for this order: paying another way now invites paying twice, and
+ * Payop cannot cancel the invoice. Said with the way back to it and the time the wait ends.
+ */
+function LocalMethodOpen({ blocked, lang }: { blocked: ManualBlock; lang: string }) {
+  const { t } = useI18n()
+  const until = new Date(blocked.until).toLocaleString(lang, { dateStyle: 'medium', timeStyle: 'short' })
+  return (
+    <div role="tabpanel" data-testid="local-method-open">
+      <Alert tone="neutral">
+        {t.completePayment.blockedLead}{' '}
+        {blocked.invoiceUrl ? (
+          <a href={blocked.invoiceUrl} className="font-semibold text-brand-400 hover:underline">
+            {t.completePayment.blockedLink}
+          </a>
+        ) : t.completePayment.blockedLink}
+        {t.completePayment.blockedTail(until)}
+      </Alert>
     </div>
   )
 }

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import jakarta.persistence.EntityManager;
+import com.globalfutservice.domain.payments.ClaimStatus;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import org.flywaydb.core.Flyway;
@@ -171,8 +172,34 @@ class PayopInvoicePostgresTest {
         long lapsedInvoice = order("GFS-26-SWEP0003", "AWAITING_PAYMENT", old);
         invoice(lapsedInvoice, "EXPIRED", "inv-swep-3", NOW.minus(1, ChronoUnit.HOURS));
 
-        List<Long> stale = orders.findStaleUnpaid(NOW.minus(48, ChronoUnit.HOURS), NOW,
-                PayopInvoiceEntity.Status.CREATING).stream().map(OrderEntity::getId).toList();
+        List<Long> stale = stale();
         assertThat(stale).contains(plain, lapsedInvoice).doesNotContain(withInvoice);
+    }
+
+    @Test
+    @DisplayName("the sweep also leaves an order alone while its payment claim waits to be checked")
+    void sweepWaitsForAClaim() {
+        Instant old = NOW.minus(3, ChronoUnit.DAYS);
+        long submitted = order("GFS-26-CLAM0001", "AWAITING_PAYMENT", old);
+        claim(submitted, "SUBMITTED", null);
+        // A rejected claim is no longer waiting on us: the job decides from the rejection's
+        // time (PayByDeadline), so the query hands it over.
+        long rejected = order("GFS-26-CLAM0002", "AWAITING_PAYMENT", old);
+        claim(rejected, "REJECTED", NOW.minus(2, ChronoUnit.HOURS));
+        long noClaim = order("GFS-26-CLAM0003", "AWAITING_PAYMENT", old);
+
+        assertThat(stale()).contains(rejected, noClaim).doesNotContain(submitted);
+    }
+
+    private List<Long> stale() {
+        return orders.findStaleUnpaid(NOW.minus(48, ChronoUnit.HOURS), NOW, PayopInvoiceEntity.Status.CREATING,
+                ClaimStatus.SUBMITTED).stream().map(OrderEntity::getId).toList();
+    }
+
+    private void claim(long orderId, String status, Instant reviewedAt) {
+        jdbc.update("""
+                insert into manual_payment_claim (order_id, method, destination, reference, status, reviewed_at)
+                values (?, 'UPI', 'gfs@upi', 'UTR12345678', ?, ?)
+                """, orderId, status, reviewedAt == null ? null : Timestamp.from(reviewedAt));
     }
 }
