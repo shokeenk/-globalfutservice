@@ -10,7 +10,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,20 +52,23 @@ class CustomerActionNoticeTest {
             when(props.notifications().emailEnabled()).thenReturn(true);
             when(props.notifications().emailFrom()).thenReturn("orders@globalfutservices.com");
             when(props.publicUrl()).thenReturn("https://globalfutservices.com");
-            JavaMailSender sender = mock(JavaMailSender.class);
+            when(props.instagramUrl()).thenReturn("https://www.instagram.com/global_fut_services/");
+            JavaMailSender sender = SentEmail.sender();
 
             new EmailNotifier(props, sender).customerActionNeeded(notice());
 
-            ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
-            verify(sender).send(message.capture());
-            assertThat(message.getValue().getTo()).containsExactly("player@example.test");
-            assertThat(message.getValue().getSubject()).isEqualTo("Action needed on order " + REF);
-            assertThat(message.getValue().getText())
-                    .contains("Reference: " + REF)
-                    .contains(INSTRUCTION)
-                    .contains("https://globalfutservices.com/track?ref=" + REF)
-                    .contains("https://globalfutservices.com/support")
-                    .contains("never ask for your password or backup codes by email");
+            SentEmail mail = SentEmail.captured(sender);
+            assertThat(mail.to()).isEqualTo("player@example.test");
+            assertThat(mail.subject()).isEqualTo("Action needed on order " + REF);
+            for (String part : List.of(mail.text(), mail.html())) {
+                assertThat(part)
+                        .contains(REF)
+                        .contains(INSTRUCTION)
+                        .contains("https://globalfutservices.com/track?ref=" + REF)
+                        .contains("https://globalfutservices.com/support")
+                        .contains("never ask for your password or backup codes by email");
+            }
+            assertThat(mail.html()).contains("TRACK YOUR ORDER");
         }
     }
 

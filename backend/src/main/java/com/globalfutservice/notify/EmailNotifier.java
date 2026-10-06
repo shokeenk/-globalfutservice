@@ -100,7 +100,7 @@ public class EmailNotifier implements Notifier {
 
     @Override
     public void credentialsNeeded(OrderNotification n) {
-        send(n, "Action needed on order " + n.publicRef(), credentialsRequest(n));
+        sendCredentialsRequest(n, false);
     }
 
     /**
@@ -110,33 +110,33 @@ public class EmailNotifier implements Notifier {
      */
     @Override
     public void credentialsReminder(OrderNotification n) {
-        send(n, "Reminder: action needed on order " + n.publicRef(), credentialsRequest(n));
+        sendCredentialsRequest(n, true);
+    }
+
+    /**
+     * A coin order's request carries the order's own tracking link, as a button and in the
+     * text; the details are added on that page. Other orders keep the plain-text request.
+     */
+    private void sendCredentialsRequest(OrderNotification n, boolean reminder) {
+        if (TransactionalEmails.isCoins(n)) {
+            sendHtml(n, TransactionalEmails.credentialsRequest(n, brand(), trackUrl(n), reminder));
+        } else {
+            send(n, TransactionalEmails.credentialsSubject(n, reminder),
+                    TransactionalEmails.credentialsText(n, publicUrl() + "/track"));
+        }
     }
 
     /**
      * Their order is on hold until they fix something on their EA account.
      *
      * <p>The instruction is the storefront's own sentence. The rest is the same promise the
-     * sign-in request makes: where to go, and what we will never ask for by email.
+     * sign-in request makes: where to go, and what we will never ask for by email. Only a
+     * coin order can be put on hold this way, and it gets the order's tracking button.
      */
     @Override
     public void customerActionNeeded(CustomerActionNotification a) {
         OrderNotification n = a.order();
-        send(n, "Action needed on order " + n.publicRef(), """
-                Your order is paused until you do one thing for us.
-
-                Reference: %s
-
-                %s
-
-                Your order page: %s
-
-                When it's done, or if you have a question, tell us in your order's Discord ticket or
-                at %s/support. Replies to this email do not reach us.
-                We will never ask for your password or backup codes by email.
-
-                — Global FUT Services
-                """.formatted(n.publicRef(), a.instruction(), trackUrl(n), publicUrl()));
+        sendHtml(n, TransactionalEmails.actionNeeded(n, a.instruction(), brand(), trackUrl(n), publicUrl()));
     }
 
     /**
@@ -181,45 +181,17 @@ public class EmailNotifier implements Notifier {
         }
     }
 
-    private String credentialsRequest(OrderNotification n) {
-        return """
-                Your order is paid and queued. To start, we need a few details from you.
-
-                Reference: %s
-
-                Add them here: %s/track
-
-                Before you do, please make sure your account is signed out everywhere —
-                console, web app and companion app — your transfer market is unlocked, and
-                you have fewer than five unassigned items. Those four things account for
-                almost every delayed order.
-
-                — Global FUT Services
-                """.formatted(n.publicRef(), publicUrl());
-    }
-
+    /**
+     * The delivery notice, word for word as it has always been sent. A coin order's copy is
+     * branded and adds the order's tracking link; other orders keep the plain text.
+     */
     @Override
     public void orderDelivered(OrderNotification n) {
-        send(n, "Order " + n.publicRef() + " delivered", """
-                Your order is complete.
-
-                Reference: %s
-                Service:   %s
-                Total:     %s
-
-                Two things worth doing now:
-
-                  1. Change your EA password and regenerate your backup codes. We have
-                     already deleted everything you gave us, and rotating is good hygiene
-                     regardless.
-                  2. Keep this email. Our seven-day guarantee runs from today — if
-                     anything happens to the account in that window, reply to this message.
-
-                Please note that under our Terms, receipt of this email closes the refund
-                window for this order.
-
-                — Global FUT Services
-                """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted()));
+        if (TransactionalEmails.isCoins(n)) {
+            sendHtml(n, TransactionalEmails.orderDelivered(n, brand(), trackUrl(n)));
+        } else {
+            send(n, TransactionalEmails.deliveredSubject(n), TransactionalEmails.deliveredText(n, null));
+        }
     }
 
     /**
