@@ -10,6 +10,7 @@ import type { Order, VendorSection } from '../../lib/types'
 import { useAuth } from '../../state/AuthContext'
 import { statusTone } from '../Track'
 import { releasePreview, releaseQuestion } from './orders/confirmations'
+import { PaymentPanel } from './orders/PaymentPanel'
 import { approveReplacedBy } from './orders/vendor'
 import { VendorPanel } from './orders/VendorPanel'
 import { AdminPage } from './shell/AdminPage'
@@ -256,6 +257,8 @@ export default function AdminOrder() {
               </div>
             )}
           </Card>
+
+          <PaymentPanel publicRef={order.publicRef} />
 
           {isAdmin && vendor && order.sku === 'TRADING_SERVICE' && (
             <VendorPanel
