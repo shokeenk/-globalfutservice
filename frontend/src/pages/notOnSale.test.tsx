@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Account, Catalog, CatalogOption, ServiceGroup } from '../lib/types'
@@ -152,11 +153,15 @@ describe('Coin order page', () => {
     expect(quoteRequests()).toHaveLength(0)
   })
 
-  it('prices as before when there is something to sell', async () => {
+  it('prices as before when there is something to sell, once the platform is picked', async () => {
     state.catalog = tradingCatalog()
     api.post.mockResolvedValue({ quoteId: 'q1', lines: [], expiresAt: '2026-10-01T07:00:00Z' })
 
     renderAt('/order', <Order />)
+    // Nothing is picked for the customer, even when there is only one platform to sell.
+    await pastDebounce()
+    expect(quoteRequests()).toHaveLength(0)
+    await userEvent.click(screen.getByRole('button', { name: /900/ }))
 
     await waitFor(() => expect(quoteRequests()).toHaveLength(1))
     expect(screen.queryByText('Prices are unavailable')).not.toBeInTheDocument()
@@ -167,6 +172,7 @@ describe('Coin order page', () => {
     api.post.mockRejectedValue(new ApiErrorClass('That option is not available right now.', 'not_found'))
 
     renderAt('/order', <Order />)
+    await userEvent.click(await screen.findByRole('button', { name: /900/ }))
 
     expect(await screen.findByText('That option is not available right now.')).toBeInTheDocument()
   })
@@ -176,6 +182,7 @@ describe('Coin order page', () => {
     api.post.mockRejectedValue(new TypeError('Failed to fetch'))
 
     renderAt('/order', <Order />)
+    await userEvent.click(await screen.findByRole('button', { name: /900/ }))
 
     expect(await screen.findByText('We could not price that. Try again.')).toBeInTheDocument()
   })

@@ -742,6 +742,8 @@ const fr: Dictionary = {
     lead: 'Tout est tarifé à l’avance. Rien n’est ajouté à la dernière étape.',
     stepPackage: (_n, service) => service,
     stepPlatform: () => 'Plateforme',
+    platformRequired: 'Choisis la plateforme sur laquelle tu joues.',
+    choosePlatformForPrice: 'Choisis ta plateforme pour voir ton prix.',
     stepAmount: () => 'Montant',
     boostPlatformHint: 'Le compte sur lequel le joueur va se connecter.',
     boostPlatformPlayStation: 'PlayStation',

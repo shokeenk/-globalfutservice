@@ -66,6 +66,16 @@ public class QuoteService {
         Currency currency = request.currency() == null || request.currency().isBlank()
                 ? Currency.INR : parseEnum(Currency.class, request.currency(), "Unknown currency.");
 
+        /*
+         * Coins are priced per platform, and the platform is the customer's to choose. Never
+         * filled in: without one the rate lookup would match whichever platform's row it
+         * found, and the quote -- then the order, then the partner's request -- would carry
+         * a platform nobody picked.
+         */
+        if (sku.isCoinTransfer() && platform == null) {
+            throw new ApiExceptions.BadRequestException("platform_required", "Choose your platform.");
+        }
+
         RateCardEntity rate = catalogService.requireLiveRate(sku, platform, request.variant(), currency);
         Long accountId = account == null ? null : account.getId();
 

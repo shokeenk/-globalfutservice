@@ -5,7 +5,7 @@ import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
 import { SiEa, SiEpicgames, SiSteam } from 'react-icons/si'
 import { RankBadge, hasBadge } from '../components/RankBadge'
-import { Alert, Badge, Button, Input, Section, Spinner } from '../components/ui'
+import { Alert, Badge, Button, FieldError, Input, Section, Spinner, revealField } from '../components/ui'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
@@ -300,8 +300,8 @@ export default function BoostingCheckout() {
                   }}
                   launcher={launcher}
                   onLauncher={setLauncher}
-                  blockedReason={touched ? blockedReason : null}
-                  disabled={Boolean(blockedReason) || placing || !quote}
+                  touched={touched}
+                  disabled={placing || !quote}
                   placing={placing}
                   onContinue={() => void placeOrder()}
                 />
@@ -404,19 +404,36 @@ function CheckoutHeader({ current }: { current: number }) {
 
 function DetailsStep({
   platform, onPlatform, launcher, onLauncher,
-  blockedReason, disabled, placing, onContinue,
+  touched, disabled, placing, onContinue,
 }: {
   platform: BoostPlatform | null
   onPlatform: (next: BoostPlatform) => void
   launcher: Launcher | null
   onLauncher: (next: Launcher) => void
-  blockedReason: string | null
+  /** Continue has been pressed: missing answers are now errors. */
+  touched: boolean
   disabled: boolean
   placing: boolean
   onContinue: () => void
 }) {
   const t = useT()
   const b = t.boostingCheckout
+  const platformRef = useRef<HTMLDivElement>(null)
+  const launcherRef = useRef<HTMLDivElement>(null)
+  const platformError = touched && !platform
+  const launcherError = touched && platform === 'PC' && !launcher
+
+  /*
+   * Continue is never greyed out for a missing answer. A disabled button explains
+   * nothing, and the reason used to sit beneath it in grey where it read as a footnote;
+   * now pressing it puts the same red error as any required field under the choice that
+   * is missing, and brings that choice into view.
+   */
+  function continuePressed() {
+    if (!platform) revealField(platformRef.current)
+    else if (platform === 'PC' && !launcher) revealField(launcherRef.current)
+    onContinue()
+  }
 
   /*
    * Each storefront's own mark. SiEa is Electronic Arts' corporate logo rather than the EA
@@ -434,7 +451,13 @@ function DetailsStep({
       <h1 className="display text-display-sm text-chalk">{b.platformTitle}</h1>
       <p className="mt-1 text-body-sm text-chalk-muted">{b.platformLead}</p>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div
+        ref={platformRef}
+        role="group"
+        aria-label={b.platformTitle}
+        aria-describedby={platformError ? 'boost-platform-error' : undefined}
+        className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2"
+      >
         <ChoiceCard
           active={platform === 'PLAYSTATION'}
           onSelect={() => onPlatform('PLAYSTATION')}
@@ -450,6 +473,9 @@ function DetailsStep({
           icon={<PlatformIcon platform="PC" className="h-6 w-6" />}
         />
       </div>
+      {platformError && (
+        <FieldError id="boost-platform-error" className="mt-3">{b.needPlatform}</FieldError>
+      )}
 
       {/*
         One note, and which one depends on the answer. PlayStation is complete on its own
@@ -462,7 +488,13 @@ function DetailsStep({
         <div className="mt-6 border-t border-ink-400 pt-6">
           <h2 className="display text-[16px] text-chalk">{b.pcTitle}</h2>
           <p className="mt-1 text-body-sm text-chalk-muted">{b.pcLead}</p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div
+            ref={launcherRef}
+            role="group"
+            aria-label={b.pcTitle}
+            aria-describedby={launcherError ? 'boost-launcher-error' : undefined}
+            className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+          >
             {LAUNCHERS.map((option) => (
               <ChoiceCard
                 key={option}
@@ -474,6 +506,9 @@ function DetailsStep({
               />
             ))}
           </div>
+          {launcherError && (
+            <FieldError id="boost-launcher-error" className="mt-3">{b.needLauncher}</FieldError>
+          )}
           <InfoNote>{b.pcNote}</InfoNote>
         </div>
       )}
@@ -524,12 +559,9 @@ function DetailsStep({
       </div>
 
       <div className="mt-6">
-        <Button full size="lg" onClick={onContinue} disabled={disabled}>
+        <Button full size="lg" onClick={continuePressed} disabled={disabled}>
           {placing ? <Spinner size={18} /> : <>{b.continueToPayment} <span aria-hidden="true" className="ml-1.5">&rarr;</span></>}
         </Button>
-        {blockedReason && (
-          <p className="mt-2 text-center text-[12.5px] text-chalk-faint">{blockedReason}</p>
-        )}
         <div className="mt-3 rounded-edge border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">
           <p className="text-center text-[12.5px] leading-relaxed text-chalk">{b.afterPaymentNote}</p>
         </div>

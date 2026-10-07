@@ -738,6 +738,8 @@ const es: Dictionary = {
     lead: 'Todo tiene el precio por adelantado. No añadimos nada en el último paso.',
     stepPackage: (_n, service) => service,
     stepPlatform: () => 'Plataforma',
+    platformRequired: 'Elige la plataforma en la que juegas.',
+    choosePlatformForPrice: 'Elige tu plataforma para ver tu precio.',
     stepAmount: () => 'Cantidad',
     boostPlatformHint: 'La cuenta en la que iniciará sesión el jugador.',
     boostPlatformPlayStation: 'PlayStation',
