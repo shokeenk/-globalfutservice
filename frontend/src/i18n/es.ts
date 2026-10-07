@@ -623,6 +623,9 @@ const es: Dictionary = {
       'Nunca te los pediremos aquí. Si un pedido necesita tus credenciales, se recogen en el ' +
       'formulario cifrado del propio pedido.',
     send: 'Enviar mensaje',
+    subjectRequired: 'Introduce un asunto.',
+    messageRequired: 'Escribe tu mensaje.',
+    confirmRequired: 'Marca esta casilla para enviar tu mensaje.',
     sendFailed: 'No se ha podido enviar.',
     category: '¿Sobre qué es?',
     categoryHint: 'Opcional, pero hace que tu mensaje llegue a la persona adecuada.',
@@ -660,6 +663,7 @@ const es: Dictionary = {
     replyPlaceholder: 'Escribe tu respuesta…',
     noPassword: 'No incluyas nunca tu contraseña ni tus códigos de respaldo. Nunca te los pediremos aquí.',
     send: 'Enviar respuesta',
+    replyRequired: 'Escribe tu respuesta antes de enviarla.',
     sent: 'Enviado. Te responderemos aquí y por correo.',
     sendFailed: 'No se ha podido enviar. Inténtalo de nuevo.',
     closedNote: 'Esta solicitud está resuelta. Si vuelves a escribir, se abrirá de nuevo.',

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Button, ButtonLink, EmptyState, Field, Section, Skeleton, Textarea } from '../components/ui'
+import {
+  Alert, Badge, Button, ButtonLink, EmptyState, Field, Section, Skeleton, Textarea, revealFirstError,
+} from '../components/ui'
 import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
@@ -38,6 +40,9 @@ export default function SupportTicket() {
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'failed'>('loading')
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
+  // Send has been pressed: an empty reply is now an error under the box, not a grey button.
+  const [touched, setTouched] = useState(false)
+  const replyMissing = !reply.trim()
   const [result, setResult] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
 
   const load = useCallback(async () => {
@@ -53,13 +58,20 @@ export default function SupportTicket() {
   useEffect(() => { void load() }, [load])
 
   async function send() {
-    if (!reply.trim() || sending) return
+    setTouched(true)
+    if (replyMissing) {
+      revealFirstError()
+      return
+    }
+    if (sending) return
     setSending(true)
     setResult(null)
     try {
       setThread(await api.post<SupportThread>(
         `/api/v1/support/tickets/${encodeURIComponent(ref)}/messages${query}`, { message: reply.trim() }))
       setReply('')
+      // The box is empty again because it was sent, not because anything is missing.
+      setTouched(false)
       setResult({ tone: 'ok', text: t.supportTicket.sent })
     } catch (e) {
       setResult({ tone: 'warn', text: e instanceof ApiError && e.status !== 404 ? e.message : t.supportTicket.sendFailed })
@@ -142,7 +154,8 @@ export default function SupportTicket() {
                 void send()
               }}>
                 {thread.status === 'CLOSED' && <p className="text-[13px] text-chalk-muted">{t.supportTicket.closedNote}</p>}
-                <Field label={t.supportTicket.replyLabel} hint={t.supportTicket.noPassword}>
+                <Field label={t.supportTicket.replyLabel} hint={t.supportTicket.noPassword} required
+                       error={touched && replyMissing ? t.supportTicket.replyRequired : undefined}>
                   {(props) => (
                     <Textarea {...props} rows={5} value={reply} maxLength={4000}
                               placeholder={t.supportTicket.replyPlaceholder}
@@ -150,7 +163,8 @@ export default function SupportTicket() {
                   )}
                 </Field>
                 {result && <Alert tone={result.tone}>{result.text}</Alert>}
-                <Button type="submit" size="lg" loading={sending} disabled={!reply.trim()}>
+                {/* Never greyed out for an empty reply: pressing it says so, under the box. */}
+                <Button type="submit" size="lg" loading={sending}>
                   {t.supportTicket.send}
                 </Button>
               </form>
