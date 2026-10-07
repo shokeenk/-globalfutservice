@@ -355,6 +355,19 @@ class VendorAdminActionsPostgresTest {
         VendorOrderActions.Section after = actions.section(o, List.of());
         assertThat(after.tracking().transferStartedAt()).isEqualTo(started);
         assertThat(after.tracking().customerUrl()).isEqualTo("https://gfs.example.test/track?ref=GFS-26-TRACKSEC");
+        // FUT Transfer's own page: not linked while GFS_FUTTRANSFER_PROGRESS_URL is empty.
+        assertThat(after.tracking().partnerProgressUrl()).isNull();
+
+        // Set, it is linked for staff, with the id FUT Transfer gave the order.
+        AppProperties withPage = VendorTestSupport.withProgressPage(
+                VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(800)),
+                "https://futtransfer.top/progress.php?id={orderId}");
+        VendorControl control = VendorTestSupport.running();
+        VendorOrderActions staffView = new VendorOrderActions(VendorTestSupport.client(withPage, control), control,
+                ledger, new VendorOrderActionLog(db.named), mock(CredentialVaultService.class), orderService, withPage,
+                new ObjectMapper());
+        assertThat(staffView.section(o, List.of()).tracking().partnerProgressUrl())
+                .isEqualTo("https://futtransfer.top/progress.php?id=vid-track-sec");
     }
 
     @Test

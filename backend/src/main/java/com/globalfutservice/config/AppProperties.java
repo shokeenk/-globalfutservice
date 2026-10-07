@@ -624,7 +624,18 @@ public record AppProperties(
             /** What only a public-pool order sends. */
             @Valid @DefaultValue FutTransferPublicPool publicPool,
             /** Whether a paid coin order is sent without an admin's Approve. */
-            @Valid @DefaultValue FutTransferAutoDispatch autoDispatch) {
+            @Valid @DefaultValue FutTransferAutoDispatch autoDispatch,
+            /**
+             * FUT Transfer's own progress page for one order, for staff in the admin only:
+             * the address of its dashboard's "View Order Progress Page", with the order's id
+             * replaced by {@value #ORDER_ID}. Its API gives no such address, so it is set here.
+             * Empty: the admin says it is not linked. Customers never see it -- they follow
+             * their order on our tracking page.
+             */
+            String progressPageUrl) {
+
+        /** Where the order's id goes in {@link #progressPageUrl}. */
+        public static final String ORDER_ID = "{orderId}";
 
         public FutTransfer {
             requireSecure("gfs.fut-transfer.base-url", baseUrl);
@@ -632,6 +643,25 @@ public record AppProperties(
             // "https://futtransfer.top/" as the vendor writes it; paths are appended to it.
             baseUrl = withoutTrailingSlash(baseUrl);
             backupBaseUrl = withoutTrailingSlash(backupBaseUrl);
+            progressPageUrl = progressPageUrl == null || progressPageUrl.isBlank() ? null : progressPageUrl.trim();
+            if (progressPageUrl != null
+                    && (!progressPageUrl.regionMatches(true, 0, "https://", 0, 8) || !progressPageUrl.contains(ORDER_ID))) {
+                throw new IllegalArgumentException("gfs.fut-transfer.progress-page-url must be an https:// address"
+                        + " with " + ORDER_ID + " where the order's id goes");
+            }
+        }
+
+        /**
+         * Staff only: FUT Transfer's progress page for the order it numbered
+         * {@code vendorOrderId}. Empty when the address is not set, or the order has no id.
+         */
+        public java.util.Optional<String> progressPageFor(String vendorOrderId) {
+            if (progressPageUrl == null || vendorOrderId == null || vendorOrderId.isBlank()) {
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(progressPageUrl.replace(ORDER_ID,
+                    org.springframework.web.util.UriUtils.encode(vendorOrderId.trim(),
+                            java.nio.charset.StandardCharsets.UTF_8)));
         }
 
         private static String withoutTrailingSlash(String url) {
