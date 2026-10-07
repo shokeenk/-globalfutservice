@@ -1099,6 +1099,8 @@ const en = {
     payTabPaypal: 'PayPal',
     payTabCrypto: 'Crypto',
     payTabInternational: 'International',
+    /** The International entry in a checkout's list of ways to pay, for an order not in INR. */
+    payIntlChoiceLocal: 'Pay with a local method: bank transfer, cards or wallets in your country',
     payIntlBadge: 'Coming soon',
     payIntlTitle: 'International payment options are coming soon',
     payIntlBody: (methods: string[]) =>
@@ -1113,8 +1115,8 @@ const en = {
     payopLoading: 'Loading the ways to pay in your country…',
     payopNone: (country: string) => `There is no local way to pay in ${country} yet.`,
     payopNoneHint: 'Choose another country, or pay with one of the other options above.',
-    payopUnavailable: 'International payment is not available for this order right now.',
-    payopUnavailableHint: 'You can still pay with one of the other options above.',
+    payopUnavailable: 'Temporarily unavailable.',
+    payopUnavailableHint: 'Please use PayPal or crypto.',
     payopMethodsLabel: 'Choose a payment method',
     payopFeeLine: 'Payment processing fee',
     payopOrderPrice: 'Order price',

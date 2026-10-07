@@ -943,6 +943,7 @@ const es: Dictionary = {
     payTabPaypal: 'PayPal',
     payTabCrypto: 'Cripto',
     payTabInternational: 'Internacional',
+    payIntlChoiceLocal: 'Paga con un método local: transferencia bancaria, tarjeta o monedero de tu país',
     payIntlBadge: 'Próximamente',
     payIntlTitle: 'Las opciones de pago internacional llegarán pronto',
     payIntlBody: (methods: string[]) =>
@@ -957,8 +958,8 @@ const es: Dictionary = {
     payopLoading: 'Cargando las formas de pago de tu país…',
     payopNone: (country: string) => `Todavía no hay una forma de pago local en ${country}.`,
     payopNoneHint: 'Elige otro país o paga con una de las otras opciones de arriba.',
-    payopUnavailable: 'El pago internacional no está disponible para este pedido en este momento.',
-    payopUnavailableHint: 'Puedes pagar con una de las otras opciones de arriba.',
+    payopUnavailable: 'No disponible temporalmente.',
+    payopUnavailableHint: 'Usa PayPal o cripto.',
     payopMethodsLabel: 'Elige un método de pago',
     payopFeeLine: 'Gastos de procesamiento del pago',
     payopOrderPrice: 'Precio del pedido',

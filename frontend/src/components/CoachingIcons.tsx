@@ -8,7 +8,7 @@
 export type CoachIconName =
   | 'chat' | 'clipboard' | 'gamepad' | 'video' | 'bars' | 'bulb' | 'checkCircle'
   | 'target' | 'shield' | 'trend' | 'sliders' | 'brain' | 'trophy' | 'arrowRight'
-  | 'lock' | 'globe' | 'check' | 'card' | 'qr' | 'clock' | 'shieldCheck' | 'quote'
+  | 'lock' | 'globe' | 'check' | 'card' | 'qr' | 'clock' | 'shieldCheck' | 'quote' | 'bank'
 
 export function CoachIcon({
   name, className = 'h-5 w-5', strokeWidth = 1.8,
@@ -89,6 +89,8 @@ export function CoachIcon({
       )
     case 'check':
       return <svg {...common}><path d="m5 12.5 4 4L19 7" /></svg>
+    case 'bank':
+      return <svg {...common}><path d="M12 3 3.5 8h17z" /><path d="M5.5 10.5v6M9.8 10.5v6M14.2 10.5v6M18.5 10.5v6M3.5 20h17" /></svg>
     case 'card':
       return <svg {...common}><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18M7 14.5h3" /></svg>
     case 'qr':

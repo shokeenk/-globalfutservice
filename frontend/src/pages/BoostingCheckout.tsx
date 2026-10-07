@@ -13,9 +13,10 @@ import { SupportCard } from '../components/support/SupportCard'
 import { DiscordMessageUs } from '../components/DiscordMessageUs'
 import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
+import { offersLocalMethods, paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
 import { SEASON, useSeo } from '../lib/seo'
 import type {
-  CatalogOption, CreateOrderResponse, ManualPaymentMethod, ManualPaymentOption, Order, SignedQuote,
+  CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, SignedQuote,
 } from '../lib/types'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
@@ -43,7 +44,7 @@ import { useCatalog } from '../state/CatalogContext'
  */
 
 type Step = 'details' | 'pay' | 'processing' | 'done'
-type PayChoice = 'ONLINE' | ManualPaymentMethod
+type PayChoice = PaymentChoiceKey
 type BoostPlatform = 'PLAYSTATION' | 'PC'
 type Launcher = 'STEAM' | 'EA_APP' | 'EPIC'
 
@@ -153,16 +154,25 @@ export default function BoostingCheckout() {
     return () => { live = false }
   }, [sku, variant, catalog, options.length, couponCode, step, b.placeFailed])
 
+  /*
+   * The ways to pay: the shared list every checkout uses (lib/paymentMethods). The order's
+   * own currency decides what International holds.
+   */
+  const orderCurrency = created?.currency ?? resumed?.currency ?? catalog?.currency
   const payChoices: { key: PayChoice; title: string; body: string }[] = useMemo(() => {
-    const list: { key: PayChoice; title: string; body: string }[] = []
-    if (policy?.onlinePaymentsEnabled) list.push({ key: 'ONLINE', title: b.payOnlineTitle, body: b.payOnlineBody })
-    for (const m of methods ?? []) {
-      if (m.method === 'UPI') list.push({ key: 'UPI', title: b.payUpiTitle, body: b.payUpiBody })
-      if (m.method === 'PAYPAL') list.push({ key: 'PAYPAL', title: b.payPaypalTitle, body: b.payPaypalBody })
-      if (m.method === 'CRYPTO') list.push({ key: 'CRYPTO', title: b.payCryptoTitle, body: b.payCryptoBody })
+    if (methods === null) return []
+    const copy: Record<PayChoice, { title: string; body: string }> = {
+      ONLINE: { title: b.payOnlineTitle, body: b.payOnlineBody },
+      UPI: { title: b.payUpiTitle, body: b.payUpiBody },
+      PAYPAL: { title: b.payPaypalTitle, body: b.payPaypalBody },
+      CRYPTO: { title: b.payCryptoTitle, body: b.payCryptoBody },
+      INTERNATIONAL: {
+        title: t.order.payTabInternational,
+        body: offersLocalMethods(orderCurrency) ? t.order.payIntlChoiceLocal : t.order.payIntlTitle,
+      },
     }
-    return list
-  }, [policy, methods, b])
+    return paymentChoices(methods, !!policy?.onlinePaymentsEnabled).map((key) => ({ key, ...copy[key] }))
+  }, [policy, methods, b, t.order, orderCurrency])
 
   useEffect(() => {
     const first = payChoices[0]
