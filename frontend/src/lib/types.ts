@@ -1085,8 +1085,11 @@ export interface VendorSection {
   currentOrderMode?: string | null
   /** What Approve would send for this order right now; null when FUT Transfer is off. */
   nextSend?: VendorNextSend | null
-  /** What the customer can follow. Both null until FUT Transfer has the order. */
-  tracking?: { transferStartedAt: string | null; customerUrl: string | null } | null
+  /**
+   * What the customer can follow, and -- for staff only -- FUT Transfer's own progress page,
+   * which needs the order's id there and GFS_FUTTRANSFER_PROGRESS_URL set.
+   */
+  tracking?: { transferStartedAt: string | null; customerUrl: string | null; partnerProgressUrl?: string | null } | null
 }
 
 /** How Approve would place one coin order, from the same decision Approve itself takes. */

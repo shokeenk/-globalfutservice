@@ -371,18 +371,20 @@ public class VendorOrderActions {
     }
 
     /**
-     * What the customer can follow: when their transfer started and the tracking page they
-     * were sent, the same address. Both null until FUT Transfer has the order. FUT Transfer's
-     * own progress page is not here: its API gives no address for one.
+     * What the customer can follow -- when their transfer started, and the tracking page they
+     * were sent -- and, for staff only, FUT Transfer's own progress page for the order. Null
+     * until FUT Transfer has the order; the partner's page also needs its id and
+     * GFS_FUTTRANSFER_PROGRESS_URL, since its API gives no address for one.
      */
-    public record Tracking(java.time.Instant transferStartedAt, String customerUrl) {
+    public record Tracking(java.time.Instant transferStartedAt, String customerUrl, String partnerProgressUrl) {
     }
 
     public Section section(OrderEntity order, List<VendorCallLog.Call> calls) {
         VendorOrderLedger.Detail d = ledger.detail(order.getId()).orElse(null);
         java.time.Instant started = order.getTransferStartedAt();
         Tracking tracking = new Tracking(started, started == null ? null
-                : com.globalfutservice.orders.TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef()));
+                : com.globalfutservice.orders.TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef()),
+                d == null ? null : props.futTransfer().progressPageFor(d.vendorOrderId()).orElse(null));
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
                 actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order), tracking);
     }

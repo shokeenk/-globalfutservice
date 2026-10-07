@@ -16,7 +16,7 @@ class OrderModeReportTest {
         return new AppProperties.FutTransfer(enabled, "https://vendor.example.test", "api@example.test",
                 VendorTestSupport.RAW_KEY, method, 1, VendorTestSupport.POLLING, Duration.ofSeconds(15), 3,
                 VendorTestSupport.DOCUMENTED_CODES, VendorTestSupport.NO_BACKUP, VendorTestSupport.METHOD_3_0, true,
-                Duration.ofHours(72), mode, pool, AppProperties.FutTransferAutoDispatch.OFF);
+                Duration.ofHours(72), mode, pool, AppProperties.FutTransferAutoDispatch.OFF, null);
     }
 
     private static final AppProperties.FutTransfer POOL = cfg(true, "targetedSnipe",
