@@ -79,6 +79,40 @@ export function automaticNote(section: VendorSection): { title: string; text: st
   }
 }
 
+/** "200 of 500 K": delivered of ordered, in thousands. Nothing reported yet counts as none delivered. */
+export function deliveredOfOrdered(deliveredK: number | null | undefined, orderedK: number | null | undefined): string {
+  if (orderedK == null) return '—'
+  return `${(deliveredK ?? 0).toLocaleString('en-IN')} of ${orderedK.toLocaleString('en-IN')} K`
+}
+
+const IN_FLIGHT = new Set(['SUBMITTING', 'SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER', 'NEEDS_REVIEW'])
+
+/**
+ * What is holding the order up, in one line, or null when nothing is: the Tracking summary's
+ * last row. Taken from the fields the rest of the section shows in full.
+ */
+export function blockage(section: VendorSection): string | null {
+  const v = section.vendorOrder
+  if (!v) {
+    const auto = automaticNote(section)
+    return auto ? `${auto.title}: ${auto.text}` : null
+  }
+  switch (v.state) {
+    case 'NEEDS_REVIEW':
+      return `Needs review: ${v.reviewReason ?? v.lastErrorCode ?? 'no reason recorded'}`
+    case 'AWAITING_CUSTOMER':
+      return `Waiting for the customer${v.customerAction ? `: ${v.customerAction}` : ''}`
+    case 'PARTIALLY_DELIVERED':
+      return `Partly delivered${v.reviewReason ? `: ${v.reviewReason}` : ''}`
+    case 'FAILED':
+      return `Not created at FUT Transfer${v.lastErrorCode ? ` (${v.lastErrorCode})` : ''}`
+        + `${v.reviewReason ? `: ${v.reviewReason}` : ''}`
+  }
+  if (v.aborted) return 'FUT Transfer reports this order was aborted.'
+  if (section.paused && IN_FLIGHT.has(v.state)) return 'Calls to FUT Transfer are paused: it refused our API credentials.'
+  return null
+}
+
 /** How an order is placed at the partner. */
 export const ORDER_MODE_LABEL: Record<string, string> = {
   PUBLIC_POOL: 'Public pool',

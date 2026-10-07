@@ -161,3 +161,45 @@ describe('"Track your order", only once the partner has the order', () => {
     expect(track).toHaveAttribute('href', `/track?ref=${REF}`)
   }, 15000)
 })
+
+describe("staff opening the customer's tracking link", () => {
+  const staff = (role: 'ADMIN' | 'OPERATOR'): Account => ({ ...OWNER, publicId: 'acc_staff', email: 'ops@example.test', role })
+  const STAFF_URL = `/api/v1/admin/orders/${REF}/customer-view`
+
+  function openAsStaff(role: 'ADMIN' | 'OPERATOR', o: Record<string, unknown>) {
+    auth.account = staff(role)
+    api.get.mockImplementation(async (url: string) => (url === STAFF_URL ? o : new Promise(() => {})))
+    render(<MemoryRouter initialEntries={[`/track?ref=${REF}`]}><Track /></MemoryRouter>)
+  }
+
+  it.each(['ADMIN', 'OPERATOR'] as const)('%s: the order as its customer sees it, from the staff endpoint, read-only', async (role) => {
+    openAsStaff(role, order({ transferStarted: true, deliveredCoins: 200, orderedCoins: 500 }))
+
+    expect(await screen.findByTestId('transfer-progress')).toHaveTextContent('200K of 500K coins delivered')
+    expect(screen.getByTestId('staff-view')).toHaveTextContent('Staff view')
+    // Never the customer's own endpoints: looking does not stand in for the customer.
+    expect(api.get.mock.calls.map(([url]) => url)).toEqual([STAFF_URL])
+    expect(api.post).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it.each([
+    ['their EA sign-in', { status: 'READY_FOR_DELIVERY', nextAction: 'SUBMIT_CREDENTIALS', credentialsSubmitted: false }],
+    ['paying', { status: 'AWAITING_PAYMENT', nextAction: 'PAY' }],
+  ])('where the customer has a form (%s), staff are told there is one instead of getting it', async (_step, patch) => {
+    openAsStaff('OPERATOR', order(patch))
+    expect(await screen.findByText('Here the customer sees a form for this step. It is hidden in the staff view.'))
+      .toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
+  it('the customer opening the same link still gets their own page, from their own endpoint', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 200, orderedCoins: 500 }))
+    await screen.findByTestId('transfer-progress')
+    expect(screen.queryByTestId('staff-view')).toBeNull()
+    expect(api.get).toHaveBeenCalledWith(`/api/v1/orders/${REF}`)
+    expect(api.get).not.toHaveBeenCalledWith(STAFF_URL)
+  })
+})

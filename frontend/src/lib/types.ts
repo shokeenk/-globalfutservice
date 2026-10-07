@@ -344,6 +344,17 @@ export interface AdminOrderRow {
   createdAt: string
   deliveredAt: string | null
   availableTransitions: string[]
+  /** Null until FUT Transfer has the order: the Tracking column shows a dash. */
+  tracking?: AdminOrderTracking | null
+}
+
+/** A coin order FUT Transfer has: the customer's own tracking page, and how far it has got. */
+export interface AdminOrderTracking {
+  /** The address the customer's emails link to. */
+  url: string
+  orderedK: number | null
+  /** Null until FUT Transfer first reports. */
+  deliveredK: number | null
 }
 
 export interface AdminOrderPage {
@@ -1074,6 +1085,8 @@ export interface VendorSection {
   currentOrderMode?: string | null
   /** What Approve would send for this order right now; null when FUT Transfer is off. */
   nextSend?: VendorNextSend | null
+  /** What the customer can follow. Both null until FUT Transfer has the order. */
+  tracking?: { transferStartedAt: string | null; customerUrl: string | null } | null
 }
 
 /** How Approve would place one coin order, from the same decision Approve itself takes. */

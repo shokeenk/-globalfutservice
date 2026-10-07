@@ -48,7 +48,17 @@ public final class AdminOrderViews {
             String currency,
             Instant createdAt,
             Instant deliveredAt,
-            List<String> availableTransitions) {
+            List<String> availableTransitions,
+            /** Null until FUT Transfer has the order: the table shows a dash. */
+            Tracking tracking) {
+    }
+
+    /**
+     * A coin order FUT Transfer has: the customer's tracking page, the same address their
+     * email links to, and how far it has got in thousands. Delivered is null until the
+     * partner first reports.
+     */
+    public record Tracking(String url, Long orderedK, Long deliveredK) {
     }
 
     public record Page(List<Row> items, long total, int page, int size) {

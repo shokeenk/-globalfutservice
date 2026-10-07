@@ -510,6 +510,9 @@ const fr: Dictionary = {
     transferDelivered: 'Tous tes coins ont été livrés',
     progressCoins: (done: string, total: string) => `${done} sur ${total} coins livrés`,
     updatesAutomatically: 'Cette page se met à jour toute seule.',
+    staffViewTitle: 'Vue équipe',
+    staffViewBody: 'Voici la page de suivi du client telle qu’il la voit, en lecture seule. Rien de ce que tu fais ici ne modifie la commande ni n’agit à la place du client.',
+    staffHiddenStep: 'Ici, le client voit un formulaire pour cette étape. Il est masqué dans la vue équipe.',
     action: {
       RESUBMIT_SIGN_IN: "Tes identifiants EA ont été refusés. Renvoie-les ci-dessous et nous reprenons.",
       NEW_BACKUP_CODES: "Ces codes de secours sont déjà utilisés ou incorrects. Génère-en de nouveaux puis envoie-les ci-dessous.",

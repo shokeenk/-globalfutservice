@@ -397,7 +397,7 @@ public class EmailNotifier implements Notifier {
      * mechanism. The page still asks for the email on the order before it shows anything.
      */
     private String trackUrl(OrderNotification n) {
-        return publicUrl() + "/track?ref=" + n.publicRef();
+        return com.globalfutservice.orders.TrackingLinks.trackUrl(publicUrl(), n.publicRef());
     }
 
     /** The order's support page on this site, with the live chat. */

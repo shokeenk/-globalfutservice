@@ -18,7 +18,66 @@ import type { MyCoaching, Order, OrderSummary } from '../lib/types'
 import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
 
+/**
+ * The tracking page. Staff who open a customer's tracking link -- from the admin's Orders
+ * table or the order's FUT Transfer section -- get that order as the customer sees it,
+ * read-only. Everybody else gets the customer's page.
+ */
 export default function Track() {
+  const [params] = useSearchParams()
+  const { account } = useAuth()
+  const ref = params.get('ref')
+  if (ref && (account?.role === 'ADMIN' || account?.role === 'OPERATOR')) {
+    return <StaffCustomerView reference={ref.toUpperCase()} />
+  }
+  return <CustomerTrack />
+}
+
+/**
+ * The customer's tracking page as staff see it.
+ *
+ * <p>Read from a staff-only endpoint, never the customer's: staff do not stand in for the
+ * customer by looking, and need neither their email nor their account. The order view is
+ * the customer's own, with everything that acts taken out -- no payment, no sign-in form,
+ * no support or Discord buttons -- so nothing done here changes the order.
+ */
+function StaffCustomerView({ reference }: { reference: string }) {
+  const t = useT()
+  useSeo({ title: t.track.seoTitle, description: 'Check where your order is with your reference and email.', noindex: true })
+  const [order, setOrder] = useState<Order | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    const load = () => {
+      api.get<Order>(`/api/v1/admin/orders/${encodeURIComponent(reference)}/customer-view`)
+        .then((found) => { if (live) { setOrder(found); setError(null) } })
+        .catch((e) => { if (live) setError(e instanceof ApiError ? e.message : 'We could not open that order.') })
+    }
+    load()
+    // As often as the customer's own page refreshes.
+    const timer = window.setInterval(load, 30_000)
+    return () => { live = false; window.clearInterval(timer) }
+  }, [reference])
+
+  return (
+    <>
+      <PageHeader eyebrow={t.track.eyebrow} title={t.track.title} lead={t.track.lead} />
+      <Section className="rhythm-section">
+        <div className="space-y-5">
+          <div data-testid="staff-view">
+            <Alert tone="neutral" title={t.track.staffViewTitle}>{t.track.staffViewBody}</Alert>
+          </div>
+          {error && <Alert tone="warn">{error}</Alert>}
+          {!order && !error && <Skeleton className="h-40 w-full" />}
+          {order && <OrderView order={order} readOnly />}
+        </div>
+      </Section>
+    </>
+  )
+}
+
+function CustomerTrack() {
   const t = useT()
   useSeo({
     title: t.track.seoTitle,
@@ -652,6 +711,7 @@ export function OrderView({
   signedIn = false,
   onSubmitted,
   startPayment = false,
+  readOnly = false,
 }: {
   order: Order
   /*
@@ -663,6 +723,11 @@ export function OrderView({
   onSubmitted?: (order: Order) => void
   /** Open the payment step of an unpaid order straight away. */
   startPayment?: boolean
+  /**
+   * Staff looking at the customer's page: everything as the customer sees it except what
+   * acts -- no payment, no sign-in form, no support or Discord buttons, no sessions.
+   */
+  readOnly?: boolean
 }) {
   const t = useT()
   const labels = useCatalogLabels()
@@ -678,13 +743,14 @@ export function OrderView({
       </div>
 
       <div className="space-y-7 p-6">
-        <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} startPayment={startPayment} />
+        <NextAction order={order} signedIn={signedIn} onSubmitted={onSubmitted} startPayment={startPayment}
+                    readOnly={readOnly} />
 
-        {supportModeFor(order.sku) === 'BOOSTING' && <DiscordTicket order={order} />}
+        {!readOnly && supportModeFor(order.sku) === 'BOOSTING' && <DiscordTicket order={order} />}
 
-        <OrderSupportCard order={order} signedIn={signedIn} />
+        {!readOnly && <OrderSupportCard order={order} signedIn={signedIn} />}
 
-        <BookedSessions order={order} signedIn={signedIn} />
+        {!readOnly && <BookedSessions order={order} signedIn={signedIn} />}
 
         <SupplierProgress order={order} />
 
@@ -795,17 +861,24 @@ function NextAction({
   signedIn,
   onSubmitted,
   startPayment = false,
+  readOnly = false,
 }: {
   order: Order
   signedIn: boolean
   onSubmitted?: (order: Order) => void
   startPayment?: boolean
+  readOnly?: boolean
 }) {
   const t = useT()
   // Payment first: details sent and being checked, or too late to pay, say so before
   // anything else -- the server works both out (paymentState).
   if (order.paymentState === 'EXPIRED') return <OrderExpired sku={order.sku} />
   if (order.paymentState === 'SUBMITTED') return <PaymentSubmitted />
+  // Staff: where the customer has a form to fill, say so instead of showing it.
+  if (readOnly && (order.nextAction === 'PAY'
+    || (order.nextAction === 'SUBMIT_CREDENTIALS' && !order.credentialsSubmitted))) {
+    return <Alert tone="neutral">{t.track.staffHiddenStep}</Alert>
+  }
   switch (order.nextAction) {
     case 'PAY':
       return (

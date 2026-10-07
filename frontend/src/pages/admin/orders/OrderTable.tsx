@@ -7,14 +7,15 @@ import { ago, shortDateTime } from '../ui/format'
 import { PlatformMark } from '../ui/PlatformMark'
 import { Th } from '../ui/Table'
 import { nextAction, type NextAction } from './nextAction'
+import { deliveredOfOrdered } from './vendor'
 
 /**
  * The Orders table's rows.
  *
- * <p>Nine columns, the reference's list without its checkbox: no bulk action exists, and
- * a box that selects rows for nothing is a promise the page cannot keep.
+ * <p>Ten columns: the reference's list without its checkbox -- no bulk action exists, and
+ * a box that selects rows for nothing is a promise the page cannot keep -- plus Tracking.
  */
-export const ORDER_COLUMNS = 9
+export const ORDER_COLUMNS = 10
 
 export function OrderTableHead() {
   return (
@@ -26,6 +27,7 @@ export function OrderTableHead() {
         <Th>Platform</Th>
         <Th>Amount</Th>
         <Th>Status</Th>
+        <Th>Tracking</Th>
         <Th>Next Action</Th>
         <Th>Created</Th>
         <Th className="text-right">Actions</Th>
@@ -108,6 +110,9 @@ function OrderRow({
       <td className="px-3 py-2.5">
         <OrderStatusBadge status={row.status} />
       </td>
+      <td className="whitespace-nowrap px-3 py-2.5" data-testid="tracking-cell">
+        <TrackingCell row={row} />
+      </td>
       <td className="px-3 py-2.5">
         <NextActionButton row={row} action={action} busy={busy} onAction={onAction} />
       </td>
@@ -149,6 +154,39 @@ function OrderRow({
         </div>
       </td>
     </tr>
+  )
+}
+
+/**
+ * Once FUT Transfer has the order: the customer's own tracking page -- the address their
+ * email links to -- in a new tab, and how far it has got. Before that a dash: there is
+ * nothing to follow yet.
+ */
+function TrackingCell({ row }: { row: AdminOrderRow }) {
+  const tracking = row.tracking
+  if (!tracking) {
+    return (
+      <span className="text-admin-faint">
+        —<span className="sr-only">Not with FUT Transfer yet</span>
+      </span>
+    )
+  }
+  return (
+    <>
+      <a
+        href={tracking.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Customer tracking page for order ${row.publicRef} (opens in a new tab)`}
+        className="inline-flex items-center gap-1 font-medium text-admin-red-text hover:underline"
+      >
+        Track
+        <LuExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
+      </a>
+      <p className="text-[12px] tabular-nums text-admin-faint">
+        {deliveredOfOrdered(tracking.deliveredK, tracking.orderedK)}
+      </p>
+    </>
   )
 }
 

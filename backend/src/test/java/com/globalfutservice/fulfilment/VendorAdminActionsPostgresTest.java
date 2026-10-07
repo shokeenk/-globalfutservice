@@ -343,6 +343,21 @@ class VendorAdminActionsPostgresTest {
     }
 
     @Test
+    @DisplayName("the section's tracking: nothing until the transfer starts, then when, and the customer's own tracking link")
+    void trackingInSection() {
+        OrderEntity o = at("GFS-26-TRACKSEC", "vid-track-sec", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        VendorOrderActions.Section before = actions.section(o, List.of());
+        assertThat(before.tracking().transferStartedAt()).isNull();
+        assertThat(before.tracking().customerUrl()).isNull();
+
+        java.time.Instant started = java.time.Instant.parse("2026-10-07T10:00:00Z");
+        when(o.getTransferStartedAt()).thenReturn(started);
+        VendorOrderActions.Section after = actions.section(o, List.of());
+        assertThat(after.tracking().transferStartedAt()).isEqualTo(started);
+        assertThat(after.tracking().customerUrl()).isEqualTo("https://gfs.example.test/track?ref=GFS-26-TRACKSEC");
+    }
+
+    @Test
     @DisplayName("before an order is ever sent, the section already says what Approve would send, for its amount")
     void nextSendBeforeApprove() {
         long id = db.order("GFS-26-NEXTSND1", "READY_FOR_DELIVERY", "0.5");

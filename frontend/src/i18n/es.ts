@@ -507,6 +507,9 @@ const es: Dictionary = {
     transferDelivered: 'Todas tus monedas han sido entregadas',
     progressCoins: (done: string, total: string) => `${done} de ${total} monedas entregadas`,
     updatesAutomatically: 'Esta página se actualiza sola.',
+    staffViewTitle: 'Vista del equipo',
+    staffViewBody: 'Esta es la página de seguimiento del cliente tal como la ve, en solo lectura. Nada de lo que hagas aquí cambia el pedido ni actúa en nombre del cliente.',
+    staffHiddenStep: 'Aquí el cliente ve un formulario para este paso. Está oculto en la vista del equipo.',
     action: {
       RESUBMIT_SIGN_IN: 'No se aceptaron tus credenciales de EA. Envíalas de nuevo abajo y continuamos.',
       NEW_BACKUP_CODES: 'Esos códigos de respaldo ya se usaron o son incorrectos. Genera otros en tu cuenta EA y envíalos abajo.',

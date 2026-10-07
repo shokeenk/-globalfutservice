@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Badge, Button, Card, Field, Input, Textarea } from '../../../components/ui'
 import { ApiError, api } from '../../../lib/api'
 import { dateTime } from '../../../lib/format'
 import type { VendorActionName, VendorBalance, VendorNextSend, VendorSection } from '../../../lib/types'
 import {
   VENDOR_ACTION_LABEL, VENDOR_ACTION_PATH, VENDOR_ACTIONS, VENDOR_FINAL_ACTIONS, VENDOR_STATE_LABEL,
-  asReported, automaticNote, historyLabel, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
-  whoSent,
+  asReported, automaticNote, blockage, deliveredOfOrdered, historyLabel, orderModeLabel, vendorQuestion,
+  vendorStateTone, vendorTimeline, whoSent,
 } from './vendor'
 
 /**
@@ -135,6 +135,8 @@ export function VendorPanel({
       {v && whoSent(section) && (
         <p className="mt-3 text-[13px] font-semibold text-chalk" data-testid="who-sent">{whoSent(section)}</p>
       )}
+      <TrackingSummary section={section} />
+
       {!v ? (
         <p className="mt-3 text-[13px] text-chalk-muted">Not sent to the partner.</p>
       ) : (
@@ -309,6 +311,73 @@ function NextSend({ next }: { next: VendorNextSend }) {
           GFS_FUTTRANSFER_ORDER_MODE=PUBLIC_POOL and redeploy.
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Where the order stands for the customer, at a glance: the tracking page they were sent (open
+ * it, or copy it into a reply), whether and when FUT Transfer took the order, how far it has
+ * got, when it last reported, and what is holding it up. The details are below.
+ */
+function TrackingSummary({ section }: { section: VendorSection }) {
+  const v = section.vendorOrder
+  const url = section.tracking?.customerUrl ?? null
+  const startedAt = section.tracking?.transferStartedAt ?? null
+  const blocked = blockage(section)
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    if (!url) return
+    try {
+      await navigator.clipboard?.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Nothing to undo: the link is on screen to copy by hand.
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-edge border border-ink-400 p-4" data-testid="vendor-tracking">
+      <p className="stamp mb-3">Tracking</p>
+      <dl className="grid gap-x-6 gap-y-3 text-[13px] sm:grid-cols-2">
+        <Line label="Customer tracking page" wide>
+          {url ? (
+            <span className="flex flex-wrap items-center gap-2">
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                 className="break-all font-semibold text-brand-400 hover:underline">
+                {url}
+              </a>
+              <Button size="sm" variant="secondary" onClick={() => void copy()}>
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
+            </span>
+          ) : 'Not yet: it is offered to the customer once FUT Transfer has the order.'}
+        </Line>
+        <Line label="FUT Transfer progress page" wide>
+          Not available: FUT Transfer&apos;s API gives no link to it.
+          {v?.vendorOrderId ? ' Open the partner order below from its dashboard.' : null}
+        </Line>
+        <Line label="Onboarded">{v?.submittedAt ? `Yes, ${dateTime(v.submittedAt)}` : 'No'}</Line>
+        <Line label="Transfer started">{startedAt ? `Yes, ${dateTime(startedAt)}` : 'Not yet'}</Line>
+        <Line label="Delivered of ordered">
+          {v?.submittedAt ? deliveredOfOrdered(v.deliveredK, v.vendorAmountOrderedK ?? v.amountOrderedK) : '—'}
+        </Line>
+        <Line label="Last reported">{v?.lastPolledAt ? dateTime(v.lastPolledAt) : 'None yet'}</Line>
+        <Line label="Held up by" wide>
+          <span className={blocked ? 'text-warn' : undefined}>{blocked ?? 'Nothing'}</span>
+        </Line>
+      </dl>
+    </div>
+  )
+}
+
+function Line({ label, wide = false, children }: { label: string; wide?: boolean; children: ReactNode }) {
+  return (
+    <div className={wide ? 'sm:col-span-2' : undefined}>
+      <dt className="text-[10.5px] uppercase tracking-[0.14em] text-chalk-faint">{label}</dt>
+      <dd className="mt-1 text-chalk">{children}</dd>
     </div>
   )
 }
