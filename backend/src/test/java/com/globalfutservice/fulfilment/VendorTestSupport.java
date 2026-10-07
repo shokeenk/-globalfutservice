@@ -66,11 +66,29 @@ final class VendorTestSupport {
 
     static AppProperties props(String baseUrl, String backupUrl, Duration timeout,
                                AppProperties.FutTransferOrderMode mode, AppProperties.FutTransferPublicPool pool) {
+        return props(baseUrl, backupUrl, timeout, mode, pool, AppProperties.FutTransferAutoDispatch.OFF);
+    }
+
+    /** With automatic sending as given; own senders, as {@link #props(String, Duration)}. */
+    static AppProperties props(String baseUrl, Duration timeout, AppProperties.FutTransferAutoDispatch auto) {
+        return props(baseUrl, NO_BACKUP, timeout, AppProperties.FutTransferOrderMode.OWN_SENDERS, ORDER_AMOUNT_POOL,
+                auto);
+    }
+
+    static AppProperties props(String baseUrl, String backupUrl, Duration timeout,
+                               AppProperties.FutTransferOrderMode mode, AppProperties.FutTransferPublicPool pool,
+                               AppProperties.FutTransferAutoDispatch auto) {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
                 RAW_KEY, "targetedSnipe", 1, POLLING, timeout, 3, DOCUMENTED_CODES,
-                backupUrl, METHOD_3_0, true, Duration.ofHours(72), mode, pool));
+                backupUrl, METHOD_3_0, true, Duration.ofHours(72), mode, pool, auto));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
+        // The release checks the stored sign-in against the rules before sending it; these
+        // tests' sign-in carries two backup codes, so two are what is required here.
+        when(props.fulfilment()).thenReturn(new org.springframework.boot.context.properties.bind.Binder(
+                new org.springframework.boot.context.properties.source.MapConfigurationPropertySource(
+                        java.util.Map.of("f.backup-codes-required", String.valueOf(BACKUP_CODES.size()))))
+                .bind("f", AppProperties.Fulfilment.class).get());
         return props;
     }
 

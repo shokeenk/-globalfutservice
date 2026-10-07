@@ -8,6 +8,7 @@ import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.SignInRules;
+import com.globalfutservice.fulfilment.AutoDispatchQueue;
 import com.globalfutservice.credentials.web.CredentialDtos;
 import com.globalfutservice.domain.catalog.CoinAmount;
 import com.globalfutservice.domain.catalog.PcLauncher;
@@ -79,6 +80,7 @@ public class OrderService {
     private final Clock clock;
 
     /** Runs the coaching hold's follow-ups once a payment or abandonment has committed. */
+    private final AutoDispatchQueue autoDispatch;
     private final AfterCommit afterCommit;
 
     public OrderService(OrderRepository orders, OrderEventRepository events,
@@ -89,8 +91,9 @@ public class OrderService {
                         CoachingService coachingService, CouponService couponService,
                         CustomerFeedService feed,
                         ObjectMapper mapper, AppProperties props, Clock clock,
-                        AfterCommit afterCommit) {
+                        AfterCommit afterCommit, AutoDispatchQueue autoDispatch) {
         this.afterCommit = afterCommit;
+        this.autoDispatch = autoDispatch;
         this.feed = feed;
         this.coachingService = coachingService;
         this.couponService = couponService;
@@ -560,6 +563,14 @@ public class OrderService {
                 needsSignIn
                         ? "Waiting for the customer's sign-in"
                         : "Queued for delivery");
+
+        /*
+         * Sent to FUT Transfer without an admin, when GFS_FUTTRANSFER_AUTO_DISPATCH is on.
+         * Only queued here, in this transaction, so the entry exists exactly when the payment
+         * does; the send happens after the commit, in AutoDispatchWorker, through Approve's own
+         * release. Nothing it does can undo this payment.
+         */
+        autoDispatch.paid(paid);
     }
 
     @Transactional

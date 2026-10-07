@@ -332,6 +332,12 @@ gfs:
   # with the fixed settings under `order`. Customers only ever see the GFS name.
   fut-transfer:
     enabled: ${GFS_FUTTRANSFER_ENABLED:false}
+    # Send a paid coin order without an admin's Approve, through Approve's own release.
+    # MAX_K: orders of more coins (thousands) wait for Approve; empty for no limit.
+    auto-dispatch:
+      enabled: ${GFS_FUTTRANSFER_AUTO_DISPATCH:false}
+      max-k: ${GFS_FUTTRANSFER_AUTO_DISPATCH_MAX_K:}
+      every: ${GFS_FUTTRANSFER_AUTO_DISPATCH_EVERY:PT15S}
     base-url: ${GFS_FUTTRANSFER_BASE_URL:https://futtransfer.top}
     # The vendor's second domain. Status reads may fall back to it; placing an order never does.
     backup-base-url: ${GFS_FUTTRANSFER_BACKUP_BASE_URL:https://eatransfer.top}

@@ -4,6 +4,7 @@ import com.globalfutservice.web.ApiExceptions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
@@ -42,6 +43,28 @@ public final class SignInRules {
     public static final String EMAIL_REGEX = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$";
 
     private SignInRules() {
+    }
+
+    /**
+     * What is wrong with a sign-in already on file, or empty when it meets every rule. For the
+     * release, which checks the stored sign-in before sending it: one sealed before these rules
+     * existed, or before the number of codes was raised, is caught here rather than refused by
+     * the partner.
+     */
+    public static Optional<String> problem(String eaEmail, String eaPassword, List<String> backupCodes,
+                                           int required) {
+        if (eaEmail == null || !eaEmail.trim().matches(EMAIL_REGEX)) {
+            return Optional.of("The EA email on file is not an email address.");
+        }
+        if (eaPassword == null || eaPassword.length() < PASSWORD_MIN) {
+            return Optional.of("The EA password on file is shorter than " + PASSWORD_MIN + " characters.");
+        }
+        try {
+            backupCodes(backupCodes, required);
+            return Optional.empty();
+        } catch (ApiExceptions.BadRequestException e) {
+            return Optional.of(e.getMessage());
+        }
     }
 
     /**

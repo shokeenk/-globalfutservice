@@ -31,7 +31,7 @@ class FutTransferConfigTest {
                 new AppProperties.FutTransferOrder(300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1"), true,
                 Duration.ofHours(72), AppProperties.FutTransferOrderMode.PUBLIC_POOL,
                 new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, false,
-                        null));
+                        null), AppProperties.FutTransferAutoDispatch.OFF);
     }
 
     private static AppProperties.FutTransferPublicPool pool(String threshold, boolean sendMaxPrice, String maxPrice) {
