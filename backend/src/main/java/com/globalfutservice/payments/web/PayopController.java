@@ -76,7 +76,7 @@ public class PayopController {
     }
 
     public record ReturnStatusResponse(String payment, String order, long totalMinor, String totalFormatted,
-                                       String method) {
+                                       String method, boolean transferStarted) {
     }
 
     public record CountryResponse(String country) {
@@ -138,7 +138,8 @@ public class PayopController {
     public ResponseEntity<ReturnStatusResponse> returnStatus(@RequestParam String ref, @RequestParam String invoice) {
         PayopCheckoutService.ReturnStatus s = checkout.returnStatus(ref, invoice);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new ReturnStatusResponse(s.payment(),
-                s.order(), s.totalMinor(), Money.ofMinor(s.totalMinor(), s.currency()).format(), s.methodName()));
+                s.order(), s.totalMinor(), Money.ofMinor(s.totalMinor(), s.currency()).format(), s.methodName(),
+                s.transferStarted()));
     }
 
     @GetMapping("/country")

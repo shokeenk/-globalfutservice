@@ -501,6 +501,12 @@ const es: Dictionary = {
     // -- entrega en curso ---------------------------------------------------
     progressTitle: 'Monedas entregadas',
     progressOf: (done: string, total: string) => `${done} de ${total}`,
+    trackYourOrder: 'Sigue tu pedido',
+    transferStarted: 'Tu transferencia de monedas ha comenzado',
+    transferDelivering: 'Tus monedas se están entregando',
+    transferDelivered: 'Todas tus monedas han sido entregadas',
+    progressCoins: (done: string, total: string) => `${done} de ${total} monedas entregadas`,
+    updatesAutomatically: 'Esta página se actualiza sola.',
     action: {
       RESUBMIT_SIGN_IN: 'No se aceptaron tus credenciales de EA. Envíalas de nuevo abajo y continuamos.',
       NEW_BACKUP_CODES: 'Esos códigos de respaldo ya se usaron o son incorrectos. Genera otros en tu cuenta EA y envíalos abajo.',
@@ -736,7 +742,7 @@ const es: Dictionary = {
     notFoundBody: 'Abre tu pedido desde la página de seguimiento para ver en qué punto está.',
     loadFailed: 'No hemos podido comprobar el pago ahora mismo. Esta página volverá a intentarlo.',
     summary: (total: string, method: string) => `${total} con ${method}`,
-    viewOrder: 'Seguir tu pedido',
+    viewOrder: 'Ver tu pedido',
   },
   order: {
     seoTitle: (season) => `Comprar monedas de ${season}`,

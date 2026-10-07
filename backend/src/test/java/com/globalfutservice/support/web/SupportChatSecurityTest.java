@@ -66,7 +66,7 @@ class SupportChatSecurityTest {
         when(support.contextFor("GFS-26-70C4DPWH", 7L)).thenReturn(new SupportChatService.SupportContext(
                 SupportChatService.Mode.COINS,
                 new SupportChatService.Summary("GFS-26-70C4DPWH", "Buy Coins — 500K", "PC", "Queued", "500K",
-                        null, null, null, null),
+                        null, null, null, null, false),
                 new SupportChatService.Chat("Rahul", "rahul@example.test", null, Map.of("order-id", "GFS-26-70C4DPWH"))));
 
         mvc.perform(get(PATH).with(authentication(customer(7L))))

@@ -122,6 +122,12 @@ public class NotificationService {
         each(notifier -> notifier.paymentProofAttached(n));
     }
 
+    /** Off any request thread: the sweep that sends it must not wait on SMTP. */
+    @Async
+    public void transferStarted(OrderNotification n) {
+        each(notifier -> notifier.transferStarted(n));
+    }
+
     public void orderDelivered(OrderNotification n) {
         each(notifier -> notifier.orderDelivered(n));
     }

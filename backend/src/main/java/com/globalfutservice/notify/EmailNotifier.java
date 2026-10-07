@@ -185,6 +185,15 @@ public class EmailNotifier implements Notifier {
      * The delivery notice, word for word as it has always been sent. A coin order's copy is
      * branded and adds the order's tracking link; other orders keep the plain text.
      */
+    /** "Your coin transfer has started", with the tracking button and where to get help. */
+    @Override
+    public void transferStarted(OrderNotification n) {
+        if (!TransactionalEmails.isCoins(n)) {
+            return;
+        }
+        sendHtml(n, TransactionalEmails.transferStarted(n, brand(), trackUrl(n), supportUrl(n), discordDmUrl()));
+    }
+
     @Override
     public void orderDelivered(OrderNotification n) {
         if (TransactionalEmails.isCoins(n)) {
@@ -389,6 +398,12 @@ public class EmailNotifier implements Notifier {
      */
     private String trackUrl(OrderNotification n) {
         return publicUrl() + "/track?ref=" + n.publicRef();
+    }
+
+    /** The order's support page on this site, with the live chat. */
+    private String supportUrl(OrderNotification n) {
+        return publicUrl() + "/orders/"
+                + UriUtils.encodePathSegment(n.publicRef(), StandardCharsets.UTF_8) + "/support";
     }
 
     /** The order's Connect with Coach page: where a coaching customer reaches their coach. */

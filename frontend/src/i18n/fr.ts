@@ -504,6 +504,12 @@ const fr: Dictionary = {
     // -- livraison en cours -------------------------------------------------
     progressTitle: 'Coins livrés',
     progressOf: (done: string, total: string) => `${done} sur ${total}`,
+    trackYourOrder: 'Suivre ta commande',
+    transferStarted: 'Ton transfert de coins a commencé',
+    transferDelivering: 'Tes coins sont en cours de livraison',
+    transferDelivered: 'Tous tes coins ont été livrés',
+    progressCoins: (done: string, total: string) => `${done} sur ${total} coins livrés`,
+    updatesAutomatically: 'Cette page se met à jour toute seule.',
     action: {
       RESUBMIT_SIGN_IN: "Tes identifiants EA ont été refusés. Renvoie-les ci-dessous et nous reprenons.",
       NEW_BACKUP_CODES: "Ces codes de secours sont déjà utilisés ou incorrects. Génère-en de nouveaux puis envoie-les ci-dessous.",
@@ -740,7 +746,7 @@ const fr: Dictionary = {
     notFoundBody: 'Ouvre ta commande depuis la page de suivi pour voir où elle en est.',
     loadFailed: 'Nous n’avons pas pu vérifier le paiement pour l’instant. Cette page va réessayer.',
     summary: (total: string, method: string) => `${total} avec ${method}`,
-    viewOrder: 'Suivre ta commande',
+    viewOrder: 'Voir ta commande',
   },
   order: {
     seoTitle: (season) => `Acheter des crédits ${season}`,
