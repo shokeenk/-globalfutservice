@@ -133,8 +133,8 @@ describe('Payop at checkout', () => {
   it('says why nothing is offered, and when a country has no method', async () => {
     api.post.mockResolvedValueOnce({ ...OPTIONS, methods: [], unavailable: 'NO_RATE' })
     payop()
-    expect(await screen.findByText('International payment is not available for this order right now.'))
-      .toBeInTheDocument()
+    expect(await screen.findByText('Temporarily unavailable.')).toBeInTheDocument()
+    expect(screen.getByText('Please use PayPal or crypto.')).toBeInTheDocument()
   })
 
   it('Payop switched off (404): hands back to the placeholder', async () => {
@@ -164,11 +164,14 @@ describe('the International tab', () => {
     expect(await screen.findByRole('button', { name: /Bank transfer/ })).toBeInTheDocument()
   })
 
-  it('and the placeholder when it is off', async () => {
-    api.post.mockRejectedValue(new ApiError(404, 'not_found'))
-    await openInternational('EUR')
-    expect(await screen.findByText('International payment options are coming soon')).toBeInTheDocument()
-  })
+  it('an order not in INR, with Payop off: says it is temporarily unavailable -- never hidden as "coming soon"',
+    async () => {
+      api.post.mockRejectedValue(new ApiError(404, 'not_found'))
+      await openInternational('EUR')
+      expect(await screen.findByText('Temporarily unavailable.')).toBeInTheDocument()
+      expect(screen.getByText('Please use PayPal or crypto.')).toBeInTheDocument()
+      expect(screen.queryByText('International payment options are coming soon')).toBeNull()
+    })
 
   it('a manual claim refused because a Payop invoice is open says why, in the customer’s words', async () => {
     api.post.mockRejectedValue(new ApiError(409, 'payop_invoice_open', 'server sentence'))

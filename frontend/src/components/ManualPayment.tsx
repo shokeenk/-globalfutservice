@@ -4,6 +4,7 @@ import { useI18n, useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { ManualPaymentClaim, ManualPaymentMethod, ManualPaymentOption } from '../lib/types'
 import { PayopPayment, type PayopRoutes } from './PayopPayment'
+import { INTERNATIONAL, offersLocalMethods, paymentMethods, type PaymentMethodKey } from '../lib/paymentMethods'
 
 /** Where a payment claim and its screenshot are sent. */
 export interface ManualRoutes {
@@ -81,11 +82,12 @@ function qrFor(method: ManualPaymentMethod, sku: string): string {
 }
 
 /**
- * The tabs across the top. `INTERNATIONAL` is the storefront's own, not a
- * ManualPaymentMethod: behind it is Payop, for orders in a currency other than INR, and
- * the "coming soon" panel wherever Payop is not on offer.
+ * The tabs across the top: the shared list of ways to pay (lib/paymentMethods), the same
+ * for every kind of order. `INTERNATIONAL` is the storefront's own, not a
+ * ManualPaymentMethod: behind it is Payop for an order in a currency other than INR, and
+ * the "coming soon" panel for an INR order.
  */
-type PaymentTab = ManualPaymentMethod | 'INTERNATIONAL'
+type PaymentTab = PaymentMethodKey
 
 export function ManualPayment({
   publicRef, email, sku, totalFormatted, currency, initialMethod, onSubmitted, routes, payopRoutes, blocked,
@@ -103,8 +105,8 @@ export function ManualPayment({
   totalFormatted: string
   /** The order's currency. INR orders never see Payop. */
   currency?: string
-  /** Opens on this tab when it is on offer, for a flow that already asked. */
-  initialMethod?: ManualPaymentMethod
+  /** Opens on this tab when it is on offer, for a flow that already asked -- and follows it. */
+  initialMethod?: PaymentMethodKey
   /**
    * Called once the reference and the screenshot have both landed. A caller that moves on
    * from here must not be told before the screenshot is in: a failed upload keeps this
@@ -134,7 +136,7 @@ export function ManualPayment({
   // Set when the API says Payop is not on: the tab then says it is coming, as before.
   const [payopOff, setPayopOff] = useState(false)
   const payopUnavailable = useCallback(() => setPayopOff(true), [])
-  const offersPayop = !!currency && currency !== 'INR' && !payopOff
+  const localMethods = offersLocalMethods(currency)
 
   useEffect(() => {
     let live = true
@@ -143,12 +145,17 @@ export function ManualPayment({
         if (!live) return
         setOptions(found)
         setMethod((current) => current
-          ?? (initialMethod && found.some((o) => o.method === initialMethod) ? initialMethod : undefined)
+          ?? (initialMethod && offered(initialMethod, found) ? initialMethod : undefined)
           ?? found[0]?.method ?? null)
       })
       .catch(() => { if (live) setLoadFailed(true) })
     return () => { live = false }
   }, [sku])
+
+  // A checkout that lists the ways to pay beside this panel moves it with its choice.
+  useEffect(() => {
+    if (options && initialMethod && offered(initialMethod, options)) setMethod(initialMethod)
+  }, [initialMethod, options])
 
   const active = useMemo(
     () => options?.find((option) => option.method === method) ?? null,
@@ -266,7 +273,7 @@ export function ManualPayment({
     CRYPTO: t.order.payTabCrypto,
     INTERNATIONAL: t.order.payTabInternational,
   }
-  const tabs: PaymentTab[] = [...options.map((option) => option.method), 'INTERNATIONAL']
+  const tabs: PaymentTab[] = paymentMethods(options)
 
   return (
     <div className="animate-rise space-y-4 rounded-panel border border-ink-400 bg-paper p-5">
@@ -300,7 +307,9 @@ export function ManualPayment({
               'transition-colors duration-200',
               tab === method
                 ? 'bg-brand-500 text-paper'
-                : 'bg-ink-700 text-chalk-muted hover:text-chalk',
+                : tab === INTERNATIONAL && localMethods && payopOff
+                  ? 'bg-ink-700 text-chalk-faint'
+                  : 'bg-ink-700 text-chalk-muted hover:text-chalk',
             ].join(' ')}
           >
             {label[tab]}
@@ -308,9 +317,16 @@ export function ManualPayment({
         ))}
       </div>
 
-      {method === 'INTERNATIONAL' && offersPayop ? (
+      {method === INTERNATIONAL && localMethods && payopOff ? (
+        <LocalMethodsUnavailable
+          alternatives={options
+            .filter((option) => option.method === 'PAYPAL' || option.method === 'CRYPTO')
+            .map((option) => ({ method: option.method, name: label[option.method] }))}
+          onUse={(next) => { setMethod(next); setError(null) }}
+        />
+      ) : method === INTERNATIONAL && localMethods ? (
         <PayopPayment publicRef={publicRef} email={email} onUnavailable={payopUnavailable} routes={payopRoutes} />
-      ) : method === 'INTERNATIONAL' ? (
+      ) : method === INTERNATIONAL ? (
         <InternationalSoon
           alternatives={options
             .filter((option) => option.method === 'PAYPAL' || option.method === 'CRYPTO')
@@ -364,6 +380,36 @@ export function ManualPayment({
           </Button>
         </>
       )}
+    </div>
+  )
+}
+
+/** Whether a way to pay is on offer for this order: International always is. */
+function offered(key: PaymentMethodKey, options: ManualPaymentOption[]): boolean {
+  return key === INTERNATIONAL || options.some((o) => o.method === key)
+}
+
+/**
+ * Payop cannot be offered right now for an order that would have it -- switched off, or
+ * not answering. Said, with the other ways to pay, rather than hidden.
+ */
+function LocalMethodsUnavailable({
+  alternatives, onUse,
+}: {
+  alternatives: { method: ManualPaymentMethod; name: string }[]
+  onUse: (method: ManualPaymentMethod) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div role="tabpanel" className="space-y-3" data-testid="local-methods-unavailable">
+      <Alert tone="warn" title={t.order.payopUnavailable}>{t.order.payopUnavailableHint}</Alert>
+      <div className="flex flex-wrap gap-2">
+        {alternatives.map((a) => (
+          <Button key={a.method} size="sm" variant="secondary" onClick={() => onUse(a.method)}>
+            {t.order.payIntlUse(a.name)}
+          </Button>
+        ))}
+      </div>
     </div>
   )
 }

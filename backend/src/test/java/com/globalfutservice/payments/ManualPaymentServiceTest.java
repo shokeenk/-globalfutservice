@@ -232,6 +232,21 @@ class ManualPaymentServiceTest {
         }
 
         @Test
+        @DisplayName("coins, boosting and coaching are offered the same methods; only the UPI account differs")
+        void sameMethodsForEveryOrderType() {
+            List<ManualPaymentMethod> coins = methods("TRADING_SERVICE");
+            for (String sku : List.of("BOOST_CHAMPS", "BOOST_RIVALS", "COACHING")) {
+                assertThat(methods(sku)).as(sku).isEqualTo(coins);
+            }
+            assertThat(coins).containsExactly(ManualPaymentMethod.UPI, ManualPaymentMethod.PAYPAL,
+                    ManualPaymentMethod.CRYPTO);
+        }
+
+        private List<ManualPaymentMethod> methods(String sku) {
+            return service.optionsFor(sku).stream().map(ManualPaymentService.PaymentOption::method).toList();
+        }
+
+        @Test
         @DisplayName("PayPal is offered on the account, and carries the scan link alongside it")
         void paypalCarriesBoth() {
             ManualPaymentService.PaymentOption paypal = service.optionsFor("COACHING").stream()

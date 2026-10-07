@@ -12,9 +12,10 @@ import { ApiError, api } from '../lib/api'
 import { SupportCard } from '../components/support/SupportCard'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { useSeo } from '../lib/seo'
+import { offersLocalMethods, paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
 import { ScheduleStep, formatSlot, type ChosenSlot } from './coaching/ScheduleStep'
 import type {
-  CatalogOption, CreateOrderResponse, ManualPaymentMethod, ManualPaymentOption, Order, SignedQuote,
+  CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, SignedQuote,
 } from '../lib/types'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
@@ -38,7 +39,7 @@ import { useCatalog } from '../state/CatalogContext'
  */
 
 type Step = 'option' | 'details' | 'schedule' | 'review' | 'pay' | 'processing' | 'success' | 'support' | 'done'
-type PayChoice = 'ONLINE' | ManualPaymentMethod
+type PayChoice = PaymentChoiceKey
 type Variant = 'SINGLE_SESSION' | 'MONTHLY_6_SESSIONS'
 type CoachingPlatform = 'PLAYSTATION' | 'XBOX' | 'PC'
 
@@ -141,18 +142,27 @@ export default function CoachingBook() {
     return () => { live = false }
   }, [])
 
+  /*
+   * The ways to pay: the shared list every checkout uses (lib/paymentMethods), so this one
+   * cannot leave International out again. The order is placed in the quote's currency,
+   * which decides what International holds.
+   */
+  const orderCurrency = quote?.currency ?? catalog?.currency
   const payChoices: { key: PayChoice; title: string; body: string; icon: CoachIconName }[] = useMemo(() => {
-    const list: { key: PayChoice; title: string; body: string; icon: CoachIconName }[] = []
-    if (policy?.onlinePaymentsEnabled) {
-      list.push({ key: 'ONLINE', title: b.payOnlineTitle, body: b.payOnlineBody, icon: 'card' })
+    if (methods === null) return []
+    const copy: Record<PayChoice, { title: string; body: string; icon: CoachIconName }> = {
+      ONLINE: { title: b.payOnlineTitle, body: b.payOnlineBody, icon: 'card' },
+      UPI: { title: b.payUpiTitle, body: b.payUpiBody, icon: 'qr' },
+      PAYPAL: { title: b.payPaypalTitle, body: b.payPaypalBody, icon: 'globe' },
+      CRYPTO: { title: b.payCryptoTitle, body: b.payCryptoBody, icon: 'lock' },
+      INTERNATIONAL: {
+        title: t.order.payTabInternational,
+        body: offersLocalMethods(orderCurrency) ? t.order.payIntlChoiceLocal : t.order.payIntlTitle,
+        icon: 'bank',
+      },
     }
-    for (const m of methods ?? []) {
-      if (m.method === 'UPI') list.push({ key: 'UPI', title: b.payUpiTitle, body: b.payUpiBody, icon: 'qr' })
-      if (m.method === 'PAYPAL') list.push({ key: 'PAYPAL', title: b.payPaypalTitle, body: b.payPaypalBody, icon: 'globe' })
-      if (m.method === 'CRYPTO') list.push({ key: 'CRYPTO', title: b.payCryptoTitle, body: b.payCryptoBody, icon: 'lock' })
-    }
-    return list
-  }, [policy, methods, b])
+    return paymentChoices(methods, !!policy?.onlinePaymentsEnabled).map((key) => ({ key, ...copy[key] }))
+  }, [policy, methods, b, t.order, orderCurrency])
 
   useEffect(() => {
     const first = payChoices[0]
