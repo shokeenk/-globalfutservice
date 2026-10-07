@@ -54,6 +54,25 @@ public class AutoDispatchQueue {
                 """, new MapSqlParameterSource("orderId", order.getId()));
     }
 
+    /**
+     * The customer's sign-in has arrived for an order that was paid and waiting for it. Queued
+     * when automatic sending is on -- or queued again, when the queue had already left it for
+     * Approve for want of exactly this. An order in any other state here is left as it is:
+     * sent, in review, or left for a reason a sign-in does not change.
+     */
+    public void signInArrived(OrderEntity order) {
+        if (!props.futTransfer().autoDispatch().enabled() || !order.getSku().isCoinTransfer()) {
+            return;
+        }
+        jdbc.update("""
+                insert into auto_dispatch (order_id) values (:orderId)
+                on conflict (order_id) do update
+                   set state = 'QUEUED', attempts = 0, next_attempt_at = now(), reason_code = null, reason = null,
+                       updated_at = now()
+                 where auto_dispatch.state = 'LEFT_FOR_APPROVE' and auto_dispatch.reason_code = 'NO_SIGN_IN'
+                """, new MapSqlParameterSource("orderId", order.getId()));
+    }
+
     /** Orders whose turn has come, oldest first. */
     public List<Long> due(Instant now, int limit) {
         return jdbc.queryForList("""

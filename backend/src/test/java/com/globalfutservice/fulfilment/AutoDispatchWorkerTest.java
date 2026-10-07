@@ -133,6 +133,42 @@ class AutoDispatchWorkerTest {
     }
 
     @Test
+    @DisplayName("the sign-in arrives through the real order service: queued again only for an order paid and "
+            + "waiting for it -- not one coming off hold, not one not yet paid")
+    void signInArrivalQueues() {
+        AppProperties p = mock(AppProperties.class);
+        when(p.fulfilment()).thenReturn(new Binder(new MapConfigurationPropertySource(
+                Map.of("f.backup-codes-required", "3"))).bind("f", AppProperties.Fulfilment.class).get());
+        OrderRepository repo = mock(OrderRepository.class);
+        when(repo.save(any(OrderEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        OrderService service = new OrderService(repo, mock(OrderEventRepository.class), mock(PaymentRepository.class),
+                mock(PaymentGateway.class), mock(QuoteService.class), mock(LoyaltyService.class),
+                mock(AffiliateService.class), vault, notifications, mock(AccountRepository.class),
+                mock(CoachingService.class), mock(CouponService.class), mock(CustomerFeedService.class),
+                new ObjectMapper(), p, NOW, AfterCommit.immediate(), queue);
+        CredentialDtos.SubmitCredentialsRequest signIn = new CredentialDtos.SubmitCredentialsRequest(
+                "ea@example.test", "correct-horse", List.of("11112222", "33334444", "55556666"), null, null,
+                true, true, true, true);
+
+        for (OrderStatus from : List.of(OrderStatus.CREDENTIALS_PENDING, OrderStatus.ON_HOLD,
+                OrderStatus.AWAITING_PAYMENT)) {
+            OrderEntity coins = new OrderEntity("GFS-26-SIGN" + from.ordinal(), "q_" + from, "FC27",
+                    Sku.TRADING_SERVICE, null, null, BigDecimal.ONE, DeliveryMethod.PLAYER_AUCTION, Currency.INR,
+                    10000, 10000, "{}");
+            ReflectionTestUtils.setField(coins, "id", 20L + from.ordinal());
+            ReflectionTestUtils.setField(coins, "status", from);
+
+            service.submitCredentials(coins, signIn, 5L);
+
+            if (from == OrderStatus.CREDENTIALS_PENDING) {
+                verify(queue).signInArrived(coins);
+            } else {
+                verify(queue, never()).signInArrived(coins);
+            }
+        }
+    }
+
+    @Test
     @DisplayName("calls paused, or FUT Transfer off: left for Approve, and staff are told why")
     void pausedOrOff() {
         when(control.isPaused()).thenReturn(true);
