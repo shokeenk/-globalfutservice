@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { ManualPayment } from '../components/ManualPayment'
 import { PageHeader } from '../components/PageHeader'
-import { EaSignInFields, validateEaSignIn } from '../components/EaSignInFields'
+import { EaSignInFields, useBackupCodes, validateEaSignIn } from '../components/EaSignInFields'
 import { PlatformCard } from '../components/PlatformCard'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
@@ -1166,7 +1166,7 @@ function CheckoutForm({
    */
   const [eaEmail, setEaEmail] = useState('')
   const [eaPassword, setEaPassword] = useState('')
-  const [backupCodes, setBackupCodes] = useState(['', '', ''])
+  const [backupCodes, setBackupCodes, clearBackupCodes] = useBackupCodes()
 
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [readyChecks, setReadyChecks] = useState(false)
@@ -1263,7 +1263,7 @@ function CheckoutForm({
         // Cleared as soon as the vault has them, so the password is not sitting in a
         // React tree while the payment sheet is open.
         setEaPassword('')
-        setBackupCodes(['', '', ''])
+        clearBackupCodes()
       }
 
       setPlaced(response)

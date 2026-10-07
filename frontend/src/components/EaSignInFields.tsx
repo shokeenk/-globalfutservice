@@ -1,6 +1,30 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Field, Input } from './ui'
 import { useT } from '../i18n'
+import {
+  BACKUP_CODE_LENGTH, DEFAULT_BACKUP_CODES, EA_PASSWORD_MIN, isBackupCode, resizeCodes,
+} from '../lib/signInRules'
+import { looksLikeEmail } from '../lib/validation'
+import { useCatalog } from '../state/CatalogContext'
+
+/**
+ * The backup-code boxes a sign-in form shows: as many as the server requires.
+ *
+ * <p>The number is `GFS_BACKUP_CODES_REQUIRED`, served on the policy. It used to be an
+ * `['', '', '']` literal in each form, so changing it meant finding every copy. Codes
+ * already typed survive the policy arriving after the first render.
+ *
+ * @returns the codes, a setter, and a reset to that many empty boxes
+ */
+export function useBackupCodes(): [string[], (codes: string[]) => void, () => void] {
+  const count = useCatalog().policy?.backupCodesRequired ?? DEFAULT_BACKUP_CODES
+  const [codes, setCodes] = useState(() => resizeCodes([], count))
+  useEffect(() => {
+    setCodes((current) => (current.length === count ? current : resizeCodes(current, count)))
+  }, [count])
+  const clear = useCallback(() => setCodes(resizeCodes([], count)), [count])
+  return [codes, setCodes, clear]
+}
 
 /**
  * The EA sign-in, as fields. One copy, used by every checkout that needs one.
@@ -29,7 +53,7 @@ export function EaSignInFields({
   setEaPassword: (v: string) => void
   backupCodes: string[]
   setBackupCodes: (codes: string[]) => void
-  /** Keyed `eaEmail`, `eaPassword`, `backup0`…`backup2` — see {@link validateEaSignIn}. */
+  /** Keyed `eaEmail`, `eaPassword`, `backup0`, `backup1`… — see {@link validateEaSignIn}. */
   errors: Record<string, string>
 }) {
   const t = useT()
@@ -93,7 +117,7 @@ export function EaSignInFields({
                 )}
                 placeholder={t.order.backupCodePlaceholder}
                 inputMode="numeric"
-                maxLength={8}
+                maxLength={BACKUP_CODE_LENGTH}
                 autoComplete="off"
                 data-1p-ignore
                 spellCheck={false}
@@ -108,13 +132,13 @@ export function EaSignInFields({
 }
 
 /**
- * What is wrong with the sign-in, field by field.
+ * What is wrong with the sign-in, field by field: every box checked, so each missing or
+ * malformed one gets its own error at once.
  *
  * <p>Empty and malformed are different failures and get different messages: a customer who
  * typed seven digits has done something, and telling them the field is required says the
- * opposite of what happened. Backup codes are exactly eight digits — that is EA's format,
- * not a house rule — so anything else is rejected before it can be sealed into the vault
- * and found to be useless by a trader at three in the morning.
+ * opposite of what happened. The rules are `lib/signInRules`, the same numbers the server
+ * enforces -- this only says it sooner, under the right field.
  */
 export function validateEaSignIn(
   t: ReturnType<typeof useT>,
@@ -124,15 +148,15 @@ export function validateEaSignIn(
 ): Record<string, string> {
   const errors: Record<string, string> = {}
   if (!eaEmail.trim()) errors.eaEmail = t.order.errEaEmail
+  else if (!looksLikeEmail(eaEmail)) errors.eaEmail = t.common.emailInvalid
   if (!eaPassword) errors.eaPassword = t.order.errEaPassword
-  // Eight is the fulfilment partner's minimum. Caught here so it is a correction while
-  // the customer is typing, rather than a refused order after they have paid.
-  else if (eaPassword.length < 8) errors.eaPassword = t.order.errEaPasswordShort
+  // The fulfilment partner's minimum. Caught here so it is a correction while the
+  // customer is typing, rather than a refused order after they have paid.
+  else if (eaPassword.length < EA_PASSWORD_MIN) errors.eaPassword = t.order.errEaPasswordShort
   backupCodes.forEach((code, index) => {
-    const value = code.trim()
-    if (!value) {
+    if (!code.trim()) {
       errors[`backup${index}`] = t.order.errBackupCode(index + 1)
-    } else if (!/^\d{8}$/.test(value)) {
+    } else if (!isBackupCode(code)) {
       errors[`backup${index}`] = t.order.errBackupCodeFormat(index + 1)
     }
   })

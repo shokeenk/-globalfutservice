@@ -137,9 +137,9 @@ describe('coin checkout: your details and the sign-in', () => {
 
     await userEvent.click(pay)
 
-    expectFieldError('Please enter Origin (Web App) Email!')
-    expectFieldError('Please enter Origin (Web App) Password!')
-    expectFieldError('Please enter Backup Code 1!')
+    expectFieldError('Enter your EA account email.')
+    expectFieldError('Enter your EA password.')
+    expectFieldError('Backup code 1 is required.')
     expectFieldError('Please confirm your account is ready — it saves both of us a delay.')
     expectFieldError('Please accept the terms to place your order.')
     // Said under the fields, not as one message at the bottom of the form.
@@ -253,9 +253,9 @@ describe('sending the EA sign-in from the order page', () => {
 
     await userEvent.click(send)
 
-    expectFieldError('Please enter Origin (Web App) Email!')
-    expectFieldError('Please enter Origin (Web App) Password!')
-    expectFieldError('Please enter Backup Code 1!')
+    expectFieldError('Enter your EA account email.')
+    expectFieldError('Enter your EA password.')
+    expectFieldError('Backup code 1 is required.')
     const boxes = screen.getAllByRole('checkbox')
     expect(boxes).toHaveLength(4)
     for (const box of boxes) expect(box).toHaveAttribute('aria-invalid', 'true')
@@ -272,7 +272,7 @@ describe('sending the EA sign-in from the order page', () => {
     await userEvent.click(send)
 
     expectFieldError('That looks too short — an EA password is at least 8 characters.')
-    expectFieldError('Backup Code 1 must be exactly 8 digits.')
+    expectFieldError('Backup code 1 must be exactly 8 digits.')
     expect(screen.getByLabelText('Backup code 1')).toHaveAttribute('aria-invalid', 'true')
     expect(api.post).not.toHaveBeenCalled()
   })
