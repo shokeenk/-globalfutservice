@@ -33,6 +33,37 @@ export const VENDOR_ACTION_PATH: Record<VendorActionName, string> = {
   RESOLVE: 'resolve',
 }
 
+/** History-only entries: sending the order, by Approve or automatically. */
+const VENDOR_HISTORY_LABEL: Record<string, string> = {
+  APPROVE: 'Approve',
+  AUTO_DISPATCH: 'Automatic sending',
+}
+
+/** The name a history entry is shown under. */
+export function historyLabel(action: string): string {
+  return (VENDOR_ACTION_LABEL as Record<string, string>)[action] ?? VENDOR_HISTORY_LABEL[action] ?? action
+}
+
+/**
+ * Who sent the order to the partner: "Sent automatically", or "Sent by" the admin who clicked
+ * Approve. From the latest send that went through; null when none has.
+ */
+export function whoSent(section: VendorSection): string | null {
+  const sent = [...section.actions].reverse().find((e) => e.outcome === 'DONE'
+    && (e.action === 'APPROVE' || e.action === 'AUTO_DISPATCH'))
+  if (!sent) return null
+  return sent.action === 'AUTO_DISPATCH' ? 'Sent automatically' : `Sent by ${sent.actorLabel ?? 'an admin'}`
+}
+
+/**
+ * Why the automatic queue left this order for Approve, while nothing has been sent since:
+ * the reason staff were alerted with. Null when it was sent, or never left.
+ */
+export function notSentAutomatically(section: VendorSection): string | null {
+  const last = [...section.actions].reverse().find((e) => e.action === 'APPROVE' || e.action === 'AUTO_DISPATCH')
+  return last && last.action === 'AUTO_DISPATCH' && last.outcome === 'REFUSED' ? last.detail ?? last.code ?? null : null
+}
+
 /** How an order is placed at the partner. */
 export const ORDER_MODE_LABEL: Record<string, string> = {
   PUBLIC_POOL: 'Public pool',
