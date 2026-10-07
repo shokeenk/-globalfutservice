@@ -5,7 +5,7 @@ import { dateTime } from '../../../lib/format'
 import type { VendorActionName, VendorBalance, VendorNextSend, VendorSection } from '../../../lib/types'
 import {
   VENDOR_ACTION_LABEL, VENDOR_ACTION_PATH, VENDOR_ACTIONS, VENDOR_FINAL_ACTIONS, VENDOR_STATE_LABEL,
-  asReported, historyLabel, notSentAutomatically, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
+  asReported, automaticNote, historyLabel, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
   whoSent,
 } from './vendor'
 
@@ -32,6 +32,7 @@ export function VendorPanel({
   const [note, setNote] = useState('')
 
   const v = section.vendorOrder
+  const autoNote = automaticNote(section)
   const available = VENDOR_ACTIONS.filter((a) => section.available.includes(a))
 
   /*
@@ -122,10 +123,13 @@ export function VendorPanel({
       {section.enabled && section.nextSend && (!v || v.state === 'FAILED') && (
         <NextSend next={section.nextSend} />
       )}
-      {/* Why the automatic queue left it for Approve -- what staff were alerted with. */}
-      {notSentAutomatically(section) && (!v || v.state === 'FAILED') && (
+      {/*
+        Why the automatic queue left it for Approve -- what staff were alerted with -- or, when
+        it is only waiting for the customer's sign-in, that it goes by itself once that arrives.
+      */}
+      {autoNote && (!v || v.state === 'FAILED') && (
         <div className="mt-4" data-testid="not-sent-automatically">
-          <Alert tone="warn" title="Not sent automatically">{notSentAutomatically(section)}</Alert>
+          <Alert tone={autoNote.waiting ? 'neutral' : 'warn'} title={autoNote.title}>{autoNote.text}</Alert>
         </div>
       )}
       {v && whoSent(section) && (

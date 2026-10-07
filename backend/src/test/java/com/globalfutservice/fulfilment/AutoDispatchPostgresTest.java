@@ -144,14 +144,18 @@ class AutoDispatchPostgresTest {
         final AutoDispatchQueue queue;
         final FulfilmentRelease release;
         final AutoDispatchWorker worker;
+        /** Whether the customer's sign-in is on file; flipped when a test has them enter it. */
+        final java.util.concurrent.atomic.AtomicBoolean signInOnFile;
         final TransferStartedNotices notices;
         final VendorOrderLedger ledger;
 
-        App(AppProperties.FutTransferAutoDispatch auto, boolean signInOnFile) {
+        App(AppProperties.FutTransferAutoDispatch auto, boolean signIn) {
+            signInOnFile = new java.util.concurrent.atomic.AtomicBoolean(signIn);
             props = VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(1500), auto);
             NamedParameterJdbcTemplate named = new NamedParameterJdbcTemplate(ds);
             CredentialVaultService vault = mock(CredentialVaultService.class);
-            when(vault.status(anyLong())).thenReturn(new CredentialDtos.VaultStatus(signInOnFile, false, null, 0));
+            when(vault.status(anyLong())).thenAnswer(inv -> new CredentialDtos.VaultStatus(signInOnFile.get(), false,
+                    null, 0));
             when(vault.reveal(anyLong(), any())).thenReturn(VendorTestSupport.signIn());
             VendorControl control = VendorTestSupport.running();
             ledger = new VendorOrderLedger(named);
@@ -186,6 +190,13 @@ class AutoDispatchPostgresTest {
 
         void paid(String ref) {
             queue.paid(orderFor(ref));
+        }
+
+        /** The customer enters their sign-in, as OrderService.submitCredentials leaves it. */
+        void signInArrives(String ref) {
+            signInOnFile.set(true);
+            jdbc.update("update orders set status = 'READY_FOR_DELIVERY' where public_ref = ?", ref);
+            queue.signInArrived(orderFor(ref));
         }
 
         List<String> alertCodes() {
@@ -271,18 +282,65 @@ class AutoDispatchPostgresTest {
     }
 
     @Test
-    @DisplayName("no sign-in on file: left for Approve with the reason, staff told, the vault never read")
+    @DisplayName("paid without a sign-in: waits for it with the reason, nothing sent, no staff alert (the customer acts)")
     void missingSignInWaits() {
         App app = new App(ON, false);
         long id = paidOrder("GFS-26-AUTO0004", "0.5");
+        jdbc.update("update orders set status = 'CREDENTIALS_PENDING' where id = ?", id);
         app.paid("GFS-26-AUTO0004");
 
         assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.LEFT_FOR_APPROVE);
 
         assertThat(vendor.calls("/orderAPI")).isZero();
         assertThat(queued(id).get("reason_code")).isEqualTo("NO_SIGN_IN");
-        assertThat((String) queued(id).get("reason")).contains("sign-in is not on file yet");
-        assertThat(app.alertCodes()).containsExactly("NO_SIGN_IN");
+        assertThat((String) queued(id).get("reason")).contains("sent automatically once they enter it");
+        assertThat(app.alertCodes()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the sign-in arrives after payment: queued again and sent once, \"Sent automatically\"")
+    void sentWhenSignInArrives() {
+        App app = new App(ON, false);
+        long id = paidOrder("GFS-26-AUTO0009", "0.5");
+        jdbc.update("update orders set status = 'CREDENTIALS_PENDING' where id = ?", id);
+        app.paid("GFS-26-AUTO0009");
+        app.worker.process(id);
+        assertThat(queued(id).get("state")).isEqualTo("LEFT_FOR_APPROVE");
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+
+        app.signInArrives("GFS-26-AUTO0009");
+        assertThat(queued(id).get("state")).isEqualTo("QUEUED");
+        assertThat(queued(id).get("attempts")).isEqualTo(0);
+        app.worker.runDue();
+        // A second arrival changes nothing once sent (the order service would refuse it anyway).
+        app.queue.signInArrived(orderFor("GFS-26-AUTO0009"));
+        app.worker.runDue();
+
+        assertThat(vendor.calls("/orderAPI")).isEqualTo(1);
+        assertThat(status(id)).isEqualTo("IN_PROGRESS");
+        assertThat(queued(id).get("state")).isEqualTo("SENT");
+        assertThat(history(id)).containsExactly("AUTO_DISPATCH automatic REFUSED NO_SIGN_IN",
+                "AUTO_DISPATCH automatic DONE");
+    }
+
+    @Test
+    @DisplayName("sign-in arrives, but automatic sending is off, or the order was left for another reason: not queued")
+    void signInArrivesOnlyRequeuesWhatItFixes() {
+        App off = new App(AppProperties.FutTransferAutoDispatch.OFF, false);
+        long a = paidOrder("GFS-26-AUTO0010", "0.5");
+        jdbc.update("update orders set status = 'CREDENTIALS_PENDING' where id = ?", a);
+        off.signInArrives("GFS-26-AUTO0010");
+        assertThat(jdbc.queryForObject("select count(*) from auto_dispatch where order_id = ?", Long.class, a)).isZero();
+
+        // Left for the coin limit: a sign-in does not change that.
+        App limited = new App(new AppProperties.FutTransferAutoDispatch(true, 400L, Duration.ofSeconds(15)), true);
+        long b = paidOrder("GFS-26-AUTO0011", "0.5");
+        limited.paid("GFS-26-AUTO0011");
+        limited.worker.process(b);
+        limited.signInArrives("GFS-26-AUTO0011");
+        assertThat(queued(b).get("state")).isEqualTo("LEFT_FOR_APPROVE");
+        assertThat(queued(b).get("reason_code")).isEqualTo("OVER_LIMIT");
+        assertThat(vendor.calls("/orderAPI")).isZero();
     }
 
     @Test

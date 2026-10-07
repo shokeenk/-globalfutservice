@@ -652,8 +652,21 @@ public class OrderService {
             return order;
         }
 
-        return transition(order, OrderStatus.READY_FOR_DELIVERY, Actor.CUSTOMER, actorId,
+        boolean wasWaitingForIt = order.getStatus() == OrderStatus.CREDENTIALS_PENDING;
+        OrderEntity ready = transition(order, OrderStatus.READY_FOR_DELIVERY, Actor.CUSTOMER, actorId,
                 order.getGuestEmail(), "Sign-in details received");
+
+        /*
+         * Paid, and waiting only for this: sent to FUT Transfer without an admin when
+         * GFS_FUTTRANSFER_AUTO_DISPATCH is on, queued in this transaction and sent after it
+         * commits -- exactly as an order paid with its sign-in already on file. Not for an
+         * order coming off hold: staff may have put it there on purpose, and a customer
+         * re-entering details does not decide that for them.
+         */
+        if (wasWaitingForIt) {
+            autoDispatch.signInArrived(ready);
+        }
+        return ready;
     }
 
     // ------------------------------------------------------------------ lookup

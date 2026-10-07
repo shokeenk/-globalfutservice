@@ -65,6 +65,15 @@ describe('how the order reached the partner', () => {
     expect(screen.queryByTestId('who-sent')).toBeNull()
   })
 
+  it("waiting only for the customer's sign-in: said calmly -- it goes by itself once the sign-in arrives", () => {
+    show(section(null, [entry({ outcome: 'REFUSED', code: 'NO_SIGN_IN',
+      detail: "Paid, waiting for the customer's EA sign-in. It will be sent automatically once they enter it." })]))
+    const note = screen.getByTestId('not-sent-automatically')
+    expect(note).toHaveTextContent('Waiting for the customer’s sign-in')
+    expect(note).toHaveTextContent('It will be sent automatically once they enter it.')
+    expect(note).not.toHaveTextContent('Not sent automatically')
+  })
+
   it('left by the queue, then sent by an admin: "Sent by" them, and the old reason is not shown any more', () => {
     const s = section(sentOrder, [
       entry({ outcome: 'REFUSED', code: 'NO_SIGN_IN', detail: 'No sign-in yet.' }),

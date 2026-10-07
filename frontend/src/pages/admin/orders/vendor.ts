@@ -60,8 +60,23 @@ export function whoSent(section: VendorSection): string | null {
  * the reason staff were alerted with. Null when it was sent, or never left.
  */
 export function notSentAutomatically(section: VendorSection): string | null {
+  return automaticNote(section)?.text ?? null
+}
+
+/**
+ * The automatic queue's note on this order, while nothing has been sent since: why it left it
+ * for Approve -- or, when it is only waiting for the customer's sign-in, that it will be sent
+ * by itself once that arrives, which needs nobody on our side.
+ */
+export function automaticNote(section: VendorSection): { title: string; text: string; waiting: boolean } | null {
   const last = [...section.actions].reverse().find((e) => e.action === 'APPROVE' || e.action === 'AUTO_DISPATCH')
-  return last && last.action === 'AUTO_DISPATCH' && last.outcome === 'REFUSED' ? last.detail ?? last.code ?? null : null
+  if (!last || last.action !== 'AUTO_DISPATCH' || last.outcome !== 'REFUSED') return null
+  const waiting = last.code === 'NO_SIGN_IN'
+  return {
+    title: waiting ? 'Waiting for the customer’s sign-in' : 'Not sent automatically',
+    text: last.detail ?? last.code ?? '',
+    waiting,
+  }
 }
 
 /** How an order is placed at the partner. */

@@ -143,8 +143,10 @@ public class AutoDispatchWorker {
             return Outcome.NOT_QUEUED;
         }
         if (order.getStatus() == OrderStatus.CREDENTIALS_PENDING || !vault.status(orderId).present()) {
-            return leave(order, "NO_SIGN_IN", "Paid, but the customer's EA sign-in is not on file yet, so it was not "
-                    + "sent automatically. Approve it once they have entered it.", true);
+            // Nobody on our side has anything to do: the customer has been asked for it, and the
+            // order is queued again, and sent, the moment it arrives.
+            return leave(order, "NO_SIGN_IN", "Paid, waiting for the customer's EA sign-in. It will be sent "
+                    + "automatically once they enter it.", false);
         }
         if (order.getStatus() != OrderStatus.READY_FOR_DELIVERY) {
             return leave(order, "NOT_READY", "The order is " + order.getStatus().name() + ", not waiting to be "
