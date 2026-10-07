@@ -311,6 +311,8 @@ gfs:
     refund-fee-bps: 500
     guarantee-cash-bps: 5000     # 50% cash, or...
     guarantee-credit-bps: 10000  # ...100% as store credit. The gap is deliberate.
+    # EA backup codes a coin order's sign-in must include (1-5; FUT Transfer takes up to 5).
+    backup-codes-required: ${GFS_BACKUP_CODES_REQUIRED:3}
 
   razorpay:
     enabled: ${GFS_RAZORPAY_ENABLED:false}
