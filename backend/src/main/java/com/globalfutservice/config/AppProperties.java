@@ -504,7 +504,17 @@ public record AppProperties(
             @DefaultValue("5") int invoicesPerOrder,
             @DefaultValue("24h") Duration invoicesPerOrderWindow,
             @DefaultValue("10") int invoicesPerAccount,
-            @DefaultValue("1h") Duration invoicesPerAccountWindow) {
+            @DefaultValue("1h") Duration invoicesPerAccountWindow,
+            /**
+             * How often the reconciliation job asks Payop about invoices that could still have
+             * been paid. It exists so a lost or refused IPN cannot leave an order unpaid.
+             */
+            @DefaultValue("PT5M") Duration reconcileEvery,
+            /**
+             * How far back it looks. An invoice is payable for 24 hours; the extra two cover a
+             * payment in its last minutes and a job that was briefly not running.
+             */
+            @DefaultValue("26h") Duration reconcileWindow) {
 
         /** All four credentials are present. */
         public boolean configured() {
@@ -526,7 +536,8 @@ public record AppProperties(
                     + ", jwtExpiresAt=" + jwtExpiresAt + ", methodsCache=" + methodsCache
                     + ", invoiceLifetime=" + invoiceLifetime
                     + ", invoicesPerOrder=" + invoicesPerOrder + "/" + invoicesPerOrderWindow
-                    + ", invoicesPerAccount=" + invoicesPerAccount + "/" + invoicesPerAccountWindow + "]";
+                    + ", invoicesPerAccount=" + invoicesPerAccount + "/" + invoicesPerAccountWindow
+                    + ", reconcileEvery=" + reconcileEvery + ", reconcileWindow=" + reconcileWindow + "]";
         }
     }
 

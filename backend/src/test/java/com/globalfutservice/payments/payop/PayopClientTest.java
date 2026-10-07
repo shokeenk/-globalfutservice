@@ -98,7 +98,8 @@ class PayopClientTest {
         AppProperties props = mock(AppProperties.class);
         when(props.payop()).thenReturn(new AppProperties.Payop(true, apiUrl, "https://checkout.payop.com",
                 "application-pub-1", SECRET, JWT, "606", null, List.of(), List.of(), Duration.ofHours(1),
-                Duration.ofHours(24), Duration.ofSeconds(3), 5, Duration.ofHours(24), 10, Duration.ofHours(1)));
+                Duration.ofHours(24), Duration.ofSeconds(3), 5, Duration.ofHours(24), 10, Duration.ofHours(1),
+                Duration.ofMinutes(5), Duration.ofHours(26)));
         return new PayopClient(props, tokenWatch);
     }
 

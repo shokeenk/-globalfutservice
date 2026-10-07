@@ -13,12 +13,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.domain.payments.ClaimStatus;
 import com.globalfutservice.domain.payments.PaymentStatus;
 import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.notify.PaymentAlert;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.payments.ManualPaymentClaimRepository;
 import com.globalfutservice.payments.PaymentEntity;
 import com.globalfutservice.payments.PaymentRepository;
 import com.globalfutservice.payments.WebhookLedger;
@@ -55,7 +57,7 @@ public class PayopCallbackService {
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9-]{8,64}");
 
     /** What became of a callback or a check. */
-    public enum Outcome { PAID, ALREADY_APPLIED, DUPLICATE, REVIEW, FAILED, PENDING, IGNORED }
+    public enum Outcome { PAID, ALREADY_APPLIED, DUPLICATE, REVIEW, FAILED, PENDING, IGNORED, UNAVAILABLE }
 
     /** The parts of an IPN we use; the rest, payer details included, is never kept. */
     public record Ipn(String invoiceId, String txid, int state, int invoiceStatus, String orderId, String attemptId) {
@@ -66,6 +68,7 @@ public class PayopCallbackService {
     private final OrderRepository orders;
     private final OrderService orderService;
     private final PaymentRepository payments;
+    private final ManualPaymentClaimRepository claims;
     private final WebhookLedger ledger;
     private final NotificationService notifications;
     private final AppProperties props;
@@ -74,7 +77,8 @@ public class PayopCallbackService {
     private final Clock clock;
 
     public PayopCallbackService(PayopInvoiceRepository invoices, PayopClient client, OrderRepository orders,
-                                OrderService orderService, PaymentRepository payments, WebhookLedger ledger,
+                                OrderService orderService, PaymentRepository payments,
+                                ManualPaymentClaimRepository claims, WebhookLedger ledger,
                                 NotificationService notifications, AppProperties props, ObjectMapper mapper,
                                 PlatformTransactionManager transactions, Clock clock) {
         this.invoices = invoices;
@@ -82,6 +86,7 @@ public class PayopCallbackService {
         this.orders = orders;
         this.orderService = orderService;
         this.payments = payments;
+        this.claims = claims;
         this.ledger = ledger;
         this.notifications = notifications;
         this.props = props;
@@ -217,6 +222,19 @@ public class PayopCallbackService {
     }
 
     /**
+     * Payop says the invoice is paid but names no transaction, so there is nothing to confirm
+     * the amount, currency and order with. Never paid on the invoice status alone: a person
+     * checks it in Payop's dashboard and accepts it.
+     */
+    public Outcome reviewPaidWithoutTransaction(Long attemptId) {
+        PayopInvoiceEntity a = invoices.findById(attemptId).orElseThrow();
+        return review(a, null, "PAID_NO_TRANSACTION", "Payop reports invoice " + a.getInvoiceId() + " as paid but "
+                + "did not name its transaction, so the payment could not be checked against " + a.getAmountSent()
+                + " " + a.getCurrency() + ". The order was not marked paid. Check the payment in Payop's dashboard, "
+                + "then accept it in the admin console if it is right.");
+    }
+
+    /**
      * An admin accepting a payment in review, having checked it in Payop's dashboard: for
      * when Payop's API could not confirm it (no invoice amount in its answer, say). Applied
      * exactly like a confirmed one, so it is still applied at most once, and an order already
@@ -236,7 +254,8 @@ public class PayopCallbackService {
      */
     Outcome apply(Long attemptId, String txid, Long acceptedBy) {
         return tx.execute(status -> {
-            PayopInvoiceEntity a = invoices.findById(attemptId).orElseThrow();
+            // Locked: an IPN and the reconciliation job confirming the same payment take turns.
+            PayopInvoiceEntity a = invoices.lockById(attemptId).orElseThrow();
             if (a.getStatus() == PayopInvoiceEntity.Status.PAID) {
                 return Outcome.ALREADY_APPLIED;
             }
@@ -245,6 +264,31 @@ public class PayopCallbackService {
             }
             OrderEntity order = orders.findById(a.getOrderId()).orElseThrow();
             if (order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+                if (paidOrLater(order.getStatus()) && !paidOtherwise(order.getId(), txid)) {
+                    /*
+                     * Moved on by hand, with no payment recorded: most likely staff moved it
+                     * because this very payment's IPN never got through. Not a duplicate to
+                     * refund on a guess, and not recorded on one either -- the customer may
+                     * have paid some way nothing here records. A person says which; accepting
+                     * it records the payment against the order as it stands.
+                     */
+                    if (acceptedBy != null) {
+                        record(a, order, txid);
+                        log.info("Payop payment for invoice {} recorded against order {}, moved on by hand before it "
+                                + "was confirmed", a.getInvoiceId(), order.getPublicRef());
+                        return Outcome.PAID;
+                    }
+                    a.review(txid, "ORDER_MOVED_BY_HAND", clock.instant());
+                    invoices.save(a);
+                    alert(order.getPublicRef(), "Payop payment for an order moved on by hand",
+                            "Payop confirms a payment of " + a.getAmountSent() + " " + a.getCurrency() + " (invoice "
+                                    + a.getInvoiceId() + ", transaction " + txid + ") for an order that was moved to "
+                                    + order.getStatus().name() + " by hand, with no payment recorded. If this is the "
+                                    + "payment the order was moved on for, accept it in Payop payments to record it. "
+                                    + "If the customer also paid another way, refund it in Payop's dashboard.",
+                            "ORDER_MOVED_BY_HAND");
+                    return Outcome.REVIEW;
+                }
                 if (paidOrLater(order.getStatus())) {
                     a.duplicate(txid, "DUPLICATE_PAYMENT", clock.instant());
                     invoices.save(a);
@@ -266,19 +310,36 @@ public class PayopCallbackService {
                         "PAID_CLOSED_ORDER");
                 return Outcome.REVIEW;
             }
-            PaymentEntity payment = new PaymentEntity(order.getId(), PROVIDER, a.getInvoiceId(), a.getTotalMinor(),
-                    a.getCurrency());
-            payment.setProviderPaymentId(txid);
-            payment.setMethod(a.getMethodName());
-            payment.setStatus(PaymentStatus.CAPTURED);
-            payments.save(payment);
-            a.paid(txid, clock.instant());
-            invoices.save(a);
-            order.recordPayopPayment(a.getId(), a.getTotalMinor(), feeSnapshot(a));
+            record(a, order, txid);
             orderService.markPaid(order, "Payop " + txid + (acceptedBy == null ? "" : ", accepted by staff"));
             log.info("Order {} paid through Payop: invoice {}", order.getPublicRef(), a.getInvoiceId());
             return Outcome.PAID;
         });
+    }
+
+    /** The payment, the invoice paid, and the fee on the order. Inside {@link #apply}'s transaction. */
+    private void record(PayopInvoiceEntity a, OrderEntity order, String txid) {
+        PaymentEntity payment = new PaymentEntity(order.getId(), PROVIDER, a.getInvoiceId(), a.getTotalMinor(),
+                a.getCurrency());
+        payment.setProviderPaymentId(txid);
+        payment.setMethod(a.getMethodName());
+        payment.setStatus(PaymentStatus.CAPTURED);
+        payments.save(payment);
+        a.paid(txid, clock.instant());
+        invoices.save(a);
+        order.recordPayopPayment(a.getId(), a.getTotalMinor(), feeSnapshot(a));
+    }
+
+    /**
+     * Whether the order is paid by something on record other than this transaction: a captured
+     * payment (card, or another Payop transaction) or a payment claim staff verified. Only then
+     * is a Payop payment for an order past AWAITING_PAYMENT a duplicate to refund.
+     */
+    private boolean paidOtherwise(Long orderId, String txid) {
+        boolean captured = payments.findByOrderId(orderId).stream()
+                .anyMatch(p -> p.getStatus() == PaymentStatus.CAPTURED && !txid.equals(p.getProviderPaymentId()));
+        return captured || claims.findFirstByOrderIdAndStatusOrderByReviewedAtDesc(orderId, ClaimStatus.VERIFIED)
+                .isPresent();
     }
 
     private Outcome failed(PayopInvoiceEntity a, String txid, PayopClient.Transaction t) {
@@ -287,7 +348,7 @@ public class PayopCallbackService {
                 : t.error() != null && t.error().toLowerCase(Locale.ROOT).contains("security reason") ? "REJECTED"
                 : "FAILED";
         return tx.execute(status -> {
-            PayopInvoiceEntity fresh = invoices.findById(a.getId()).orElseThrow();
+            PayopInvoiceEntity fresh = invoices.lockById(a.getId()).orElseThrow();
             switch (fresh.getStatus()) {
                 case PAID, DUPLICATE, REVIEW -> {
                     // A failed attempt after a settled one changes nothing about the money.
@@ -303,10 +364,17 @@ public class PayopCallbackService {
     }
 
     private Outcome review(PayopInvoiceEntity a, String txid, String code, String detail) {
-        tx.executeWithoutResult(status -> invoices.findById(a.getId()).ifPresent(fresh -> {
+        Boolean moved = tx.execute(status -> invoices.lockById(a.getId()).map(fresh -> {
+            if (fresh.getStatus() == PayopInvoiceEntity.Status.PAID) {
+                return false; // settled meanwhile, by the IPN or the job: nothing left to review
+            }
             fresh.review(txid, code, clock.instant());
             invoices.save(fresh);
-        }));
+            return true;
+        }).orElse(false));
+        if (!Boolean.TRUE.equals(moved)) {
+            return Outcome.ALREADY_APPLIED;
+        }
         String ref = orders.findById(a.getOrderId()).map(OrderEntity::getPublicRef).orElse(null);
         log.warn("Payop payment for invoice {} on order {} needs review: {}", a.getInvoiceId(), ref, code);
         alert(ref, "Payop payment needs checking", detail, code);
