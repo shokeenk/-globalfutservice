@@ -65,6 +65,8 @@ const fr: Dictionary = {
     close: 'Fermer',
     comingSoon: 'Bientôt disponible',
     pricesUnavailable: 'Les tarifs sont indisponibles',
+    emailRequired: 'Saisis ton adresse e-mail.',
+    emailInvalid: 'Saisis une adresse e-mail valide, comme toi@exemple.com.',
     notOnSale: 'Ce service n’a pas de tarifs pour le moment, il ne peut donc pas être commandé. Repasse un peu plus tard.',
   },
 
@@ -487,6 +489,7 @@ const fr: Dictionary = {
     reference: 'Référence de commande',
     email: 'E-mail',
     find: 'Trouver ma commande',
+    referenceRequired: 'Saisis la référence de ta commande.',
     emptyHint:
       'Ta référence figure dans l’e-mail de confirmation — elle ressemble à GFS-26 suivi de ' +
       'huit caractères.',
@@ -555,6 +558,7 @@ const fr: Dictionary = {
       'sera marquée terminée.',
     credSignInFirst: 'Connecte-toi pour les envoyer',
     credError: 'Envoi impossible. Vérifie les champs et réessaie.',
+    credAckRequired: 'Coche cette case pour continuer.',
     stuckTitle: 'Nous sommes bloqués',
     stuckBody:
       'En général cela signifie que le compte était connecté, que le marché des transferts ' +
@@ -863,7 +867,6 @@ const fr: Dictionary = {
     clickHere: 'Clique ici',
     backupCodePlaceholder: 'Chaque code fait 8 chiffres',
     eaEmailPlaceholder: 'EA Web/Companion App',
-    fixFieldsError: 'Vérifie les champs signalés.',
     errEaEmail: 'Saisis l’e-mail Origin (Web App) !',
     errEaPassword: 'Saisis le mot de passe Origin (Web App) !',
     errEaPasswordShort: 'Cela semble trop court : un mot de passe EA fait au moins 8 caractères.',

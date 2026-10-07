@@ -8,12 +8,13 @@ import { PlatformCard } from '../components/PlatformCard'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
   Alert, Badge, Button, ButtonLink, Checkbox, Field, FieldError, Input, Section, SelectTile,
-  Skeleton, Spinner, StepCard, revealField,
+  Skeleton, Spinner, StepCard, revealFirstError,
 } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { bpsToPercent, coinsLabel, coinsShort } from '../lib/format'
 import { useMoney } from '../lib/money'
+import { looksLikeEmail } from '../lib/validation'
 import { openCheckout, isStubGateway } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
 import type { CreateOrderResponse, QuoteLine, SignedQuote } from '../lib/types'
@@ -95,7 +96,6 @@ export default function Order() {
   // Set when Continue is pressed without a platform, so the error appears then and not
   // on arrival.
   const [platformTouched, setPlatformTouched] = useState(false)
-  const platformRef = useRef<HTMLDivElement>(null)
   const [variant, setVariant] = useState<string>(params.get('variant') ?? '')
   const [quantity, setQuantity] = useState(DEFAULT_QUANTITY)
   // Accepts ?coupon= so a code can be shared as a link rather than typed off a stream.
@@ -425,7 +425,7 @@ export default function Order() {
             </StepCard>
           ) : (
             <>
-              <div ref={platformRef}>
+              <div>
                 <StepCard step={1} title={t.order.stepPlatform(1)}>
                   <div
                     role="group"
@@ -617,7 +617,7 @@ export default function Order() {
           platformMissing={platformMissing}
           onPlatformMissing={() => {
             setPlatformTouched(true)
-            revealField(platformRef.current)
+            revealFirstError()
           }}
         />
       </div>
@@ -1167,10 +1167,11 @@ function CheckoutForm({
   const [eaEmail, setEaEmail] = useState('')
   const [eaPassword, setEaPassword] = useState('')
   const [backupCodes, setBackupCodes] = useState(['', '', ''])
-  const [credErrors, setCredErrors] = useState<Record<string, string>>({})
 
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [readyChecks, setReadyChecks] = useState(false)
+  // Pay has been pressed: from here on a missing answer is an error under its field.
+  const [touched, setTouched] = useState(false)
 
   /*
    * Every trading order needs a sign-in; coaching never does.
@@ -1184,36 +1185,35 @@ function CheckoutForm({
   const needsCredentials = !isCoaching
 
   const [submitting, setSubmitting] = useState(false)
+  // Only what the server said. A missing answer is shown under its own field instead.
   const [formError, setFormError] = useState<string | null>(null)
   const [placed, setPlaced] = useState<CreateOrderResponse | null>(null)
 
+  /*
+   * Everything this form requires, worked out from what is typed now -- so every missing
+   * answer shows at once, and each error goes the moment its field is put right.
+   *
+   * The sign-in is checked before the order is created, not after. An order created and
+   * then refused at the credential step leaves a real row in AWAITING_PAYMENT that the
+   * customer has to be talked out of paying for; checking first costs nothing and means a
+   * malformed backup code never becomes an order. The readiness checks are about the
+   * transfer market, which coaching never touches, so they are not asked of it.
+   */
+  const errors: Record<string, string> = {
+    ...(!email.trim() ? { email: t.common.emailRequired }
+      : !looksLikeEmail(email) ? { email: t.common.emailInvalid } : {}),
+    ...(needsCredentials ? validateEaSignIn(t, eaEmail, eaPassword, backupCodes) : {}),
+    ...(!isCoaching && !readyChecks ? { readyChecks: t.order.readyChecksError } : {}),
+    ...(!acceptedTerms ? { acceptedTerms: t.order.acceptTermsError } : {}),
+  }
+  const shown = touched ? errors : {}
+
   async function submit() {
     setFormError(null)
-    if (!acceptedTerms) {
-      setFormError(t.order.acceptTermsError)
+    setTouched(true)
+    if (Object.keys(errors).length > 0) {
+      revealFirstError()
       return
-    }
-    // The readiness checks are about the transfer market, which coaching never touches.
-    // Requiring them there would block the order on a confirmation that means nothing.
-    if (!isCoaching && !readyChecks) {
-      setFormError(t.order.readyChecksError)
-      return
-    }
-
-    /*
-     * Validated before the order is created, not after.
-     *
-     * An order created and then rejected at the credential step leaves a real row in
-     * AWAITING_PAYMENT that the customer has to be talked out of paying for. Checking
-     * first costs nothing and means a malformed backup code never becomes an order.
-     */
-    if (needsCredentials) {
-      const found = validateEaSignIn(t, eaEmail, eaPassword, backupCodes)
-      setCredErrors(found)
-      if (Object.keys(found).length > 0) {
-        setFormError(t.order.fixFieldsError)
-        return
-      }
     }
 
     setSubmitting(true)
@@ -1312,7 +1312,7 @@ function CheckoutForm({
     <div className="animate-rise space-y-5 border-t border-ink-400 pt-5">
       <h3 className="display text-[15px] text-chalk">{t.order.userInfoTitle}</h3>
 
-      <Field label={t.order.email} required hint={t.order.emailHint}>
+      <Field label={t.order.email} required hint={t.order.emailHint} error={shown.email}>
         {(props) => (
           <Input
             {...props}
@@ -1450,7 +1450,7 @@ function CheckoutForm({
           setEaPassword={setEaPassword}
           backupCodes={backupCodes}
           setBackupCodes={setBackupCodes}
-          errors={credErrors}
+          errors={shown}
         />
       )}
 
@@ -1478,7 +1478,7 @@ function CheckoutForm({
       {!isCoaching && (
         <div className="plate p-4">
           <p className="mb-3 text-[12.5px] font-semibold text-chalk">{t.order.beforeYouPay}</p>
-          <Checkbox checked={readyChecks} onChange={setReadyChecks}>
+          <Checkbox checked={readyChecks} onChange={setReadyChecks} error={shown.readyChecks}>
             {t.order.readyCheck}
           </Checkbox>
         </div>
@@ -1494,7 +1494,7 @@ function CheckoutForm({
         registered and would drop the reader on the 404 page at the exact moment they were
         trying to read a policy before agreeing to it.
       */}
-      <Checkbox checked={acceptedTerms} onChange={setAcceptedTerms}>
+      <Checkbox checked={acceptedTerms} onChange={setAcceptedTerms} error={shown.acceptedTerms}>
         {t.order.consentLead}{' '}
         <Link to="/terms" className="text-brand-400 hover:underline">{t.order.consentTerms}</Link>
         {', '}
@@ -1512,15 +1512,15 @@ function CheckoutForm({
           {t.order.back}
         </Button>
         {/*
-          Disabled until the box is ticked, as well as checked on submit. The server-side
-          `@AssertTrue` on `acceptedTerms` is the real gate and stays; this is so the
-          customer is not invited to press a button that will refuse them.
+          Never greyed out for a missing answer: pressing it is how the customer learns
+          what is missing, under each field. It used to stay disabled until the terms box
+          was ticked, with nothing on screen saying that was why. The server-side
+          `@AssertTrue` on `acceptedTerms` is the real gate and stays.
         */}
         <Button
           full
           size="lg"
           loading={submitting}
-          disabled={!acceptedTerms}
           onClick={() => void submit()}
         >
           {t.order.pay(quote.totalFormatted)}

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { CompletePayment, OrderExpired, PaymentSubmitted } from '../components/CompletePayment'
 import { CredentialForm } from '../components/CredentialForm'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Button, ButtonLink, Field, Input, Section, Skeleton } from '../components/ui'
+import { Alert, Badge, Button, ButtonLink, Field, Input, Section, Skeleton, revealFirstError } from '../components/ui'
 import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
@@ -13,6 +13,7 @@ import { DiscordMessageUs } from '../components/DiscordMessageUs'
 import { ticketLink } from '../lib/discordTicket'
 import { dateTime } from '../lib/format'
 import { useSeo } from '../lib/seo'
+import { looksLikeEmail } from '../lib/validation'
 import type { MyCoaching, Order, OrderSummary } from '../lib/types'
 import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
@@ -39,6 +40,8 @@ export default function Track() {
   const [email, setEmail] = useState(account?.email ?? '')
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
+  // Find has been pressed: from here on a missing answer is an error under its field.
+  const [lookupTouched, setLookupTouched] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   /*
@@ -153,15 +156,32 @@ export default function Track() {
     return row.sku.startsWith('BOOST_')
   })
 
+  /*
+   * Both answers are required, and said so under each field when Find is pressed without
+   * them -- the button used to stay greyed out instead. `noValidate` because the browser's
+   * own bubble for a malformed address is a second, differently worded way of saying the
+   * same thing.
+   */
+  const lookupErrors = {
+    reference: publicRef.trim() ? undefined : t.track.referenceRequired,
+    email: !email.trim() ? t.common.emailRequired : !looksLikeEmail(email) ? t.common.emailInvalid : undefined,
+  }
+
   const lookupForm = (
     <form
+      noValidate
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault()
+        setLookupTouched(true)
+        if (lookupErrors.reference || lookupErrors.email) {
+          revealFirstError()
+          return
+        }
         void lookup(publicRef, email)
       }}
     >
-      <Field label={t.track.reference} required>
+      <Field label={t.track.reference} required error={lookupTouched ? lookupErrors.reference : undefined}>
         {(props) => (
           <Input
             {...props}
@@ -173,7 +193,7 @@ export default function Track() {
           />
         )}
       </Field>
-      <Field label={t.track.email} required>
+      <Field label={t.track.email} required error={lookupTouched ? lookupErrors.email : undefined}>
         {(props) => (
           <Input
             {...props}
@@ -190,7 +210,7 @@ export default function Track() {
       </Field>
       {error && <Alert tone="warn">{error}</Alert>}
       {/* A real submit button inside a real form: Enter works from either field. */}
-      <Button type="submit" full loading={loading} disabled={!publicRef || !email}>
+      <Button type="submit" full loading={loading}>
         {t.track.find}
       </Button>
     </form>

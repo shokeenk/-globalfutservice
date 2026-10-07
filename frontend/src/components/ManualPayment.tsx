@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Field, Input } from './ui'
+import { Alert, Button, Field, FieldError, Input, revealFirstError } from './ui'
 import { useI18n, useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { ManualPaymentClaim, ManualPaymentMethod, ManualPaymentOption } from '../lib/types'
@@ -188,9 +188,12 @@ export function ManualPayment({
   async function submit() {
     setTouched(true)
     setAttempted(true)
-    // The guard is here as well as on the button because a form can also be submitted
-    // with the keyboard, and a disabled button does not stop that on its own.
-    if (referenceIsEmpty || !file || !active || submitting) return
+    // Both answers are shown missing at once, each under its own field.
+    if (referenceIsEmpty || !file) {
+      revealFirstError()
+      return
+    }
+    if (!active || submitting) return
 
     setSubmitting(true)
     setError(null)
@@ -369,11 +372,15 @@ export function ManualPayment({
 
           {error && <Alert tone="warn">{error}</Alert>}
 
+          {/*
+            Never greyed out for a missing answer. It used to stay disabled until a
+            reference was typed, so the screenshot error -- and the reference error, unless
+            the field had been visited -- could not be reached.
+          */}
           <Button
             full
             size="lg"
             loading={submitting}
-            disabled={referenceIsEmpty}
             onClick={() => void submit()}
           >
             {t.order.paySubmit}
@@ -514,7 +521,7 @@ function ProofPicker({
 
   return (
     <div className={`rounded-edge border border-dashed p-3 ${
-      missing && !file ? 'border-warn' : 'border-ink-400'}`}>
+      (missing && !file) || rejected ? 'border-brand-500' : 'border-ink-400'}`}>
       <label className="block text-[13px] font-medium text-chalk-muted" htmlFor="payment-proof">
         {t.order.payProofLabel}
         {required && <span className="ml-1 text-brand-400">*</span>}
@@ -526,7 +533,8 @@ function ProofPicker({
         id="payment-proof"
         type="file"
         required={required}
-        aria-invalid={missing && !file ? true : undefined}
+        aria-invalid={(missing && !file) || rejected ? true : undefined}
+        aria-describedby={(missing && !file) || rejected ? 'payment-proof-error' : undefined}
         accept={ACCEPTED.join(',')}
         onChange={(e) => choose(e.target.files?.[0] ?? null)}
         className="mt-2 block w-full text-[12.5px] text-chalk-muted
@@ -535,11 +543,9 @@ function ProofPicker({
                    file:text-chalk hover:file:bg-ink-600"
       />
 
-      {rejected && <p className="mt-2 text-[12px] leading-snug text-warn">{rejected}</p>}
+      {rejected && <FieldError id="payment-proof-error" className="mt-2">{rejected}</FieldError>}
       {missing && !file && !rejected && (
-        <p role="alert" className="mt-2 text-[12px] leading-snug text-warn">
-          {t.order.payProofRequired}
-        </p>
+        <FieldError id="payment-proof-error" className="mt-2">{t.order.payProofRequired}</FieldError>
       )}
 
       {preview && file && (

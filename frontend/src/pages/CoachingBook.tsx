@@ -7,6 +7,7 @@ import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
   Alert, Badge, Button, ButtonLink, Checkbox, Field, FieldError, Input, Section, Select, Spinner, Textarea,
+  revealFirstError,
 } from '../components/ui'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
@@ -201,7 +202,10 @@ export default function CoachingBook() {
 
   function goToSchedule() {
     setDetailsTouched(true)
-    if (handleMissing || platformMissing) return
+    if (handleMissing || platformMissing) {
+      revealFirstError()
+      return
+    }
     setError(null)
     setStep('schedule')
     window.scrollTo({ top: 0 })
@@ -232,7 +236,11 @@ export default function CoachingBook() {
 
   async function placeOrder() {
     setReviewTouched(true)
-    if (!acceptedTerms || !payChoice || !selected || !catalog || !account || placing) return
+    if (!acceptedTerms) {
+      revealFirstError()
+      return
+    }
+    if (!payChoice || !selected || !catalog || !account || placing) return
     setPlacing(true)
     setError(null)
     try {

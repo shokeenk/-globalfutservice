@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, Button, Checkbox, Field, Input, Textarea } from './ui'
+import { Alert, Button, Checkbox, Field, Input, Textarea, revealFirstError } from './ui'
+import { validateEaSignIn } from './EaSignInFields'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { Order } from '../lib/types'
@@ -59,23 +60,34 @@ export function CredentialForm({
   const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
+  // Only what the server said. A missing answer is shown under its own field instead.
   const [error, setError] = useState<string | null>(null)
+  // Send has been pressed: from here on a missing answer is an error under its field.
+  const [touched, setTouched] = useState(false)
 
-  const acknowledged = signedOut && marketUnlocked && itemsClear && acceptedTerms
   /*
-   * The same three-by-eight-digits the checkout asks for.
+   * The same checks, and the same messages, as the checkout's sign-in.
    *
-   * The two forms collect the same thing for the same order and disagreed: checkout
-   * refused anything but three codes of exactly eight digits, while this one took any
-   * number of boxes in any shape. A customer who filled this one in could hand the
-   * trader two codes and a typo, and nothing said so until the sign-in failed.
+   * The two forms collect the same thing for the same order and disagreed: this one only
+   * kept its button greyed out until everything was filled, and never said which field
+   * was holding it back. Both now run `validateEaSignIn` -- three codes of exactly eight
+   * digits, a password long enough for the fulfilment partner -- and say what is wrong
+   * under the field it is wrong in.
    */
-  const codesComplete = backupCodes.every((code) => /^\d{8}$/.test(code.trim()))
-  const ready = eaEmail.trim() !== '' && eaPassword !== '' && codesComplete && acknowledged
+  const signInErrors = validateEaSignIn(t, eaEmail, eaPassword, backupCodes)
+  const codesError = signInErrors.backup0 ?? signInErrors.backup1 ?? signInErrors.backup2
+  const unticked = (ticked: boolean) => (touched && !ticked ? t.track.credAckRequired : undefined)
+  const acknowledged = signedOut && marketUnlocked && itemsClear && acceptedTerms
+  const ready = Object.keys(signInErrors).length === 0 && acknowledged
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!ready || submitting) return
+    setTouched(true)
+    if (!ready) {
+      revealFirstError()
+      return
+    }
+    if (submitting) return
 
     setSubmitting(true)
     setError(null)
@@ -131,7 +143,8 @@ export function CredentialForm({
           <HowToFind anchor="credentials" />
         </div>
 
-        <Field label={t.track.credEmail} hint={t.track.credEmailHint} required>
+        <Field label={t.track.credEmail} hint={t.track.credEmailHint} required
+               error={touched ? signInErrors.eaEmail : undefined}>
           {(props) => (
             <Input
               {...props}
@@ -145,7 +158,8 @@ export function CredentialForm({
           )}
         </Field>
 
-        <Field label={t.track.credPassword} hint={t.track.credPasswordHint} required>
+        <Field label={t.track.credPassword} hint={t.track.credPasswordHint} required
+               error={touched ? signInErrors.eaPassword : undefined}>
           {(props) => (
             <div className="relative">
               <Input
@@ -185,7 +199,8 @@ export function CredentialForm({
         </Field>
 
         <div>
-          <Field label={t.track.credBackupCodes} hint={t.track.credBackupCodesHint}>
+          <Field label={t.track.credBackupCodes} hint={t.track.credBackupCodesHint} required
+                 error={touched ? codesError : undefined}>
             {(props) => (
               <div className="grid grid-cols-3 gap-2" role="group" aria-describedby={props['aria-describedby']}>
                 {backupCodes.map((code, index) => (
@@ -199,6 +214,7 @@ export function CredentialForm({
                       return next
                     })}
                     aria-label={t.track.credBackupCodeN(index + 1)}
+                    aria-invalid={touched && signInErrors[`backup${index}`] ? true : undefined}
                     placeholder={`${index + 1}`}
                     maxLength={32}
                     /*
@@ -212,6 +228,7 @@ export function CredentialForm({
                     spellCheck={false}
                     className="tnum h-11 w-full rounded-edge border border-ink-400 bg-paper px-3
                                text-center text-[13px] text-chalk placeholder:text-chalk-faint
+                               aria-[invalid=true]:border-brand-500
                                focus-visible:outline focus-visible:outline-2
                                focus-visible:outline-offset-1 focus-visible:outline-brand-400"
                   />
@@ -303,21 +320,22 @@ export function CredentialForm({
       </div>
 
       <div className="mt-6 space-y-3 rounded-edge bg-paper p-4">
-        <Checkbox checked={signedOut} onChange={setSignedOut}>
+        <Checkbox checked={signedOut} onChange={setSignedOut} error={unticked(signedOut)}>
           {t.track.credAckSignedOut}
         </Checkbox>
-        <Checkbox checked={marketUnlocked} onChange={setMarketUnlocked}>
+        <Checkbox checked={marketUnlocked} onChange={setMarketUnlocked} error={unticked(marketUnlocked)}>
           {t.track.credAckMarket}
         </Checkbox>
-        <Checkbox checked={itemsClear} onChange={setItemsClear}>
+        <Checkbox checked={itemsClear} onChange={setItemsClear} error={unticked(itemsClear)}>
           {t.track.credAckItems}
         </Checkbox>
-        <Checkbox checked={acceptedTerms} onChange={setAcceptedTerms}>
+        <Checkbox checked={acceptedTerms} onChange={setAcceptedTerms} error={unticked(acceptedTerms)}>
           {t.track.credAckTerms}
         </Checkbox>
       </div>
 
-      <Button type="submit" size="lg" className="mt-5 w-full" disabled={!ready} loading={submitting}>
+      {/* Never greyed out for a missing answer: pressing it says what is missing, and where. */}
+      <Button type="submit" size="lg" className="mt-5 w-full" loading={submitting}>
         {submitting ? t.track.credSubmitting : t.track.credSubmit}
       </Button>
     </form>

@@ -5,7 +5,7 @@ import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
 import { SiEa, SiEpicgames, SiSteam } from 'react-icons/si'
 import { RankBadge, hasBadge } from '../components/RankBadge'
-import { Alert, Badge, Button, FieldError, Input, Section, Spinner, revealField } from '../components/ui'
+import { Alert, Badge, Button, FieldError, Input, Section, Spinner, revealFirstError } from '../components/ui'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
@@ -205,7 +205,10 @@ export default function BoostingCheckout() {
 
   async function placeOrder() {
     setTouched(true)
-    if (blockedReason) return
+    if (blockedReason) {
+      revealFirstError()
+      return
+    }
     if (!quote || !account || !platform || placing) return
 
     setPlacing(true)
@@ -418,22 +421,8 @@ function DetailsStep({
 }) {
   const t = useT()
   const b = t.boostingCheckout
-  const platformRef = useRef<HTMLDivElement>(null)
-  const launcherRef = useRef<HTMLDivElement>(null)
   const platformError = touched && !platform
   const launcherError = touched && platform === 'PC' && !launcher
-
-  /*
-   * Continue is never greyed out for a missing answer. A disabled button explains
-   * nothing, and the reason used to sit beneath it in grey where it read as a footnote;
-   * now pressing it puts the same red error as any required field under the choice that
-   * is missing, and brings that choice into view.
-   */
-  function continuePressed() {
-    if (!platform) revealField(platformRef.current)
-    else if (platform === 'PC' && !launcher) revealField(launcherRef.current)
-    onContinue()
-  }
 
   /*
    * Each storefront's own mark. SiEa is Electronic Arts' corporate logo rather than the EA
@@ -452,7 +441,6 @@ function DetailsStep({
       <p className="mt-1 text-body-sm text-chalk-muted">{b.platformLead}</p>
 
       <div
-        ref={platformRef}
         role="group"
         aria-label={b.platformTitle}
         aria-describedby={platformError ? 'boost-platform-error' : undefined}
@@ -489,7 +477,6 @@ function DetailsStep({
           <h2 className="display text-[16px] text-chalk">{b.pcTitle}</h2>
           <p className="mt-1 text-body-sm text-chalk-muted">{b.pcLead}</p>
           <div
-            ref={launcherRef}
             role="group"
             aria-label={b.pcTitle}
             aria-describedby={launcherError ? 'boost-launcher-error' : undefined}
@@ -559,7 +546,12 @@ function DetailsStep({
       </div>
 
       <div className="mt-6">
-        <Button full size="lg" onClick={continuePressed} disabled={disabled}>
+        {/*
+          Never greyed out for a missing answer. A disabled button explains nothing, and the
+          reason used to sit beneath it in grey where it read as a footnote; pressing it now
+          puts the red required-field error under the choice that is missing.
+        */}
+        <Button full size="lg" onClick={onContinue} disabled={disabled}>
           {placing ? <Spinner size={18} /> : <>{b.continueToPayment} <span aria-hidden="true" className="ml-1.5">&rarr;</span></>}
         </Button>
         <div className="mt-3 rounded-edge border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">

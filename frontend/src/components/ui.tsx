@@ -403,9 +403,21 @@ export function LiveDot({ className = '' }: { className?: string }) {
  * A required answer that is missing, said the one way every form on the site says it:
  * red, small, under the thing it is about, and announced rather than only coloured.
  *
- * <p>A text field gets it through `Field`. A choice made by pressing cards -- the
- * platform, the launcher -- has no `Field` around it, so it uses this directly, and the
- * two cannot drift apart in colour or in what a screen reader hears.
+ * <p>The rules every order form follows, so a customer meets one behaviour throughout:
+ * <ul>
+ *   <li>A button is never greyed out for a missing answer. Pressing it is how the customer
+ *       finds out what is missing; a disabled button explains nothing.</li>
+ *   <li>Every missing answer is shown at once, each under its own field, here -- not as
+ *       one message at the bottom of the form.</li>
+ *   <li>Errors appear when Continue or Pay is pressed, not on arrival, and each clears as
+ *       soon as its field is put right.</li>
+ *   <li>The first one is brought into view: {@link revealFirstError}.</li>
+ * </ul>
+ *
+ * <p>A text field gets it through `Field`, a tick box through `Checkbox`. A choice made by
+ * pressing cards -- the platform, the launcher, a time -- has no `Field` around it, so it
+ * uses this directly, and none of them can drift apart in colour or in what a screen
+ * reader hears.
  */
 export function FieldError({
   id, children, className = '',
@@ -415,22 +427,28 @@ export function FieldError({
   className?: string
 }) {
   return (
-    <p id={id} role="alert" className={`text-[12px] text-brand-400 ${className}`}>
+    <p id={id} role="alert" data-field-error="" className={`text-[12px] text-brand-400 ${className}`}>
       {children}
     </p>
   )
 }
 
 /**
- * Brings a missing answer into view when Continue is pressed without it.
+ * Brings the first missing answer into view, after Continue or Pay found one.
  *
- * <p>The button is often a screen below the choice it is waiting for -- on a phone the
- * order summary sits under the whole configurator -- and an error the customer cannot
- * see reads as a button that does nothing.
+ * <p>The button is often a screen away from what it is waiting for -- on a phone the order
+ * summary sits under the whole configurator, and Pay sits under the sign-in fields -- and
+ * an error the customer cannot see reads as a button that does nothing.
+ *
+ * <p>Waits a tick so the errors the press just caused have rendered, then finds the first
+ * on the page. Nothing to pass in: whichever form called it, its errors are `FieldError`s.
  */
-export function revealField(element: HTMLElement | null) {
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-  element?.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+export function revealFirstError() {
+  window.setTimeout(() => {
+    const first = document.querySelector<HTMLElement>('[data-field-error]')
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    first?.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+  }, 0)
 }
 
 export function Field({
@@ -513,12 +531,13 @@ export function Checkbox({
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
           aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
           className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded border-ink-300 bg-ink-700
                      text-brand-500 focus:ring-brand-400 focus:ring-offset-ink"
         />
         <span className="text-[13px] leading-relaxed text-chalk-muted">{children}</span>
       </label>
-      {error && <FieldError className="ml-[30px] mt-1">{error}</FieldError>}
+      {error && <FieldError id={`${id}-error`} className="ml-[30px] mt-1">{error}</FieldError>}
     </div>
   )
 }
