@@ -434,20 +434,43 @@ export function FieldError({
 }
 
 /**
- * Brings the first missing answer into view, after Continue or Pay found one.
+ * The nudge an error gives when Continue or Pay is pressed without its answer: a short
+ * side-to-side shake, the gesture for "no". Played on every press, not only the first --
+ * pressing again with the same box still empty must look like something happened.
+ */
+const NUDGE: Keyframe[] = [
+  { transform: 'translateX(0)' },
+  { transform: 'translateX(-5px)' },
+  { transform: 'translateX(5px)' },
+  { transform: 'translateX(-3px)' },
+  { transform: 'translateX(0)' },
+]
+
+/**
+ * After Continue or Pay found a missing answer: brings the first error into view and nudges
+ * every error on the page.
  *
  * <p>The button is often a screen away from what it is waiting for -- on a phone the order
- * summary sits under the whole configurator, and Pay sits under the sign-in fields -- and
- * an error the customer cannot see reads as a button that does nothing.
+ * summary sits under the whole configurator, and Pay sits under the sign-in fields, the
+ * rewards panel and the tick boxes. Client testing found exactly that: one of three backup
+ * codes filled, Pay pressed, the red errors rendered out of sight above, and only a line by
+ * the button saying something was wrong. An error the customer cannot see reads as a button
+ * that does nothing.
  *
- * <p>Waits a tick so the errors the press just caused have rendered, then finds the first
- * on the page. Nothing to pass in: whichever form called it, its errors are `FieldError`s.
+ * <p>Waits a tick so the errors the press just caused have rendered, then finds them on the
+ * page. Nothing to pass in: whichever form called it, its errors are `FieldError`s. The
+ * nudge is skipped for anybody who has asked their system for reduced motion; the scroll
+ * is then instant rather than smooth.
  */
 export function revealFirstError() {
   window.setTimeout(() => {
-    const first = document.querySelector<HTMLElement>('[data-field-error]')
+    const errors = Array.from(document.querySelectorAll<HTMLElement>('[data-field-error]'))
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    first?.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+    errors[0]?.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+    if (reduce) return
+    for (const error of errors) {
+      error.animate?.(NUDGE, { duration: 380, easing: 'ease-out' })
+    }
   }, 0)
 }
 

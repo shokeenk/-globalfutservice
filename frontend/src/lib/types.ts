@@ -92,6 +92,8 @@ export interface Policy {
   onlinePaymentsEnabled: boolean
   /** Whether customer emails are on. The storefront only says it emailed when this is true. */
   customerEmailsEnabled: boolean
+  /** EA backup codes a coin order's sign-in must include (GFS_BACKUP_CODES_REQUIRED). */
+  backupCodesRequired?: number
 }
 
 export interface LoyaltyTierView {

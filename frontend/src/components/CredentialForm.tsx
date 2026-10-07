@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, Button, Checkbox, Field, Input, Textarea, revealFirstError } from './ui'
-import { validateEaSignIn } from './EaSignInFields'
+import { useBackupCodes, validateEaSignIn } from './EaSignInFields'
+import { BACKUP_CODE_LENGTH } from '../lib/signInRules'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { Order } from '../lib/types'
@@ -50,7 +51,7 @@ export function CredentialForm({
    * Still assembled into the same `backupCodes` array the API already takes, so the
    * wire format and the vault are untouched.
    */
-  const [backupCodes, setBackupCodes] = useState(['', '', ''])
+  const [backupCodes, setBackupCodes, clearBackupCodes] = useBackupCodes()
   const [platformHandle, setPlatformHandle] = useState('')
   const [note, setNote] = useState('')
 
@@ -75,7 +76,7 @@ export function CredentialForm({
    * under the field it is wrong in.
    */
   const signInErrors = validateEaSignIn(t, eaEmail, eaPassword, backupCodes)
-  const codesError = signInErrors.backup0 ?? signInErrors.backup1 ?? signInErrors.backup2
+  const codesError = backupCodes.map((_, index) => signInErrors[`backup${index}`]).find(Boolean)
   const unticked = (ticked: boolean) => (touched && !ticked ? t.track.credAckRequired : undefined)
   const acknowledged = signedOut && marketUnlocked && itemsClear && acceptedTerms
   const ready = Object.keys(signInErrors).length === 0 && acknowledged
@@ -112,7 +113,7 @@ export function CredentialForm({
        * kind of thing that survives a refactor and ends up in a devtools screenshot.
        */
       setEaPassword('')
-      setBackupCodes(['', '', ''])
+      clearBackupCodes()
       onSubmitted(order)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t.track.credError)
@@ -208,15 +209,14 @@ export function CredentialForm({
                     key={index}
                     id={index === 0 ? props.id : undefined}
                     value={code}
-                    onChange={(e) => setBackupCodes((prev) => {
-                      const next = [...prev]
-                      next[index] = e.target.value
-                      return next
-                    })}
+                    onChange={(e) => setBackupCodes(
+                      backupCodes.map((c, i) => (i === index ? e.target.value : c)),
+                    )}
                     aria-label={t.track.credBackupCodeN(index + 1)}
                     aria-invalid={touched && signInErrors[`backup${index}`] ? true : undefined}
                     placeholder={`${index + 1}`}
-                    maxLength={32}
+                    inputMode="numeric"
+                    maxLength={BACKUP_CODE_LENGTH}
                     /*
                       `off` plus `data-1p-ignore`: a password manager offering to save a
                       one-time backup code would store a value that is worthless by the

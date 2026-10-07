@@ -68,4 +68,14 @@ class CredentialValidationTest {
     void blankIsStillRequired() {
         assertThat(failedFields(withPassword(""))).contains("eaPassword");
     }
+
+    @Test
+    @DisplayName("the EA email is held to the storefront's shape: name@gmail is not an address")
+    void emailShape() {
+        for (String bad : new String[] {"name@gmail", "name", "na me@example.com"}) {
+            assertThat(failedFields(new CredentialDtos.SubmitCredentialsRequest(bad, "correct-horse",
+                    List.of("12345678"), null, null, true, true, true, true))).as(bad).contains("eaEmail");
+        }
+        assertThat(failedFields(withPassword("correct-horse"))).doesNotContain("eaEmail");
+    }
 }
