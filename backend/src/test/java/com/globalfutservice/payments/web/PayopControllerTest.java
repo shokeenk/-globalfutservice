@@ -89,6 +89,30 @@ class PayopControllerTest {
     }
 
     @Test
+    @DisplayName("from Payop through the storefront's nginx, as production sends it: accepted and handed on")
+    void fromPayopThroughTheStorefront() throws Exception {
+        // Render's router appended Payop's address; nginx appended the router's, a private one.
+        mvc.perform(ipn().with(from("10.230.0.5")).header("X-Forwarded-For", PAYOP + ", 10.204.3.17"))
+                .andExpect(status().isOk());
+        mvc.perform(ipn().with(from("10.230.0.5"))
+                        .header("X-Forwarded-For", PAYOP + ", 172.70.1.1, 10.204.3.17")
+                        .header("CF-Connecting-IP", PAYOP))
+                .andExpect(status().isOk());
+        verify(callbacks, org.mockito.Mockito.times(2)).handle(IPN);
+    }
+
+    @Test
+    @DisplayName("Payop's address forged behind the storefront: refused, the caller's real address kept for staff")
+    void forgedThroughTheStorefront() throws Exception {
+        mvc.perform(ipn().with(from("10.230.0.5"))
+                        .header("X-Forwarded-For", PAYOP + ", 198.51.100.7, 10.204.3.17")
+                        .header("CF-Connecting-IP", PAYOP))
+                .andExpect(status().isForbidden());
+        verify(callbacks, never()).handle(any());
+        verify(callbacks).recordRejected(IPN, "198.51.100.7");
+    }
+
+    @Test
     @DisplayName("Payop's address forged in the headers, sent straight to the host: refused, kept for staff")
     void forged() throws Exception {
         mvc.perform(ipn().with(from("10.204.3.17"))

@@ -17,12 +17,18 @@ import jakarta.servlet.http.HttpServletRequest;
  *
  * <p>Spring's forwarded-header support takes the <em>left-most</em> X-Forwarded-For entry,
  * which is whatever the caller put there: fine for display, useless as a security check.
- * This reads the request underneath Spring's wrapper and trusts the chain from the right:
+ * This reads the request underneath Spring's wrapper and trusts the chain from the right.
+ *
+ * <p>In production a request reaches the API through two hops of our own, both on private
+ * addresses: Render's router, then the storefront's nginx, which proxies {@code /api} over
+ * Render's private network and appends the router's address to X-Forwarded-For. So:
  *
  * <ol>
- *   <li>The connection itself comes from the hosting platform's proxy (a private address).
- *       That proxy appends the address it saw to X-Forwarded-For, so the right-most entry is
- *       the one value in the header the caller cannot choose.</li>
+ *   <li>The connection itself comes from one of our hops (a private address).</li>
+ *   <li>Reading X-Forwarded-For from the right, private entries are our own hops and are
+ *       skipped. The first public entry is the address that connected to Render's edge,
+ *       which Render appended: the one value in the header the caller cannot choose.
+ *       Anything further left was written by the caller and is never read.</li>
  *   <li>If that address is one of Cloudflare's, the request came through Cloudflare, which
  *       overwrites CF-Connecting-IP with the address that connected to it: that is the
  *       client.</li>
@@ -30,9 +36,14 @@ import jakarta.servlet.http.HttpServletRequest;
  *       client.</li>
  * </ol>
  *
+ * <p>This used to take the right-most entry as it stood. With nginx in the chain that entry
+ * is Render's router, a private address, so every real Payop IPN was judged to come from
+ * {@code 10.x} and refused -- the order stayed unpaid until staff stepped in.
+ *
  * <p>A connection from a public address with no proxy in front (local development) is its
- * own client. Anything that does not fit -- no header where one must be, a value that is not
- * an IP address -- yields nothing, and a caller checking an allowlist must then refuse.
+ * own client. Anything that does not fit -- no header where one must be, only private
+ * entries, a value that is not an IP address -- yields nothing, and a caller checking an
+ * allowlist must then refuse.
  */
 public final class TrustedClientAddress {
 
@@ -78,10 +89,18 @@ public final class TrustedClientAddress {
                 }
             }
         }
-        if (forwarded.isEmpty()) {
-            return Optional.empty();
+        // From the right: skip our own hops, stop at the first address Render's edge saw.
+        Optional<InetAddress> seenByProxy = Optional.empty();
+        for (int i = forwarded.size() - 1; i >= 0; i--) {
+            Optional<InetAddress> entry = ip(forwarded.get(i));
+            if (entry.isEmpty()) {
+                return Optional.empty(); // not an address: nothing to the left of it can be trusted
+            }
+            if (!isInternal(entry.get())) {
+                seenByProxy = entry;
+                break;
+            }
         }
-        Optional<InetAddress> seenByProxy = ip(forwarded.get(forwarded.size() - 1));
         if (seenByProxy.isEmpty()) {
             return Optional.empty();
         }

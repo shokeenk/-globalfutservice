@@ -46,6 +46,45 @@ class TrustedClientAddressTest {
         });
     }
 
+    /*
+     * Production: Payop -> [Cloudflare] -> Render's router -> the storefront's nginx -> the
+     * API. Render's router appends the address it saw; nginx appends the router's own, a
+     * private address. Taking the right-most entry as it stood read that private address, so
+     * every real IPN was refused.
+     */
+    private static final String STOREFRONT = "10.230.0.5";
+
+    @Test
+    @DisplayName("through the storefront's nginx: our private hops are skipped, the address Render saw is the client")
+    void throughNginx() {
+        assertThat(client(request(STOREFRONT, PAYOP + ", " + RENDER_PROXY, null))).contains(PAYOP);
+    }
+
+    @Test
+    @DisplayName("through Cloudflare and the storefront's nginx: Cloudflare's client, past both private hops")
+    void throughCloudflareAndNginx() {
+        MockHttpServletRequest r = request(STOREFRONT, "6.6.6.6, " + PAYOP + ", " + CLOUDFLARE_EDGE + ", " + RENDER_PROXY,
+                PAYOP);
+        assertThat(ADDRESSES.resolve(r)).hasValueSatisfying(resolved -> {
+            assertThat(resolved.client().getHostAddress()).isEqualTo(PAYOP);
+            assertThat(resolved.viaCloudflare()).isTrue();
+        });
+    }
+
+    @Test
+    @DisplayName("forged behind nginx: what the caller wrote is never reached, the address Render saw wins")
+    void forgedBehindNginx() {
+        MockHttpServletRequest r = request(STOREFRONT, PAYOP + ", 198.51.100.7, " + RENDER_PROXY, PAYOP);
+        assertThat(client(r)).contains("198.51.100.7");
+    }
+
+    @Test
+    @DisplayName("only private addresses in the chain, or a non-address on the way: nothing, so refused")
+    void onlyPrivate() {
+        assertThat(client(request(STOREFRONT, "10.1.1.1, " + RENDER_PROXY, null))).isEmpty();
+        assertThat(client(request(STOREFRONT, PAYOP + ", payop.example, " + RENDER_PROXY, null))).isEmpty();
+    }
+
     @Test
     @DisplayName("straight to the host with forged headers: the address the host's proxy saw wins")
     void forgedDirect() {
