@@ -30,6 +30,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -315,6 +317,24 @@ class VendorDispatchPostgresTest {
         assertThat(instance().approveAndDispatch(order(id, "GFS-26-RETRY001", "1.0"), 1L).result())
                 .isEqualTo(Result.ALREADY_SUBMITTED);
         assertThat(vendor.calls("/orderAPI")).isEqualTo(2);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(Platform.class)
+    @DisplayName("the partner is sent the platform the customer picked: PC, PS or XB, never another")
+    void platformAsPicked(Platform picked) {
+        String ref = "GFS-26-PLAT-" + picked.name();
+        long id = insertOrder(ref, "TRADING_SERVICE", "READY_FOR_DELIVERY", "0.5");
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.ORDER_ACCEPTED));
+        OrderEntity order = order(id, ref, "0.5");
+        when(order.getPlatform()).thenReturn(picked);
+
+        instance().approveAndDispatch(order, 1L);
+
+        String expected = Map.of(Platform.PC, "PC", Platform.PLAYSTATION, "PS", Platform.XBOX, "XB").get(picked);
+        assertThat(vendor.requests()).filteredOn(r -> "/orderAPI".equals(r.path()))
+                .singleElement()
+                .satisfies(r -> assertThat(r.body().get("platform").asText()).isEqualTo(expected));
     }
 
     @Test

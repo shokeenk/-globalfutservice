@@ -41,6 +41,20 @@ class BoostingPlatformTest {
     }
 
     @Test
+    @DisplayName("a platform that is not one is refused too, never replaced by a default")
+    void unknownPlatformRefused() {
+        OrderEntity order = boostingOrder();
+
+        for (String bogus : new String[] {"", "  ", "NINTENDO", "playstation"}) {
+            assertThatThrownBy(() -> OrderService.applyBoostingDetails(order, request(bogus, null)))
+                    .as(bogus)
+                    .isInstanceOf(ApiExceptions.BadRequestException.class)
+                    .hasMessageContaining("platform");
+        }
+        assertThat(order.getPlatform()).isNull();
+    }
+
+    @Test
     @DisplayName("PC without a launcher is refused: the booster would not know how to sign in")
     void launcherIsRequiredOnPc() {
         OrderEntity order = boostingOrder();

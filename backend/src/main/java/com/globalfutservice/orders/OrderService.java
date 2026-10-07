@@ -123,6 +123,12 @@ public class OrderService {
                                                 AccountEntity account) {
         Quote quote = quoteService.verifyOrThrow(request.quote(), account);
 
+        // A coin order's platform is the one its quote was priced for, which the customer
+        // chose. One without is refused, never given a platform here.
+        if (quote.sku().isCoinTransfer() && quote.platform() == null) {
+            throw new ApiExceptions.BadRequestException("platform_required", "Choose your platform.");
+        }
+
         // A quote can become at most one order. Checked here for a clean error message,
         // and enforced by a unique index for the case where two requests race.
         if (orders.existsByQuoteId(quote.quoteId())) {
@@ -751,6 +757,21 @@ public class OrderService {
     }
 
     /**
+     * The platform the customer chose, exactly as sent. Missing or not a platform at all is
+     * refused with the step's own message; a platform is never filled in for them.
+     */
+    private static Platform chosenPlatform(String raw, String code, String message) {
+        if (raw == null || raw.isBlank()) {
+            throw new ApiExceptions.BadRequestException(code, message);
+        }
+        try {
+            return Platform.valueOf(raw.trim());
+        } catch (IllegalArgumentException unknown) {
+            throw new ApiExceptions.BadRequestException(code, message);
+        }
+    }
+
+    /**
      * Refuses a coaching order that is missing what the coach needs, and stores the rest.
      *
      * <p>Checked here rather than by annotation because the same request places coin and
@@ -762,12 +783,10 @@ public class OrderService {
             throw new ApiExceptions.BadRequestException("coaching_handle_required",
                     "Enter your EA FC ID, PSN or Xbox ID so your coach can find you.");
         }
-        if (request.coachingPlatform() == null || request.coachingPlatform().isBlank()) {
-            throw new ApiExceptions.BadRequestException("coaching_platform_required",
-                    "Choose the platform you play on.");
-        }
+        Platform platform = chosenPlatform(request.coachingPlatform(), "coaching_platform_required",
+                "Choose the platform you play on.");
         order.setEaPlatformHandle(request.eaPlatformHandle().trim());
-        order.setCoachingPlatform(Platform.valueOf(request.coachingPlatform()));
+        order.setCoachingPlatform(platform);
         order.setCoachingRank(blankToNull(request.currentRank()));
         order.setCoachingFocus(blankToNull(request.improvementFocus()));
     }
@@ -789,11 +808,8 @@ public class OrderService {
      * and a database for a check that touches none of them.
      */
     static void applyBoostingDetails(OrderEntity order, OrderDtos.CreateOrderRequest request) {
-        if (request.boostPlatform() == null || request.boostPlatform().isBlank()) {
-            throw new ApiExceptions.BadRequestException("boost_platform_required",
-                    "Choose the platform this account plays on.");
-        }
-        Platform platform = Platform.valueOf(request.boostPlatform());
+        Platform platform = chosenPlatform(request.boostPlatform(), "boost_platform_required",
+                "Choose the platform this account plays on.");
         PcLauncher launcher = null;
         if (platform == Platform.PC) {
             if (request.pcLauncher() == null || request.pcLauncher().isBlank()) {
