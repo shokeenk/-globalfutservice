@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../motion/Reveal'
-import { Alert, Button, Checkbox, Field, Input, Section, Select, Textarea } from '../components/ui'
+import { Alert, Button, Checkbox, Field, Input, Section, Select, Textarea, revealFirstError } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { BUSINESS, EMAIL_HREF } from '../content/business'
 import { useSeo } from '../lib/seo'
+import { looksLikeEmail } from '../lib/validation'
 import { useAuth } from '../state/AuthContext'
 import type { SupportCategory } from '../lib/types'
 
@@ -34,8 +35,29 @@ export default function Support() {
   const [confirmed, setConfirmed] = useState(false)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
+  // Send has been pressed: from here on a missing answer is an error under its field.
+  const [touched, setTouched] = useState(false)
+
+  /*
+   * What the form requires, said under each field when Send is pressed without it -- the
+   * same way as every form in the order flow. The button used to stay greyed out until all
+   * four were given, without saying which one was holding it back.
+   */
+  const errors: Partial<Record<'email' | 'subject' | 'message' | 'confirmed', string>> = {
+    ...(!email.trim() ? { email: t.common.emailRequired }
+      : !looksLikeEmail(email) ? { email: t.common.emailInvalid } : {}),
+    ...(!subject.trim() ? { subject: t.support.subjectRequired } : {}),
+    ...(!message.trim() ? { message: t.support.messageRequired } : {}),
+    ...(!confirmed ? { confirmed: t.support.confirmRequired } : {}),
+  }
+  const shown = touched ? errors : {}
 
   async function submit() {
+    setTouched(true)
+    if (Object.keys(errors).length > 0) {
+      revealFirstError()
+      return
+    }
     setSending(true)
     setResult(null)
     try {
@@ -52,6 +74,8 @@ export default function Support() {
       setSubject('')
       setMessage('')
       setConfirmed(false)
+      // A fresh, empty form: nothing in it has been left out yet.
+      setTouched(false)
     } catch (e) {
       setResult({ tone: 'warn', text: e instanceof ApiError ? e.message : t.support.sendFailed })
     } finally {
@@ -75,13 +99,13 @@ export default function Support() {
           keyboard all depend on the element actually being a form — none of which a
           div gives you, however correct the click handler is.
         */}
-        <Reveal as="form" className="surface p-6 sm:p-7" onSubmit={(event: React.FormEvent) => {
+        <Reveal as="form" noValidate className="surface p-6 sm:p-7" onSubmit={(event: React.FormEvent) => {
           event.preventDefault()
           void submit()
         }}>
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.support.yourEmail} required>
+              <Field label={t.support.yourEmail} required error={shown.email}>
                 {(props) => (
                   <Input {...props} type="email" value={email} autoComplete="email"
                          onChange={(e) => setEmail(e.target.value)} />
@@ -106,7 +130,7 @@ export default function Support() {
                   </Select>
                 )}
               </Field>
-              <Field label={t.support.subject} required>
+              <Field label={t.support.subject} required error={shown.subject}>
                 {(props) => (
                   <Input {...props} value={subject} maxLength={120}
                          onChange={(e) => setSubject(e.target.value)} />
@@ -114,7 +138,7 @@ export default function Support() {
               </Field>
             </div>
 
-            <Field label={t.support.message} required>
+            <Field label={t.support.message} required error={shown.message}>
               {(props) => (
                 <Textarea {...props} rows={7} value={message} maxLength={4000}
                           onChange={(e) => setMessage(e.target.value)} />
@@ -126,19 +150,19 @@ export default function Support() {
               password into a free-text box if nothing asks them not to, and a
               support inbox is exactly where one should never end up.
             */}
-            <Checkbox checked={confirmed} onChange={setConfirmed}>
+            <Checkbox checked={confirmed} onChange={setConfirmed} error={shown.confirmed}>
               {t.support.noPassword}
               <span className="mt-1 block text-chalk-faint">{t.support.noPasswordNote}</span>
             </Checkbox>
 
             {result && <Alert tone={result.tone}>{result.text}</Alert>}
 
+            {/* Never greyed out for a missing answer: pressing it says what is missing, and where. */}
             <Button
               type="submit"
               full
               size="lg"
               loading={sending}
-              disabled={!email || !subject || !message || !confirmed}
             >
               {t.support.send}
             </Button>

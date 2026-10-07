@@ -718,6 +718,10 @@ const en = {
       'We will never ask for them here. If an order needs your sign-in, it is collected ' +
       'through the encrypted form on the order itself.',
     send: 'Send message',
+    // Under each required answer left empty when Send is pressed.
+    subjectRequired: 'Enter a subject.',
+    messageRequired: 'Write your message.',
+    confirmRequired: 'Tick this to send your message.',
     sendFailed: 'Could not send that.',
     category: 'What is it about?',
     categoryHint: 'Optional, but it gets your message to the right person.',
@@ -755,6 +759,7 @@ const en = {
     replyPlaceholder: 'Write your reply…',
     noPassword: 'Never include your password or backup codes. We will never ask for them here.',
     send: 'Send reply',
+    replyRequired: 'Write your reply before sending.',
     sent: 'Sent. We will answer here and by email.',
     sendFailed: 'Could not send that. Try again.',
     closedNote: 'This request is resolved. Writing again reopens it.',

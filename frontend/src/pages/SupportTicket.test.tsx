@@ -31,6 +31,15 @@ const THREAD: SupportThread = {
   ],
 }
 
+/** The one way a missing answer is said on the site: red, announced, under its field. */
+function expectFieldError(text: string) {
+  const error = screen.getByText(text)
+  expect(error).toHaveAttribute('role', 'alert')
+  expect(error).toHaveAttribute('data-field-error')
+  expect(error).toHaveClass('text-brand-400')
+  return error
+}
+
 const openTicket = (path: string) => render(
   <MemoryRouter initialEntries={[path]}>
     <Routes><Route path="/support/tickets/:ref" element={<SupportTicket />} /></Routes>
@@ -59,7 +68,7 @@ describe('a support request, as its customer sees it', () => {
     api.post.mockResolvedValue({ ...THREAD, status: 'OPEN',
       messages: [...THREAD.messages, { from: 'CUSTOMER', body: 'Got them, thanks!', at: '2026-09-26T11:00:00Z' }] })
     openTicket('/support/tickets/TKT-AB12CD34?key=k3y')
-    const box = await screen.findByLabelText('Your reply')
+    const box = await screen.findByLabelText(/Your reply/)
     expect(screen.getByText(/Never include your password or backup codes/)).toBeInTheDocument()
     fireEvent.change(box, { target: { value: 'Got them, thanks!' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
@@ -76,6 +85,29 @@ describe('a support request, as its customer sees it', () => {
     expect(screen.getByRole('link', { name: 'Send a new request' })).toHaveAttribute('href', '/support')
   })
 
+  it('Send is not greyed out for an empty reply: it says so in red under the box, and sends nothing', async () => {
+    api.get.mockResolvedValue(THREAD)
+    api.post.mockResolvedValue({ ...THREAD, status: 'OPEN',
+      messages: [...THREAD.messages, { from: 'CUSTOMER', body: 'Here it is.', at: '2026-09-26T11:00:00Z' }] })
+    openTicket('/support/tickets/TKT-AB12CD34?key=k3y')
+    const box = await screen.findByLabelText(/Your reply/)
+    const send = screen.getByRole('button', { name: 'Send reply' })
+    expect(send).toBeEnabled()
+
+    fireEvent.click(send)
+    const error = expectFieldError('Write your reply before sending.')
+    expect(box).toHaveAttribute('aria-describedby', error.id)
+    expect(api.post).not.toHaveBeenCalled()
+
+    // Typing clears it; sending empties the box without bringing the error back.
+    fireEvent.change(box, { target: { value: 'Here it is.' } })
+    expect(screen.queryByText('Write your reply before sending.')).toBeNull()
+    fireEvent.click(send)
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(box).toHaveValue(''))
+    expect(screen.queryByText('Write your reply before sending.')).toBeNull()
+  })
+
   it('tells the customer writing again reopens a resolved request', async () => {
     api.get.mockResolvedValue({ ...THREAD, status: 'CLOSED' })
     openTicket('/support/tickets/TKT-AB12CD34?key=k3y')
@@ -87,6 +119,29 @@ describe('the contact form', () => {
   beforeEach(() => {
     api.post.mockReset()
     account.current = null
+  })
+
+  it('Send is not greyed out; pressed empty, each required answer is asked for in red, and nothing is sent', async () => {
+    render(<MemoryRouter><Support /></MemoryRouter>)
+    const send = screen.getByRole('button', { name: 'Send message' })
+    expect(send).toBeEnabled()
+
+    fireEvent.click(send)
+
+    expectFieldError('Enter your email address.')
+    expectFieldError('Enter a subject.')
+    expectFieldError('Write your message.')
+    expectFieldError('Tick this to send your message.')
+    expect(send.closest('form')).toHaveAttribute('novalidate')
+    expect(api.post).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText(/Your email/), { target: { value: 'buyer@example' } })
+    expectFieldError('Enter a valid email address, like you@example.com.')
+    fireEvent.change(screen.getByLabelText(/Your email/), { target: { value: 'buyer@example.test' } })
+    fireEvent.change(screen.getByLabelText(/Subject/), { target: { value: 'Paid twice' } })
+    fireEvent.change(screen.getByLabelText(/What is going on/), { target: { value: 'Please check.' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(document.querySelector('[data-field-error]')).toBeNull()
   })
 
   it('sends the topic chosen, and none when none is chosen', async () => {

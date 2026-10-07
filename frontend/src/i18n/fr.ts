@@ -626,6 +626,9 @@ const fr: Dictionary = {
       'Nous ne te les demanderons jamais ici. Si une commande nécessite tes identifiants, ils ' +
       'sont recueillis via le formulaire chiffré de la commande elle-même.',
     send: 'Envoyer le message',
+    subjectRequired: 'Saisis un objet.',
+    messageRequired: 'Écris ton message.',
+    confirmRequired: 'Coche cette case pour envoyer ton message.',
     sendFailed: 'Envoi impossible.',
     category: 'De quoi s’agit-il ?',
     categoryHint: 'Facultatif, mais ton message arrive ainsi à la bonne personne.',
@@ -664,6 +667,7 @@ const fr: Dictionary = {
     replyPlaceholder: 'Écris ta réponse…',
     noPassword: 'N’inclus jamais ton mot de passe ni tes codes de secours. Nous ne te les demanderons jamais ici.',
     send: 'Envoyer la réponse',
+    replyRequired: 'Écris ta réponse avant de l’envoyer.',
     sent: 'Envoyé. Nous te répondrons ici et par e-mail.',
     sendFailed: 'Envoi impossible. Réessaie.',
     closedNote: 'Cette demande est résolue. Si tu écris à nouveau, elle sera rouverte.',
