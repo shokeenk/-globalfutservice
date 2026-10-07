@@ -132,6 +132,13 @@ public class OrderMapper {
                                                java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events) {
         boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
         OrderPaymentState.View payment = paymentState.of(order);
+        /*
+         * Live progress, from where the vendor poller writes it. These used to be read off the
+         * order's own supplier_amount_* columns, which nothing has written since vendor orders
+         * moved to their own table -- so the progress bar on the tracking page never showed.
+         */
+        VendorOrderLedger.Progress progress = order.getTransferStartedAt() == null || order.getId() == null ? null
+                : vendorOrders.progress(order.getId()).orElse(null);
         return new OrderDtos.OrderResponse(
                 order.getPublicRef(),
                 order.getStatus().name(),
@@ -152,8 +159,9 @@ public class OrderMapper {
                 order.getPointsRedeemed(),
                 order.getPointsEarned(),
                 order.getReferralCode(),
-                order.getSupplierAmountDelivered(),
-                order.getSupplierAmountOrdered(),
+                progress == null ? order.getSupplierAmountDelivered() : progress.deliveredK(),
+                progress == null ? order.getSupplierAmountOrdered() : Long.valueOf(progress.orderedK()),
+                order.getTransferStartedAt() != null,
                 customerActionFor(order),
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
@@ -203,7 +211,8 @@ public class OrderMapper {
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
                 transitions,
-                paymentState.of(order).state());
+                paymentState.of(order).state(),
+                order.getTransferStartedAt() != null);
     }
 
     /** What a line is called when it is the fee of the payment method the customer used. */

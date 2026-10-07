@@ -13,6 +13,14 @@ public interface Notifier {
 
     void orderDelivered(OrderNotification notification);
 
+    /**
+     * FUT Transfer has accepted a coin order: the transfer has started. Sent once per order,
+     * by TransferStartedNotices. Only the customer's email says anything; other channels
+     * stay quiet.
+     */
+    default void transferStarted(OrderNotification notification) {
+    }
+
     void credentialsNeeded(OrderNotification notification);
 
     /**

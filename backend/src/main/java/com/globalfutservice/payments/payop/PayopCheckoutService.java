@@ -86,7 +86,9 @@ public class PayopCheckoutService {
     }
 
     /** What a return page may show: statuses and the amount, nothing that moves anything. */
-    public record ReturnStatus(String payment, String order, long totalMinor, Currency currency, String methodName) {
+    /** {@code transferStarted}: FUT Transfer has the order, so the page offers "Track your order". */
+    public record ReturnStatus(String payment, String order, long totalMinor, Currency currency, String methodName,
+                               boolean transferStarted) {
     }
 
     private final PayopInvoiceRepository invoices;
@@ -323,7 +325,7 @@ public class PayopCheckoutService {
             case CREATING, OPEN, EXPIRED -> order.getStatus() == OrderStatus.AWAITING_PAYMENT ? "PENDING" : "CLOSED";
         };
         return new ReturnStatus(payment, order.getStatus().name(), a.getTotalMinor(), a.getCurrency(),
-                a.getMethodName());
+                a.getMethodName(), order.getTransferStartedAt() != null);
     }
 
     /* ------------------------------------------------------------- the rest --- */

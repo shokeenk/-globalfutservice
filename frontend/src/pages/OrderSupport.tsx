@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { SupportChat } from '../components/support/SupportChat'
 import { supportPath, useSupportCopy } from '../components/support/SupportCard'
-import { Alert, Section, Spinner } from '../components/ui'
+import { Alert, ButtonLink, Section, Spinner } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { useSeo } from '../lib/seo'
@@ -68,6 +68,11 @@ export default function OrderSupport() {
       <PageHeader eyebrow={s.eyebrow} title={copy.title} lead={copy.body} />
       <Section className="rhythm-section">
         <div className="mx-auto max-w-4xl space-y-6">
+          {context.mode === 'COINS' && summary.transferStarted && (
+            <ButtonLink to={`/track?ref=${encodeURIComponent(summary.reference)}`} size="md">
+              {t.track.trackYourOrder}
+            </ButtonLink>
+          )}
           <dl className="grid gap-px overflow-hidden rounded-panel bg-ink-400 sm:grid-cols-4" data-testid="support-summary">
             <Cell label={s.summaryReference} value={`#${summary.reference}`} />
             <Cell label={s.summaryService} value={summary.service} />

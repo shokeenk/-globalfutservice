@@ -589,6 +589,13 @@ const en = {
     // -- live fulfilment ----------------------------------------------------
     progressTitle: 'Coins delivered',
     progressOf: (done: string, total: string) => `${done} of ${total}`,
+    // A coin order FUT Transfer has: the button to its tracking page, and where the transfer is.
+    trackYourOrder: 'Track your order',
+    transferStarted: 'Your coin transfer has started',
+    transferDelivering: 'Your coins are being delivered',
+    transferDelivered: 'All your coins have been delivered',
+    progressCoins: (done: string, total: string) => `${done} of ${total} coins delivered`,
+    updatesAutomatically: 'This page updates by itself.',
     // Each of these is a stall the customer can usually clear in under a minute. The
     // supplier names the cause; these say what to do about it.
     action: {
@@ -836,7 +843,7 @@ const en = {
     notFoundBody: 'Open your order from the tracking page to see where it stands.',
     loadFailed: 'We could not check the payment just now. This page will try again.',
     summary: (total: string, method: string) => `${total} with ${method}`,
-    viewOrder: 'Track your order',
+    viewOrder: 'View your order',
   },
   order: {
     seoTitle: (season: string) => `Buy ${season} coins`,

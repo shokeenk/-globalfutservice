@@ -144,6 +144,8 @@ class AutoDispatchPostgresTest {
         final AutoDispatchQueue queue;
         final FulfilmentRelease release;
         final AutoDispatchWorker worker;
+        final TransferStartedNotices notices;
+        final VendorOrderLedger ledger;
 
         App(AppProperties.FutTransferAutoDispatch auto, boolean signInOnFile) {
             props = VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(1500), auto);
@@ -152,7 +154,7 @@ class AutoDispatchPostgresTest {
             when(vault.status(anyLong())).thenReturn(new CredentialDtos.VaultStatus(signInOnFile, false, null, 0));
             when(vault.reveal(anyLong(), any())).thenReturn(VendorTestSupport.signIn());
             VendorControl control = VendorTestSupport.running();
-            VendorOrderLedger ledger = new VendorOrderLedger(named);
+            ledger = new VendorOrderLedger(named);
             SupplierFulfilmentService supplier = new SupplierFulfilmentService(new FutTransferClient(props, mapper,
                     control, new VendorCallLog(named)).withoutRetryPauses(), control, vault, ledger, notifications,
                     props, mapper);
@@ -160,6 +162,10 @@ class AutoDispatchPostgresTest {
             // The order service's part in a release: find the order, move it on.
             OrderService orderService = mock(OrderService.class);
             when(orderService.requireAny(anyString())).thenAnswer(inv -> orderFor(inv.getArgument(0)));
+            when(orderService.notificationFor(any())).thenAnswer(inv -> new com.globalfutservice.notify.OrderNotification(
+                    ((OrderEntity) inv.getArgument(0)).getPublicRef(), "IN_PROGRESS", "Buy Coins", "₹1,000.00",
+                    "buyer@example.test", null, "PLAYER_AUCTION", "TRADING_SERVICE", "PlayStation", null, null, null,
+                    null));
             when(orderService.transition(any(), any(), any(), any(), any(), any())).thenAnswer(inv -> {
                 OrderEntity o = inv.getArgument(0);
                 OrderStatus to = inv.getArgument(1);
@@ -175,6 +181,7 @@ class AutoDispatchPostgresTest {
             release = new FulfilmentRelease(orderService, vault, supplier, history);
             worker = new AutoDispatchWorker(queue, release, supplier, control, ledger, history, vault, orders,
                     notifications, mock(SchedulerLock.class), props, mapper, Clock.systemUTC());
+            notices = new TransferStartedNotices(named, orders, orderService, notifications, mock(SchedulerLock.class));
         }
 
         void paid(String ref) {
@@ -335,6 +342,105 @@ class AutoDispatchPostgresTest {
         assertThat(vendor.calls("/orderAPI")).isZero();
         assertThat(status(id)).isEqualTo("READY_FOR_DELIVERY");
         assertThat(app.alertCodes()).contains("NOT_SENT");
+    }
+
+    // ------------------------------------------- "your coin transfer has started" --
+
+    /** Orders other tests sent share this schema; their notices are not this test's to count. */
+    private void quietEarlierOrders() {
+        jdbc.update("update orders set transfer_notice_at = now() where transfer_notice_at is null");
+    }
+
+    private Map<String, Object> started(long orderId) {
+        return jdbc.queryForMap("select transfer_started_at, transfer_notice_at from orders where id = ?", orderId);
+    }
+
+    @Test
+    @DisplayName("sent automatically: the transfer-started email goes once, and the progress is readable")
+    void startedEmailAfterAutoSend() {
+        quietEarlierOrders();
+        App app = new App(ON, true);
+        long id = paidOrder("GFS-26-MAIL0001", "0.5");
+        app.paid("GFS-26-MAIL0001");
+        assertThat(app.notices.sendDue()).isZero(); // not before the partner has it
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+        app.worker.process(id);
+
+        assertThat(started(id).get("transfer_started_at")).isNotNull();
+        assertThat(app.notices.sendDue()).isEqualTo(1);
+        assertThat(app.notices.sendDue()).isZero();
+        verify(app.notifications, org.mockito.Mockito.times(1)).transferStarted(any());
+
+        // What the tracking page's bar reads, as the poller leaves it.
+        jdbc.update("update vendor_order set vendor_amount_ordered_k = 500, amount_delivered_k = 200 where order_id = ?", id);
+        assertThat(app.ledger.progress(id)).hasValue(new VendorOrderLedger.Progress(500, 200L));
+    }
+
+    @Test
+    @DisplayName("sent by an admin's Approve: the same email, once")
+    void startedEmailAfterApprove() {
+        quietEarlierOrders();
+        App app = new App(AppProperties.FutTransferAutoDispatch.OFF, true);
+        long id = paidOrder("GFS-26-MAIL0002", "0.5");
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+        app.release.release("GFS-26-MAIL0002", FulfilmentRelease.Releaser.admin(admin));
+
+        assertThat(app.notices.sendDue()).isEqualTo(1);
+        assertThat(app.notices.sendDue()).isZero();
+        verify(app.notifications, org.mockito.Mockito.times(1)).transferStarted(any());
+        assertThat(started(id).get("transfer_notice_at")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("answer lost, a lookup confirms the order: started, and the email goes once")
+    void startedEmailAfterLookup() {
+        quietEarlierOrders();
+        App app = new App(ON, true);
+        long id = paidOrder("GFS-26-MAIL0003", "0.5");
+        app.paid("GFS-26-MAIL0003");
+        vendor.on("/orderAPI", Reply.of(500, "{}"));
+        vendor.on("/orderStatusAPI", Reply.ok(FakeFutTransfer.status("GFS-26-MAIL0003", 500)));
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.SENT);
+
+        assertThat(app.notices.sendDue()).isEqualTo(1);
+        verify(app.notifications).transferStarted(any());
+    }
+
+    @Test
+    @DisplayName("not before the partner has it: paid, refused or unsent orders get no email and no Track button")
+    void noEmailBeforeOnboarding() {
+        quietEarlierOrders();
+        App app = new App(ON, true);
+        long waiting = paidOrder("GFS-26-MAIL0004", "0.5");
+        long refused = paidOrder("GFS-26-MAIL0005", "0.5");
+        app.paid("GFS-26-MAIL0005");
+        vendor.on("/orderAPI", Reply.of(400, "{\"error\":\"MissingData\"}"));
+        app.worker.process(refused);
+
+        assertThat(app.notices.sendDue()).isZero();
+        assertThat(started(waiting).get("transfer_started_at")).isNull();
+        assertThat(started(refused).get("transfer_started_at")).isNull();
+        verify(app.notifications, never()).transferStarted(any());
+    }
+
+    @Test
+    @DisplayName("the email failing never touches the order, and it is not sent again")
+    void emailFailureLeavesOrderAlone() {
+        quietEarlierOrders();
+        App app = new App(ON, true);
+        long id = paidOrder("GFS-26-MAIL0006", "0.5");
+        app.paid("GFS-26-MAIL0006");
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+        app.worker.process(id);
+        org.mockito.Mockito.doThrow(new IllegalStateException("smtp down")).when(app.notifications)
+                .transferStarted(any());
+
+        assertThat(app.notices.sendDue()).isZero();
+        assertThat(app.notices.sendDue()).isZero();
+        verify(app.notifications, org.mockito.Mockito.times(1)).transferStarted(any());
+        assertThat(status(id)).isEqualTo("IN_PROGRESS");
+        assertThat(jdbc.queryForObject("select state from vendor_order where order_id = ?", String.class, id))
+                .isEqualTo("SUBMITTED");
     }
 
     @Test

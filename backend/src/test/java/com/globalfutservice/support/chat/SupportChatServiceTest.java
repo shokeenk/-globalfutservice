@@ -257,8 +257,8 @@ class SupportChatServiceTest {
             Arrays.stream(record.getRecordComponents()).map(RecordComponent::getName).forEach(fields::add);
         }
         assertThat(fields).containsExactlyInAnyOrder("mode", "summary", "chat", "reference", "service", "platform",
-                "status", "coins", "session", "sessionStartsAt", "sessionTimezone", "coach", "name", "email", "hash",
-                "attributes");
+                "status", "coins", "transferStarted", "session", "sessionStartsAt", "sessionTimezone", "coach", "name",
+                "email", "hash", "attributes");
         assertThat(fields).noneMatch(f -> f.matches("(?i).*(pass|backup|code|ea|payment|card|upi|token|secret).*"));
     }
 

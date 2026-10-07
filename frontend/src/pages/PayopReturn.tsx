@@ -21,6 +21,8 @@ interface ReturnStatus {
   totalMinor: number
   totalFormatted: string
   method: string
+  /** FUT Transfer has the order: "Track your order" takes over from "View your order". */
+  transferStarted?: boolean
 }
 
 /** How often, and for how long, to look again while the payment is pending. */
@@ -54,7 +56,10 @@ export default function PayopReturn() {
           if (!live) return
           setStatus(found)
           setFailedOnce(false)
-          if (found.payment === 'PENDING' && Date.now() - startedAt < POLL_FOR_MS) {
+          // Paid, and the transfer may start within moments when it is sent automatically:
+          // keep asking until it has, so the page can offer to follow it.
+          const waiting = found.payment === 'PENDING' || (found.payment === 'PAID' && !found.transferStarted)
+          if (waiting && Date.now() - startedAt < POLL_FOR_MS) {
             timer = window.setTimeout(check, POLL_MS)
           }
         })
@@ -113,9 +118,15 @@ export default function PayopReturn() {
           </div>
         )}
         {failedOnce && <Alert tone="warn">{t.payopReturn.loadFailed}</Alert>}
-        <ButtonLink to={ref ? `/track?ref=${encodeURIComponent(ref)}` : '/track'} variant="secondary" size="md">
-          {t.payopReturn.viewOrder}
-        </ButtonLink>
+        {status?.transferStarted ? (
+          <ButtonLink to={`/track?ref=${encodeURIComponent(ref ?? status.order)}`} size="md">
+            {t.track.trackYourOrder}
+          </ButtonLink>
+        ) : (
+          <ButtonLink to={ref ? `/track?ref=${encodeURIComponent(ref)}` : '/track'} variant="secondary" size="md">
+            {t.payopReturn.viewOrder}
+          </ButtonLink>
+        )}
       </div>
     </Section>
   )
