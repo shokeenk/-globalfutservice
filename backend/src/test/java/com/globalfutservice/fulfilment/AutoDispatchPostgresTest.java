@@ -421,6 +421,7 @@ class AutoDispatchPostgresTest {
         long id = paidOrder("GFS-26-MAIL0001", "0.5");
         app.paid("GFS-26-MAIL0001");
         assertThat(app.notices.sendDue()).isZero(); // not before the partner has it
+        assertThat(app.ledger.progressAmong(List.of(id))).isEmpty();
         vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
         app.worker.process(id);
 
@@ -432,6 +433,9 @@ class AutoDispatchPostgresTest {
         // What the tracking page's bar reads, as the poller leaves it.
         jdbc.update("update vendor_order set vendor_amount_ordered_k = 500, amount_delivered_k = 200 where order_id = ?", id);
         assertThat(app.ledger.progress(id)).hasValue(new VendorOrderLedger.Progress(500, 200L));
+        // The admin's Orders table reads the same figures, for a page of orders at once.
+        assertThat(app.ledger.progressAmong(List.of(id, -1L)))
+                .containsExactly(Map.entry(id, new VendorOrderLedger.Progress(500, 200L)));
     }
 
     @Test

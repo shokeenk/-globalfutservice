@@ -33,10 +33,14 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -88,7 +92,7 @@ class AdminOrderPageSecurityTest {
                 "FUT Classes — Single session · 1 hour", "SINGLE_SESSION", BigDecimal.ONE,
                 "PLAYSTATION", "SCHEDULED_SESSION", false, false, name, "rahul07@example.test",
                 "SUBMITTED", "UPI", "412345678901", "Rahul_07", 102500, "₹1,025.00", "INR",
-                Instant.parse("2026-09-26T10:04:00Z"), null, List.of());
+                Instant.parse("2026-09-26T10:04:00Z"), null, List.of(), null);
     }
 
     @BeforeEach
@@ -252,5 +256,33 @@ class AdminOrderPageSecurityTest {
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.orderMode").value("PUBLIC_POOL"))
                 .andExpect(jsonPath("$.lastAttemptMode").value("OWN_SENDERS"));
+    }
+
+    @Test
+    @DisplayName("the customer's tracking page as staff see it: staff only, the customer's own view, and a read that changes nothing")
+    void customerView() throws Exception {
+        OrderEntity order = org.mockito.Mockito.mock(OrderEntity.class);
+        when(order.getId()).thenReturn(7L);
+        when(orderService.requireAny("GFS-26-CN43SP05")).thenReturn(order);
+        when(vaultService.status(7L)).thenReturn(
+                new com.globalfutservice.credentials.web.CredentialDtos.VaultStatus(true, false, null, 0));
+        String path = BASE + "/GFS-26-CN43SP05/customer-view";
+
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).with(authentication(as(AccountRole.CUSTOMER)))).andExpect(status().isForbidden());
+        verifyNoInteractions(mapper);
+
+        for (AccountRole staff : List.of(AccountRole.OPERATOR, AccountRole.ADMIN)) {
+            mvc.perform(get(path).with(authentication(as(staff))))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Cache-Control", "no-store"));
+        }
+        // The customer's wording and timeline, not the staff page's.
+        verify(mapper, times(2)).toResponse(order, List.of(), true);
+        verify(mapper, never()).toAdminResponse(any(), any(), anyBoolean());
+        // A read: the order does not move, nobody is emailed or reminded, nothing is sent anywhere.
+        verify(orderService, never()).transition(any(), any(), any(), any(), anyString(), anyString());
+        verify(orderService, never()).remindCredentials(any(), any(), any());
+        verifyNoInteractions(orders, supplierFulfilment, vendorHistory);
     }
 }

@@ -596,6 +596,10 @@ const en = {
     transferDelivered: 'All your coins have been delivered',
     progressCoins: (done: string, total: string) => `${done} of ${total} coins delivered`,
     updatesAutomatically: 'This page updates by itself.',
+    // Staff opening a customer's tracking link from the admin: the page as the customer sees it, read-only.
+    staffViewTitle: 'Staff view',
+    staffViewBody: 'This is the customer’s tracking page as they see it, read-only. Nothing you do here changes the order or acts for the customer.',
+    staffHiddenStep: 'Here the customer sees a form for this step. It is hidden in the staff view.',
     // Each of these is a stall the customer can usually clear in under a minute. The
     // supplier names the cause; these say what to do about it.
     action: {

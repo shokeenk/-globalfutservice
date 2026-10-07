@@ -222,6 +222,20 @@ public class VendorOrderLedger {
                 rs.getLong("ordered_k"), rs.getObject("amount_delivered_k", Long.class))).stream().findFirst();
     }
 
+    /** {@link #progress} for a page of orders at once: the admin's Orders table, in one query. */
+    public java.util.Map<Long, Progress> progressAmong(java.util.Collection<Long> orderIds) {
+        if (orderIds.isEmpty()) return java.util.Map.of();
+        java.util.Map<Long, Progress> out = new java.util.HashMap<>();
+        jdbc.query("""
+                select order_id, coalesce(vendor_amount_ordered_k, amount_ordered_k) as ordered_k, amount_delivered_k
+                  from vendor_order where order_id in (:ids) and submitted_at is not null
+                """, new MapSqlParameterSource("ids", orderIds), rs -> {
+            out.put(rs.getLong("order_id"), new Progress(rs.getLong("ordered_k"),
+                    rs.getObject("amount_delivered_k", Long.class)));
+        });
+        return out;
+    }
+
     /**
      * The balance FUT Transfer reported just before this send, for margin tracking. Only
      * while the row is still SUBMITTING: it belongs to this send and no other.

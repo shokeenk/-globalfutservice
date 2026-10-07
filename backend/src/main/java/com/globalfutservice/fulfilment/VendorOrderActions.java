@@ -367,13 +367,24 @@ public class VendorOrderActions {
     public record Section(boolean enabled, boolean paused, VendorOrderLedger.Detail vendorOrder,
                           List<String> available, List<VendorCallLog.Call> calls,
                           List<VendorOrderActionLog.Entry> actions, String currentOrderMode,
-                          OrderModeReport.NextSend nextSend) {
+                          OrderModeReport.NextSend nextSend, Tracking tracking) {
+    }
+
+    /**
+     * What the customer can follow: when their transfer started and the tracking page they
+     * were sent, the same address. Both null until FUT Transfer has the order. FUT Transfer's
+     * own progress page is not here: its API gives no address for one.
+     */
+    public record Tracking(java.time.Instant transferStartedAt, String customerUrl) {
     }
 
     public Section section(OrderEntity order, List<VendorCallLog.Call> calls) {
         VendorOrderLedger.Detail d = ledger.detail(order.getId()).orElse(null);
+        java.time.Instant started = order.getTransferStartedAt();
+        Tracking tracking = new Tracking(started, started == null ? null
+                : com.globalfutservice.orders.TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef()));
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
-                actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order));
+                actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order), tracking);
     }
 
     private OrderModeReport.NextSend nextSend(OrderEntity order) {

@@ -1,5 +1,6 @@
 package com.globalfutservice.admin;
 
+import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultRepository;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
@@ -11,6 +12,7 @@ import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.orders.TrackingLinks;
 import com.globalfutservice.payments.ManualPaymentClaimEntity;
 import com.globalfutservice.payments.ManualPaymentClaimRepository;
 import org.springframework.data.domain.Page;
@@ -39,9 +41,9 @@ import java.util.Set;
  * <p>Reads only. Every action the page offers goes through the endpoints that already
  * existed — transition, release, verify — so nothing here can change an order.
  *
- * <p>A page of rows costs five queries whatever its size: the orders, then their claims,
- * their vault rows, their accounts and their orders at the fulfilment partner in one query
- * each. The old queue asked the vault once per row.
+ * <p>A page of rows costs six queries whatever its size: the orders, then their claims,
+ * their vault rows, their accounts, their orders at the fulfilment partner and how far
+ * those have got in one query each. The old queue asked the vault once per row.
  */
 @Service
 public class AdminOrderQueries {
@@ -57,16 +59,18 @@ public class AdminOrderQueries {
     private final CredentialVaultRepository vault;
     private final AccountRepository accounts;
     private final VendorOrderLedger vendorOrders;
+    private final AppProperties props;
     private final Clock clock;
 
     public AdminOrderQueries(OrderRepository orders, ManualPaymentClaimRepository claims,
                              CredentialVaultRepository vault, AccountRepository accounts,
-                             VendorOrderLedger vendorOrders, Clock clock) {
+                             VendorOrderLedger vendorOrders, AppProperties props, Clock clock) {
         this.orders = orders;
         this.claims = claims;
         this.vault = vault;
         this.accounts = accounts;
         this.vendorOrders = vendorOrders;
+        this.props = props;
         this.clock = clock;
     }
 
@@ -161,6 +165,10 @@ public class AdminOrderQueries {
         // With the partner even without its id: a lookup can confirm an order the partner
         // never numbered for us, and releasing that one again would be refused.
         Set<Long> atPartner = vendorOrders.atPartner(ids);
+        // How far each has got, for the orders whose transfer has started: the Tracking column.
+        List<Long> started = page.stream().filter(o -> o.getTransferStartedAt() != null)
+                .map(OrderEntity::getId).toList();
+        Map<Long, VendorOrderLedger.Progress> progress = vendorOrders.progressAmong(started);
 
         Set<Long> accountIds = new HashSet<>();
         for (OrderEntity order : page) {
@@ -206,9 +214,19 @@ public class AdminOrderQueries {
                     order.getCreatedAt(),
                     order.getDeliveredAt(),
                     OrderStateMachine.operatorTransitions(order.getStatus())
-                            .stream().map(Enum::name).sorted().toList()));
+                            .stream().map(Enum::name).sorted().toList(),
+                    tracking(order, progress.get(order.getId()))));
         }
         return out;
+    }
+
+    /** Only once the transfer has started: the moment the customer's own page offers "Track your order". */
+    private AdminOrderViews.Tracking tracking(OrderEntity order, VendorOrderLedger.Progress progress) {
+        if (order.getTransferStartedAt() == null) {
+            return null;
+        }
+        return new AdminOrderViews.Tracking(TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef()),
+                progress == null ? null : progress.orderedK(), progress == null ? null : progress.deliveredK());
     }
 
     private static String platformOf(OrderEntity order) {

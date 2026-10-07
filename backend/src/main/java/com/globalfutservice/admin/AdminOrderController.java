@@ -271,6 +271,25 @@ public class AdminOrderController {
                         vaultService.status(order.getId()).present()));
     }
 
+    /**
+     * The order exactly as its customer's tracking page shows it: the customer's own
+     * wording and timeline, not the staff view above. For staff opening the customer's
+     * tracking link from the admin.
+     *
+     * <p>A read and nothing else. It is not the customer's endpoint, so it neither needs
+     * the customer's email nor stands in for them: nothing is recorded as the customer
+     * having looked, and nothing on the order changes.
+     */
+    @GetMapping("/{publicRef}/customer-view")
+    @Operation(summary = "One order as its customer's tracking page shows it (staff, read-only)")
+    public ResponseEntity<OrderDtos.OrderResponse> customerView(@PathVariable String publicRef) {
+        OrderEntity order = orderService.requireAny(publicRef);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(mapper.toResponse(order, orderService.timeline(order.getId()),
+                        vaultService.status(order.getId()).present()));
+    }
+
     @PostMapping("/{publicRef}/transition")
     @Operation(summary = "Move an order to another state",
             description = "Validated against the state machine. DELIVERED is irreversible: "
