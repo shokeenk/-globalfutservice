@@ -65,6 +65,8 @@ const es: Dictionary = {
     close: 'Cerrar',
     comingSoon: 'Próximamente',
     pricesUnavailable: 'Los precios no están disponibles',
+    emailRequired: 'Introduce tu correo electrónico.',
+    emailInvalid: 'Introduce un correo válido, como tu@ejemplo.com.',
     notOnSale: 'Este servicio no tiene precios ahora mismo, así que no se puede pedir. Vuelve a mirar en un rato.',
   },
 
@@ -484,6 +486,7 @@ const es: Dictionary = {
     reference: 'Referencia del pedido',
     email: 'Correo electrónico',
     find: 'Buscar mi pedido',
+    referenceRequired: 'Introduce la referencia de tu pedido.',
     emptyHint:
       'Tu referencia está en el correo de confirmación: tiene la forma GFS-26 seguido de ' +
       'ocho caracteres.',
@@ -552,6 +555,7 @@ const es: Dictionary = {
       'marca como completado.',
     credSignInFirst: 'Inicia sesión para enviarlas',
     credError: 'No se ha podido enviar. Revisa los campos e inténtalo de nuevo.',
+    credAckRequired: 'Marca esta casilla para continuar.',
     stuckTitle: 'Nos hemos atascado',
     stuckBody:
       'Normalmente significa que la cuenta estaba conectada, el mercado de traspasos ' +
@@ -863,7 +867,6 @@ const es: Dictionary = {
     clickHere: 'Haz clic aquí',
     backupCodePlaceholder: 'Cada código tiene 8 dígitos',
     eaEmailPlaceholder: 'EA Web/Companion App',
-    fixFieldsError: 'Revisa los campos marcados.',
     errEaEmail: '¡Introduce el correo de Origin (Web App)!',
     errEaPassword: '¡Introduce la contraseña de Origin (Web App)!',
     errEaPasswordShort: 'Parece demasiado corta: una contraseña de EA tiene al menos 8 caracteres.',

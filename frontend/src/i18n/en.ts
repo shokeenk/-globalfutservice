@@ -71,6 +71,12 @@ const en = {
     close: 'Close',
     comingSoon: 'Coming soon',
     pricesUnavailable: 'Prices are unavailable',
+    /*
+     * Required-field errors shared by every form that asks for an email: the checkout and
+     * the order lookup say it the same way.
+     */
+    emailRequired: 'Enter your email address.',
+    emailInvalid: 'Enter a valid email address, like you@example.com.',
     /* A service with no live price: the season moved on before its prices did, or an admin closed them. */
     notOnSale: 'This service has no prices right now, so it cannot be ordered. Please check back shortly.',
   },
@@ -568,6 +574,7 @@ const en = {
     reference: 'Order reference',
     email: 'Email',
     find: 'Find my order',
+    referenceRequired: 'Enter your order reference.',
     emptyHint:
       'Your reference is in the confirmation email — it looks like GFS-26 followed by eight ' +
       'characters.',
@@ -642,6 +649,8 @@ const en = {
       'marked complete.',
     credSignInFirst: 'Sign in to submit it',
     credError: 'That could not be submitted. Please check the fields and try again.',
+    // Under each confirmation left unticked when the sign-in is sent.
+    credAckRequired: 'Tick this to continue.',
     stuckTitle: 'We are stuck on something',
     stuckBody:
       'Usually this means the account was online, the transfer market was locked, or there ' +
@@ -1018,7 +1027,6 @@ const en = {
     clickHere: 'Click here',
     backupCodePlaceholder: 'Each code is 8 digits',
     eaEmailPlaceholder: 'EA Web/Companion App',
-    fixFieldsError: 'Please check the highlighted fields.',
     errEaEmail: 'Please enter Origin (Web App) Email!',
     errEaPassword: 'Please enter Origin (Web App) Password!',
     errEaPasswordShort: 'That looks too short — an EA password is at least 8 characters.',

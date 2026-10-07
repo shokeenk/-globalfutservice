@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Calendar, endOfMonth, startOfMonth } from '../../components/Calendar'
 import { CoachIcon } from '../../components/CoachingIcons'
-import { Alert, Button, Skeleton } from '../../components/ui'
+import { Alert, Button, FieldError, Skeleton, revealFirstError } from '../../components/ui'
 import { useT } from '../../i18n'
 import { ApiError, api } from '../../lib/api'
 import type { Coach, CoachSlots } from '../../lib/types'
@@ -146,6 +146,7 @@ export function ScheduleStep({
   function next() {
     setTouched(true)
     if (value) onContinue()
+    else revealFirstError()
   }
 
   return (
@@ -268,7 +269,7 @@ export function ScheduleStep({
         </p>
       )}
       {touched && !value && (
-        <p role="alert" className="mt-4 text-[12.5px] text-warn">{b.pickTimeRequired}</p>
+        <FieldError className="mt-4">{b.pickTimeRequired}</FieldError>
       )}
 
       <Button full size="lg" className="mt-6" onClick={next}>

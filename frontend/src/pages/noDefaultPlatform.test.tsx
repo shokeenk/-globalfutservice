@@ -141,7 +141,7 @@ describe('coins checkout', () => {
 
     const error = expectRequiredError('Choose the platform you play on.')
     expect(picker).toHaveAttribute('aria-describedby', error.id)
-    expect(scrolled).toHaveBeenCalled()
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
     // Still on the first step: the picker is there and nothing was priced or ordered.
     expect(screen.getByRole('group', { name: 'Platform' })).toBeInTheDocument()
     expect(posted('/api/v1/quotes')).toHaveLength(0)
@@ -188,7 +188,7 @@ describe('boosting checkout', () => {
 
     const error = expectRequiredError('Choose a platform to continue.')
     expect(picker).toHaveAttribute('aria-describedby', error.id)
-    expect(scrolled).toHaveBeenCalled()
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
     expect(posted('/api/v1/orders')).toHaveLength(0)
   })
 
