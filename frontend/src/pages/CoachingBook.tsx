@@ -5,7 +5,9 @@ import { CoachIcon } from '../components/CoachingIcons'
 import type { CoachIconName } from '../components/CoachingIcons'
 import { ManualPayment } from '../components/ManualPayment'
 import { PlatformIcon } from '../components/PlatformIcon'
-import { Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, Select, Spinner, Textarea } from '../components/ui'
+import {
+  Alert, Badge, Button, ButtonLink, Checkbox, Field, FieldError, Input, Section, Select, Spinner, Textarea,
+} from '../components/ui'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
@@ -616,7 +618,13 @@ function DetailsStep({
           <legend className="block text-[13px] font-medium text-chalk-muted">
             {b.platformLabel}<span className="ml-1 text-brand-400">*</span>
           </legend>
-          <div role="radiogroup" aria-label={b.platformLabel} className="mt-2 grid grid-cols-3 gap-2">
+          <div
+            role="radiogroup"
+            aria-label={b.platformLabel}
+            aria-invalid={touched && platform === null ? true : undefined}
+            aria-describedby={touched && platform === null ? 'coaching-platform-error' : undefined}
+            className="mt-2 grid grid-cols-3 gap-2"
+          >
             {PLATFORMS.map((p) => {
               const checked = platform === p
               return (
@@ -641,7 +649,7 @@ function DetailsStep({
             })}
           </div>
           {touched && platform === null && (
-            <p role="alert" className="mt-2 text-[12px] text-warn">{b.platformRequired}</p>
+            <FieldError id="coaching-platform-error" className="mt-2">{b.platformRequired}</FieldError>
           )}
         </fieldset>
 

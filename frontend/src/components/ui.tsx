@@ -399,6 +399,40 @@ export function LiveDot({ className = '' }: { className?: string }) {
 
 /* ------------------------------------------------------------------- forms --- */
 
+/**
+ * A required answer that is missing, said the one way every form on the site says it:
+ * red, small, under the thing it is about, and announced rather than only coloured.
+ *
+ * <p>A text field gets it through `Field`. A choice made by pressing cards -- the
+ * platform, the launcher -- has no `Field` around it, so it uses this directly, and the
+ * two cannot drift apart in colour or in what a screen reader hears.
+ */
+export function FieldError({
+  id, children, className = '',
+}: {
+  id?: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <p id={id} role="alert" className={`text-[12px] text-brand-400 ${className}`}>
+      {children}
+    </p>
+  )
+}
+
+/**
+ * Brings a missing answer into view when Continue is pressed without it.
+ *
+ * <p>The button is often a screen below the choice it is waiting for -- on a phone the
+ * order summary sits under the whole configurator -- and an error the customer cannot
+ * see reads as a button that does nothing.
+ */
+export function revealField(element: HTMLElement | null) {
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  element?.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+}
+
 export function Field({
   label, hint, error, children, required = false,
 }: {
@@ -420,11 +454,7 @@ export function Field({
       {children({ id, 'aria-describedby': describedBy, 'aria-invalid': error ? true : undefined })}
       {/* The error is announced, not just coloured: a red border alone is invisible
           to a screen reader and to a good number of sighted people. */}
-      {error && (
-        <p id={`${id}-error`} role="alert" className="text-[12px] text-brand-400">
-          {error}
-        </p>
-      )}
+      {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
       {!error && hint && (
         <p id={`${id}-hint`} className="text-[12px] text-chalk-faint">
           {hint}
@@ -488,11 +518,7 @@ export function Checkbox({
         />
         <span className="text-[13px] leading-relaxed text-chalk-muted">{children}</span>
       </label>
-      {error && (
-        <p role="alert" className="ml-[30px] mt-1 text-[12px] text-brand-400">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="ml-[30px] mt-1">{error}</FieldError>}
     </div>
   )
 }

@@ -7,8 +7,8 @@ import { EaSignInFields, validateEaSignIn } from '../components/EaSignInFields'
 import { PlatformCard } from '../components/PlatformCard'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
-  Alert, Badge, Button, ButtonLink, Checkbox, Field, Input, Section, SelectTile,
-  Skeleton, Spinner, StepCard,
+  Alert, Badge, Button, ButtonLink, Checkbox, Field, FieldError, Input, Section, SelectTile,
+  Skeleton, Spinner, StepCard, revealField,
 } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
@@ -84,7 +84,18 @@ export default function Order() {
     noindex: true,
   })
 
+  /*
+   * Empty until the customer picks one, and nothing here picks for them.
+   *
+   * The first platform in the catalogue used to be selected on arrival, so every coin
+   * order quietly started on it. A customer who did not notice paid for coins on a
+   * platform they do not play on, and the partner was asked to deliver there.
+   */
   const [platform, setPlatform] = useState<string>('')
+  // Set when Continue is pressed without a platform, so the error appears then and not
+  // on arrival.
+  const [platformTouched, setPlatformTouched] = useState(false)
+  const platformRef = useRef<HTMLDivElement>(null)
   const [variant, setVariant] = useState<string>(params.get('variant') ?? '')
   const [quantity, setQuantity] = useState(DEFAULT_QUANTITY)
   // Accepts ?coupon= so a code can be shared as a link rather than typed off a stream.
@@ -97,29 +108,32 @@ export default function Order() {
   const [quoteError, setQuoteError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isFlat) {
-      // A variant that came from the URL but is not in the live catalogue would price
-      // nothing, so fall back to the first real option rather than to a dead request.
-      if (options.length > 0 && !options.some((o) => o.variant === variant)) {
-        setVariant(options[0]?.variant ?? '')
-      }
-    } else if (!platform && options.length > 0) {
-      setPlatform(options[0]?.platform ?? '')
+    // A variant that came from the URL but is not in the live catalogue would price
+    // nothing, so fall back to the first real option rather than to a dead request.
+    // Flat services only: a coin order's platform is never filled in.
+    if (isFlat && options.length > 0 && !options.some((o) => o.variant === variant)) {
+      setVariant(options[0]?.variant ?? '')
     }
-  }, [options, platform, variant, isFlat])
+  }, [options, variant, isFlat])
 
   const selected = isFlat
     ? options.find((o) => o.variant === variant) ?? options[0]
-    : options.find((o) => o.platform === platform) ?? options[0]
+    : options.find((o) => o.platform === platform)
+  const platformMissing = !isFlat && !selected
 
   /*
-   * Fallbacks only, for the frame before the catalog lands. They match the rate card
+   * The slider's range. Before a platform is picked it borrows the first card's bounds,
+   * which is a range and not a choice: no price is shown or asked for until the customer
+   * picks, and the amount is re-fitted to their platform's card when they do.
+   *
+   * The constants are for the frame before the catalog lands. They match the rate card
    * rather than being round numbers, so a slider rendered in that frame cannot offer an
    * amount the server would refuse to quote.
    */
-  const min = Number(selected?.minQuantity ?? 0.01)
-  const max = Number(selected?.maxQuantity ?? 1)
-  const stepSize = Number(selected?.stepQuantity ?? 0.01)
+  const range = selected ?? options[0]
+  const min = Number(range?.minQuantity ?? 0.01)
+  const max = Number(range?.maxQuantity ?? 1)
+  const stepSize = Number(range?.stepQuantity ?? 0.01)
 
   /*
    * The shortcut buttons, derived from the range rather than written into it.
@@ -140,9 +154,9 @@ export default function Order() {
    * who switches platform to a card with different bounds, which nothing did before.
    */
   useEffect(() => {
-    if (isFlat || !selected) return
+    if (isFlat || !range) return
     setQuantity((current) => clampToStep(current, min, max, stepSize))
-  }, [isFlat, selected, min, max, stepSize])
+  }, [isFlat, range, min, max, stepSize])
 
   const presets = useMemo(() => {
     const stepK = Math.max(1, Math.round(stepSize * 1000))
@@ -411,21 +425,31 @@ export default function Order() {
             </StepCard>
           ) : (
             <>
-              <StepCard step={1} title={t.order.stepPlatform(1)}>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {options.map((option) => (
-                    <PlatformCard
-                      key={option.platform}
-                      platform={option.platform}
-                      active={option.platform === platform}
-                      onSelect={() => setPlatform(option.platform ?? '')}
-                      label={option.label ?? ''}
-                      price={`${option.unitPriceFormatted} ${t.order.perMillion}`}
-                      taxNote={service?.marketTaxApplies ? t.order.taxIncludedInline : undefined}
-                    />
-                  ))}
-                </div>
-              </StepCard>
+              <div ref={platformRef}>
+                <StepCard step={1} title={t.order.stepPlatform(1)}>
+                  <div
+                    role="group"
+                    aria-label={t.order.stepPlatform(1)}
+                    aria-describedby={platformTouched && platformMissing ? 'order-platform-error' : undefined}
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                  >
+                    {options.map((option) => (
+                      <PlatformCard
+                        key={option.platform}
+                        platform={option.platform}
+                        active={option.platform === platform}
+                        onSelect={() => setPlatform(option.platform ?? '')}
+                        label={option.label ?? ''}
+                        price={`${option.unitPriceFormatted} ${t.order.perMillion}`}
+                        taxNote={service?.marketTaxApplies ? t.order.taxIncludedInline : undefined}
+                      />
+                    ))}
+                  </div>
+                  {platformTouched && platformMissing && (
+                    <FieldError id="order-platform-error" className="mt-3">{t.order.platformRequired}</FieldError>
+                  )}
+                </StepCard>
+              </div>
 
               <StepCard
                 step={2}
@@ -590,6 +614,11 @@ export default function Order() {
           step={step}
           setStep={setStep}
           onRequote={() => void fetchQuote()}
+          platformMissing={platformMissing}
+          onPlatformMissing={() => {
+            setPlatformTouched(true)
+            revealField(platformRef.current)
+          }}
         />
       </div>
       </Section>
@@ -730,7 +759,7 @@ function AmountReadout({ quantity, stepSize }: { quantity: number; stepSize: num
 
 function QuotePanel({
   quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
-  pointsToRedeem, setPointsToRedeem, maxRedeemable,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable, platformMissing, onPlatformMissing,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -743,6 +772,10 @@ function QuotePanel({
   pointsToRedeem: number
   setPointsToRedeem: (points: number) => void
   maxRedeemable: number
+  /** A coin order with no platform picked yet: there is no price to show. */
+  platformMissing: boolean
+  /** Continue was pressed without one. */
+  onPlatformMissing: () => void
 }) {
   const t = useT()
   const money = useMoney()
@@ -809,6 +842,21 @@ function QuotePanel({
           )}
 
           {error && <Alert tone="warn">{error}</Alert>}
+
+          {/*
+            No platform, no price -- and no way past this step.
+
+            Continue is still offered rather than hidden or greyed out: pressing it is how
+            the customer finds out what is missing, the same as an empty required field.
+          */}
+          {platformMissing && !quote && step === 'configure' && (
+            <>
+              <p className="text-[13px] leading-relaxed text-chalk-muted">{t.order.choosePlatformForPrice}</p>
+              <Button full size="lg" onClick={onPlatformMissing}>
+                {t.order.continue}
+              </Button>
+            </>
+          )}
 
           {quote && (
             <>

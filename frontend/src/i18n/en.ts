@@ -839,6 +839,13 @@ const en = {
      */
     stepPackage: (_n: number, service: string) => service,
     stepPlatform: (_n: number) => 'Platform',
+    /*
+     * Coins are priced per platform and nothing picks one for the customer: PC,
+     * PlayStation and Xbox all start unselected. The first line is the required-field
+     * error under the platform cards; the second stands where the price will be.
+     */
+    platformRequired: 'Choose the platform you play on.',
+    choosePlatformForPrice: 'Choose your platform to see your price.',
     stepAmount: (_n: number) => 'Amount',
     /*
      * Boosting only. A booster signs in and plays, so the account has to be reachable:
