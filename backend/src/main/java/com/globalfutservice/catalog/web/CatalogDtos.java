@@ -138,7 +138,13 @@ public final class CatalogDtos {
              * emailed you" only when this is true -- otherwise it would be a promise about
              * a message nobody sends.
              */
-            boolean customerEmailsEnabled) {
+            boolean customerEmailsEnabled,
+            /**
+             * How many EA backup codes a coin order's sign-in must include. The checkout
+             * shows that many boxes and asks for every one, so the number lives in one
+             * setting rather than in an array literal in each form.
+             */
+            int backupCodesRequired) {
     }
 
     public record TierView(

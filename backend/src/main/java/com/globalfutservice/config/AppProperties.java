@@ -309,7 +309,15 @@ public record AppProperties(
             /** Store credit offered instead of cash on an upheld guarantee claim.
              *  10000 bps = 100%, against 50% in cash — the asymmetry is deliberate. */
             @DefaultValue("10000") int guaranteeCreditBps,
-            @DefaultValue("5000") int guaranteeCashBps) {
+            @DefaultValue("5000") int guaranteeCashBps,
+
+            /**
+             * How many EA backup codes a coin order's sign-in must carry. Served to the
+             * storefront, which shows that many boxes and asks for all of them, and
+             * enforced when the sign-in is submitted. At most five: FUT Transfer takes
+             * {@code ba} to {@code ba5}.
+             */
+            @DefaultValue("3") @Min(1) @Max(5) int backupCodesRequired) {
     }
 
     public record Razorpay(

@@ -168,6 +168,7 @@ public class CatalogService {
                 props.razorpay().enabled()
                         && props.razorpay().keyId() != null && !props.razorpay().keyId().isBlank()
                         && props.razorpay().keySecret() != null && !props.razorpay().keySecret().isBlank(),
-                props.notifications().emailEnabled());
+                props.notifications().emailEnabled(),
+                f.backupCodesRequired());
     }
 }

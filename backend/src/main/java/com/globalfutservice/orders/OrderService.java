@@ -7,6 +7,7 @@ import com.globalfutservice.affiliate.AffiliateService;
 import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
+import com.globalfutservice.credentials.SignInRules;
 import com.globalfutservice.credentials.web.CredentialDtos;
 import com.globalfutservice.domain.catalog.CoinAmount;
 import com.globalfutservice.domain.catalog.PcLauncher;
@@ -613,7 +614,13 @@ public class OrderService {
                     "This order is not waiting for sign-in details.");
         }
 
-        vaultService.store(order.getId(), request);
+        /*
+         * Every required backup code, each in EA's format, or nothing is stored. The
+         * storefront asks the same, but it is only a convenience; this is the check.
+         */
+        List<String> codes = SignInRules.backupCodes(request.backupCodes(),
+                props.fulfilment().backupCodesRequired());
+        vaultService.store(order.getId(), request.withBackupCodes(codes));
         if (request.platformHandle() != null && !request.platformHandle().isBlank()) {
             order.setEaPlatformHandle(request.platformHandle());
         }

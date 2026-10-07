@@ -1,5 +1,6 @@
 package com.globalfutservice.credentials.web;
 
+import com.globalfutservice.credentials.SignInRules;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -28,7 +29,7 @@ public final class CredentialDtos {
      */
     public record SubmitCredentialsRequest(
             @NotBlank(message = "EA email is required")
-            @Email(message = "That does not look like an email address")
+            @Email(regexp = SignInRules.EMAIL_REGEX, message = "That does not look like an email address")
             @Size(max = 255)
             String eaEmail,
 
@@ -39,10 +40,15 @@ public final class CredentialDtos {
              * customer had paid, and with an operator left holding an order that could
              * not go out.
              */
-            @Size(min = 8, max = 255,
+            @Size(min = SignInRules.PASSWORD_MIN, max = 255,
                     message = "An EA password is at least 8 characters — please check it")
             String eaPassword,
 
+            /*
+             * How many, and in what shape, is checked by SignInRules.backupCodes before
+             * anything is stored: the number required is configuration, which an annotation
+             * cannot read. These bounds only keep an absurd payload out of that check.
+             */
             @Size(max = 12, message = "Twelve backup codes is the most EA issues")
             List<@Size(max = 32) String> backupCodes,
 
@@ -63,6 +69,12 @@ public final class CredentialDtos {
 
             @AssertTrue(message = "Please accept the terms to continue")
             boolean acceptedTerms) {
+
+        /** The same request with its backup codes as SignInRules returned them. */
+        public SubmitCredentialsRequest withBackupCodes(List<String> codes) {
+            return new SubmitCredentialsRequest(eaEmail, eaPassword, codes, platformHandle, note,
+                    acknowledgedSignedOut, acknowledgedMarketUnlocked, acknowledgedItemsClear, acceptedTerms);
+        }
 
         @Override
         public String toString() {
