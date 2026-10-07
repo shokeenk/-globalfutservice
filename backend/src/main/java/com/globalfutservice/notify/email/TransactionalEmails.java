@@ -398,6 +398,82 @@ public final class TransactionalEmails {
                 trackUrl == null ? "" : "\nTrack your order: " + trackUrl + "\n");
     }
 
+    public static String transferStartedSubject(OrderNotification n) {
+        return "Your coin transfer has started — order " + n.publicRef();
+    }
+
+    /**
+     * Sent once, when FUT Transfer first accepts a coin order -- by an admin's Approve or
+     * automatically. Says the transfer has started, gives the button and the plain address of
+     * the order's tracking page, where the coins can be watched arriving, and says where help
+     * is: the order's support page, with the live chat, and our Discord account.
+     *
+     * <p>In our words only. The partner is never named, nor any of its methods; the customer
+     * has GFS Transfer Method 3.0, and the tracking page is ours.
+     */
+    public static Rendered transferStarted(OrderNotification n, EmailTemplate.Brand brand, String trackUrl,
+                                           String supportUrl, String discordDmUrl) {
+        List<EmailTemplate.InfoCard> cards = new ArrayList<>();
+        cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
+        cards.add(EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()));
+        cards.add(EmailTemplate.InfoCard.accented("➤", "Order Status", "Your coin transfer has started"));
+        if (n.platform() != null && !n.platform().isBlank()) {
+            cards.add(EmailTemplate.InfoCard.of("▪", "Platform", n.platform()));
+        }
+
+        String link = "color:#C1281B;font-weight:700;text-decoration:underline;";
+        String body = EmailTemplate.paragraphs(
+                "We've started transferring your coins with GFS Transfer Method 3.0. Your order's tracking page "
+                        + "shows how many have arrived and updates by itself, so there is nothing you need to do.",
+                "Please stay signed out of EA FC everywhere -- console, web app and companion app -- until the "
+                        + "transfer is complete. Signing in can pause it.")
+                + "\n<p style=\"margin:0 0 12px 0;\">Your tracking page: <a href=\"" + EmailTemplate.esc(trackUrl)
+                + "\" style=\"" + link + "\">" + EmailTemplate.esc(trackUrl) + "</a></p>"
+                + "\n<p style=\"margin:0 0 12px 0;\">Need help? <a href=\"" + EmailTemplate.esc(supportUrl)
+                + "\" style=\"" + link + "\">Chat with us on your order's support page</a>, or message <a href=\""
+                + EmailTemplate.esc(discordDmUrl) + "\" style=\"" + link + "\">" + DISCORD_NAME + " on Discord</a> "
+                + "with your order reference.</p>";
+
+        EmailTemplate.Content content = new EmailTemplate.Content(
+                "Your coin transfer has started. Track it live.",
+                "➤",
+                null,
+                "YOUR COIN TRANSFER HAS STARTED",
+                "Order " + n.publicRef() + " is on its way.",
+                cards,
+                body,
+                null,
+                List.of(),
+                null,
+                "TRACK YOUR ORDER",
+                trackUrl,
+                orderFooterNote());
+
+        String text = """
+                YOUR COIN TRANSFER HAS STARTED
+
+                Order #%s
+                %s
+                Status: Your coin transfer has started
+
+                We've started transferring your coins with GFS Transfer Method 3.0. Your
+                order's tracking page shows how many have arrived and updates by itself.
+
+                Track your order: %s
+
+                Please stay signed out of EA FC everywhere -- console, web app and
+                companion app -- until the transfer is complete. Signing in can pause it.
+
+                Need help?
+                  Chat with us on your order's support page: %s
+                  Or message %s on Discord, with your order reference: %s
+
+                — Global FUT Services
+                """.formatted(n.publicRef(), n.serviceLabel(), trackUrl, supportUrl, DISCORD_NAME, discordDmUrl);
+
+        return new Rendered(transferStartedSubject(n), EmailTemplate.render(content, brand), text);
+    }
+
     /** The delivery email for a coin order: branded, with the button to the order's tracking page. */
     public static Rendered orderDelivered(OrderNotification n, EmailTemplate.Brand brand, String trackUrl) {
         List<EmailTemplate.InfoCard> cards = List.of(

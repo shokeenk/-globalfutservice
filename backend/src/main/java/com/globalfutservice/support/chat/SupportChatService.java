@@ -65,8 +65,10 @@ public class SupportChatService {
     public enum Mode { BOOSTING, COINS, COACHING }
 
     /** The order at the top of the support page, in the customer's own words. */
+    /** {@code transferStarted}: a coin order FUT Transfer has, so the page offers "Track your order". */
     public record Summary(String reference, String service, String platform, String status, String coins,
-                          String session, Instant sessionStartsAt, String sessionTimezone, String coach) {
+                          String session, Instant sessionStartsAt, String sessionTimezone, String coach,
+                          boolean transferStarted) {
     }
 
     /**
@@ -117,7 +119,7 @@ public class SupportChatService {
                 session == null ? null : session.getPublicRef(),
                 session == null ? null : session.getStartsAt(),
                 session == null ? null : session.getCustomerTimezone(),
-                coach);
+                coach, order.getTransferStartedAt() != null);
 
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("order-id", value(order.getPublicRef()));

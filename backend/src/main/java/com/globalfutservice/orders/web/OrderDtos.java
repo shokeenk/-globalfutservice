@@ -174,6 +174,12 @@ public final class OrderDtos {
             */
             Long deliveredCoins,
             Long orderedCoins,
+            /*
+              FUT Transfer has the order: its id came back, or a lookup or an admin confirmed
+              it. What shows "Track your order" -- before this, the order's status is all
+              there is to show.
+            */
+            boolean transferStarted,
             String customerAction,
             Instant createdAt,
             Instant deliveredAt,
@@ -285,7 +291,9 @@ public final class OrderDtos {
             List<String> availableTransitions,
             /* UNPAID, SUBMITTED, EXPIRED or null, as on the order itself: the customer's list
                offers "Complete your payment" on the unpaid ones. */
-            String paymentState) {
+            String paymentState,
+            /* FUT Transfer has the order: the customer's list offers "Track your order". */
+            boolean transferStarted) {
     }
 
     public record TransitionRequest(

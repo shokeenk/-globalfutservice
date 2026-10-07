@@ -197,6 +197,14 @@ public class OrderEntity {
     @Column(name = "supplier_polled_at")
     private Instant supplierPolledAt;
 
+    /**
+     * When FUT Transfer first accepted this order. Written only by the vendor ledger, in SQL,
+     * so it is read-only here: a stale copy of the order saved elsewhere can never write a
+     * null back over it.
+     */
+    @Column(name = "transfer_started_at", insertable = false, updatable = false)
+    private Instant transferStartedAt;
+
     @Column(name = "supplier_dispatch_attempts", nullable = false)
     private int supplierDispatchAttempts;
 
@@ -552,6 +560,11 @@ public class OrderEntity {
 
     public Long getSupplierAmountOrdered() {
         return supplierAmountOrdered;
+    }
+
+    /** When FUT Transfer first accepted this order; null until then. */
+    public Instant getTransferStartedAt() {
+        return transferStartedAt;
     }
 
     public Long getSupplierAmountDelivered() {

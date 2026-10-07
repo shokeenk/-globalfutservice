@@ -142,7 +142,8 @@ export default function Track() {
           .then(setOrder).catch(() => {})
       }
     }
-    const timer = window.setInterval(refresh, 20_000)
+    // Every 30 seconds: the partner's progress is read about once a minute, so faster says nothing new.
+    const timer = window.setInterval(refresh, 30_000)
     const onFocus = () => refresh()
     window.addEventListener('focus', onFocus)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
@@ -611,6 +612,13 @@ function OrderRow({ row, onOpen, onPay }: { row: OrderSummary; onOpen: () => voi
         <Button size="sm" onClick={onPay}>{t.completePayment.button}</Button>
       )}
 
+      {/* Only once FUT Transfer has it: before that there is nothing to follow but the status. */}
+      {row.transferStarted && (
+        <ButtonLink size="sm" to={`/track?ref=${encodeURIComponent(row.publicRef)}`}>
+          {t.track.trackYourOrder}
+        </ButtonLink>
+      )}
+
       <button
         type="button"
         onClick={onOpen}
@@ -910,20 +918,31 @@ function SupplierProgress({ order }: { order: Order }) {
   const t = useT()
 
   const action = order.customerAction
-  const done = order.deliveredCoins
+  const started = order.transferStarted === true
+  // Once the partner has the order, nothing reported yet means nothing delivered yet.
+  const done = order.deliveredCoins ?? (started ? 0 : null)
   const total = order.orderedCoins
   const showBar = done != null && total != null && total > 0
+  const finished = order.status === 'DELIVERED' || order.status === 'COMPLETED'
+    || (showBar && done! >= total!)
+  const stage = !started ? null
+    : finished ? t.track.transferDelivered
+      : done != null && done > 0 ? t.track.transferDelivering
+        : t.track.transferStarted
 
-  if (!showBar && !action) return null
+  if (!showBar && !action && !stage) return null
 
   return (
-    <div className="space-y-4">
-      {showBar && (
+    <div className="space-y-4" data-testid="transfer-progress">
+      {(showBar || stage) && (
         <div className="surface p-5">
+          {stage && <p className="display mb-3 text-[16px] text-chalk" data-testid="transfer-stage">{stage}</p>}
+          {showBar && (
+          <>
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-[13px] font-semibold text-chalk">{t.track.progressTitle}</p>
             <p className="tnum text-[13px] text-chalk-muted">
-              {t.track.progressOf(coins(done!), coins(total!))}
+              {t.track.progressCoins(coins(Math.min(done!, total!)), coins(total!))}
             </p>
           </div>
           {/*
@@ -944,6 +963,11 @@ function SupplierProgress({ order }: { order: Order }) {
               style={{ width: `${Math.min(100, Math.round((done! / total!) * 100))}%` }}
             />
           </div>
+          </>
+          )}
+          {started && !finished && (
+            <p className="mt-3 text-[12px] text-chalk-faint">{t.track.updatesAutomatically}</p>
+          )}
         </div>
       )}
 

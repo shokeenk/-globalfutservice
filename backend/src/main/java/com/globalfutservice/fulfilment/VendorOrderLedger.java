@@ -151,6 +151,7 @@ public class VendorOrderLedger {
                         update orders set supplier_order_id = :vid, version = version + 1
                          where id = :orderId and supplier_order_id is null
                         """, new MapSqlParameterSource("orderId", orderId).addValue("vid", vendorOrderId));
+                markTransferStarted(orderId);
             }
             return n == 1;
         } catch (DuplicateKeyException e) {
@@ -191,7 +192,34 @@ public class VendorOrderLedger {
                 .addValue("delivered", found.amountDeliveredK())
                 .addValue("coinsUsed", found.coinsUsed())
                 .addValue("toPay", found.toPay()));
+        if (n == 1) {
+            markTransferStarted(orderId);
+        }
         return n == 1;
+    }
+
+    /**
+     * The partner has the order: the customer's "Track your order" button shows, and the
+     * "transfer started" email becomes due. Set once, on whichever way the partner first
+     * accepted it -- an id returned, a lookup confirming it, an admin linking it.
+     */
+    private void markTransferStarted(long orderId) {
+        jdbc.update("""
+                update orders set transfer_started_at = coalesce(transfer_started_at, now()) where id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId));
+    }
+
+    /** How far the partner has got, in thousands: what we asked for, and delivered so far. */
+    public record Progress(long orderedK, Long deliveredK) {
+    }
+
+    /** The customer's progress bar: the partner's own count of ordered, ours if it has not said. */
+    public Optional<Progress> progress(long orderId) {
+        return jdbc.query("""
+                select coalesce(vendor_amount_ordered_k, amount_ordered_k) as ordered_k, amount_delivered_k
+                  from vendor_order where order_id = :orderId and submitted_at is not null
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new Progress(
+                rs.getLong("ordered_k"), rs.getObject("amount_delivered_k", Long.class))).stream().findFirst();
     }
 
     /**
@@ -432,6 +460,9 @@ public class VendorOrderLedger {
                         update orders set supplier_order_id = :vid, version = version + 1
                          where id = :orderId and supplier_order_id is null
                         """, new MapSqlParameterSource("orderId", orderId).addValue("vid", vendorOrderId));
+            }
+            if (n == 1) {
+                markTransferStarted(orderId);
             }
             return n == 1;
         } catch (DuplicateKeyException e) {

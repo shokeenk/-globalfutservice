@@ -189,6 +189,8 @@ export interface CoachingProgress {
 }
 
 export interface Order {
+  /** FUT Transfer has the order: the transfer has started, and its progress can be followed. */
+  transferStarted?: boolean
   publicRef: string
   status: string
   statusLabel: string
@@ -263,6 +265,8 @@ export type CustomerAction =
   | 'SUPPLIER_SIDE'
 
 export interface OrderSummary {
+  /** FUT Transfer has the order: the list offers "Track your order". */
+  transferStarted?: boolean
   publicRef: string
   status: string
   /** TRADING_SERVICE, BOOST_CHAMPS, BOOST_RIVALS or COACHING. */
@@ -968,6 +972,8 @@ export interface ApiErrorBody {
 export interface SupportContext {
   mode: 'BOOSTING' | 'COINS' | 'COACHING'
   summary: {
+    /** A coin order FUT Transfer has: the page offers "Track your order". */
+    transferStarted?: boolean
     reference: string
     service: string
     platform?: string | null
