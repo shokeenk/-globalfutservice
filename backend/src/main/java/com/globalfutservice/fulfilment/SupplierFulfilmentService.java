@@ -3,6 +3,7 @@ package com.globalfutservice.fulfilment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
+import com.globalfutservice.credentials.SignInRules;
 import com.globalfutservice.credentials.web.CredentialDtos;
 import com.globalfutservice.notify.FulfilmentAlert;
 import com.globalfutservice.notify.NotificationService;
@@ -87,8 +88,16 @@ public class SupplierFulfilmentService {
     /**
      * @param vendorOrderId the vendor's id, when known; a lookup confirms an order without one
      * @param message       for the admin who clicked; never contains a credential
+     * @param retryable     nothing was created and the cause is passing -- the cooldown could not
+     *                      be read, the account was submitted too recently, another request is
+     *                      sending it -- so the automatic queue may try again later. An admin
+     *                      clicking Approve simply reads the message.
      */
-    public record Release(Result result, String vendorOrderId, String message) {
+    public record Release(Result result, String vendorOrderId, String message, boolean retryable) {
+
+        public Release(Result result, String vendorOrderId, String message) {
+            this(result, vendorOrderId, message, false);
+        }
     }
 
     /**
@@ -163,6 +172,18 @@ public class SupplierFulfilmentService {
                     "This order has no sign-in on file, so there is nothing to send. Nothing was sent.");
         }
 
+        /*
+         * The sign-in on file must meet the partner's rules -- the same rules the checkout and
+         * the API enforce when it is given. One sealed before they existed, or before more
+         * backup codes were required, would be refused by the partner after a send.
+         */
+        var problem = SignInRules.problem(creds.eaEmail(), creds.eaPassword(), creds.backupCodes(),
+                props.fulfilment().backupCodesRequired());
+        if (problem.isPresent()) {
+            return new Release(Result.NOT_SENT, null, "The sign-in on file does not meet the partner's rules: "
+                    + problem.get() + " Ask the customer for a new one. Nothing was sent.");
+        }
+
         if (props.futTransfer().cooldownCheck()) {
             Release cooling = cooldownRefusal(ref, creds);
             if (cooling != null) {
@@ -181,8 +202,9 @@ public class SupplierFulfilmentService {
          * sign-in, and the record of who authorised it must not depend on the request
          * coming back. Order reference and operator only -- never a credential.
          */
-        log.info("FULFILMENT APPROVAL: operator {} is releasing order {} ({}K, {}) to the supplier",
-                operatorAccountId, ref, amountK, terms.orderMode());
+        log.info("FULFILMENT APPROVAL: {} is releasing order {} ({}K, {}) to the supplier",
+                operatorAccountId == null ? "automatic dispatch" : "operator " + operatorAccountId, ref, amountK,
+                terms.orderMode());
 
         FutTransferClient.Placement placement;
         if (terms.publicPool()) {
@@ -234,7 +256,7 @@ public class SupplierFulfilmentService {
         FutTransferClient.ReadFailed<FutTransferClient.Cooldown> failed =
                 (FutTransferClient.ReadFailed<FutTransferClient.Cooldown>) read;
         return new Release(Result.NOT_SENT, null, "Could not check whether the customer's EA account is in the "
-                + "partner's transfer cooldown (" + failed.code() + "). Nothing was sent; try again shortly.");
+                + "partner's transfer cooldown (" + failed.code() + "). Nothing was sent; try again shortly.", true);
     }
 
     private Release accepted(OrderEntity order, String vendorOrderId) {
@@ -289,7 +311,7 @@ public class SupplierFulfilmentService {
             case RATE_LIMITED -> {
                 ledger.markFailed(order.getId(), r.code(), "The same EA account was submitted too recently.");
                 return new Release(Result.FAILED, null, "The partner says this EA account was submitted too "
-                        + "recently (HTTP 429). Nothing was created. Try again later.");
+                        + "recently (HTTP 429). Nothing was created. Try again later.", true);
             }
             /*
              * The public pool's own refusals. Nothing was created and the sign-in is kept:
@@ -344,7 +366,7 @@ public class SupplierFulfilmentService {
     private Release notClaimed(String ref, VendorOrderLedger.Row row) {
         return switch (row.state()) {
             case VendorOrderLedger.SUBMITTING -> new Release(Result.IN_FLIGHT, null, "Order " + ref
-                    + " is already being released. Give it a moment and refresh -- it has not been sent twice.");
+                    + " is already being released. Give it a moment and refresh -- it has not been sent twice.", true);
             case VendorOrderLedger.NEEDS_REVIEW -> new Release(Result.NOT_SENT, null, "Order " + ref
                     + " needs review before anything else is sent: " + row.reviewReason());
             case VendorOrderLedger.FAILED -> new Release(Result.NOT_SENT, null, "Order " + ref

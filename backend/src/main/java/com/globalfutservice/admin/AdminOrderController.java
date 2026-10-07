@@ -7,8 +7,12 @@ import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.fulfilment.FulfilmentRelease;
 import com.globalfutservice.fulfilment.FutTransferClient;
 import com.globalfutservice.fulfilment.SupplierFulfilmentService;
+import com.globalfutservice.fulfilment.VendorOrderActions;
+import com.globalfutservice.identity.AccountEntity;
+import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
@@ -69,11 +73,16 @@ public class AdminOrderController {
     private final CredentialVaultService vaultService;
     private final SupplierFulfilmentService supplierFulfilment;
     private final AdminOrderQueries queries;
+    private final FulfilmentRelease release;
+    private final AccountRepository accounts;
 
     public AdminOrderController(OrderRepository orders, OrderService orderService,
                                 OrderMapper mapper, CredentialVaultService vaultService,
                                 SupplierFulfilmentService supplierFulfilment,
-                                AdminOrderQueries queries) {
+                                AdminOrderQueries queries, FulfilmentRelease release,
+                                AccountRepository accounts) {
+        this.release = release;
+        this.accounts = accounts;
         this.supplierFulfilment = supplierFulfilment;
         this.queries = queries;
         this.orders = orders;
@@ -323,8 +332,10 @@ public class AdminOrderController {
                     the order to IN_PROGRESS.
 
                     This is the only path that shares a customer's account credentials
-                    outside our infrastructure. It is deliberately a human decision: the
-                    checkout no longer dispatches automatically.
+                    outside our infrastructure. It is a human decision unless
+                    GFS_FUTTRANSFER_AUTO_DISPATCH is on; then a paid coin order is sent by this
+                    same release without anyone clicking, and Approve remains for any order it
+                    left. The order's vendor history says "Sent automatically" or who sent it.
 
                     The sign-in is decrypted in memory for the duration of one outbound
                     call and is never logged, never persisted in plaintext and never
@@ -341,86 +352,26 @@ public class AdminOrderController {
             @PathVariable String publicRef,
             @CurrentAccount AccountPrincipal operator) {
 
-        OrderEntity order = orderService.requireAny(publicRef);
-
-        if (!order.getSku().isCoinTransfer()) {
-            /*
-             * The partner takes coin orders. Boosting holds a sign-in exactly like a coin
-             * order does, so it arrived here looking releasable and failed inside the
-             * client instead -- burning a dispatch attempt to say so.
-             */
-            throw new ApiExceptions.ConflictException("not_a_coin_order",
-                    "The fulfilment partner only takes coin orders. This one is "
-                            + order.getSku().displayName() + ", which is worked by hand.");
-        }
-
-        /*
-         * READY_FOR_DELIVERY is the approval state, and it already existed.
-         *
-         * It means exactly what an "awaiting admin approval" status would: paid, sign-in
-         * held, nothing started. Adding a second status with that meaning would have made
-         * every order already sitting in this state ambiguous and bought no behaviour, so
-         * the existing one is used and the state machine's READY_FOR_DELIVERY ->
-         * IN_PROGRESS edge carries the approval.
-         */
-        if (order.getStatus() != OrderStatus.READY_FOR_DELIVERY) {
-            throw new ApiExceptions.ConflictException("not_awaiting_approval",
-                    "Only an order that is paid and holding a sign-in can be released. "
-                            + "This one is " + order.getStatus().name() + ".");
-        }
-        if (!vaultService.status(order.getId()).present()) {
-            // The partner requires the sign-in; releasing without one would be a
-            // guaranteed 400 from them and a wasted dispatch attempt against the order.
-            throw new ApiExceptions.ConflictException("no_credentials",
-                    "This order has no sign-in on file, so there is nothing to send.");
-        }
-
-        SupplierFulfilmentService.Release release = supplierFulfilment.approveAndDispatch(order, operator.id());
-
-        /*
-         * Re-read before moving it, because the release may just have written to this row.
-         *
-         * The release records the partner's order id and commits, which leaves the copy
-         * loaded above one version behind. Transitioning that stale copy failed the
-         * optimistic lock *after* the sign-in had already gone to the partner: the
-         * operator saw a 500, the order sat in the queue, and only a second click moved
-         * it. Loading it again costs one query and makes the successful path succeed.
-         */
-        OrderEntity released = orderService.requireAny(publicRef);
-
-        switch (release.result()) {
-            case SUBMITTED, ALREADY_SUBMITTED -> {
-                if (released.getStatus() != OrderStatus.READY_FOR_DELIVERY) {
-                    break;
-                }
-                // Labelled with the public id, as every other transition is. Never the email: an
-                // access token does not carry one, and the customer's own API returns this label.
-                OrderEntity moved = orderService.transition(released, OrderStatus.IN_PROGRESS,
-                        Actor.OPERATOR, operator.id(), operator.publicId(),
-                        release.vendorOrderId() == null ? "Released to fulfilment partner"
-                                : "Released to fulfilment partner as " + release.vendorOrderId());
-                return ResponseEntity.ok()
-                        .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                        .body(mapper.toAdminResponse(moved, orderService.timeline(moved.getId()), true));
-            }
-            case FAILED_SIGN_IN -> {
-                // The sign-in was refused and deleted: the customer is asked for it again.
-                // This reason is on the order timeline, which the customer reads.
-                orderService.transition(released, OrderStatus.ON_HOLD, Actor.SYSTEM, null, "GFS",
-                        "Your EA sign-in was not accepted. Please enter your details again so we can start.");
-            }
-            default -> {
-                // The order stays where it was. The reason is in the error below.
-            }
-        }
-        if (release.result() == SupplierFulfilmentService.Result.SUBMITTED
-                || release.result() == SupplierFulfilmentService.Result.ALREADY_SUBMITTED) {
+        // The same release the automatic queue uses: checks, exactly-once send, order moved on.
+        FulfilmentRelease.Released released = release.release(publicRef, FulfilmentRelease.Releaser.admin(
+                new VendorOrderActions.Admin(operator.id(), labelOf(operator), operator.publicId())));
+        if (released.sent()) {
             return ResponseEntity.ok()
                     .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                    .body(mapper.toAdminResponse(released, orderService.timeline(released.getId()), true));
+                    .body(mapper.toAdminResponse(released.order(), orderService.timeline(released.order().getId()),
+                            true));
         }
         // Safe to show: written by us, never containing the sign-in.
-        throw new FutTransferClient.FutTransferException(release.message());
+        throw new FutTransferClient.FutTransferException(released.release().message());
+    }
+
+    /**
+     * Who clicked, by name, for the order's vendor history (staff only). The access token
+     * carries no email, so it is read from the account.
+     */
+    private String labelOf(AccountPrincipal operator) {
+        return operator.email() != null ? operator.email()
+                : accounts.findById(operator.id()).map(AccountEntity::getEmail).orElse("account " + operator.id());
     }
 
     @PostMapping("/{publicRef}/credentials/reveal")

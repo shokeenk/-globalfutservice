@@ -52,7 +52,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * The export is a file of amounts, so it is an admin's.
  */
 @WebMvcTest(AdminOrderController.class)
-@Import(SecurityConfig.class)
+// The real release Approve delegates to, so these tests still see what Approve does.
+@Import({SecurityConfig.class, com.globalfutservice.fulfilment.FulfilmentRelease.class})
 @TestPropertySource(properties = {
         // Dummy values for placeholders that have no default. Not secrets: nothing signs
         // or decrypts anything in this test.
@@ -74,6 +75,8 @@ class AdminOrderPageSecurityTest {
     @MockBean private SupplierFulfilmentService supplierFulfilment;
     @MockBean private AdminOrderQueries queries;
     @MockBean private JwtService jwtService;
+    @MockBean private com.globalfutservice.fulfilment.VendorOrderActionLog vendorHistory;
+    @MockBean private com.globalfutservice.identity.AccountRepository accounts;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
         AccountPrincipal p = new AccountPrincipal(1L, "acc_test", "t@example.test", role);
@@ -199,6 +202,10 @@ class AdminOrderPageSecurityTest {
         when(supplierFulfilment.approveAndDispatch(order, 1L)).thenReturn(new SupplierFulfilmentService.Release(
                 SupplierFulfilmentService.Result.SUBMITTED, "SUP-1", "Sent to the fulfilment partner as SUP-1."));
         when(orderService.transition(any(), any(), any(), any(), any(), any())).thenReturn(order);
+        com.globalfutservice.identity.AccountEntity staff = org.mockito.Mockito.mock(
+                com.globalfutservice.identity.AccountEntity.class);
+        when(staff.getEmail()).thenReturn("ops@example.test");
+        when(accounts.findById(1L)).thenReturn(java.util.Optional.of(staff));
         // As an access token builds it: no email.
         AccountPrincipal fromToken = new AccountPrincipal(1L, "acc_test", null, AccountRole.OPERATOR);
 
@@ -209,6 +216,10 @@ class AdminOrderPageSecurityTest {
         verify(orderService).transition(eq(order), eq(com.globalfutservice.domain.orders.OrderStatus.IN_PROGRESS),
                 eq(com.globalfutservice.domain.orders.Actor.OPERATOR), eq(1L), eq("acc_test"),
                 eq("Released to fulfilment partner as SUP-1"));
+        // The vendor history (staff only) says who sent it by name, read from the account.
+        verify(vendorHistory).record(eq(7L), eq(com.globalfutservice.fulfilment.VendorOrderActionLog.Action.APPROVE),
+                eq(1L), eq("ops@example.test"), eq(com.globalfutservice.fulfilment.VendorOrderActionLog.Outcome.DONE),
+                org.mockito.ArgumentMatchers.isNull(), eq("Sent to the fulfilment partner as SUP-1."));
     }
 
     @Test

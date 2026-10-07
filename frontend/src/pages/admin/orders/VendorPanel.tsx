@@ -5,7 +5,8 @@ import { dateTime } from '../../../lib/format'
 import type { VendorActionName, VendorBalance, VendorNextSend, VendorSection } from '../../../lib/types'
 import {
   VENDOR_ACTION_LABEL, VENDOR_ACTION_PATH, VENDOR_ACTIONS, VENDOR_FINAL_ACTIONS, VENDOR_STATE_LABEL,
-  asReported, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
+  asReported, historyLabel, notSentAutomatically, orderModeLabel, vendorQuestion, vendorStateTone, vendorTimeline,
+  whoSent,
 } from './vendor'
 
 /**
@@ -120,6 +121,15 @@ export function VendorPanel({
       */}
       {section.enabled && section.nextSend && (!v || v.state === 'FAILED') && (
         <NextSend next={section.nextSend} />
+      )}
+      {/* Why the automatic queue left it for Approve -- what staff were alerted with. */}
+      {notSentAutomatically(section) && (!v || v.state === 'FAILED') && (
+        <div className="mt-4" data-testid="not-sent-automatically">
+          <Alert tone="warn" title="Not sent automatically">{notSentAutomatically(section)}</Alert>
+        </div>
+      )}
+      {v && whoSent(section) && (
+        <p className="mt-3 text-[13px] font-semibold text-chalk" data-testid="who-sent">{whoSent(section)}</p>
       )}
       {!v ? (
         <p className="mt-3 text-[13px] text-chalk-muted">Not sent to the partner.</p>
@@ -241,7 +251,7 @@ export function VendorPanel({
                 ) : (
                   <>
                     <p className="text-chalk">
-                      <span className="font-semibold">{VENDOR_ACTION_LABEL[item.entry.action] ?? item.entry.action}</span>
+                      <span className="font-semibold">{historyLabel(item.entry.action)}</span>
                       {' · '}{item.entry.outcome.toLowerCase()}
                       {item.entry.code ? ` (${item.entry.code})` : ''}
                     </p>

@@ -1041,10 +1041,16 @@ export interface VendorCall {
   durationMs: number
 }
 
+/**
+ * What the order's vendor history records: the admin actions above, plus sending it -- by an
+ * admin's Approve, or by the automatic queue (which also records why it left an order).
+ */
+export type VendorHistoryAction = VendorActionName | 'APPROVE' | 'AUTO_DISPATCH'
+
 /** One admin action on an order at the partner, and who did it. */
 export interface VendorActionEntry {
   at: string
-  action: VendorActionName
+  action: VendorHistoryAction
   actorLabel?: string | null
   outcome: 'DONE' | 'REFUSED' | 'UNCERTAIN'
   code?: string | null

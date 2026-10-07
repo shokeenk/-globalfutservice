@@ -61,6 +61,10 @@ class AdminOrderStatsTest {
     private AdminOrderQueries queries;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private com.globalfutservice.fulfilment.FulfilmentRelease release;
+    @MockBean
+    private com.globalfutservice.identity.AccountRepository accounts;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
         AccountPrincipal p = new AccountPrincipal(1L, "acc_test", "t@example.test", role);

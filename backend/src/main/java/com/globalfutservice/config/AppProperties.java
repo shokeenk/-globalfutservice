@@ -622,7 +622,9 @@ public record AppProperties(
              */
             @DefaultValue("PUBLIC_POOL") FutTransferOrderMode orderMode,
             /** What only a public-pool order sends. */
-            @Valid @DefaultValue FutTransferPublicPool publicPool) {
+            @Valid @DefaultValue FutTransferPublicPool publicPool,
+            /** Whether a paid coin order is sent without an admin's Approve. */
+            @Valid @DefaultValue FutTransferAutoDispatch autoDispatch) {
 
         public FutTransfer {
             requireSecure("gfs.fut-transfer.base-url", baseUrl);
@@ -740,6 +742,33 @@ public record AppProperties(
             @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal buyNowThreshold,
             @DefaultValue("false") boolean sendMaxPrice,
             @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxPrice) {
+    }
+
+    /**
+     * Sending a paid coin order to FUT Transfer without an admin's Approve.
+     *
+     * <p>Off by default: sending a customer's sign-in to the partner has been a deliberate admin
+     * action, and switching that off is the business's decision. When on, an order that becomes
+     * PAID is queued in the payment's own transaction and sent, after it commits, by the same
+     * release Approve uses -- exactly once, the same checks, the same handling of a lost
+     * answer. One it cannot send is left for Approve, with the reason.
+     *
+     * @param enabled GFS_FUTTRANSFER_AUTO_DISPATCH
+     * @param maxK    GFS_FUTTRANSFER_AUTO_DISPATCH_MAX_K: an order of more coins (in thousands)
+     *                waits for Approve; null for no limit
+     * @param every   how often the queue is worked
+     */
+    public record FutTransferAutoDispatch(
+            @DefaultValue("false") boolean enabled,
+            @jakarta.validation.constraints.Positive Long maxK,
+            @DefaultValue("PT15S") Duration every) {
+
+        public static final FutTransferAutoDispatch OFF = new FutTransferAutoDispatch(false, null, Duration.ofSeconds(15));
+
+        /** Whether an order of {@code amountK} thousand coins is within the automatic limit. */
+        public boolean allows(long amountK) {
+            return maxK == null || amountK <= maxK;
+        }
     }
 
     /**

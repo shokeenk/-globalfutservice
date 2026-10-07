@@ -107,7 +107,8 @@ class PayopIpnRecoveryTest {
                 mock(PaymentRepository.class), mock(PaymentGateway.class), mock(QuoteService.class),
                 mock(LoyaltyService.class), mock(AffiliateService.class), vault, notifications,
                 mock(AccountRepository.class), mock(CoachingService.class), mock(CouponService.class),
-                mock(CustomerFeedService.class), new ObjectMapper(), props, NOW, AfterCommit.immediate());
+                mock(CustomerFeedService.class), new ObjectMapper(), props, NOW, AfterCommit.immediate(),
+                mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class));
         callbacks = new PayopCallbackService(invoices.repo, client, orders, orderService, payments, claims, ledger,
                 notifications, props, new ObjectMapper(), PayopFakes.noTransactions(), NOW);
         reconciliation = new PayopReconciliation(invoices.repo, client, callbacks, lock, props, NOW);

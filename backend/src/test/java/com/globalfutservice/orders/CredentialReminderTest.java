@@ -109,7 +109,8 @@ class CredentialReminderTest {
                     mock(AccountRepository.class), mock(CoachingService.class),
                     mock(CouponService.class), mock(CustomerFeedService.class),
                     new ObjectMapper(), mock(AppProperties.class),
-                    Clock.fixed(NOW, ZoneOffset.UTC), AfterCommit.immediate());
+                    Clock.fixed(NOW, ZoneOffset.UTC), AfterCommit.immediate(),
+                mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class));
 
             order = mock(OrderEntity.class);
             when(order.getId()).thenReturn(7L);

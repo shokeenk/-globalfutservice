@@ -25,7 +25,11 @@ public class VendorOrderActionLog {
 
     private static final Logger log = LoggerFactory.getLogger(VendorOrderActionLog.class);
 
-    public enum Action { SEND_SIGN_IN, RESUME, STOP, MARK_FINISHED, RETRY, LINK, RESOLVE }
+    /**
+     * APPROVE is an admin sending the order; AUTO_DISPATCH the automatic queue sending it, or
+     * leaving it for Approve. Both go through the same release.
+     */
+    public enum Action { SEND_SIGN_IN, RESUME, STOP, MARK_FINISHED, RETRY, LINK, RESOLVE, APPROVE, AUTO_DISPATCH }
 
     public enum Outcome { DONE, REFUSED, UNCERTAIN }
 
