@@ -27,6 +27,7 @@ import com.globalfutservice.payments.payop.PayopFeeTableService;
 import com.globalfutservice.payments.payop.PayopInvoiceEntity;
 import com.globalfutservice.payments.payop.PayopInvoiceRepository;
 import com.globalfutservice.payments.payop.PayopMethodsService;
+import com.globalfutservice.payments.payop.PayopReconciliation;
 import com.globalfutservice.payments.payop.PayopStartupCheck;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
@@ -119,6 +120,14 @@ public class AdminPayopController {
     public record AcceptRequest(@NotBlank String txid, @NotBlank String note) {
     }
 
+    /** One invoice re-checked for an order, as it stood before and what came of it. */
+    public record RecheckedDto(String invoiceId, String statusBefore, String outcome) {
+    }
+
+    /** The order's status after the re-check, and each invoice looked at. */
+    public record RecheckDto(String order, String orderStatus, List<RecheckedDto> invoices) {
+    }
+
     public record OutcomeDto(String outcome) {
     }
 
@@ -129,11 +138,13 @@ public class AdminPayopController {
     private final PayopCallbackService callbacks;
     private final PayopMethodsService methods;
     private final WebhookEventRepository webhooks;
+    private final PayopReconciliation reconciliation;
     private final AppProperties props;
 
     public AdminPayopController(PayopFeeTableService fees, FxRateService fx, PayopInvoiceRepository invoices,
                                 OrderRepository orders, PayopCallbackService callbacks, PayopMethodsService methods,
-                                WebhookEventRepository webhooks, AppProperties props) {
+                                WebhookEventRepository webhooks, PayopReconciliation reconciliation,
+                                AppProperties props) {
         this.fees = fees;
         this.fx = fx;
         this.invoices = invoices;
@@ -141,6 +152,7 @@ public class AdminPayopController {
         this.callbacks = callbacks;
         this.methods = methods;
         this.webhooks = webhooks;
+        this.reconciliation = reconciliation;
         this.props = props;
     }
 
@@ -266,6 +278,24 @@ public class AdminPayopController {
         } catch (IllegalArgumentException e) {
             throw new ApiExceptions.BadRequestException("That is not a Payop transaction ID.");
         }
+    }
+
+    @PostMapping("/orders/{ref}/recheck")
+    @Operation(summary = "Re-check Payop payment: ask Payop about every unpaid invoice of this order",
+            description = """
+                    The same check the reconciliation job runs every few minutes, for one order and at
+                    once. Pays the order only if Payop reports an invoice paid and its transaction passes
+                    every check an IPN's would; a paid invoice Payop names no transaction for goes to
+                    review. For an order a lost or refused IPN left unpaid.
+                    """)
+    public ResponseEntity<RecheckDto> recheck(@PathVariable String ref, @CurrentAccount AccountPrincipal operator) {
+        OrderEntity order = orders.findByPublicRef(ref.trim().toUpperCase(Locale.ROOT))
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("No such order."));
+        log.info("Operator {} is re-checking Payop payment for order {}", operator.id(), order.getPublicRef());
+        List<RecheckedDto> checked = reconciliation.recheckOrder(order.getId()).stream()
+                .map(c -> new RecheckedDto(c.invoiceId(), c.status(), c.outcome().name())).toList();
+        String status = orders.findById(order.getId()).map(o -> o.getStatus().name()).orElse(null);
+        return noStore(new RecheckDto(order.getPublicRef(), status, checked));
     }
 
     @PostMapping("/invoices/{id}/accept")

@@ -1184,6 +1184,13 @@ export interface PaymentAttempt {
   superseded: boolean
 }
 
+/** POST /api/v1/admin/payop/orders/{ref}/recheck: each unpaid Payop invoice asked about, and the order after. */
+export interface PayopRecheck {
+  order: string
+  orderStatus: string | null
+  invoices: { invoiceId: string; statusBefore: string; outcome: string }[]
+}
+
 export interface OrderPaymentStaffView {
   current: PaymentAttempt | null
   currentBreakdown: PaymentBreakdown | null

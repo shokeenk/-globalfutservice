@@ -62,6 +62,8 @@ class PayopCallbackServiceTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderService orderService = mock(OrderService.class);
     private final PaymentRepository payments = mock(PaymentRepository.class);
+    private final com.globalfutservice.payments.ManualPaymentClaimRepository claims =
+            mock(com.globalfutservice.payments.ManualPaymentClaimRepository.class);
     private final WebhookLedger ledger = mock(WebhookLedger.class);
     private final NotificationService notifications = mock(NotificationService.class);
     private final List<PaymentEntity> paymentRows = new ArrayList<>();
@@ -83,6 +85,8 @@ class PayopCallbackServiceTest {
         });
         when(payments.findByProviderAndProviderPaymentId(eq("PAYOP"), anyString())).thenAnswer(inv ->
                 paymentRows.stream().filter(p -> inv.getArgument(1).equals(p.getProviderPaymentId())).findFirst());
+        when(payments.findByOrderId(anyLong())).thenAnswer(inv ->
+                paymentRows.stream().filter(p -> p.getOrderId().equals(inv.getArgument(0))).toList());
         // markPaid's effect, as far as these tests need it.
         doAnswer(inv -> {
             OrderEntity o = inv.getArgument(0);
@@ -101,7 +105,7 @@ class PayopCallbackServiceTest {
 
         AppProperties props = mock(AppProperties.class);
         when(props.publicUrl()).thenReturn("https://globalfutservices.com");
-        callbacks = new PayopCallbackService(invoices.repo, client, orders, orderService, payments, ledger,
+        callbacks = new PayopCallbackService(invoices.repo, client, orders, orderService, payments, claims, ledger,
                 notifications, props, MAPPER, PayopFakes.noTransactions(), NOW);
     }
 

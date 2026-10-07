@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -66,6 +68,29 @@ public interface PayopInvoiceRepository extends JpaRepository<PayopInvoiceEntity
                                                                Pageable page);
 
     List<PayopInvoiceEntity> findAllByOrderByCreatedAtDesc(Pageable page);
+
+    /**
+     * The attempt, locked for the rest of the transaction. Every change to an attempt's money
+     * state takes it, so an IPN and the reconciliation job arriving together are applied one
+     * after the other: the second finds the first's answer, never a stale copy.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from PayopInvoiceEntity i where i.id = :id")
+    Optional<PayopInvoiceEntity> lockById(@Param("id") Long id);
+
+    /**
+     * Invoices Payop could have taken money on that we have not settled: made since
+     * {@code since}, Payop has them, and not already paid, in review or a duplicate. Expired
+     * and replaced ones are included -- Payop cannot cancel an invoice, so either can still
+     * have been paid -- as are failed ones, which a later try on the same invoice can turn.
+     */
+    @Query("""
+            select i from PayopInvoiceEntity i
+            where i.invoiceId is not null and i.createdAt > :since and i.status not in :settled
+            order by i.createdAt
+            """)
+    List<PayopInvoiceEntity> findUnsettledSince(@Param("since") Instant since,
+                                                @Param("settled") Collection<PayopInvoiceEntity.Status> settled);
 
     long countByStatusIn(Collection<PayopInvoiceEntity.Status> statuses);
 }

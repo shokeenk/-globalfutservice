@@ -69,6 +69,14 @@ final class PayopFakes {
             when(repo.save(any(PayopInvoiceEntity.class))).thenAnswer(inv -> store(inv.getArgument(0)));
             when(repo.saveAndFlush(any(PayopInvoiceEntity.class))).thenAnswer(inv -> store(inv.getArgument(0)));
             when(repo.findById(anyLong())).thenAnswer(inv -> Optional.ofNullable(rows.get((Long) inv.getArgument(0))));
+            when(repo.lockById(anyLong())).thenAnswer(inv -> Optional.ofNullable(rows.get((Long) inv.getArgument(0))));
+            when(repo.findUnsettledSince(any(), anyCollection())).thenAnswer(inv -> {
+                Collection<?> settled = inv.getArgument(1);
+                return rows.values().stream()
+                        .filter(r -> r.getInvoiceId() != null && r.getCreatedAt().isAfter(inv.getArgument(0))
+                                && !settled.contains(r.getStatus()))
+                        .sorted(Comparator.comparing(PayopInvoiceEntity::getCreatedAt)).toList();
+            });
             when(repo.findByInvoiceId(anyString())).thenAnswer(inv -> rows.values().stream()
                     .filter(r -> inv.getArgument(0).equals(r.getInvoiceId())).findFirst());
             when(repo.findFirstByOrderIdAndStatusInOrderByCreatedAtDesc(anyLong(), anyCollection())).thenAnswer(inv -> {

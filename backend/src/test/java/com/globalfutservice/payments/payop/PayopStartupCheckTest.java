@@ -26,7 +26,7 @@ class PayopStartupCheckTest {
         return new AppProperties.Payop(enabled, "https://api.payop.com", "https://checkout.payop.com", publicKey,
                 secretKey, jwt, appId, expires, List.of("18.199.249.46"), List.of("173.245.48.0/20"),
                 Duration.ofHours(1), Duration.ofHours(24), Duration.ofSeconds(15), 5, Duration.ofHours(24), 10,
-                Duration.ofHours(1));
+                Duration.ofHours(1), Duration.ofMinutes(5), Duration.ofHours(26));
     }
 
     private static PayopStartupCheck check(AppProperties.Payop payop, boolean internationalPoints) {

@@ -1,8 +1,20 @@
-import { useEffect, useState } from 'react'
-import { Badge, Card } from '../../../components/ui'
-import { api } from '../../../lib/api'
+import { useCallback, useEffect, useState } from 'react'
+import { Alert, Badge, Button, Card } from '../../../components/ui'
+import { ApiError, api } from '../../../lib/api'
 import { dateTime } from '../../../lib/format'
-import type { OrderPaymentStaffView, PaymentAttempt } from '../../../lib/types'
+import type { OrderPaymentStaffView, PaymentAttempt, PayopRecheck } from '../../../lib/types'
+
+/** What each re-check outcome means, said to staff. */
+const RECHECK: Record<string, string> = {
+  PAID: 'paid: the order has moved on',
+  ALREADY_APPLIED: 'already applied',
+  PENDING: 'no completed payment at Payop yet',
+  REVIEW: 'held for review: see Payop payments, staff were alerted',
+  FAILED: 'Payop reports the payment failed',
+  DUPLICATE: 'a second payment for a paid order: refund it',
+  UNAVAILABLE: 'Payop could not be reached: try again shortly',
+  IGNORED: 'nothing to do',
+}
 
 /**
  * How the customer is paying for this order.
@@ -17,10 +29,13 @@ import type { OrderPaymentStaffView, PaymentAttempt } from '../../../lib/types'
  * <p>Shown only when there has been an attempt; an order paid at checkout the ordinary way
  * has its claim on the Payments page as before.
  */
-export function PaymentPanel({ publicRef }: { publicRef: string }) {
+export function PaymentPanel({ publicRef, onChanged }: { publicRef: string; onChanged?: () => void }) {
   const [view, setView] = useState<OrderPaymentStaffView | null>(null)
+  const [rechecking, setRechecking] = useState(false)
+  const [recheck, setRecheck] = useState<PayopRecheck | null>(null)
+  const [recheckError, setRecheckError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let live = true
     api.get<OrderPaymentStaffView>(`/api/v1/admin/orders/${encodeURIComponent(publicRef)}/payment`)
       .then((found) => { if (live) setView(found) })
@@ -28,7 +43,30 @@ export function PaymentPanel({ publicRef }: { publicRef: string }) {
     return () => { live = false }
   }, [publicRef])
 
+  useEffect(() => load(), [load])
+
+  /*
+   * For an order a lost or refused Payop IPN left unpaid: the same check the reconciliation
+   * job runs every few minutes, now. It only asks Payop, and pays the order only if Payop's
+   * answer passes every check an IPN's would.
+   */
+  async function recheckPayop() {
+    setRechecking(true)
+    setRecheckError(null)
+    try {
+      setRecheck(await api.post<PayopRecheck>(
+        `/api/v1/admin/payop/orders/${encodeURIComponent(publicRef)}/recheck`))
+      load()
+      onChanged?.()
+    } catch (e) {
+      setRecheckError(e instanceof ApiError ? e.message : 'The re-check failed.')
+    } finally {
+      setRechecking(false)
+    }
+  }
+
   if (!view || view.attempts.length === 0) return null
+  const hasPayop = view.attempts.some((a) => a.kind === 'PAYOP')
 
   return (
     <div data-testid="payment-panel">
@@ -80,6 +118,38 @@ export function PaymentPanel({ publicRef }: { publicRef: string }) {
           </tbody>
         </table>
       </div>
+
+      {hasPayop && (
+        <div className="mt-5 border-t border-ink-400 pt-4">
+          <Button size="sm" variant="secondary" loading={rechecking} onClick={() => void recheckPayop()}>
+            Re-check Payop payment
+          </Button>
+          <p className="mt-1.5 text-[12px] text-chalk-faint">
+            Asks Payop about this order&apos;s unpaid invoices and applies a confirmed payment, exactly as an IPN
+            would. Safe to press more than once.
+          </p>
+          {recheckError && <div className="mt-3"><Alert tone="warn">{recheckError}</Alert></div>}
+          {recheck && (
+            <div className="mt-3 text-[12.5px]" data-testid="payop-recheck">
+              {recheck.invoices.length === 0 ? (
+                <p className="text-chalk-muted">No Payop invoice on this order is waiting to be paid.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {recheck.invoices.map((i) => (
+                    <li key={i.invoiceId} className="text-chalk">
+                      <span className="tnum text-chalk-faint">{i.invoiceId.slice(0, 8)}…</span>{' '}
+                      {RECHECK[i.outcome] ?? i.outcome}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {recheck.orderStatus && (
+                <p className="mt-1.5 text-chalk-muted">Order is now <span className="text-chalk">{recheck.orderStatus}</span>.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </Card>
     </div>
   )

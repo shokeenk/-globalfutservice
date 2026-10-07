@@ -465,6 +465,10 @@ gfs:
     invoices-per-order-window: ${GFS_PAYOP_INVOICES_PER_ORDER_WINDOW:24h}
     invoices-per-account: ${GFS_PAYOP_INVOICES_PER_ACCOUNT:10}
     invoices-per-account-window: ${GFS_PAYOP_INVOICES_PER_ACCOUNT_WINDOW:1h}
+    # The safety net for a lost or refused IPN: open invoices are checked with Payop this often,
+    # back this far (an invoice is payable for 24h).
+    reconcile-every: ${GFS_PAYOP_RECONCILE_EVERY:PT5M}
+    reconcile-window: ${GFS_PAYOP_RECONCILE_WINDOW:26h}
 
   # Exchange rates: only for Payop's fixed fee, which is quoted in EUR.
   fx:

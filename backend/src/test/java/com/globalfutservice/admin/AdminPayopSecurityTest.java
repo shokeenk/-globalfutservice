@@ -16,6 +16,7 @@ import com.globalfutservice.payments.payop.PayopFeeMethodEntity;
 import com.globalfutservice.payments.payop.PayopFeeTableService;
 import com.globalfutservice.payments.payop.PayopInvoiceRepository;
 import com.globalfutservice.payments.payop.PayopMethodsService;
+import com.globalfutservice.payments.payop.PayopReconciliation;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.JwtService;
 import org.junit.jupiter.api.DisplayName;
@@ -71,6 +72,7 @@ class AdminPayopSecurityTest {
     @MockBean private PayopCallbackService callbacks;
     @MockBean private PayopMethodsService methods;
     @MockBean private WebhookEventRepository webhooks;
+    @MockBean private PayopReconciliation reconciliation;
     @MockBean private JwtService jwtService;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
@@ -111,6 +113,35 @@ class AdminPayopSecurityTest {
         mvc.perform(post(BASE + "/invoices/1/verify").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"txid\":\"dca59ca5-be19-470d-9494-9b76944e0241\"}")
                         .with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Re-check Payop payment: an operator can run it on an order; a customer or a stranger cannot")
+    void recheck() throws Exception {
+        String path = BASE + "/orders/GFS-26-EUR00001/recheck";
+        mvc.perform(post(path)).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).with(authentication(as(AccountRole.CUSTOMER)))).andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(reconciliation);
+
+        com.globalfutservice.orders.OrderEntity order = org.mockito.Mockito.mock(
+                com.globalfutservice.orders.OrderEntity.class);
+        org.mockito.Mockito.when(order.getId()).thenReturn(7L);
+        org.mockito.Mockito.when(order.getPublicRef()).thenReturn("GFS-26-EUR00001");
+        org.mockito.Mockito.when(order.getStatus())
+                .thenReturn(com.globalfutservice.domain.orders.OrderStatus.READY_FOR_DELIVERY);
+        org.mockito.Mockito.when(orders.findByPublicRef("GFS-26-EUR00001")).thenReturn(java.util.Optional.of(order));
+        org.mockito.Mockito.when(orders.findById(7L)).thenReturn(java.util.Optional.of(order));
+        org.mockito.Mockito.when(reconciliation.recheckOrder(7L)).thenReturn(java.util.List.of(
+                new PayopReconciliation.Checked("d024f697-ba2d-456f-910e-4d7fdfd338dd", "OPEN",
+                        PayopCallbackService.Outcome.PAID)));
+        mvc.perform(post(path).with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.orderStatus").value("READY_FOR_DELIVERY"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.invoices[0].outcome").value("PAID"));
+        mvc.perform(post(BASE + "/orders/GFS-26-NOSUCH01/recheck").with(authentication(as(AccountRole.OPERATOR))))
                 .andExpect(status().isNotFound());
     }
 

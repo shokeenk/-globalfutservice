@@ -258,7 +258,7 @@ export default function AdminOrder() {
             )}
           </Card>
 
-          <PaymentPanel publicRef={order.publicRef} />
+          <PaymentPanel publicRef={order.publicRef} onChanged={() => void load()} />
 
           {isAdmin && vendor && order.sku === 'TRADING_SERVICE' && (
             <VendorPanel
