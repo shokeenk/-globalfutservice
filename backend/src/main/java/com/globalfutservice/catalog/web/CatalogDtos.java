@@ -73,6 +73,11 @@ public final class CatalogDtos {
      * same range in millions, for a storefront that reads those.
      */
     public record CoinDetails(
+            /**
+             * The price version these numbers come from. A quote names the version that priced
+             * it; when the two differ, the storefront knows its prices are stale and fetches them again.
+             */
+            Long version,
             /** PC, or CONSOLE for PlayStation and Xbox. */
             String market,
             String marketLabel,

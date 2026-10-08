@@ -30,6 +30,34 @@ export interface CatalogOption {
    * back to the last tier itself.
    */
   bestValue?: boolean
+  /**
+   * A coin option's price structure: its slider and its rates. PlayStation and Xbox carry
+   * the same one -- they share a market and its prices. Missing from older servers, and
+   * on every option that is not coins.
+   */
+  coin?: CatalogCoin | null
+}
+
+/** A coin price structure, as the storefront reads it. Amounts in whole thousands of coins. */
+export interface CatalogCoin {
+  /** The price version these numbers come from; a quote priced from another means they are stale. */
+  version?: number | null
+  market: 'PC' | 'CONSOLE'
+  marketLabel: string
+  minK: number
+  maxK: number
+  stepK: number
+  /** The one-tap amounts, in order. */
+  quickPicksK: number[]
+  /** The base rate (fromK 0), then any brackets: from that amount on, every coin in the order at that rate. */
+  rates: CatalogCoinRate[]
+}
+
+export interface CatalogCoinRate {
+  fromK: number
+  perMillionMinor: number
+  perMillionFormatted: string
+  per100kFormatted: string
 }
 
 export interface ServiceGroup {
@@ -132,6 +160,8 @@ export interface SignedQuote {
   issuedAt: string
   expiresAt: string
   signature: string
+  /** The coin price version that priced this quote; null for other services. */
+  priceVersion?: number | null
 }
 
 export interface Coupon {

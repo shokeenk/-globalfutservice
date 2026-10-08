@@ -773,6 +773,10 @@ const es: Dictionary = {
     perMillion: '/ millón',
     taxIncludedShort: 'Incluido',
     taxIncludedInline: 'Impuesto EA del 5% incluido',
+    volumeTitle: 'Precio por volumen',
+    volumeRange: (from: string, to: string) => `${from} – ${to}`,
+    volumeFrom: (from: string) => `${from} o más`,
+    volumeNext: (from: string, rate: string) => `Desde ${from}, todas las monedas del pedido a ${rate}.`,
     taxIncludedTitle: 'El 5% de EA corre de nuestra cuenta',
     taxIncludedBody:
       'EA se lleva el 5% de cada traspaso. La mayoría te lo suma en el checkout. ' +

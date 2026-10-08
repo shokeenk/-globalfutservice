@@ -17,7 +17,7 @@ import { useMoney } from '../lib/money'
 import { looksLikeEmail } from '../lib/validation'
 import { openCheckout, isStubGateway } from '../lib/razorpay'
 import { SEASON, useSeo } from '../lib/seo'
-import type { CreateOrderResponse, QuoteLine, SignedQuote } from '../lib/types'
+import type { CatalogCoin, CatalogCoinRate, CreateOrderResponse, QuoteLine, SignedQuote } from '../lib/types'
 import { useReducedMotion } from '../motion'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
@@ -39,7 +39,7 @@ const SERVICE_LANDING: Record<string, string> = {
 
 export default function Order() {
   const t = useT()
-  const { catalog, policy, loading, error } = useCatalog()
+  const { catalog, policy, loading, error, refresh } = useCatalog()
   const labels = useCatalogLabels()
   const { account } = useAuth()
   const [params] = useSearchParams()
@@ -122,18 +122,21 @@ export default function Order() {
   const platformMissing = !isFlat && !selected
 
   /*
-   * The slider's range. Before a platform is picked it borrows the first card's bounds,
-   * which is a range and not a choice: no price is shown or asked for until the customer
-   * picks, and the amount is re-fitted to their platform's card when they do.
+   * The slider's range: the chosen platform's price structure, as the admin set it. PC has
+   * its own; PlayStation and Xbox share one. Before a platform is picked it borrows the
+   * first card's, which is a range and not a choice: no price is shown or asked for until
+   * the customer picks, and the amount is re-fitted to their platform's structure when
+   * they do.
    *
-   * The constants are for the frame before the catalog lands. They match the rate card
-   * rather than being round numbers, so a slider rendered in that frame cannot offer an
-   * amount the server would refuse to quote.
+   * The constants are for the frame before the catalog lands, and for a server too old to
+   * send a structure. They match the shipped default -- 50K to 1M in 10K steps -- so a
+   * slider rendered in that frame cannot offer an amount the server would refuse to quote.
    */
   const range = selected ?? options[0]
-  const min = Number(range?.minQuantity ?? 0.01)
-  const max = Number(range?.maxQuantity ?? 1)
-  const stepSize = Number(range?.stepQuantity ?? 0.01)
+  const coin = range?.coin ?? null
+  const min = coin ? coin.minK / 1000 : Number(range?.minQuantity ?? 0.05)
+  const max = coin ? coin.maxK / 1000 : Number(range?.maxQuantity ?? 1)
+  const stepSize = coin ? coin.stepK / 1000 : Number(range?.stepQuantity ?? 0.01)
 
   /*
    * The shortcut buttons, derived from the range rather than written into it.
@@ -162,11 +165,33 @@ export default function Order() {
     const stepK = Math.max(1, Math.round(stepSize * 1000))
     const minK = Math.round(min * 1000)
     const maxK = Math.round(max * 1000)
+    const onSlider = (k: number) => k >= minK && k <= maxK && (k - minK) % stepK === 0
+    // The structure's own quick picks, as the admin set them. Checked against the range all
+    // the same: a button for an amount the slider cannot stop on would be refused a price.
+    if (coin) return coin.quickPicksK.filter(onSlider).map((k) => k / 1000)
     return [50, 100, 250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000]
-      .filter((k) => k >= minK && k <= maxK && (k - minK) % stepK === 0)
+      .filter(onSlider)
       .slice(0, 6)
       .map((k) => k / 1000)
-  }, [min, max, stepSize])
+  }, [coin, min, max, stepSize])
+
+  // What this amount pays per million: the highest bracket it reaches, every coin at that rate.
+  const amountK = Math.round(quantity * 1000)
+  const applied = coinRate(selected?.coin ?? null, amountK)
+
+  /*
+   * Prices changed since this page loaded them: the quote was priced from a newer version than
+   * the one the page is showing. The catalogue is fetched again so the rate, the range and the
+   * brackets on screen match the total. Once per version, whatever comes back.
+   */
+  const refreshedFor = useRef<number | null>(null)
+  useEffect(() => {
+    const shown = selected?.coin?.version
+    const priced = quote?.priceVersion
+    if (shown == null || priced == null || shown === priced || refreshedFor.current === priced) return
+    refreshedFor.current = priced
+    refresh?.()
+  }, [quote, selected, refresh])
 
   /*
    * Quoting is debounced and every in-flight request is aborted when a newer one
@@ -534,7 +559,7 @@ export default function Order() {
                 >
                   <span className="text-chalk-faint">{coinsShort(quantity)}</span>
                   <span aria-hidden="true" className="text-chalk-faint">&times;</span>
-                  <span>{selected?.unitPriceFormatted ?? '—'}</span>
+                  <span data-testid="applied-rate">{applied?.perMillionFormatted ?? selected?.unitPriceFormatted ?? '—'}</span>
                   <span aria-hidden="true" className="h-3 w-px bg-ink-300" />
                   <span className="text-chalk-faint">{t.order.perMillion}</span>
                   {service?.marketTaxApplies && (
@@ -544,6 +569,10 @@ export default function Order() {
                     </>
                   )}
                 </div>
+
+                {selected?.coin && selected.coin.rates.length > 1 && (
+                  <VolumePricing coin={selected.coin} amountK={amountK} />
+                )}
 
                 <div className="mt-5 flex flex-wrap gap-2">
                   {presets.map((preset) => (
@@ -641,6 +670,57 @@ export default function Order() {
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * The rate an order of {@code amountK} thousand coins pays per million: the highest bracket
+ * it reaches -- from that amount on, every coin in the order is at that rate -- else the
+ * base rate. The server prices the quote the same way; this is what the page shows meanwhile.
+ */
+function coinRate(coin: CatalogCoin | null, amountK: number): CatalogCoinRate | null {
+  if (!coin || coin.rates.length === 0) return null
+  const reached = coin.rates.filter((r) => r.fromK <= amountK).sort((a, b) => b.fromK - a.fromK)
+  return reached[0] ?? coin.rates[0] ?? null
+}
+
+/**
+ * Volume pricing, when the chosen platform's structure has brackets: each tier with its
+ * rate per million, the one this amount reaches marked, and the next one said plainly --
+ * buying into it reprices the whole order, not just the coins above it.
+ */
+function VolumePricing({ coin, amountK }: { coin: CatalogCoin; amountK: number }) {
+  const t = useT()
+  const rates = [...coin.rates].sort((a, b) => a.fromK - b.fromK)
+  const active = coinRate(coin, amountK)
+  const next = rates.find((r) => r.fromK > amountK)
+  return (
+    <div className="mt-4 rounded-edge border border-ink-400 px-3 py-2.5" data-testid="volume-pricing">
+      <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-chalk-faint">{t.order.volumeTitle}</p>
+      <ul className="mt-1.5 space-y-0.5 text-[12.5px]">
+        {rates.map((r, i) => {
+          const from = coinsShort(Math.max(r.fromK, coin.minK) / 1000)
+          const following = rates[i + 1]
+          const label = following
+            ? t.order.volumeRange(from, coinsShort((following.fromK - coin.stepK) / 1000))
+            : t.order.volumeFrom(from)
+          const on = r === active
+          return (
+            <li key={r.fromK} aria-current={on ? 'true' : undefined}
+                className={`tnum flex justify-between gap-3 rounded px-2 py-1 ${
+                  on ? 'bg-ink-700 font-semibold text-chalk' : 'text-chalk-muted'}`}>
+              <span>{label}</span>
+              <span>{r.perMillionFormatted} {t.order.perMillion}</span>
+            </li>
+          )
+        })}
+      </ul>
+      {next && (
+        <p className="mt-1.5 text-[12px] text-ok">
+          {t.order.volumeNext(coinsShort(next.fromK / 1000), `${next.perMillionFormatted} ${t.order.perMillion}`)}
+        </p>
+      )}
+    </div>
   )
 }
 

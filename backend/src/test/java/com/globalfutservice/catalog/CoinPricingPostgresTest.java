@@ -203,7 +203,8 @@ class CoinPricingPostgresTest {
         Map<Currency, List<Bracket>> rates = new java.util.EnumMap<>(Currency.class);
         rates.putAll(pc.rates());
         rates.put(Currency.INR, List.of(new Bracket(0, 1_400_000), new Bracket(500, 1_350_000)));
-        pricing.save(new CoinPriceTable(null, "FC26", CoinMarket.PC, 50, 1000, 10, List.of(100, 500), rates), null, "t");
+        long version = pricing.save(new CoinPriceTable(null, "FC26", CoinMarket.PC, 50, 1000, 10, List.of(100, 500), rates),
+                null, "t").table().version();
 
         List<CatalogDtos.CatalogOption> options = pricing.catalogOptions(Currency.INR);
         assertThat(options).extracting(CatalogDtos.CatalogOption::platform).containsExactly("PC", "PLAYSTATION", "XBOX");
@@ -211,6 +212,8 @@ class CoinPricingPostgresTest {
                 .containsExactly("₹14,000.00", "₹13,000.00", "₹13,000.00");
         assertThat(options.get(0).minQuantity()).isEqualByComparingTo("0.05");
         assertThat(options.get(0).coin().quickPicksK()).containsExactly(100, 500);
+        // The version the numbers come from: what a quote is checked against to know they are current.
+        assertThat(options.get(0).coin().version()).isEqualTo(version);
         assertThat(options.get(0).coin().rates()).extracting(CatalogDtos.CoinRate::fromK, CatalogDtos.CoinRate::per100kFormatted)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(0, "₹1,400.00"),
                         org.assertj.core.groups.Tuple.tuple(500, "₹1,350.00"));

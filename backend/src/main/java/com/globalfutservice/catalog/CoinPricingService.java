@@ -93,7 +93,7 @@ public class CoinPricingService {
         for (CoinPriceTable.Bracket b : t.brackets(currency)) {
             rates.add(rate(currency, b.fromK(), b.perMillionMinor()));
         }
-        return new CatalogDtos.CoinDetails(t.market().name(), t.market().displayName(), t.minK(), t.maxK(), t.stepK(),
+        return new CatalogDtos.CoinDetails(t.version(), t.market().name(), t.market().displayName(), t.minK(), t.maxK(), t.stepK(),
                 t.quickPicksK(), rates);
     }
 

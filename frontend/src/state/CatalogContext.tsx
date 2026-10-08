@@ -11,6 +11,11 @@ type CatalogState = {
   setCurrency: (currency: string) => void
   loading: boolean
   error: string | null
+  /**
+   * Fetch the catalogue again, past any cache, without a loading state: for a page that has
+   * learned its prices changed since it loaded them.
+   */
+  refresh: () => void
 }
 
 const CatalogContext = createContext<CatalogState | null>(null)
@@ -109,9 +114,22 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  /*
+   * The catalogue is served with a minute's public cache, so a price an admin has just changed
+   * can still come back old. A different address goes past the browser's cache and any in
+   * front of the server; the policy is left as it is.
+   */
+  const refresh = useCallback(() => {
+    api.get<Catalog>(`/api/v1/catalog?currency=${currency}&fresh=${Date.now()}`)
+      .then((next) => setCatalog((shown) => (shown && shown.currency !== next.currency ? shown : next)))
+      .catch(() => {
+        // The quote is still right; only the numbers beside it stay as they were.
+      })
+  }, [currency])
+
   const value = useMemo(
-    () => ({ catalog, policy, currency, setCurrency, loading, error }),
-    [catalog, policy, currency, setCurrency, loading, error],
+    () => ({ catalog, policy, currency, setCurrency, loading, error, refresh }),
+    [catalog, policy, currency, setCurrency, loading, error, refresh],
   )
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>
