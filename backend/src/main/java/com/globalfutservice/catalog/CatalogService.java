@@ -4,6 +4,7 @@ import com.globalfutservice.coaching.CoachingSettingsService;
 import com.globalfutservice.catalog.web.CatalogDtos;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.Platform;
+import com.globalfutservice.domain.catalog.RateCard;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.loyalty.LoyaltyTier;
 import com.globalfutservice.domain.money.Currency;
@@ -35,7 +36,9 @@ public class CatalogService {
     private final PricingPolicy policy;
 
     public CatalogService(RateCardRepository repository, AppProperties props, PricingPolicy policy,
-                          CoachingSettingsService coachingSettings, ListingSettings listingSettings) {
+                          CoachingSettingsService coachingSettings, ListingSettings listingSettings,
+                          CoinPricingService coinPricing) {
+        this.coinPricing = coinPricing;
         this.listingSettings = listingSettings;
         this.repository = repository;
         this.props = props;
@@ -48,6 +51,9 @@ public class CatalogService {
 
     /** Success rates and Best Value, as set on the Listings page. */
     private final ListingSettings listingSettings;
+
+    /** Coin prices, which live in their own structures rather than the rate card. */
+    private final CoinPricingService coinPricing;
 
     @Transactional(readOnly = true)
     public CatalogDtos.CatalogResponse catalogue(Currency currency) {
@@ -70,7 +76,16 @@ public class CatalogService {
         }
 
         Map<Sku, List<CatalogDtos.CatalogOption>> bySku = new LinkedHashMap<>();
+        // Coins come from their price structures. A coin row left live on the rate card is
+        // not what quotes price from, so it is never shown either.
+        List<CatalogDtos.CatalogOption> coins = coinPricing.catalogOptions(currency);
+        if (!coins.isEmpty()) {
+            bySku.put(Sku.TRADING_SERVICE, coins);
+        }
         for (RateCardEntity row : rows) {
+            if (row.getSku() == Sku.TRADING_SERVICE) {
+                continue;
+            }
             bySku.computeIfAbsent(row.getSku(), k -> new ArrayList<>()).add(
                     new CatalogDtos.CatalogOption(
                             row.getPlatform() == null ? null : row.getPlatform().name(),
@@ -94,7 +109,8 @@ public class CatalogService {
                                             stored.get(row.getSku()).get(row.getVariant()))
                                     : props.boosting().successRateBpsFor(row.getVariant()),
                             row.getVariant() != null && bestValue.getOrDefault(row.getSku(), java.util.Optional.empty())
-                                    .map(row.getVariant()::equals).orElse(false)));
+                                    .map(row.getVariant()::equals).orElse(false),
+                            null));
         }
 
         List<CatalogDtos.ServiceGroup> services = new ArrayList<>();
@@ -122,17 +138,30 @@ public class CatalogService {
 
     @Transactional(readOnly = true)
     public List<Currency> availableCurrencies() {
-        List<Currency> live = repository.findLiveCurrencies(props.season());
+        java.util.Set<Currency> live = java.util.EnumSet.noneOf(Currency.class);
+        live.addAll(repository.findLiveCurrencies(props.season()));
+        live.addAll(coinPricing.pricedCurrencies(props.season()));
         List<String> enabled = props.pricing().enabledCurrencies();
         List<Currency> out = live.stream().filter(c -> enabled.contains(c.name())).sorted().toList();
         return out.isEmpty() ? List.of(Currency.INR) : out;
     }
 
+    /**
+     * The row a quote is priced from. Coins come from their platform's price structure, at
+     * the rate the amount reaches; everything else from its live rate card row.
+     *
+     * @param quantity the amount asked for, in millions; only coins read it
+     */
     @Transactional(readOnly = true)
-    public RateCardEntity requireLiveRate(Sku sku, Platform platform, String variant, Currency currency) {
+    public RateCard requireLiveRate(Sku sku, Platform platform, String variant, Currency currency,
+                                    java.math.BigDecimal quantity) {
+        if (sku == Sku.TRADING_SERVICE) {
+            return coinPricing.rateCard(platform, currency, quantity);
+        }
         return repository.findLive(props.season(), sku, platform, variant, currency)
                 .orElseThrow(() -> new ApiExceptions.NotFoundException(
-                        "That option is not available right now."));
+                        "That option is not available right now."))
+                .toDomain();
     }
 
     /** Exposes the pricing and fulfilment policy so the storefront copy cannot drift. */

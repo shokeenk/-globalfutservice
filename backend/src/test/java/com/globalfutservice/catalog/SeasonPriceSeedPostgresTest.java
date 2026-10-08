@@ -37,6 +37,8 @@ class SeasonPriceSeedPostgresTest {
 
     private String schema;
     private JdbcTemplate jdbc;
+    /** Coins, read the way the season check reads them: from their price structures. */
+    private CoinPricingService coins;
 
     @BeforeEach
     void migrate() {
@@ -50,6 +52,8 @@ class SeasonPriceSeedPostgresTest {
                 .locations("classpath:db/migration")
                 .initSql("SET search_path TO " + schema + ", public").load().migrate();
         jdbc = new JdbcTemplate(ds);
+        coins = new CoinPricingService(new CoinPriceStore(
+                new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(ds)), null);
     }
 
     @AfterEach
@@ -72,23 +76,33 @@ class SeasonPriceSeedPostgresTest {
                 .hasMessageContaining("Seasons with live prices: FC26");
     }
 
-    /** The same rows {@link RateCardRepository#findLiveForSeason} reads, per currency. */
+    /**
+     * What {@link SeasonPriceCheck#verify} counts as on sale, per currency: the rate card's
+     * live rows for everything but coins, and coins where every coin structure prices them.
+     */
     private Map<Currency, Set<Sku>> priced(String season) {
+        Set<Currency> coinPriced = coins.pricedCurrencies(season);
         Map<Currency, Set<Sku>> out = new LinkedHashMap<>();
         for (Currency currency : SeasonPriceCheck.currencies(DEFAULT_CURRENCIES)) {
             Set<Sku> skus = EnumSet.noneOf(Sku.class);
             jdbc.queryForList("""
                     select sku from rate_card
-                    where valid_to is null and season = ? and currency = ?
+                    where valid_to is null and season = ? and currency = ? and sku <> 'TRADING_SERVICE'
                     """, String.class, season, currency.name())
                     .forEach(sku -> skus.add(Sku.valueOf(sku)));
+            if (coinPriced.contains(currency)) {
+                skus.add(Sku.TRADING_SERVICE);
+            }
             out.put(currency, skus);
         }
         return out;
     }
 
     private Supplier<List<String>> liveSeasons() {
-        return () -> jdbc.queryForList(
-                "select distinct season from rate_card where valid_to is null order by season", String.class);
+        return () -> java.util.stream.Stream.concat(
+                        jdbc.queryForList("select distinct season from rate_card where valid_to is null",
+                                String.class).stream(),
+                        coins.liveSeasons().stream())
+                .distinct().sorted().toList();
     }
 }

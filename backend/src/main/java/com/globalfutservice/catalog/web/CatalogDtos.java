@@ -62,7 +62,30 @@ public final class CatalogDtos {
              * Listings page; without one, the last tier of a boosting service, as the
              * storefront always drew it. Always false outside boosting.
              */
-            boolean bestValue) {
+            boolean bestValue,
+            /** A coin option's structure: its slider and its rates. Null for every other service. */
+            CoinDetails coin) {
+    }
+
+    /**
+     * The coin price structure a platform's option belongs to. PlayStation and Xbox carry the
+     * same one. Amounts in whole thousands of coins; the option's own quantities say the
+     * same range in millions, for a storefront that reads those.
+     */
+    public record CoinDetails(
+            /** PC, or CONSOLE for PlayStation and Xbox. */
+            String market,
+            String marketLabel,
+            int minK,
+            int maxK,
+            int stepK,
+            /** The one-tap amounts, in order. */
+            List<Integer> quickPicksK,
+            /** The base rate (fromK 0), then any brackets, lowest first: from that amount on, every coin at that rate. */
+            List<CoinRate> rates) {
+    }
+
+    public record CoinRate(int fromK, long perMillionMinor, String perMillionFormatted, String per100kFormatted) {
     }
 
     /**

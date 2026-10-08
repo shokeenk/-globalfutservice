@@ -39,23 +39,35 @@ public class SeasonPriceCheck {
 
     private final RateCardRepository rates;
     private final AppProperties props;
+    private final CoinPricingService coins;
 
-    public SeasonPriceCheck(RateCardRepository rates, AppProperties props) {
+    public SeasonPriceCheck(RateCardRepository rates, AppProperties props, CoinPricingService coins) {
         this.rates = rates;
         this.props = props;
+        this.coins = coins;
     }
 
     /** Throws when the season has nothing to sell; logs any partial gaps. */
     public void verify() {
         String season = props.season();
         Map<Currency, Set<Sku>> priced = new LinkedHashMap<>();
+        // Coins are on sale in a currency when every coin structure prices it; a coin row
+        // still live on the rate card is not what quotes read, so it does not count.
+        Set<Currency> coinPriced = coins.pricedCurrencies(season);
         for (Currency currency : currencies(props.pricing().enabledCurrencies())) {
-            priced.put(currency, rates.findLiveForSeason(season, currency).stream()
+            Set<Sku> skus = rates.findLiveForSeason(season, currency).stream()
                     .map(RateCardEntity::getSku)
-                    .collect(Collectors.toCollection(() -> EnumSet.noneOf(Sku.class))));
+                    .filter(sku -> sku != Sku.TRADING_SERVICE)
+                    .collect(Collectors.toCollection(() -> EnumSet.noneOf(Sku.class)));
+            if (coinPriced.contains(currency)) {
+                skus.add(Sku.TRADING_SERVICE);
+            }
+            priced.put(currency, skus);
         }
 
-        List<String> gaps = gaps(season, priced, rates::findLiveSeasons);
+        List<String> gaps = gaps(season, priced, () -> java.util.stream.Stream
+                .concat(rates.findLiveSeasons().stream(), coins.liveSeasons().stream())
+                .distinct().sorted().toList());
         if (!gaps.isEmpty()) {
             log.error("\nSeason {} is only partly priced. Customers cannot buy these until a "
                     + "price exists:\n{}", season, String.join("\n", gaps));

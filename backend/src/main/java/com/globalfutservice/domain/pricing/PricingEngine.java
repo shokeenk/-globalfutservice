@@ -255,7 +255,8 @@ public final class PricingEngine {
                 referralApplies ? customer.referralCode() : null,
                 couponApplies ? customer.couponCode() : null,
                 now,
-                now.plus(policy.quoteTtl()));
+                now.plus(policy.quoteTtl()),
+                rateCard.priceVersion());
     }
 
     /**

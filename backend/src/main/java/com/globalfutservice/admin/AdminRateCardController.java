@@ -1,7 +1,11 @@
 package com.globalfutservice.admin;
 
+import com.globalfutservice.catalog.CoinPriceStore;
+import com.globalfutservice.catalog.CoinPricingService;
 import com.globalfutservice.catalog.RateCardEntity;
 import com.globalfutservice.catalog.RateCardRepository;
+import com.globalfutservice.domain.catalog.CoinMarket;
+import com.globalfutservice.domain.catalog.CoinPriceTable;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.CoinBaseRate;
 import com.globalfutservice.domain.catalog.Platform;
@@ -56,10 +60,12 @@ public class AdminRateCardController {
 
     private final RateCardRepository rates;
     private final AppProperties props;
+    private final CoinPricingService coinPricing;
 
-    public AdminRateCardController(RateCardRepository rates, AppProperties props) {
+    public AdminRateCardController(RateCardRepository rates, AppProperties props, CoinPricingService coinPricing) {
         this.rates = rates;
         this.props = props;
+        this.coinPricing = coinPricing;
     }
 
     public record RateRowDto(
@@ -107,6 +113,11 @@ public class AdminRateCardController {
     public ResponseEntity<RateRowDto> update(@Valid @RequestBody UpdateRateRequest request,
                                              @CurrentAccount AccountPrincipal admin) {
         Sku sku = parse(Sku.class, request.sku());
+        if (sku == Sku.TRADING_SERVICE) {
+            // A coin row here would be read by nothing: coins are priced per structure.
+            throw new ApiExceptions.BadRequestException("coin_prices_elsewhere",
+                    "Coin prices are set per structure, on the coin pricing page.");
+        }
         Currency currency = parse(Currency.class, request.currency());
         Platform platform = request.platform() == null || request.platform().isBlank()
                 ? null : parse(Platform.class, request.platform());
@@ -144,23 +155,16 @@ public class AdminRateCardController {
     }
 
     // =========================================================================
-    //  Coin base rates
+    //  Coin base rates -- the Coin rates page as it stands.
     //
-    //  The rate card stores coins PER MILLION because that is the unit the
-    //  pricing engine multiplies by. The owner sets the price PER 100,000,
-    //  because that is the unit the business is run in. These two endpoints are
-    //  the translation, and they exist so nobody has to do that arithmetic in
-    //  their head against a live price list: ten times, in minor units.
-    //
-    //  Everything else about a coin price — the close-and-reopen, the ADMIN
-    //  restriction, the audit line — is the same machinery the rest of this
-    //  controller uses. This is a different way of typing the number, not a
-    //  second way of storing it.
+    //  Coin prices now live in two structures, PC and PlayStation + Xbox, each
+    //  with its own slider and optional volume brackets (CoinPricingService).
+    //  Until the admin page for those replaces this one, these two endpoints keep
+    //  the old page working on top of them: it reads PC's base price per 100,000,
+    //  and a save sets that base price in both structures, leaving everything else
+    //  in them -- range, quick picks, brackets -- as it was. One price for every
+    //  platform, which is what this page always meant.
     // =========================================================================
-
-    /** Coin rows are per-platform in the schema, but priced as one number. */
-    private static final List<Platform> TRADING_PLATFORMS =
-            List.of(Platform.PC, Platform.PLAYSTATION, Platform.XBOX);
 
     public record CoinRateDto(
             String currency,
@@ -191,17 +195,23 @@ public class AdminRateCardController {
 
     @GetMapping("/coin-rates")
     @Operation(summary = "The coin base price per 100,000, per currency",
-            description = "One number per currency. Not converted from any other currency.")
+            description = "One number per currency: the PC structure's base price. Not converted from any other currency.")
     public ResponseEntity<List<CoinRateDto>> coinRates() {
+        return ResponseEntity.ok(coinRateDtos());
+    }
+
+    private List<CoinRateDto> coinRateDtos() {
         List<CoinRateDto> out = new ArrayList<>();
+        CoinPriceStore.Version pc = coinPricing.live().get(CoinMarket.PC);
+        if (pc == null) {
+            return out;
+        }
         for (String code : props.pricing().enabledCurrencies()) {
             Currency currency = parse(Currency.class, code);
-            // PC stands for all three: they are written together and read together.
-            rates.findLive(props.season(), Sku.TRADING_SERVICE, Platform.PC, null, currency)
-                    .map(AdminRateCardController::toCoinDto)
-                    .ifPresent(out::add);
+            pc.table().base(currency).ifPresent(perMillionMinor ->
+                    out.add(toCoinDto(currency, perMillionMinor, pc.validFrom())));
         }
-        return ResponseEntity.ok(out);
+        return out;
     }
 
     @PostMapping("/coin-rates")
@@ -217,27 +227,36 @@ public class AdminRateCardController {
             throw new ApiExceptions.BadRequestException("No rates were supplied.");
         }
 
-        Instant now = Instant.now();
-        List<CoinRateDto> out = new ArrayList<>();
-
+        java.util.Map<Currency, Long> bases = new java.util.EnumMap<>(Currency.class);
         for (CoinRateInput input : request.rates()) {
             Currency currency = parse(Currency.class, input.currency());
-            long perMillionMinor = toPerMillionMinor(currency, input.per100k());
-
-            RateCardEntity pc = null;
-            for (Platform platform : TRADING_PLATFORMS) {
-                RateCardEntity written = replacePrice(
-                        Sku.TRADING_SERVICE, platform, null, currency, perMillionMinor,
-                        now, admin);
-                if (platform == Platform.PC) {
-                    pc = written;
-                }
-            }
-            if (pc != null) {
-                out.add(toCoinDto(pc));
-            }
+            bases.put(currency, toPerMillionMinor(currency, input.per100k()));
         }
-        return ResponseEntity.ok(out);
+
+        java.util.Map<CoinMarket, CoinPriceStore.Version> live = coinPricing.live();
+        for (CoinMarket market : CoinMarket.values()) {
+            CoinPriceStore.Version current = live.get(market);
+            if (current == null) {
+                throw new ApiExceptions.BadRequestException("There are no " + market.displayName()
+                        + " coin prices to change for " + props.season() + ".");
+            }
+            coinPricing.save(withBases(current.table(), bases), admin.id(), admin.publicId());
+        }
+        return ResponseEntity.ok(coinRateDtos());
+    }
+
+    /** {@code table} with these currencies' base prices, and nothing else changed. */
+    private static CoinPriceTable withBases(CoinPriceTable table, java.util.Map<Currency, Long> bases) {
+        java.util.Map<Currency, List<CoinPriceTable.Bracket>> rates = new java.util.EnumMap<>(Currency.class);
+        rates.putAll(table.rates());
+        bases.forEach((currency, perMillionMinor) -> {
+            List<CoinPriceTable.Bracket> next = new ArrayList<>();
+            next.add(new CoinPriceTable.Bracket(0, perMillionMinor));
+            next.addAll(table.brackets(currency));
+            rates.put(currency, next);
+        });
+        return new CoinPriceTable(null, table.season(), table.market(), table.minK(), table.maxK(), table.stepK(),
+                table.quickPicksK(), rates);
     }
 
     /**
@@ -254,44 +273,7 @@ public class AdminRateCardController {
         }
     }
 
-    /**
-     * Close the live row and open its replacement — the one write path for a price.
-     *
-     * <p>Bounds, label and sort order are carried across rather than restated: this sets
-     * a price, and a caller that does not mention the slider's range must not silently
-     * reset it.
-     */
-    private RateCardEntity replacePrice(Sku sku, Platform platform, String variant,
-                                        Currency currency, long unitPriceMinor,
-                                        Instant now, AccountPrincipal admin) {
-        RateCardEntity current = rates.findLive(props.season(), sku, platform, variant, currency)
-                .orElse(null);
-        if (current != null && current.getUnitPriceMinor() == unitPriceMinor) {
-            return current; // No-op writes would litter the history and make it useless.
-        }
-        if (current == null) {
-            throw new ApiExceptions.BadRequestException(
-                    "There is no live " + currency + " price for " + sku
-                            + " to replace. Add one through the rate card first.");
-        }
-        current.close(now);
-        rates.save(current);
-        rates.flush();
-
-        RateCardEntity replacement = new RateCardEntity(
-                props.season(), sku, platform, variant, currency, sku.unit(),
-                unitPriceMinor,
-                current.getMinQuantity(), current.getMaxQuantity(), current.getStepQuantity(),
-                current.getLabel(), current.getSortOrder(), admin.id());
-        RateCardEntity saved = rates.save(replacement);
-        log.info("Admin {} changed {} {} {} to {}", admin.publicId(), sku, platform, currency,
-                Money.ofMinor(unitPriceMinor, currency).format());
-        return saved;
-    }
-
-    private static CoinRateDto toCoinDto(RateCardEntity r) {
-        Currency currency = r.getCurrency();
-        long perMillionMinor = r.getUnitPriceMinor();
+    private static CoinRateDto toCoinDto(Currency currency, long perMillionMinor, Instant validFrom) {
         return new CoinRateDto(
                 currency.name(),
                 currency.symbol(),
@@ -299,7 +281,7 @@ public class AdminRateCardController {
                 CoinBaseRate.per100k(currency, perMillionMinor),
                 CoinBaseRate.per10k(currency, perMillionMinor),
                 CoinBaseRate.stepIsWholeMinorUnit(perMillionMinor),
-                r.getValidFrom());
+                validFrom);
     }
 
     private static BigDecimal orElse(BigDecimal value, BigDecimal fallback) {

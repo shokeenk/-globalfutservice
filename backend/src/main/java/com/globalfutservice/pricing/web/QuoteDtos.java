@@ -86,6 +86,11 @@ public final class QuoteDtos {
             String couponMessage,
             @NotNull Instant issuedAt,
             @NotNull Instant expiresAt,
-            @NotBlank String signature) {
+            @NotBlank String signature,
+            /**
+             * The coin price version that priced this quote, null for other services. Signed,
+             * and frozen on the order with the rest of the quote.
+             */
+            Long priceVersion) {
     }
 }

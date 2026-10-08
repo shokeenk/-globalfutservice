@@ -47,7 +47,7 @@ class QuotePlatformTest {
                     .isInstanceOfSatisfying(ApiExceptions.BadRequestException.class,
                             e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("platform_required"));
         }
-        verify(catalog, never()).requireLiveRate(any(), any(), any(), any());
+        verify(catalog, never()).requireLiveRate(any(), any(), any(), any(), any());
     }
 
     @ParameterizedTest(name = "{0}")
@@ -55,15 +55,16 @@ class QuotePlatformTest {
     @DisplayName("the price is looked up for the platform the customer chose")
     void pricedForTheChosenPlatform(Platform chosen) {
         // Stop at the lookup: what matters is which platform it was asked for.
-        when(catalog.requireLiveRate(any(), any(), any(), any())).thenThrow(new IllegalStateException("looked up"));
+        when(catalog.requireLiveRate(any(), any(), any(), any(), any())).thenThrow(new IllegalStateException("looked up"));
         assertThatThrownBy(() -> quotes.quote(coins(chosen.name()), null)).hasMessage("looked up");
-        verify(catalog).requireLiveRate(Sku.TRADING_SERVICE, chosen, null, Currency.USD);
+        // For that platform, and the amount asked for: a bracket can depend on it.
+        verify(catalog).requireLiveRate(Sku.TRADING_SERVICE, chosen, null, Currency.USD, new BigDecimal("0.5"));
     }
 
     @Test
     @DisplayName("boosting and coaching are not priced per platform: their quote needs none")
     void flatServicesNeedNone() {
-        when(catalog.requireLiveRate(any(), any(), any(), any())).thenThrow(new IllegalStateException("looked up"));
+        when(catalog.requireLiveRate(any(), any(), any(), any(), any())).thenThrow(new IllegalStateException("looked up"));
         for (String sku : new String[] {"BOOST_CHAMPS", "COACHING"}) {
             assertThatThrownBy(() -> quotes.quote(new QuoteDtos.QuoteRequest(sku, null, "SINGLE_SESSION",
                     BigDecimal.ONE, "USD", null, null, 0L), null)).hasMessage("looked up");

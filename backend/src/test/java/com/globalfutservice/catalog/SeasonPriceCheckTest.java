@@ -116,8 +116,9 @@ class SeasonPriceCheckTest {
         when(pricing.enabledCurrencies()).thenReturn(List.of("INR"));
         when(rates.findLiveForSeason("FC27", Currency.INR)).thenReturn(List.of());
         when(rates.findLiveSeasons()).thenReturn(List.of("FC26"));
+        CoinPricingService coins = mock(CoinPricingService.class);
 
-        assertThatThrownBy(() -> new SeasonPriceCheck(rates, props).verify())
+        assertThatThrownBy(() -> new SeasonPriceCheck(rates, props, coins).verify())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("GFS_SEASON is FC27")
                 .hasMessageContaining("Seasons with live prices: FC26");
@@ -134,10 +135,14 @@ class SeasonPriceCheckTest {
         when(pricing.enabledCurrencies()).thenReturn(List.of("INR"));
         List<RateCardEntity> rows = ALL_SELLABLE.stream().map(SeasonPriceCheckTest::row).toList();
         when(rates.findLiveForSeason("FC26", Currency.INR)).thenReturn(rows);
+        // Coins are on sale from their price structures, not from a rate card row.
+        CoinPricingService coins = mock(CoinPricingService.class);
+        when(coins.pricedCurrencies("FC26")).thenReturn(java.util.Set.of(Currency.INR));
 
-        new SeasonPriceCheck(rates, props).verify();
+        new SeasonPriceCheck(rates, props, coins).verify();
 
         verify(rates, never()).findLiveSeasons();
+        verify(coins, never()).liveSeasons();
     }
 
     private static RateCardEntity row(Sku sku) {
