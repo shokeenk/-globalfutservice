@@ -133,8 +133,20 @@ public class CoinPricingService {
         return props.futTransfer().order().minTransferAmount();
     }
 
+    /**
+     * What stops {@code draft} being saved, and what to say before it is: its own checks, and
+     * prices that look typed in the wrong unit next to the other structure and next to this
+     * one as it stands.
+     */
     public CoinPriceTable.Check check(CoinPriceTable draft) {
-        return draft.check(requiredCurrencies(), vendorMinTransferK());
+        CoinPriceTable.Check own = draft.check(requiredCurrencies(), vendorMinTransferK());
+        Map<CoinMarket, CoinPriceStore.Version> live = store.live(draft.season());
+        CoinPriceStore.Version previous = live.get(draft.market());
+        CoinPriceStore.Version other = live.get(draft.market() == CoinMarket.PC ? CoinMarket.CONSOLE : CoinMarket.PC);
+        List<String> warnings = new ArrayList<>(own.warnings());
+        warnings.addAll(draft.unitWarnings(previous == null ? null : previous.table(),
+                other == null ? null : other.table()));
+        return new CoinPriceTable.Check(own.errors(), List.copyOf(warnings));
     }
 
     public List<CoinPriceStore.Version> history(CoinMarket market, int limit) {

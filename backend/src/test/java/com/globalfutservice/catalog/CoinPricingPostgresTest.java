@@ -216,6 +216,6 @@ class CoinPricingPostgresTest {
                         org.assertj.core.groups.Tuple.tuple(500, "₹1,350.00"));
         assertThat(options.get(1).coin()).isEqualTo(options.get(2).coin());
         assertThat(options.get(1).coin().market()).isEqualTo("CONSOLE");
-        assertThat(options.get(1).coin().marketLabel()).isEqualTo("PlayStation & Xbox");
+        assertThat(options.get(1).coin().marketLabel()).isEqualTo("PlayStation + Xbox");
     }
 }

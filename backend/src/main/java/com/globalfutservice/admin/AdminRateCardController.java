@@ -1,13 +1,8 @@
 package com.globalfutservice.admin;
 
-import com.globalfutservice.catalog.CoinPriceStore;
-import com.globalfutservice.catalog.CoinPricingService;
 import com.globalfutservice.catalog.RateCardEntity;
 import com.globalfutservice.catalog.RateCardRepository;
-import com.globalfutservice.domain.catalog.CoinMarket;
-import com.globalfutservice.domain.catalog.CoinPriceTable;
 import com.globalfutservice.config.AppProperties;
-import com.globalfutservice.domain.catalog.CoinBaseRate;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.PriceUnit;
 import com.globalfutservice.domain.catalog.Sku;
@@ -35,7 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -60,12 +54,10 @@ public class AdminRateCardController {
 
     private final RateCardRepository rates;
     private final AppProperties props;
-    private final CoinPricingService coinPricing;
 
-    public AdminRateCardController(RateCardRepository rates, AppProperties props, CoinPricingService coinPricing) {
+    public AdminRateCardController(RateCardRepository rates, AppProperties props) {
         this.rates = rates;
         this.props = props;
-        this.coinPricing = coinPricing;
     }
 
     public record RateRowDto(
@@ -152,136 +144,6 @@ public class AdminRateCardController {
         log.info("Admin {} changed {} {} {} to {}", admin.publicId(), sku, platform,
                 request.variant(), Money.ofMinor(request.unitPriceMinor(), currency).format());
         return ResponseEntity.ok(toDto(saved));
-    }
-
-    // =========================================================================
-    //  Coin base rates -- the Coin rates page as it stands.
-    //
-    //  Coin prices now live in two structures, PC and PlayStation + Xbox, each
-    //  with its own slider and optional volume brackets (CoinPricingService).
-    //  Until the admin page for those replaces this one, these two endpoints keep
-    //  the old page working on top of them: it reads PC's base price per 100,000,
-    //  and a save sets that base price in both structures, leaving everything else
-    //  in them -- range, quick picks, brackets -- as it was. One price for every
-    //  platform, which is what this page always meant.
-    // =========================================================================
-
-    public record CoinRateDto(
-            String currency,
-            String symbol,
-            /** What the rate card stores, for anyone reconciling against the table. */
-            long perMillionMinor,
-            /** What the owner sets: the price of 100,000 coins, in major units. */
-            BigDecimal per100k,
-            /** What one slider step costs, derived — may carry a fraction of a cent. */
-            BigDecimal per10k,
-            /**
-             * Whether a 10,000-coin step lands on a whole minor unit.
-             *
-             * <p>False means the price is still exact — the engine rounds once, at the
-             * total, and never accumulates — but consecutive steps on screen differ by
-             * one minor unit more or less than the others. The admin screen says so
-             * rather than leaving the owner to notice it in a customer's receipt.
-             */
-            boolean stepIsWholeMinorUnit,
-            Instant validFrom) {
-    }
-
-    public record CoinRateInput(@NotBlank String currency, BigDecimal per100k) {
-    }
-
-    public record UpdateCoinRatesRequest(List<CoinRateInput> rates) {
-    }
-
-    @GetMapping("/coin-rates")
-    @Operation(summary = "The coin base price per 100,000, per currency",
-            description = "One number per currency: the PC structure's base price. Not converted from any other currency.")
-    public ResponseEntity<List<CoinRateDto>> coinRates() {
-        return ResponseEntity.ok(coinRateDtos());
-    }
-
-    private List<CoinRateDto> coinRateDtos() {
-        List<CoinRateDto> out = new ArrayList<>();
-        CoinPriceStore.Version pc = coinPricing.live().get(CoinMarket.PC);
-        if (pc == null) {
-            return out;
-        }
-        for (String code : props.pricing().enabledCurrencies()) {
-            Currency currency = parse(Currency.class, code);
-            pc.table().base(currency).ifPresent(perMillionMinor ->
-                    out.add(toCoinDto(currency, perMillionMinor, pc.validFrom())));
-        }
-        return out;
-    }
-
-    @PostMapping("/coin-rates")
-    @Operation(summary = "Set the coin base price for one or more currencies",
-            description = "Writes every platform for each currency. Closes the old rows, "
-                    + "opens new ones — nothing is overwritten.")
-    @Transactional
-    public ResponseEntity<List<CoinRateDto>> updateCoinRates(
-            @Valid @RequestBody UpdateCoinRatesRequest request,
-            @CurrentAccount AccountPrincipal admin) {
-
-        if (request.rates() == null || request.rates().isEmpty()) {
-            throw new ApiExceptions.BadRequestException("No rates were supplied.");
-        }
-
-        java.util.Map<Currency, Long> bases = new java.util.EnumMap<>(Currency.class);
-        for (CoinRateInput input : request.rates()) {
-            Currency currency = parse(Currency.class, input.currency());
-            bases.put(currency, toPerMillionMinor(currency, input.per100k()));
-        }
-
-        java.util.Map<CoinMarket, CoinPriceStore.Version> live = coinPricing.live();
-        for (CoinMarket market : CoinMarket.values()) {
-            CoinPriceStore.Version current = live.get(market);
-            if (current == null) {
-                throw new ApiExceptions.BadRequestException("There are no " + market.displayName()
-                        + " coin prices to change for " + props.season() + ".");
-            }
-            coinPricing.save(withBases(current.table(), bases), admin.id(), admin.publicId());
-        }
-        return ResponseEntity.ok(coinRateDtos());
-    }
-
-    /** {@code table} with these currencies' base prices, and nothing else changed. */
-    private static CoinPriceTable withBases(CoinPriceTable table, java.util.Map<Currency, Long> bases) {
-        java.util.Map<Currency, List<CoinPriceTable.Bracket>> rates = new java.util.EnumMap<>(Currency.class);
-        rates.putAll(table.rates());
-        bases.forEach((currency, perMillionMinor) -> {
-            List<CoinPriceTable.Bracket> next = new ArrayList<>();
-            next.add(new CoinPriceTable.Bracket(0, perMillionMinor));
-            next.addAll(table.brackets(currency));
-            rates.put(currency, next);
-        });
-        return new CoinPriceTable(null, table.season(), table.market(), table.minK(), table.maxK(), table.stepK(),
-                table.quickPicksK(), rates);
-    }
-
-    /**
-     * The owner's number as the column stores it, with a domain error turned into a 400.
-     *
-     * <p>The arithmetic and the validation both live in {@link CoinBaseRate}; this only
-     * decides what a bad price looks like over HTTP.
-     */
-    private static long toPerMillionMinor(Currency currency, BigDecimal per100k) {
-        try {
-            return CoinBaseRate.toPerMillionMinor(currency, per100k);
-        } catch (IllegalArgumentException e) {
-            throw new ApiExceptions.BadRequestException(e.getMessage());
-        }
-    }
-
-    private static CoinRateDto toCoinDto(Currency currency, long perMillionMinor, Instant validFrom) {
-        return new CoinRateDto(
-                currency.name(),
-                currency.symbol(),
-                perMillionMinor,
-                CoinBaseRate.per100k(currency, perMillionMinor),
-                CoinBaseRate.per10k(currency, perMillionMinor),
-                CoinBaseRate.stepIsWholeMinorUnit(perMillionMinor),
-                validFrom);
     }
 
     private static BigDecimal orElse(BigDecimal value, BigDecimal fallback) {

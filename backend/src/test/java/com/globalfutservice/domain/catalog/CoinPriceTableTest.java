@@ -193,6 +193,52 @@ class CoinPriceTableTest {
         }
     }
 
+    @Nested
+    @DisplayName("prices that look typed in the wrong unit: more than five times off")
+    class WrongUnit {
+
+        private CoinPriceTable pc(long inrBase, Bracket... brackets) {
+            List<Bracket> all = new java.util.ArrayList<>(List.of(new Bracket(0, inrBase)));
+            all.addAll(List.of(brackets));
+            return new CoinPriceTable(null, "FC26", CoinMarket.PC, 50, 1000, 10, List.of(), Map.of(Currency.INR, all));
+        }
+
+        @Test
+        @DisplayName("against the other structure: ₹13 per 100K next to ₹1,300 looks typed per 1K")
+        void againstTheOther() {
+            assertThat(pc(13_000).unitWarnings(null, rupees())).containsExactly(
+                    "INR: the base price, ₹13.00 per 100K (₹130.00 per 1M), is less than a fifth of "
+                            + "PlayStation + Xbox's ₹1,300.00 per 100K. It may have been typed in the wrong unit: "
+                            + "prices here are per 100,000 coins.");
+        }
+
+        @Test
+        @DisplayName("against this structure as it stands: ₹13,000 per 100K where it was ₹1,300 looks typed per 1M")
+        void againstThePrevious() {
+            CoinPriceTable current = pc(RS_13000);
+            assertThat(pc(13_000_000).unitWarnings(current, null)).containsExactly(
+                    "INR: the base price, ₹13,000.00 per 100K (" + CoinPriceTable.perMillion(Currency.INR, 13_000_000)
+                            + " per 1M), is more than five times the current ₹1,300.00 per 100K. It may have been "
+                            + "typed in the wrong unit: prices here are per 100,000 coins.");
+        }
+
+        @Test
+        @DisplayName("a bracket against its own base price")
+        void bracketAgainstBase() {
+            assertThat(pc(RS_13000, new Bracket(500, 12_000)).unitWarnings(null, null)).containsExactly(
+                    "INR: the price from 500K, ₹12.00 per 100K (₹120.00 per 1M), is less than a fifth of the base price "
+                            + "₹1,300.00 per 100K. It may have been typed in the wrong unit: prices here are per 100,000 coins.");
+        }
+
+        @Test
+        @DisplayName("five times exactly, and ordinary changes, say nothing")
+        void withinFiveTimes() {
+            assertThat(pc(RS_13000 * 5).unitWarnings(pc(RS_13000), rupees())).isEmpty();
+            assertThat(pc(RS_13000 / 5).unitWarnings(pc(RS_13000), rupees())).isEmpty();
+            assertThat(pc(1_250_000, new Bracket(500, RS_12000)).unitWarnings(pc(RS_13000), rupees())).isEmpty();
+        }
+    }
+
     @Test
     @DisplayName("a price per 100K as typed, even when it is not a whole cent per 100K")
     void per100kAsTyped() {

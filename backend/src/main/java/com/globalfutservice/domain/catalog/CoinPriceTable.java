@@ -52,6 +52,8 @@ public record CoinPriceTable(
     public static final int MAX_K_CAP = 10_000;
     public static final int MAX_QUICK_PICKS = 8;
     public static final int MAX_BRACKETS = 10;
+    /** A price this many times above or below the one it is compared with looks typed in the wrong unit. */
+    public static final int UNIT_SLIP_FACTOR = 5;
     /** The quick picks a structure starts with: the storefront's set before they were configurable. */
     public static final List<Integer> DEFAULT_QUICK_PICKS_K = List.of(50, 100, 250, 500, 1_000);
 
@@ -247,6 +249,57 @@ public record CoinPriceTable(
                     + ", and this minimum is " + describeK(minK) + ".");
         }
         return new Check(List.copyOf(errors), List.copyOf(warnings));
+    }
+
+    /**
+     * Prices that look typed in the wrong unit -- per 1M or per 10K where 100K was meant: more
+     * than {@value #UNIT_SLIP_FACTOR} times above or below what they are compared with. Each
+     * base price against the same currency in {@code other} (the other structure) and in
+     * {@code previous} (this structure's live version), and each bracket against this
+     * structure's own base price. Warnings: a real change of that size is possible, if rare.
+     *
+     * @param previous this structure as it stands, or null
+     * @param other    the other structure, or null
+     */
+    public List<String> unitWarnings(CoinPriceTable previous, CoinPriceTable other) {
+        List<String> out = new ArrayList<>();
+        for (Currency currency : new TreeSet<>(rates.keySet())) {
+            OptionalLong base = base(currency);
+            if (base.isEmpty() || base.getAsLong() <= 0) {
+                continue;
+            }
+            long mine = base.getAsLong();
+            if (other != null) {
+                other.base(currency).ifPresent(theirs ->
+                        slip(currency, "the base price", mine, other.market().displayName() + "'s", theirs)
+                                .ifPresent(out::add));
+            }
+            if (previous != null) {
+                previous.base(currency).ifPresent(was ->
+                        slip(currency, "the base price", mine, "the current", was).ifPresent(out::add));
+            }
+            for (Bracket b : brackets(currency)) {
+                slip(currency, "the price from " + describeK(b.fromK()), b.perMillionMinor(), "the base price", mine)
+                        .ifPresent(out::add);
+            }
+        }
+        return out;
+    }
+
+    private static java.util.Optional<String> slip(Currency currency, String what, long rate, String against,
+                                                   long reference) {
+        if (reference <= 0 || rate <= 0) {
+            return java.util.Optional.empty();
+        }
+        boolean high = rate > reference * UNIT_SLIP_FACTOR;
+        boolean low = rate * UNIT_SLIP_FACTOR < reference;
+        if (!high && !low) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(currency + ": " + what + ", " + per100k(currency, rate) + " per 100K ("
+                + perMillion(currency, rate) + " per 1M), is " + (high ? "more than five times " : "less than a fifth of ")
+                + against + " " + per100k(currency, reference) + " per 100K. It may have been typed in the wrong "
+                + "unit: prices here are per 100,000 coins.");
     }
 
     /** Why {@code k} is not an amount the slider can stop on, if it is not. */

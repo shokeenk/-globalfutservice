@@ -20,8 +20,13 @@ import com.globalfutservice.domain.catalog.CoinPriceTable;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.RateCard;
 import com.globalfutservice.domain.money.Currency;
+import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.pricing.CustomerPricingContext;
+import com.globalfutservice.domain.pricing.LineCode;
+import com.globalfutservice.domain.pricing.MarketTaxMode;
 import com.globalfutservice.domain.pricing.PricingEngine;
+import com.globalfutservice.domain.pricing.Quote;
+import com.globalfutservice.domain.pricing.QuoteLine;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
 import com.globalfutservice.web.ApiExceptions;
@@ -78,9 +83,13 @@ public class AdminCoinPricingController {
                          int maxQuickPicks, int maxBrackets) {
     }
 
-    /** One price, as typed (per 100K) and as the engine uses it (per 1M). */
-    public record Rate(int fromK, BigDecimal per100k, String per100kFormatted, long perMillionMinor,
-                       String perMillionFormatted) {
+    /**
+     * One price, as typed (per 100K, plain decimal text) and as the engine uses it (per 1M).
+     * {@code stepIsWholeMinorUnit} false means a 10K step costs a fraction of a cent here
+     * ({@code per10k}): prices stay exact, but adjacent steps differ by a cent either way.
+     */
+    public record Rate(int fromK, String per100k, String per100kFormatted, long perMillionMinor,
+                       String perMillionFormatted, String per10k, boolean stepIsWholeMinorUnit) {
     }
 
     public record CurrencyRates(String currency, String symbol, Rate base, List<Rate> brackets) {
@@ -109,9 +118,16 @@ public class AdminCoinPricingController {
                         List<Integer> previewK) {
     }
 
-    /** What an amount costs: the coins alone, and what a guest pays with no discount, fee included. */
-    public record PreviewRow(int amountK, String currency, BigDecimal per100k, String per100kFormatted,
+    /**
+     * What an amount costs, from the same engine run a quote makes: the coins before EA's
+     * market tax, the tax line ({@code marketTaxIncluded}: already in the price, as the shop
+     * is configured, so the line is zero), the price after it, and what a guest pays with no
+     * discount, the card fee included.
+     */
+    public record PreviewRow(int amountK, String currency, String per100k, String per100kFormatted,
                              String perMillionFormatted, long coinPriceMinor, String coinPriceFormatted,
+                             String marketTaxLabel, boolean marketTaxIncluded, long marketTaxMinor,
+                             String marketTaxFormatted, long afterTaxMinor, String afterTaxFormatted,
                              long guestTotalMinor, String guestTotalFormatted) {
     }
 
@@ -278,11 +294,18 @@ public class AdminCoinPricingController {
                 }
                 long rate = table.perMillionMinor(currency, k).orElseThrow();
                 RateCard card = table.rateCard(platform, currency, CoinPriceTable.millions(k));
-                var total = engine.quote(card, CoinPriceTable.millions(k), guest).total();
-                var coins = table.coinPrice(currency, k);
-                rows.add(new PreviewRow(k, currency.name(), CoinBaseRate.per100k(currency, rate),
+                Quote quote = engine.quote(card, CoinPriceTable.millions(k), guest);
+                Money coins = line(quote, LineCode.BASE).map(QuoteLine::amount).orElse(table.coinPrice(currency, k));
+                java.util.Optional<QuoteLine> tax = line(quote, LineCode.MARKET_TAX);
+                Money taxAmount = tax.map(QuoteLine::amount).orElse(Money.ofMinor(0, currency));
+                rows.add(new PreviewRow(k, currency.name(), CoinBaseRate.per100k(currency, rate).toPlainString(),
                         CoinPriceTable.per100k(currency, rate), CoinPriceTable.perMillion(currency, rate),
-                        coins.minor(), coins.format(), total.minor(), total.format()));
+                        coins.minor(), coins.format(),
+                        tax.map(QuoteLine::label).orElse("EA transfer market tax"),
+                        engine.policy().marketTaxMode() == MarketTaxMode.INCLUDED,
+                        taxAmount.minor(), taxAmount.format(),
+                        quote.subtotal().minor(), quote.subtotal().format(),
+                        quote.total().minor(), quote.total().format()));
             }
         }
         return rows;
@@ -304,9 +327,15 @@ public class AdminCoinPricingController {
     }
 
     private static Rate rate(Currency currency, int fromK, long perMillionMinor) {
-        return new Rate(fromK, CoinBaseRate.per100k(currency, perMillionMinor),
+        return new Rate(fromK, CoinBaseRate.per100k(currency, perMillionMinor).toPlainString(),
                 CoinPriceTable.per100k(currency, perMillionMinor), perMillionMinor,
-                CoinPriceTable.perMillion(currency, perMillionMinor));
+                CoinPriceTable.perMillion(currency, perMillionMinor),
+                currency.symbol() + CoinBaseRate.per10k(currency, perMillionMinor).toPlainString(),
+                CoinBaseRate.stepIsWholeMinorUnit(perMillionMinor));
+    }
+
+    private static java.util.Optional<QuoteLine> line(Quote quote, LineCode code) {
+        return quote.lines().stream().filter(l -> l.code() == code).findFirst();
     }
 
     private Limits limits() {

@@ -13,7 +13,7 @@ import java.util.List;
 public enum CoinMarket {
 
     PC("PC", List.of(Platform.PC)),
-    CONSOLE("PlayStation & Xbox", List.of(Platform.PLAYSTATION, Platform.XBOX));
+    CONSOLE("PlayStation + Xbox", List.of(Platform.PLAYSTATION, Platform.XBOX));
 
     private final String displayName;
     private final List<Platform> platforms;

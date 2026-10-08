@@ -94,15 +94,36 @@ class AdminCoinPricingControllerTest {
         assertThat(body.rows()).extracting(AdminCoinPricingController.PreviewRow::amountK)
                 .containsExactly(50, 100, 250, 490, 500, 1000);
         var hundredK = body.rows().get(1);
+        assertThat(hundredK.per100k()).isEqualTo("1300");
         assertThat(hundredK.per100kFormatted()).isEqualTo("₹1,300.00");
         assertThat(hundredK.perMillionFormatted()).isEqualTo("₹13,000.00");
         assertThat(hundredK.coinPriceFormatted()).isEqualTo("₹1,300.00");
+        // EA's 5%: included in the price, as the shop is configured, so before and after are the same.
+        assertThat(hundredK.marketTaxIncluded()).isTrue();
+        assertThat(hundredK.marketTaxLabel()).isEqualTo("EA transfer market tax (5%)");
+        assertThat(hundredK.marketTaxFormatted()).isEqualTo("₹0.00");
+        assertThat(hundredK.afterTaxFormatted()).isEqualTo("₹1,300.00");
         // What production quoted a guest for 100K on PC: ₹1,300 and the 2.5% card fee.
         assertThat(hundredK.guestTotalFormatted()).isEqualTo("₹1,332.50");
         var fiveHundredK = body.rows().get(4);
         assertThat(fiveHundredK.perMillionFormatted()).isEqualTo("₹12,000.00");
         assertThat(fiveHundredK.coinPriceFormatted()).isEqualTo("₹6,000.00");
         verify(store, never()).replace(any(), any());
+    }
+
+    @Test
+    @DisplayName("preview: a price that looks typed in the wrong unit, next to the other structure, is said plainly")
+    void wrongUnit() {
+        CoinPriceTable console = new CoinPriceTable(5L, "FC26", CoinMarket.CONSOLE, 50, 1000, 10, List.of(100),
+                Map.of(Currency.INR, List.of(new Bracket(0, 1_300_000))));
+        when(store.live("FC26")).thenReturn(Map.of(CoinMarket.CONSOLE,
+                new CoinPriceStore.Version(console, Instant.now(), null, null)));
+
+        var body = controller.preview("PC", draft(50, 1000, null, rupees("13"))).getBody();
+        assertThat(body.errors()).isEmpty();
+        assertThat(body.warnings()).anyMatch(w -> w.startsWith("INR: the base price, ₹13.00 per 100K")
+                && w.contains("less than a fifth of PlayStation + Xbox's ₹1,300.00 per 100K")
+                && w.contains("typed in the wrong unit"));
     }
 
     @Test
