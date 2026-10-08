@@ -37,7 +37,9 @@ public record Quote(
         /** The coupon actually applied, or null. Recorded so the order can redeem it. */
         String couponCode,
         Instant issuedAt,
-        Instant expiresAt) {
+        Instant expiresAt,
+        /** The coin price version that priced it; null for boosting and coaching. Signed. */
+        Long priceVersion) {
 
     public Quote {
         lines = List.copyOf(lines);

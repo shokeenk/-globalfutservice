@@ -52,7 +52,13 @@ public final class QuoteSigner {
      */
     private String canonical(Quote q, String customerBinding) {
         StringBuilder sb = new StringBuilder(256);
-        sb.append("v1").append(SEP)
+        /*
+         * v2 adds the coin price version, and only for a quote that has one. Boosting and
+         * coaching quotes, which never do, keep the v1 form exactly -- as does a coin quote
+         * signed before versions existed, so one in flight across the deploy still verifies.
+         * Stripping the version from a v2 quote turns it back into v1 and fails the check.
+         */
+        sb.append(q.priceVersion() == null ? "v1" : "v2").append(SEP)
                 .append(q.quoteId()).append(SEP)
                 .append(q.season()).append(SEP)
                 .append(q.sku().name()).append(SEP)
@@ -67,6 +73,9 @@ public final class QuoteSigner {
                 .append(q.couponCode() == null ? "-" : q.couponCode()).append(SEP)
                 .append(q.expiresAt().toEpochMilli()).append(SEP)
                 .append(customerBinding == null ? "guest" : customerBinding);
+        if (q.priceVersion() != null) {
+            sb.append(SEP).append(q.priceVersion());
+        }
         return sb.toString();
     }
 }

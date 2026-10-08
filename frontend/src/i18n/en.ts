@@ -894,6 +894,11 @@ const en = {
     // under a per-million figure and beside a total, not in running text.
     taxIncludedShort: 'Included',
     taxIncludedInline: 'EA 5% tax included',
+    // Volume pricing: the chosen platform's brackets, under the slider.
+    volumeTitle: 'Volume pricing',
+    volumeRange: (from: string, to: string) => `${from} – ${to}`,
+    volumeFrom: (from: string) => `${from} and more`,
+    volumeNext: (from: string, rate: string) => `From ${from}, every coin in the order is ${rate}.`,
     taxIncludedTitle: 'EA’s 5% tax is on us',
     taxIncludedBody:
       'EA takes 5% of every transfer on the market. Most sellers add it to your bill at ' +

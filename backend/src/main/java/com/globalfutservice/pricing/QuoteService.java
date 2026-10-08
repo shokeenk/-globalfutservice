@@ -2,7 +2,7 @@ package com.globalfutservice.pricing;
 
 import com.globalfutservice.affiliate.AffiliateService;
 import com.globalfutservice.catalog.CatalogService;
-import com.globalfutservice.catalog.RateCardEntity;
+import com.globalfutservice.domain.catalog.RateCard;
 import com.globalfutservice.domain.catalog.Platform;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.money.Currency;
@@ -76,7 +76,7 @@ public class QuoteService {
             throw new ApiExceptions.BadRequestException("platform_required", "Choose your platform.");
         }
 
-        RateCardEntity rate = catalogService.requireLiveRate(sku, platform, request.variant(), currency);
+        RateCard rate = catalogService.requireLiveRate(sku, platform, request.variant(), currency, request.quantity());
         Long accountId = account == null ? null : account.getId();
 
         /*
@@ -90,13 +90,13 @@ public class QuoteService {
          * subtotal is unaffected by any discount, so the second pass cannot move it.
          */
         Quote provisional = engine.quote(
-                rate.toDomain(), request.quantity(), contextFor(account, request, null));
+                rate, request.quantity(), contextFor(account, request, null));
 
         Optional<CouponService.Resolved> coupon =
                 couponService.resolve(request.couponCode(), accountId, provisional.subtotal());
 
         Quote quote = coupon
-                .map(c -> engine.quote(rate.toDomain(), request.quantity(),
+                .map(c -> engine.quote(rate, request.quantity(),
                         contextFor(account, request, c)))
                 .orElse(provisional);
 
@@ -212,7 +212,8 @@ public class QuoteService {
                 couponMessage,
                 quote.issuedAt(),
                 quote.expiresAt(),
-                signature);
+                signature,
+                quote.priceVersion());
     }
 
     private Quote fromDto(QuoteDtos.SignedQuote dto) {
@@ -239,7 +240,8 @@ public class QuoteService {
                     dto.referralCode(),
                     dto.couponCode(),
                     dto.issuedAt(),
-                    dto.expiresAt());
+                    dto.expiresAt(),
+                    dto.priceVersion());
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new ApiExceptions.BadRequestException("malformed_quote",
                     "That price could not be read. Please refresh and try again.");

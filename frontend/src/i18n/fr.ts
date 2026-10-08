@@ -777,6 +777,10 @@ const fr: Dictionary = {
     perMillion: '/ million',
     taxIncludedShort: 'Inclus',
     taxIncludedInline: 'Taxe EA de 5 % incluse',
+    volumeTitle: 'Prix dégressif',
+    volumeRange: (from: string, to: string) => `${from} – ${to}`,
+    volumeFrom: (from: string) => `${from} et plus`,
+    volumeNext: (from: string, rate: string) => `À partir de ${from}, tous les coins de la commande à ${rate}.`,
     taxIncludedTitle: 'Les 5 % d’EA sont pour nous',
     taxIncludedBody:
       'EA prélève 5 % sur chaque transfert. La plupart te les ajoutent au ' +

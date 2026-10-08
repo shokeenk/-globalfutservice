@@ -30,6 +30,34 @@ export interface CatalogOption {
    * back to the last tier itself.
    */
   bestValue?: boolean
+  /**
+   * A coin option's price structure: its slider and its rates. PlayStation and Xbox carry
+   * the same one -- they share a market and its prices. Missing from older servers, and
+   * on every option that is not coins.
+   */
+  coin?: CatalogCoin | null
+}
+
+/** A coin price structure, as the storefront reads it. Amounts in whole thousands of coins. */
+export interface CatalogCoin {
+  /** The price version these numbers come from; a quote priced from another means they are stale. */
+  version?: number | null
+  market: 'PC' | 'CONSOLE'
+  marketLabel: string
+  minK: number
+  maxK: number
+  stepK: number
+  /** The one-tap amounts, in order. */
+  quickPicksK: number[]
+  /** The base rate (fromK 0), then any brackets: from that amount on, every coin in the order at that rate. */
+  rates: CatalogCoinRate[]
+}
+
+export interface CatalogCoinRate {
+  fromK: number
+  perMillionMinor: number
+  perMillionFormatted: string
+  per100kFormatted: string
 }
 
 export interface ServiceGroup {
@@ -132,6 +160,8 @@ export interface SignedQuote {
   issuedAt: string
   expiresAt: string
   signature: string
+  /** The coin price version that priced this quote; null for other services. */
+  priceVersion?: number | null
 }
 
 export interface Coupon {
@@ -875,31 +905,99 @@ export interface AdminPaymentClaim {
 }
 
 /**
- * The coin base price in one currency, as the rates screen edits it.
- *
- * <p>`per100k` is the number the owner sets; `perMillionMinor` is what the rate card
- * actually stores. Both are sent so the screen can show the price in the unit the
- * business uses while still reconciling against the table when something looks wrong.
- *
- * <p>These four prices are set independently per market. Nothing here is converted from
- * anything else — there is no FX rate in this payload because there is none in the system.
+ * Coin pricing, as the Coin rates page edits it: two structures -- PC, and PlayStation +
+ * Xbox sharing one market -- each with its slider and, per currency, a base price and
+ * optional whole-order brackets. Prices travel as plain decimal text per 100,000 coins,
+ * with the per-million figure the engine multiplies beside them.
  */
-export interface CoinRate {
+export interface CoinPricingOverview {
+  season: string
+  /** Every currency the shop sells in: each structure needs a base price in all of them. */
+  currencies: string[]
+  limits: CoinPricingLimits
+  structures: CoinStructure[]
+}
+
+/** The rules a structure is checked against, so the page can say them before a save does. */
+export interface CoinPricingLimits {
+  smallestStepK: number
+  maxCapK: number
+  /** FUT Transfer's minimum per transfer, as configured: below it, a warning. */
+  vendorMinTransferK: number
+  defaultQuickPicksK: number[]
+  maxQuickPicks: number
+  maxBrackets: number
+}
+
+export type CoinMarketCode = 'PC' | 'CONSOLE'
+
+/** One version of a structure. */
+export interface CoinStructure {
+  market: CoinMarketCode
+  label: string
+  platforms: string[]
+  version: number | null
+  validFrom: string | null
+  /** Null for the live version. */
+  validTo: string | null
+  /** The admin who saved it; null for the migration that set it up. */
+  setBy: string | null
+  minK: number
+  maxK: number
+  stepK: number
+  quickPicksK: number[]
+  rates: CoinCurrencyRates[]
+  warnings: string[]
+}
+
+export interface CoinCurrencyRates {
   currency: string
   symbol: string
+  /** Null when this currency has no price yet. */
+  base: CoinRateView | null
+  brackets: CoinRateView[]
+}
+
+export interface CoinRateView {
+  /** 0 for the base price; otherwise where the bracket starts, in K. */
+  fromK: number
+  /** As typed: per 100,000 coins, plain decimal text. */
+  per100k: string
+  per100kFormatted: string
   perMillionMinor: number
-  /*
-   * Both prices are Java BigDecimals, which arrive as JSON numbers, sometimes in exponent
-   * form (`1.6E+3`), not as strings. Typing them as strings let the Coin rates page call
-   * `.trim()` on one and crash. Read them through `toRows` in AdminRates, never as text.
-   */
-  /** Price of 100,000 coins, in major units. */
-  per100k: number | string
-  /** Price of one 10,000-coin slider step. May carry a fraction of a minor unit. */
-  per10k: number | string
-  /** False when a 10,000-coin step is not a whole cent/paisa — see the note on screen. */
+  perMillionFormatted: string
+  per10k: string
+  /** False when a 10K step costs a fraction of a cent: prices stay exact, steps differ by one. */
   stepIsWholeMinorUnit: boolean
-  validFrom: string
+}
+
+/** A draft checked and priced by the server, saving nothing. */
+export interface CoinPricingPreview {
+  errors: string[]
+  warnings: string[]
+  rows: CoinPreviewRow[]
+}
+
+/** What one amount costs, from the same engine run a customer's quote makes. */
+export interface CoinPreviewRow {
+  amountK: number
+  currency: string
+  per100k: string
+  per100kFormatted: string
+  perMillionFormatted: string
+  /** The coins, before EA's market tax. */
+  coinPriceMinor: number
+  coinPriceFormatted: string
+  marketTaxLabel: string
+  /** EA's tax is already in the price, as the shop is configured: the tax line is zero. */
+  marketTaxIncluded: boolean
+  marketTaxMinor: number
+  marketTaxFormatted: string
+  afterTaxMinor: number
+  afterTaxFormatted: string
+  /** What a guest pays with no discount, the card fee included. */
+  guestTotalMinor: number
+  guestTotalFormatted: string
 }
 
 /** What a campaign did, counted from its send log. */

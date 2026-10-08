@@ -29,6 +29,9 @@ import java.util.Objects;
  * @param minQuantity    smallest orderable quantity (inclusive)
  * @param maxQuantity    largest orderable quantity (inclusive)
  * @param stepQuantity   quantity granularity; an order must land exactly on a step
+ * @param priceVersion   the coin price version this row was read from, recorded on the
+ *                       quote so an order can be explained against it; null for rows that
+ *                       are not coin prices
  */
 public record RateCard(
         String season,
@@ -39,7 +42,14 @@ public record RateCard(
         Money unitPrice,
         BigDecimal minQuantity,
         BigDecimal maxQuantity,
-        BigDecimal stepQuantity) {
+        BigDecimal stepQuantity,
+        Long priceVersion) {
+
+    /** A row with no coin price version: boosting, coaching, and tests. */
+    public RateCard(String season, Sku sku, Platform platform, String variant, String label, Money unitPrice,
+                    BigDecimal minQuantity, BigDecimal maxQuantity, BigDecimal stepQuantity) {
+        this(season, sku, platform, variant, label, unitPrice, minQuantity, maxQuantity, stepQuantity, null);
+    }
 
     public RateCard {
         Objects.requireNonNull(season, "season");
@@ -88,20 +98,18 @@ public record RateCard(
             return;
         }
         Objects.requireNonNull(quantity, "quantity");
+        // In the unit the customer chose the amount in: "50K", not "0.05M".
         if (quantity.compareTo(minQuantity) < 0) {
-            throw new IllegalArgumentException(
-                    "Minimum order is " + minQuantity.stripTrailingZeros().toPlainString() + "M coins");
+            throw new IllegalArgumentException("Minimum order is " + CoinAmount.describe(minQuantity) + " coins");
         }
         if (quantity.compareTo(maxQuantity) > 0) {
-            throw new IllegalArgumentException(
-                    "Maximum order is " + maxQuantity.stripTrailingZeros().toPlainString()
-                            + "M coins — split larger orders or contact support");
+            throw new IllegalArgumentException("Maximum order is " + CoinAmount.describe(maxQuantity)
+                    + " coins — split larger orders or contact support");
         }
         BigDecimal offset = quantity.subtract(minQuantity);
         BigDecimal[] divRem = offset.divideAndRemainder(stepQuantity);
         if (divRem[1].signum() != 0) {
-            throw new IllegalArgumentException(
-                    "Quantity must be in steps of " + stepQuantity.stripTrailingZeros().toPlainString() + "M");
+            throw new IllegalArgumentException("Quantity must be in steps of " + CoinAmount.describe(stepQuantity));
         }
     }
 }
