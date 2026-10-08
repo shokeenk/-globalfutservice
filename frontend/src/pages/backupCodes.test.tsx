@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -81,15 +81,30 @@ beforeEach(() => {
 })
 afterEach(() => { CATALOG.policy.backupCodesRequired = 3 })
 
-/** The coin checkout's details step, with everything but the backup codes answered. */
+/**
+ * The coin checkout's details step, with everything but the backup codes answered.
+ *
+ * Getting here is setup, not what these tests check, so it uses plain events, not
+ * userEvent's pointer simulation, and a fake clock for the quote. The page waits 260 ms
+ * of quiet before pricing, and Continue only appears once a price has arrived. Waiting
+ * that out in real time made findByRole re-run its query, and its error dump, over the
+ * whole page every 50 ms and on every change, which took the first test here to the edge
+ * of the 5 s timeout in a full run.
+ */
 async function toSignIn() {
-  render(<MemoryRouter initialEntries={['/order']}><Routes><Route path="/order" element={<Order />} /></Routes></MemoryRouter>)
-  await userEvent.click(await screen.findByRole('button', { name: /PLAYSTATION/ }))
-  await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
-  const pay = await screen.findByRole('button', { name: /^Pay \$0\.90/ })
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    render(<MemoryRouter initialEntries={['/order']}><Routes><Route path="/order" element={<Order />} /></Routes></MemoryRouter>)
+    fireEvent.click(screen.getByRole('button', { name: /PLAYSTATION/ }))
+    await act(() => vi.runOnlyPendingTimersAsync())
+  } finally {
+    vi.useRealTimers()
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  const pay = screen.getByRole('button', { name: /^Pay \$0\.90/ })
   fill(screen.getByLabelText(/EA account email/), 'ea@example.test')
   fill(screen.getByLabelText(/EA password/), 'correct-horse')
-  for (const box of screen.getAllByRole('checkbox')) await userEvent.click(box)
+  for (const box of screen.getAllByRole('checkbox')) fireEvent.click(box)
   return pay
 }
 
