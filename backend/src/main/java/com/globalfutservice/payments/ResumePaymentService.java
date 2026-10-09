@@ -80,8 +80,11 @@ public class ResumePaymentService {
     /**
      * @param netFormatted the order's price without the card fee: what every method's fee is
      *                     added to
+     * @param lines        that price line by line: the order's lines without the 2.5% card fee,
+     *                     which a Payop payment never carries
      */
-    public record PayopOptions(String currency, long netMinor, String netFormatted, String unavailable,
+    public record PayopOptions(String currency, long netMinor, String netFormatted,
+                               List<OrderDtos.OrderLineDto> lines, String unavailable,
                                List<PayopMethod> methods, Instant manualBlockedUntil) {
     }
 
@@ -164,8 +167,10 @@ public class ResumePaymentService {
                     null, List.of(), false, null, null, null, null, false);
         }
         Optional<PayopCheckoutService.PayableInvoice> invoice = payop.payableInvoice(order, language);
+        // What is due now: the open Payop invoice's total while there is one, else the order's own.
         return new View(order.getPublicRef(), order.getStatus().name(), state.state(), state.payBy(),
-                order.getCurrency().name(), order.getTotalMinor(), order.total().format(),
+                order.getCurrency().name(), orderMapper.payableTotalMinor(order),
+                orderMapper.payableTotal(order).format(),
                 manualBreakdown(order),
                 manual.optionsFor(order.getSku().name()),
                 payopOffered(order),
@@ -205,12 +210,13 @@ public class ResumePaymentService {
         List<PayopMethod> methods = o.methods().stream()
                 .map(m -> new PayopMethod(m.methodId(), m.name(), m.type(), m.feeMinor(),
                         Money.ofMinor(m.feeMinor(), o.currency()).format(),
-                        new Breakdown(orderMapper.paymentLines(order, m.feeMinor(), PayopCheckoutService.FEE_LABEL),
+                        new Breakdown(orderMapper.paymentLines(order, m.feeMinor(), m.name()),
                                 m.totalMinor(), Money.ofMinor(m.totalMinor(), o.currency()).format()),
                         tokens.issue(order, m.methodId(), iso, m.totalMinor())))
                 .toList();
         return new PayopOptions(o.currency().name(), o.netMinor(), Money.ofMinor(o.netMinor(), o.currency()).format(),
-                o.unavailable(), methods, payop.claimsBlockedUntil(order.getId()).orElse(null));
+                orderMapper.netLines(order), o.unavailable(), methods,
+                payop.claimsBlockedUntil(order.getId()).orElse(null));
     }
 
     /**
@@ -327,7 +333,7 @@ public class ResumePaymentService {
                         || (!"CREATING".equals(a.status()) && !"FAILED".equals(a.status())))
                 .findFirst();
         Breakdown breakdown = current.map(a -> Attempt.PAYOP.equals(a.kind())
-                        ? new Breakdown(orderMapper.paymentLines(order, a.feeMinor(), PayopCheckoutService.FEE_LABEL),
+                        ? new Breakdown(orderMapper.paymentLines(order, a.feeMinor(), a.method()),
                                 a.totalMinor(), a.totalFormatted())
                         : manualBreakdown(order))
                 .orElse(null);

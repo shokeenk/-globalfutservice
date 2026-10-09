@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,12 +26,24 @@ vi.mock('../state/CatalogContext', () => ({
   }),
 }))
 vi.mock('../lib/razorpay', () => ({ isStubGateway: () => true, openCheckout: vi.fn() }))
-// The payment panel itself is the shared one; here it only shows what it was opened with.
-vi.mock('../components/ManualPayment', () => ({
-  ManualPayment: ({ initialMethod, currency }: { initialMethod?: string; currency?: string }) => (
-    <p data-testid="panel">{`${initialMethod}|${currency}`}</p>
-  ),
-}))
+// The payment panel itself is the shared one; here it only shows what it was opened with --
+// and, opened on International, reports a Payop method chosen, as the real one does.
+vi.mock('../components/ManualPayment', async () => {
+  const { useEffect } = await import('react')
+  const { usePublishPaySummary } = await import('../components/paySummary')
+  return {
+    ManualPayment: ({ initialMethod, currency }: { initialMethod?: string; currency?: string }) => {
+      const publish = usePublishPaySummary()
+      useEffect(() => {
+        if (initialMethod !== 'INTERNATIONAL') return
+        publish?.({ kind: 'payop', lines: [{ code: 'BASE', label: 'Single session', amountMinor: 999,
+          amountFormatted: '$9.99' }], method: { name: 'Visa / Mastercard', feeMinor: 41, feeFormatted: '$0.41',
+          totalFormatted: '$10.40' }, pay: () => {}, paying: false, error: null })
+      }, [initialMethod, publish])
+      return <p data-testid="panel">{`${initialMethod}|${currency}`}</p>
+    },
+  }
+})
 
 const { default: CoachingBook } = await import('./CoachingBook')
 
@@ -75,7 +87,11 @@ beforeEach(() => {
   })
   api.post.mockImplementation(async (path: string) => {
     if (path === '/api/v1/quotes') {
-      return { quoteId: 'q1', expiresAt: '2026-10-01T07:00:00Z', lines: [], currency: catalog.currency,
+      return { quoteId: 'q1', expiresAt: '2026-10-01T07:00:00Z', currency: catalog.currency,
+        lines: [
+          { code: 'BASE', label: 'Single session', amountMinor: 999, amountFormatted: '$9.99' },
+          { code: 'GATEWAY_FEE', label: 'Payment processing (2.5%)', amountMinor: 25, amountFormatted: '$0.25' },
+        ],
         totalFormatted: catalog.currency === 'INR' ? '₹1,025.00' : '$10.24', signature: 'x' }
     }
     return { publicRef: 'GFS-26-C1', status: 'AWAITING_PAYMENT', totalMinor: 1024, totalFormatted: '$10.24',
@@ -113,4 +129,44 @@ describe('coaching checkout: the ways to pay', () => {
     expect(international).toHaveTextContent('International payment options are coming soon')
     expect(international).not.toHaveTextContent(/local method/)
   })
+
+  it('the review step: International drops the 2.5% and leaves the fee to the method chosen next', async () => {
+    catalog.currency = 'USD'
+    await toPaymentStep()
+    const summary = () => screen.getByText('Order summary').parentElement as HTMLElement
+
+    // UPI, the first listed: the 2.5% card fee and the quote's total.
+    expect(await within(summary()).findByText('$0.25')).toBeInTheDocument()
+    expect(within(summary()).getByTestId('summary-total')).toHaveTextContent('$10.24')
+
+    await userEvent.click(screen.getByRole('radio', { name: /^International/ }))
+    expect(within(summary()).queryByText('$0.25')).toBeNull()
+    expect(summary()).toHaveTextContent('Payment processing feeSelect a payment method')
+    expect(within(summary()).getByTestId('summary-total')).toHaveTextContent('—')
+
+    await userEvent.click(screen.getByRole('radio', { name: /^PayPal/ }))
+    expect(within(summary()).getByText('$0.25')).toBeInTheDocument()
+    expect(within(summary()).getByTestId('summary-total')).toHaveTextContent('$10.24')
+  })
+
+  it('the pay step: the ways to pay on the left, the summary on the right with the method\'s fee and the total once',
+    async () => {
+      catalog.currency = 'USD'
+      await toPaymentStep()
+      await userEvent.click(screen.getByRole('radio', { name: /^International/ }))
+      await userEvent.click(screen.getByRole('checkbox'))
+      await userEvent.click(screen.getByRole('button', { name: /Pay now/ }))
+
+      const card = await screen.findByTestId('pay-summary')
+      const grid = card.parentElement as HTMLElement
+      expect(grid.className).toContain('lg:grid-cols-[1.4fr_1fr]')
+      expect(grid.firstElementChild).toBe(screen.getByTestId('panel'))
+      expect(grid.lastElementChild).toBe(card)
+
+      expect(card).toHaveTextContent('Payment processing fee (Visa / Mastercard)$0.41')
+      expect(card).not.toHaveTextContent('$0.25')
+      expect(within(card).getByTestId('summary-total')).toHaveTextContent('$10.40')
+      expect(screen.getAllByText('$10.40')).toHaveLength(1)
+      expect(within(card).getByRole('button', { name: 'Continue to payment' })).toBeInTheDocument()
+    })
 })

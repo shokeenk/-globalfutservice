@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState, type ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Order, OrderPaymentView } from '../lib/types'
+import type { Order, OrderPaymentView, QuoteLine } from '../lib/types'
 
 /*
  * "Complete your payment": the same order, at its frozen price in its own currency, paid
@@ -25,6 +26,7 @@ const { ApiError } = await import('../lib/api')
 const { CompletePayment } = await import('./CompletePayment')
 const { ownerManualRoutes } = await import('./ManualPayment')
 const { PayopPayment, ownerPayopRoutes } = await import('./PayopPayment')
+const { ORDER_SUMMARY, PaySummaryProvider, PayopPayButton } = await import('./paySummary')
 const { OrderView } = await import('../pages/Track')
 
 const REF = 'GFS-26-AFXZAZ1M'
@@ -223,7 +225,7 @@ describe('the owner\'s routes send no amount', () => {
     api.get.mockResolvedValue({ country: 'DE' })
     const routes = {
       options: async () => ({
-        currency: 'EUR', netMinor: 9000, netFormatted: '€90.00', feeLabel: '', unavailable: null,
+        currency: 'EUR', netMinor: 9000, netFormatted: '€90.00', lines: [], unavailable: null,
         claimsBlockedUntil: null,
         methods: [{ methodId: 381, name: 'Bank transfer', type: 'bank_transfer', feeMinor: 407, feeFormatted: '€4.07',
           totalMinor: 9407, totalFormatted: '€94.07', token: 't' }],
@@ -233,13 +235,78 @@ describe('the owner\'s routes send no amount', () => {
           details: { retryAt: ['2026-10-06T13:00:00Z'] } })
       },
     }
-    render(<MemoryRouter><PayopPayment publicRef={REF} onUnavailable={() => {}} routes={routes} /></MemoryRouter>)
+    render(<MemoryRouter><WithSummary>
+      <PayopPayment publicRef={REF} onUnavailable={() => {}} routes={routes} />
+    </WithSummary></MemoryRouter>)
 
     fireEvent.click(await screen.findByText('Bank transfer'))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to pay €94.07' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }))
 
     expect(await screen.findByText(/^This payment has been started several times\. .* start another after .*2026/))
       .toBeInTheDocument()
+  })
+})
+
+/** A pay step with the button the order summary would show under its total. */
+function WithSummary({ children }: { children: ReactNode }) {
+  const [pay, setPay] = useState<Parameters<Parameters<typeof PaySummaryProvider>[0]['publish']>[0]>(ORDER_SUMMARY)
+  return (
+    <PaySummaryProvider publish={setPay}>
+      {children}
+      {pay.kind === 'payop' && <PayopPayButton selection={pay} />}
+    </PaySummaryProvider>
+  )
+}
+
+describe('laid out as the checkout: the ways to pay on the left, the order summary on the right', () => {
+  const LINES: QuoteLine[] = [
+    { code: 'BASE', label: 'Coins', amountMinor: 10000, amountFormatted: '€100.00' },
+    { code: 'COUPON_DISCOUNT', label: 'Coupon', amountMinor: -1000, amountFormatted: '-€10.00' },
+    { code: 'GATEWAY_FEE', label: 'Payment processing (2.5%)', amountMinor: 225, amountFormatted: '€2.25' },
+  ]
+
+  it('UPI keeps the 2.5%; a Payop method has only its sheet fee, and the total appears once', async () => {
+    answer(view({ manual: { lines: LINES, totalMinor: 9225, totalFormatted: '€92.25' } }))
+    api.post.mockImplementation(async (url: string) => (url.endsWith('/payop/options') ? {
+      currency: 'EUR', netMinor: 9000, netFormatted: '€90.00', lines: LINES.slice(0, 2), unavailable: null,
+      manualBlockedUntil: null,
+      methods: [{ methodId: 381, name: 'Bank transfer', type: 'bank_transfer', feeMinor: 407, feeFormatted: '€4.07',
+        breakdown: { lines: [], totalMinor: 9407, totalFormatted: '€94.07' }, token: 'sealed-381' }],
+    } : new Promise(() => {})))
+    show(order({ sku: 'TRADING_SERVICE', lines: LINES }))
+    await open()
+
+    // Open, the total is the summary's: the banner no longer repeats it.
+    expect(screen.queryByTestId('amount-due')).toBeNull()
+    const card = await screen.findByTestId('pay-summary')
+    const grid = card.parentElement!
+    expect(grid.className).toContain('lg:grid-cols-[1.25fr_1fr]')
+    expect(grid.lastElementChild).toBe(card)
+    expect(within(grid).getByRole('tablist')).toBeInTheDocument()
+
+    // UPI: the order as placed, card fee included.
+    await screen.findByRole('tab', { name: 'UPI' })
+    expect(card).toHaveTextContent(/Payment processing.*€2\.25/)
+    expect(within(card).getByTestId('summary-total')).toHaveTextContent('€92.25')
+
+    // International, no method yet: no card fee, the fee line asks for a method, no total.
+    fireEvent.click(screen.getByRole('tab', { name: 'International' }))
+    await waitFor(() => expect(card).toHaveTextContent('Select a payment method'))
+    expect(card).not.toHaveTextContent('€2.25')
+    expect(within(card).getByTestId('summary-total')).toHaveTextContent('—')
+
+    // A method: its sheet fee, named, and the total -- once on the page -- with the button under it.
+    fireEvent.click(await screen.findByText('Bank transfer'))
+    expect(card).toHaveTextContent('Payment processing fee (Bank transfer)€4.07')
+    expect(within(card).getByTestId('summary-total')).toHaveTextContent('€94.07')
+    expect(screen.getAllByText('€94.07')).toHaveLength(1)
+    expect(within(card).getByRole('button', { name: 'Continue to payment' })).toBeInTheDocument()
+
+    // Back to UPI: the card fee again.
+    fireEvent.click(screen.getByRole('tab', { name: 'UPI' }))
+    expect(card).toHaveTextContent(/Payment processing.*€2\.25/)
+    expect(within(card).getByTestId('summary-total')).toHaveTextContent('€92.25')
+    expect(within(card).queryByRole('button', { name: 'Continue to payment' })).toBeNull()
   })
 })
 

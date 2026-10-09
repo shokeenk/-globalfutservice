@@ -169,13 +169,24 @@ class PayopCallbackServiceTest {
         assertThat(order.getTotalMinor()).as("what was actually charged").isEqualTo(9407);
         assertThat(order.getPayopInvoiceId()).isEqualTo(attempt.getId());
         JsonNode fee = MAPPER.readTree(order.getPaymentFee());
-        assertThat(fee.path("label").asText()).isEqualTo("Payment processing fee");
+        assertThat(fee.path("label").asText()).isEqualTo("Payment processing fee (" + attempt.getMethodName() + ")");
         assertThat(fee.path("methodId").asLong()).isEqualTo(381);
         assertThat(fee.path("fixedEur").asText()).isEqualTo("0.30");
         assertThat(fee.path("percent").asText()).isEqualTo("4.0");
         assertThat(fee.path("netMinor").asLong()).isEqualTo(9000);
         assertThat(fee.path("feeMinor").asLong()).isEqualTo(407);
         assertThat(fee.path("totalMinor").asLong()).isEqualTo(9407);
+        // The frozen breakdown becomes the one charged: no 2.5% card fee line, the method's fee in its
+        // place, the total the invoice's. The rest of the quote is kept as it was.
+        JsonNode breakdown = MAPPER.readTree(order.getPriceBreakdown());
+        assertThat(breakdown.path("lines").findValuesAsText("code"))
+                .containsExactly("BASE", "COUPON_DISCOUNT", "PAYMENT_FEE");
+        assertThat(breakdown.path("lines").get(2).path("amountMinor").asLong()).isEqualTo(407);
+        assertThat(breakdown.path("lines").get(2).path("label").asText())
+                .isEqualTo("Payment processing fee (" + attempt.getMethodName() + ")");
+        assertThat(breakdown.path("totalMinor").asLong()).isEqualTo(9407);
+        assertThat(breakdown.path("quoteId").asText()).isEqualTo("q_1");
+        assertThat(order.getPriceBreakdown()).doesNotContain("GATEWAY_FEE").doesNotContain("2.5%");
         verify(orderService, times(1)).markPaid(order, "Payop " + TXID);
         verify(notifications, never()).paymentAlert(any());
     }

@@ -19,8 +19,11 @@ import com.globalfutservice.notify.discord.DiscordVerificationService;
 import com.globalfutservice.orders.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -42,11 +45,23 @@ public class OrderMapper {
     private final AppProperties props;
     private final DiscordVerificationService verification;
     private final DiscordBotClient bot;
+    /** Whether a Payop invoice is still open: its payable-until time against now. */
+    private final Clock clock;
 
     public OrderMapper(ObjectMapper mapper, AppProperties props,
                        DiscordVerificationService verification, DiscordBotClient bot,
                        CoachingService coachingService, VendorOrderLedger vendorOrders,
                        OrderPaymentState paymentState) {
+        this(mapper, props, verification, bot, coachingService, vendorOrders, paymentState, Clock.systemUTC());
+    }
+
+    /** The constructor Spring uses: with two and neither marked, it looks for one with no arguments. */
+    @Autowired
+    public OrderMapper(ObjectMapper mapper, AppProperties props,
+                       DiscordVerificationService verification, DiscordBotClient bot,
+                       CoachingService coachingService, VendorOrderLedger vendorOrders,
+                       OrderPaymentState paymentState, Clock clock) {
+        this.clock = clock;
         this.paymentState = paymentState;
         this.vendorOrders = vendorOrders;
         this.mapper = mapper;
@@ -153,8 +168,8 @@ public class OrderMapper {
                 order.requiresCredentials(),
                 credentialsSubmitted,
                 order.getCurrency().name(),
-                order.getTotalMinor(),
-                order.total().format(),
+                payableTotalMinor(order),
+                payableTotal(order).format(),
                 lines(order),
                 order.getPointsRedeemed(),
                 order.getPointsEarned(),
@@ -205,8 +220,8 @@ public class OrderMapper {
                 order.getDeliveryMethod().name(),
                 credentialsHeld,
                 order.getGuestEmail(),
-                order.getTotalMinor(),
-                order.total().format(),
+                payableTotalMinor(order),
+                payableTotal(order).format(),
                 order.getCurrency().name(),
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
@@ -216,51 +231,125 @@ public class OrderMapper {
     }
 
     /** What a line is called when it is the fee of the payment method the customer used. */
-    static final String PAYMENT_FEE = "PAYMENT_FEE";
+    public static final String PAYMENT_FEE = "PAYMENT_FEE";
+
+    /** What the fee line of a method that charges its own fee says, before the method's name. */
+    public static final String PAYMENT_FEE_LABEL = "Payment processing fee";
+
+    /** "Payment processing fee (Visa / Mastercard)": the fee, and whose it is. */
+    public static String paymentFeeLabel(String method) {
+        return isBlank(method) ? PAYMENT_FEE_LABEL : PAYMENT_FEE_LABEL + " (" + method.trim() + ")";
+    }
+
+    /**
+     * The Payop payment an order is being paid with -- an invoice open for it -- or was paid
+     * with: the method, its fee and the total. Absent for every other order, which is charged
+     * the card fee its quote carries.
+     */
+    public record PayopTerms(String method, long feeMinor, long totalMinor) {
+    }
 
     /**
      * Reads the frozen quote back out of the snapshot column.
      *
-     * <p>An order paid through Payop was charged its method's own fee instead of the flat
-     * card fee the quote carries: that line is replaced by the fee actually charged, so the
-     * lines add up to the total the customer paid.
+     * <p>An order being paid through Payop -- an invoice open for it, or paid -- is charged its
+     * method's own fee instead of the flat card fee the quote carries: that line gives way to
+     * the method's fee, so the lines add up to the total the customer pays.
      */
-    List<OrderDtos.OrderLineDto> lines(OrderEntity order) {
-        JsonNode paymentFee = paymentFee(order);
-        return paymentFee == null ? paymentLines(order, null, null)
-                : paymentLines(order, paymentFee.path("feeMinor").asLong(),
-                        paymentFee.path("label").asText("Payment processing fee"));
+    public List<OrderDtos.OrderLineDto> lines(OrderEntity order) {
+        PayopTerms terms = payopTerms(order).orElse(null);
+        return terms == null ? paymentLines(order, null, null) : paymentLines(order, terms.feeMinor(), terms.method());
+    }
+
+    /**
+     * What the customer pays for the order: the Payop invoice's total while one is open for it
+     * or once it is paid -- the 2.5% card fee is never part of it -- and otherwise the order's
+     * own total, card fee included.
+     */
+    public long payableTotalMinor(OrderEntity order) {
+        return payopTerms(order).map(PayopTerms::totalMinor).orElse(order.getTotalMinor());
+    }
+
+    public Money payableTotal(OrderEntity order) {
+        return Money.ofMinor(payableTotalMinor(order), order.getCurrency());
     }
 
     /**
      * The frozen quote's lines, as they read when paid with a method that charges its own
      * fee of {@code feeMinor} instead of the quote's flat card fee: that line is replaced,
-     * never added to. Null keeps the quote's own lines, card fee included.
+     * never added to, and the fee line names {@code method}. Null keeps the quote's own
+     * lines, card fee included.
      */
-    public List<OrderDtos.OrderLineDto> paymentLines(OrderEntity order, Long feeMinor, String feeLabel) {
+    public List<OrderDtos.OrderLineDto> paymentLines(OrderEntity order, Long feeMinor, String method) {
+        List<OrderDtos.OrderLineDto> out = new ArrayList<>(feeMinor == null ? frozenLines(order) : netLines(order));
+        if (feeMinor != null) {
+            out.add(new OrderDtos.OrderLineDto(PAYMENT_FEE, paymentFeeLabel(method), feeMinor,
+                    Money.ofMinor(feeMinor, order.getCurrency()).format(), isBlank(method) ? null : method.trim()));
+        }
+        return out;
+    }
+
+    /**
+     * The order's price before any payment fee: every frozen line but the card fee (and a
+     * method's own fee, on an order already paid through Payop). What a Payop method's fee is
+     * added to.
+     */
+    public List<OrderDtos.OrderLineDto> netLines(OrderEntity order) {
+        return frozenLines(order).stream()
+                .filter(l -> !LineCode.GATEWAY_FEE.name().equals(l.code()) && !PAYMENT_FEE.equals(l.code()))
+                .toList();
+    }
+
+    private List<OrderDtos.OrderLineDto> frozenLines(OrderEntity order) {
         List<OrderDtos.OrderLineDto> out = new ArrayList<>();
         try {
             JsonNode root = mapper.readTree(order.getPriceBreakdown());
             for (JsonNode line : root.path("lines")) {
-                if (feeMinor != null && LineCode.GATEWAY_FEE.name().equals(line.path("code").asText())) {
-                    continue;
-                }
                 out.add(new OrderDtos.OrderLineDto(
                         line.path("code").asText(),
                         line.path("label").asText(),
                         line.path("amountMinor").asLong(),
-                        line.path("amountFormatted").asText()));
+                        line.path("amountFormatted").asText(),
+                        line.path("method").isTextual() ? line.path("method").asText() : null));
             }
         } catch (Exception e) {
             // A malformed snapshot must not take down an order page; the customer still
             // gets the total, which is the number that matters to them.
             log.warn("Could not read price breakdown for order {}", order.getPublicRef());
         }
-        if (feeMinor != null) {
-            out.add(new OrderDtos.OrderLineDto(PAYMENT_FEE, feeLabel, feeMinor,
-                    Money.ofMinor(feeMinor, order.getCurrency()).format()));
-        }
         return out;
+    }
+
+    /**
+     * The Payop terms in force on the order, if any: those of the invoice it was paid with, or
+     * of an invoice still open for it while it waits for payment. An invoice past its
+     * payable-until time no longer counts, so an order whose customer let it lapse reads as it
+     * was placed again, card fee and all.
+     */
+    public Optional<PayopTerms> payopTerms(OrderEntity order) {
+        JsonNode fee = paymentFee(order);
+        if (fee == null) {
+            return Optional.empty();
+        }
+        boolean paid = order.getPayopInvoiceId() != null;
+        if (!paid) {
+            Instant until = instant(fee.path("payableUntil"));
+            if (order.getStatus() != OrderStatus.AWAITING_PAYMENT || until == null
+                    || !clock.instant().isBefore(until) || !fee.path("totalMinor").canConvertToLong()) {
+                return Optional.empty();
+            }
+        }
+        String method = fee.path("methodName").isTextual() ? fee.path("methodName").asText() : null;
+        long total = paid ? order.getTotalMinor() : fee.path("totalMinor").asLong();
+        return Optional.of(new PayopTerms(method, fee.path("feeMinor").asLong(), total));
+    }
+
+    private static Instant instant(JsonNode node) {
+        try {
+            return node.isTextual() ? Instant.parse(node.asText()) : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private JsonNode paymentFee(OrderEntity order) {

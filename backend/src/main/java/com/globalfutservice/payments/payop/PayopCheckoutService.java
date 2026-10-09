@@ -32,11 +32,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * and starting the payment.
  *
  * <p>Everything about the price is worked out here, on the server, every time. The browser
- * says which method it wants and what total it showed; the total is recomputed, and a
- * difference is refused rather than charged. The amount is the order's price without the
- * flat card fee -- coupons and points are already in it -- plus the chosen method's own fee,
- * grossed up so the business receives the price in full. Nothing the browser sends ever
- * becomes a price.
+ * starts a method with the token the server sealed its price into ({@link PayopStartToken});
+ * the total is recomputed, and a difference is refused rather than charged. The amount is the
+ * order's price without the 2.5% card fee -- coupons, discounts and points are already in it
+ * -- plus the chosen method's own fee from the fee sheet, grossed up so the business receives
+ * the price in full. The card fee is never part of it. Nothing the browser sends ever becomes
+ * a price.
+ *
+ * <p>From the moment an invoice is opened, the order reads as that payment (its lines and
+ * total, for the customer and for staff) for as long as the invoice can be paid.
  *
  * <p>One active attempt per order, held by a unique index. Asking again for the same method
  * hands back the invoice already made, so a double click or a retry never creates a second
@@ -56,8 +60,6 @@ public class PayopCheckoutService {
 
     private static final Logger log = LoggerFactory.getLogger(PayopCheckoutService.class);
 
-    /** What the fee is called wherever a customer sees it. */
-    public static final String FEE_LABEL = "Payment processing fee";
     /** An attempt still "creating" after this was interrupted mid-request. */
     static final Duration CREATING_TIMEOUT = Duration.ofMinutes(2);
     private static final Set<String> LANGUAGES = Set.of("en", "es", "fr");
@@ -145,8 +147,8 @@ public class PayopCheckoutService {
 
     /**
      * Starts paying {@code order} with {@code methodId}. {@code expectedTotalMinor} is the
-     * total the customer was shown; if the price has moved since, nothing is created and
-     * they are asked to look again.
+     * total sealed into the token the customer started it with; if the price has moved since,
+     * nothing is created and they are asked to look again.
      */
     public Started start(OrderEntity order, long methodId, String country, long expectedTotalMinor,
                          String language) {
@@ -183,6 +185,7 @@ public class PayopCheckoutService {
             }
             if (a.getMethodId() == methodId && a.getTotalMinor() == fee.totalMinor()
                     && a.getCurrency() == currency) {
+                tx.executeWithoutResult(status -> chooseTerms(order.getId(), a));
                 return new Started(redirectUrl(lang, a.getInvoiceId()), a.getInvoiceId(), a.getTotalMinor(),
                         a.getExpiresAt());
             }
@@ -202,7 +205,9 @@ public class PayopCheckoutService {
                     replace(active, now);
                     PayopInvoiceEntity a = invoices.findById(earlier.get().getId()).orElseThrow();
                     a.reopened(now);
-                    return invoices.saveAndFlush(a);
+                    PayopInvoiceEntity saved = invoices.saveAndFlush(a);
+                    chooseTerms(order.getId(), saved);
+                    return saved;
                 });
             } catch (DataIntegrityViolationException e) {
                 throw new ApiExceptions.ConflictException("payment_starting",
@@ -255,11 +260,24 @@ public class PayopCheckoutService {
         PayopInvoiceEntity saved = tx.execute(status -> {
             PayopInvoiceEntity a = invoices.findById(id).orElseThrow();
             a.opened(opened, clock.instant());
-            return invoices.save(a);
+            PayopInvoiceEntity open = invoices.save(a);
+            chooseTerms(order.getId(), open);
+            return open;
         });
         log.info("Payop invoice {} opened for order {}: method {}, {} {}", invoiceId, order.getPublicRef(),
                 methodId, amount, currency);
         return new Started(redirectUrl(lang, invoiceId), invoiceId, saved.getTotalMinor(), saved.getExpiresAt());
+    }
+
+    /**
+     * The order now reads as a payment with this invoice -- the method's fee in place of the
+     * 2.5% card fee -- for as long as the invoice can be paid. Inside a transaction.
+     */
+    private void chooseTerms(Long orderId, PayopInvoiceEntity invoice) {
+        orders.findById(orderId).ifPresent(o -> {
+            o.choosePayopTerms(PayopTerms.snapshot(invoice, mapper));
+            orders.save(o);
+        });
     }
 
     /** Closes the order's active attempt, if any: the customer chose another method. */

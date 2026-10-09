@@ -109,9 +109,11 @@ public class OrderEntity {
     private String priceBreakdown;
 
     /**
-     * The Payop attempt that paid this order, and that payment's fee, exactly as charged.
-     * Null for every other way of paying. {@code priceBreakdown} keeps the quote the order
-     * was accepted at; these say how the payment differed from it.
+     * The Payop attempt that paid this order, and the terms of its Payop payment: the
+     * method's own fee in place of the 2.5% card fee. {@code paymentFee} is written when an
+     * invoice is opened -- the order reads as that payment while the invoice can be paid --
+     * and again when one is paid, which also rewrites {@code priceBreakdown} to what was
+     * charged. Null for every other way of paying.
      */
     @Column(name = "payop_invoice_id")
     private Long payopInvoiceId;
@@ -417,14 +419,29 @@ public class OrderEntity {
     }
 
     /**
-     * Paid through Payop: the total becomes what was actually charged -- the quote's price
-     * without the 2.5% card fee, plus the chosen method's own fee -- and the fee's details
-     * are kept with it. Called once, just before the order is marked paid.
+     * A Payop invoice was opened for this order, still unpaid: its terms, for as long as the
+     * invoice can be paid. Never replaces the terms of a payment already made.
      */
-    public void recordPayopPayment(long payopInvoiceId, long chargedTotalMinor, String paymentFeeJson) {
+    public void choosePayopTerms(String paymentFeeJson) {
+        if (this.payopInvoiceId == null) {
+            this.paymentFee = paymentFeeJson;
+        }
+    }
+
+    /**
+     * Paid through Payop: the total becomes what was actually charged -- the quote's price
+     * without the 2.5% card fee, plus the chosen method's own fee -- the fee's details are
+     * kept with it, and the frozen breakdown becomes the one charged: no card fee line, the
+     * method's fee line in its place. Called once, just before the order is marked paid.
+     */
+    public void recordPayopPayment(long payopInvoiceId, long chargedTotalMinor, String paymentFeeJson,
+                                   String paidBreakdownJson) {
         this.payopInvoiceId = payopInvoiceId;
         this.totalMinor = chargedTotalMinor;
         this.paymentFee = paymentFeeJson;
+        if (paidBreakdownJson != null && !paidBreakdownJson.isBlank()) {
+            this.priceBreakdown = paidBreakdownJson;
+        }
     }
 
     public String getPriceBreakdown() {

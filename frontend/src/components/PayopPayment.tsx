@@ -1,21 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Field, Select, SelectTile } from './ui'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Field, Select, SelectTile } from './ui'
 import { useI18n } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { COUNTRY_CODES, countryCode, countryFromLocale, countryName } from '../lib/countries'
+import type { QuoteLine } from '../lib/types'
+import { ORDER_SUMMARY, usePublishPaySummary } from './paySummary'
 
 /**
- * Paying an international order through Payop, from the International tab.
+ * Paying an international order through Payop, from the International tab: the country and
+ * the methods, on the left of the pay step.
  *
- * Every number here is the server's. The customer picks a country and a method; the list,
- * each method's fee and the total come back from the API, and starting the payment sends
- * only the method and the total that was on screen, which the server checks against its
- * own. Nothing here marks anything paid: the customer goes to Payop's page, and the order
+ * Every number is the server's. The customer picks a country and a method; the list, each
+ * method's fee from the fee sheet and the total come back from the API -- the order's price
+ * without the 2.5% card fee, which a Payop payment never carries, plus that fee -- and a
+ * payment is started from the token the server sealed that price into. No amount is ever
+ * sent. Nothing here marks anything paid: the customer goes to Payop's page, and the order
  * moves when Payop's confirmation reaches the server.
  *
+ * The fee, the total and the button that starts the payment are the page's order summary's
+ * to show (see paySummary): this reports the choice there, so the total appears once.
+ *
  * Two sets of routes: checkout's, authenticated by reference and email, and a signed-in
- * owner's own ({@link ownerPayopRoutes}), used to complete the payment of an unpaid order,
- * where a method is started from a token the server issued and no amount is sent at all.
+ * owner's own ({@link ownerPayopRoutes}), used to complete the payment of an unpaid order.
  */
 
 export interface MethodOption {
@@ -26,15 +32,16 @@ export interface MethodOption {
   feeFormatted: string
   totalMinor: number
   totalFormatted: string
-  /** The owner's routes only: the server's sealed price for this method, which starts it. */
-  token?: string
+  /** The server's sealed price for this method: the only thing that starts it. */
+  token: string
 }
 
 export interface Options {
   currency: string
   netMinor: number
   netFormatted: string
-  feeLabel: string
+  /** The order's lines before any payment fee: no 2.5% card fee among them. */
+  lines: QuoteLine[]
   methods: MethodOption[]
   /** Why nothing can be offered ("NO_RATE", "PAYOP_UNAVAILABLE"), or null. */
   unavailable: string | null
@@ -60,8 +67,8 @@ export interface PayopRoutes {
 function guestPayopRoutes(publicRef: string, email: string): PayopRoutes {
   return {
     options: (country) => api.post<Options>('/api/v1/payments/payop/options', { order: publicRef, email, country }),
-    start: (method, country, language) => api.post<Started>('/api/v1/payments/payop/invoices', {
-      order: publicRef, email, methodId: method.methodId, country, expectedTotalMinor: method.totalMinor, language,
+    start: (method, _country, language) => api.post<Started>('/api/v1/payments/payop/invoices', {
+      order: publicRef, email, token: method.token, language,
     }),
   }
 }
@@ -70,6 +77,7 @@ interface OwnerOptions {
   currency: string
   netMinor: number
   netFormatted: string
+  lines: QuoteLine[]
   unavailable: string | null
   methods: {
     methodId: number; name: string; type: string; feeMinor: number; feeFormatted: string
@@ -92,7 +100,7 @@ export function ownerPayopRoutes(publicRef: string): PayopRoutes {
         currency: o.currency,
         netMinor: o.netMinor,
         netFormatted: o.netFormatted,
-        feeLabel: '',
+        lines: o.lines ?? [],
         unavailable: o.unavailable,
         claimsBlockedUntil: o.manualBlockedUntil,
         methods: o.methods.map((m) => ({
@@ -180,6 +188,29 @@ export function PayopPayment({
   )
   const chosen = options?.methods.find((m) => m.methodId === methodId) ?? null
 
+  /*
+   * The choice, reported to the order summary beside this step: the lines the fee is added
+   * to, the chosen method's fee and total, and the way to start it. Back to the order as
+   * placed when this tab is left.
+   */
+  const publish = usePublishPaySummary()
+  const startRef = useRef<() => Promise<void>>(async () => {})
+  const pay = useCallback(() => { void startRef.current() }, [])
+  useEffect(() => {
+    publish?.({
+      kind: 'payop',
+      lines: options?.lines ?? [],
+      method: chosen && options && !options.unavailable ? {
+        name: chosen.name, feeMinor: chosen.feeMinor, feeFormatted: chosen.feeFormatted,
+        totalFormatted: chosen.totalFormatted,
+      } : null,
+      pay,
+      paying: starting,
+      error,
+    })
+  }, [publish, options, chosen, starting, error, pay])
+  useEffect(() => () => publish?.(ORDER_SUMMARY), [publish])
+
   async function start() {
     if (!chosen || !country || starting) return
     setStarting(true)
@@ -217,6 +248,7 @@ export function PayopPayment({
       setStarting(false)
     }
   }
+  startRef.current = start
 
   const blockedUntil = options?.claimsBlockedUntil
     ? new Date(options.claimsBlockedUntil).toLocaleString(lang, { dateStyle: 'medium', timeStyle: 'short' })
@@ -276,34 +308,6 @@ export function PayopPayment({
           </div>
           <p className="text-[12px] leading-snug text-chalk-faint">{t.order.payopFeeNote}</p>
         </div>
-      )}
-
-      {options && chosen && (
-        <dl className="divide-y divide-ink-400/70 rounded-panel border border-ink-400 bg-ink-700/40 px-4">
-          <div className="flex justify-between gap-4 py-2.5 text-[13px]">
-            <dt className="text-chalk-muted">{t.order.payopOrderPrice}</dt>
-            <dd className="tnum text-chalk">{options.netFormatted}</dd>
-          </div>
-          <div className="flex justify-between gap-4 py-2.5 text-[13px]">
-            <dt className="text-chalk-muted">{t.order.payopFeeLine}</dt>
-            <dd className="tnum text-chalk">{chosen.feeFormatted}</dd>
-          </div>
-          <div className="flex justify-between gap-4 py-2.5 text-[14px] font-semibold">
-            <dt className="text-chalk">{t.order.payopTotal}</dt>
-            <dd className="tnum text-chalk">{chosen.totalFormatted}</dd>
-          </div>
-        </dl>
-      )}
-
-      {error && <Alert tone="warn">{error}</Alert>}
-
-      {chosen && (
-        <>
-          <Button full size="lg" loading={starting} onClick={() => void start()}>
-            {t.order.payopContinue(chosen.totalFormatted)}
-          </Button>
-          <p className="text-[12px] leading-snug text-chalk-faint">{t.order.payopRedirectNote}</p>
-        </>
       )}
     </div>
   )

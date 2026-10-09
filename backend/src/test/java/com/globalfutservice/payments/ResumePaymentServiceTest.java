@@ -78,7 +78,8 @@ class ResumePaymentServiceTest {
         when(props.security().quoteSigningSecret()).thenReturn("a-quote-signing-secret-of-at-least-32-characters");
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         OrderMapper mapper = new OrderMapper(new ObjectMapper(), props, mock(DiscordVerificationService.class),
-                mock(DiscordBotClient.class), coaching, mock(VendorOrderLedger.class), paymentState);
+                mock(DiscordBotClient.class), coaching, mock(VendorOrderLedger.class), paymentState,
+                java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC));
         when(paymentState.of(any())).thenReturn(new OrderPaymentState.View(OrderPaymentState.UNPAID,
                 NOW.plusSeconds(3600)));
         when(payBy.forOrder(any())).thenReturn(NOW.plusSeconds(3600));
@@ -148,6 +149,22 @@ class ResumePaymentServiceTest {
         }
 
         @Test
+        @DisplayName("a Payop invoice open for the order: the amount due is the invoice's -- the method's fee, no 2.5%")
+        void amountDueWithAnInvoiceOpen() {
+            OrderEntity order = eur();
+            order.choosePayopTerms("""
+                    {"provider":"PAYOP","methodName":"Bank transfer","feeMinor":407,"netMinor":9000,"totalMinor":9407,
+                     "payableUntil":"%s"}
+                    """.formatted(NOW.plusSeconds(20 * 3600)));
+            ResumePaymentService.View view = service.view(order, "en");
+
+            assertThat(view.amountDueMinor()).isEqualTo(9407);
+            // UPI, PayPal and crypto, once they can be used again, are still paid at the order's own total.
+            assertThat(view.manual().totalMinor()).isEqualTo(9225);
+            assertThat(codes(view.manual())).contains("GATEWAY_FEE");
+        }
+
+        @Test
         @DisplayName("INR orders are never offered Payop")
         void inrNoPayop() {
             OrderEntity inr = order(2, Sku.TRADING_SERVICE, DeliveryMethod.PLAYER_AUCTION, Currency.INR,
@@ -208,10 +225,15 @@ class ResumePaymentServiceTest {
         void payopFee() {
             OrderEntity order = eur();
             payopOffers(order);
-            ResumePaymentService.PayopMethod bank = service.payopOptions(order, "de").methods().get(0);
+            ResumePaymentService.PayopOptions options = service.payopOptions(order, "de");
+            ResumePaymentService.PayopMethod bank = options.methods().get(0);
 
+            // The price every method's fee is added to, line by line: no 2.5% card fee among them.
+            assertThat(options.lines()).extracting(OrderDtos.OrderLineDto::code)
+                    .containsExactly("BASE", "COUPON_DISCOUNT");
             assertThat(codes(bank.breakdown())).containsExactly("BASE", "COUPON_DISCOUNT", "PAYMENT_FEE")
                     .doesNotContain("GATEWAY_FEE");
+            assertThat(bank.breakdown().lines().get(2).label()).isEqualTo("Payment processing fee (Bank transfer)");
             assertThat(bank.breakdown().lines().get(2).amountMinor()).isEqualTo(407);
             assertThat(bank.breakdown().totalMinor()).isEqualTo(9407).isEqualTo(9000 + 407);
             assertThat(bank.token()).isNotBlank();
@@ -271,6 +293,9 @@ class ResumePaymentServiceTest {
 
             ResumePaymentService.View view = service.view(order, "en");
             assertThat(view.manualBlockedUntil()).isEqualTo(until);
+            // UPI, PayPal and crypto are still priced with the 2.5% card fee.
+            assertThat(codes(view.manual())).contains("GATEWAY_FEE");
+            assertThat(view.manual().totalMinor()).isEqualTo(9225);
             assertThat(view.payableInvoice().url()).isEqualTo("https://checkout.payop.com/en/x/i-1");
             assertThatThrownBy(() -> service.submitClaim(order, ManualPaymentMethod.UPI, "UTR12345678"))
                     .isInstanceOfSatisfying(ApiExceptions.ConflictException.class,

@@ -128,9 +128,9 @@ export function useCatalogLabels() {
         case 'GATEWAY_FEE':
           return t.catalog.lines.gatewayFee(pct(policy?.gatewayFeeBps))
         case 'PAYMENT_FEE':
-          // The fee of the method the order was actually paid with (Payop), in place of
-          // the card fee above: no percentage, since it was the method's own.
-          return t.catalog.lines.paymentFee
+          // The fee of the method the order is paid with (Payop), in place of the card fee
+          // above -- never beside it -- and named: no percentage, since it is the method's own.
+          return t.catalog.lines.paymentFee(l.method)
         case 'WALLET_REDEMPTION':
           return t.catalog.lines.walletRedemption(context?.pointsRedeemed ?? 0)
         case 'COUPON_DISCOUNT':

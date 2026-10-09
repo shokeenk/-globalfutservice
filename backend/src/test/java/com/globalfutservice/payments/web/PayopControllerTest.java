@@ -8,9 +8,12 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.orders.OrderStatus;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.orders.web.OrderDtos;
+import com.globalfutservice.orders.web.OrderMapper;
 import com.globalfutservice.payments.payop.PayopCallbackService;
 import com.globalfutservice.payments.payop.PayopCheckoutService;
 import com.globalfutservice.payments.payop.PayopClient;
+import com.globalfutservice.payments.payop.PayopStartToken;
 import com.globalfutservice.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,8 +29,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -60,6 +63,8 @@ class PayopControllerTest {
     @MockBean private PayopCheckoutService checkout;
     @MockBean private PayopCallbackService callbacks;
     @MockBean private OrderService orders;
+    @MockBean private OrderMapper orderMapper;
+    @MockBean private PayopStartToken tokens;
     @MockBean private JwtService jwtService;
 
     @BeforeEach
@@ -151,23 +156,35 @@ class PayopControllerTest {
         verify(callbacks, never()).handle(any());
     }
 
-    @Test
-    @DisplayName("the customer endpoints are open to guests; the order is found by reference and email")
-    void guests() throws Exception {
+    private OrderEntity guestOrder() {
         OrderEntity order = mock(OrderEntity.class);
         when(order.getId()).thenReturn(7L);
         when(order.getCurrency()).thenReturn(Currency.EUR);
         when(order.getStatus()).thenReturn(OrderStatus.AWAITING_PAYMENT);
         when(orders.requireGuest("GFS-26-EUR00001", "buyer@example.com")).thenReturn(order);
+        return order;
+    }
+
+    @Test
+    @DisplayName("the customer endpoints are open to guests; the order is found by reference and email")
+    void guests() throws Exception {
+        OrderEntity order = guestOrder();
         when(checkout.options(order, "DE")).thenReturn(new PayopCheckoutService.Options(Currency.EUR, 9000,
                 List.of(new PayopCheckoutService.MethodOption(381, "Bank transfer", "bank_transfer", 407, 9407)), null));
+        when(tokens.issue(order, 381L, "DE", 9407L)).thenReturn("sealed-381");
+        when(orderMapper.netLines(order)).thenReturn(List.of(
+                new OrderDtos.OrderLineDto("BASE", "Coins", 10000, "€100.00"),
+                new OrderDtos.OrderLineDto("COUPON_DISCOUNT", "Coupon", -1000, "-€10.00")));
 
         mvc.perform(post("/api/v1/payments/payop/options").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"order\":\"GFS-26-EUR00001\",\"email\":\"buyer@example.com\",\"country\":\"DE\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.feeLabel").value("Payment processing fee"))
+                // The price before the method's fee, line by line: no 2.5% card fee among them.
+                .andExpect(jsonPath("$.lines[*].code").value(org.hamcrest.Matchers.contains("BASE", "COUPON_DISCOUNT")))
+                .andExpect(jsonPath("$.netMinor").value(9000))
                 .andExpect(jsonPath("$.methods[0].totalMinor").value(9407))
-                .andExpect(jsonPath("$.methods[0].feeMinor").value(407));
+                .andExpect(jsonPath("$.methods[0].feeMinor").value(407))
+                .andExpect(jsonPath("$.methods[0].token").value("sealed-381"));
         mvc.perform(get("/api/v1/payments/payop/country").header("CF-IPCountry", "de"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.country").value("DE"));
         mvc.perform(get("/api/v1/payments/payop/country").header("CF-IPCountry", "T1"))
@@ -175,12 +192,30 @@ class PayopControllerTest {
     }
 
     @Test
-    @DisplayName("a start request carries no price the server would use: only a method and the total to check")
-    void startNeedsTheExpectedTotal() throws Exception {
+    @DisplayName("a payment starts from the server's sealed token alone: the method, country and total are the token's")
+    void startFromTheToken() throws Exception {
+        OrderEntity order = guestOrder();
+        when(tokens.verify(order, "sealed-381")).thenReturn(new PayopStartToken.Claims(381, "DE", Currency.EUR, 9407,
+                java.time.Instant.parse("2030-01-01T00:00:00Z")));
+        when(checkout.start(order, 381L, "DE", 9407L, "fr")).thenReturn(new PayopCheckoutService.Started(
+                "https://checkout.payop.com/fr/payment/invoice-preprocessing/inv-1", "inv-1", 9407,
+                java.time.Instant.parse("2030-01-02T00:00:00Z")));
+
+        mvc.perform(post("/api/v1/payments/payop/invoices").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"order\":\"GFS-26-EUR00001\",\"email\":\"buyer@example.com\","
+                                + "\"token\":\"sealed-381\",\"language\":\"fr\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalMinor").value(9407));
+        verify(checkout).start(order, 381L, "DE", 9407L, "fr");
+    }
+
+    @Test
+    @DisplayName("a start request with an amount and no token: refused, nothing started -- the browser never prices")
+    void startNeedsTheToken() throws Exception {
         mvc.perform(post("/api/v1/payments/payop/invoices").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"order\":\"GFS-26-EUR00001\",\"email\":\"buyer@example.com\",\"methodId\":381,"
-                                + "\"country\":\"DE\"}"))
+                                + "\"country\":\"DE\",\"expectedTotalMinor\":1}"))
                 .andExpect(status().isBadRequest());
-        verify(checkout, never()).start(any(), eq(381L), anyString(), eq(0L), any());
+        verify(checkout, never()).start(any(), anyLong(), anyString(), anyLong(), any());
     }
 }

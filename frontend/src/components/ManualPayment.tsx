@@ -4,6 +4,7 @@ import { useI18n, useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import type { ManualPaymentClaim, ManualPaymentMethod, ManualPaymentOption } from '../lib/types'
 import { PayopPayment, type PayopRoutes } from './PayopPayment'
+import { ORDER_SUMMARY, usePublishPaySummary } from './paySummary'
 import { INTERNATIONAL, offersLocalMethods, paymentMethods, type PaymentMethodKey } from '../lib/paymentMethods'
 
 /** Where a payment claim and its screenshot are sent. */
@@ -137,6 +138,16 @@ export function ManualPayment({
   const [payopOff, setPayopOff] = useState(false)
   const payopUnavailable = useCallback(() => setPayopOff(true), [])
   const localMethods = offersLocalMethods(currency)
+
+  /*
+   * The order summary beside this step shows the order as placed -- 2.5% card fee included --
+   * for every way of paying but Payop, which reports its own choice there (PayopPayment).
+   */
+  const publish = usePublishPaySummary()
+  const showingPayop = method === INTERNATIONAL && localMethods && !payopOff
+  useEffect(() => {
+    if (!showingPayop) publish?.(ORDER_SUMMARY)
+  }, [showingPayop, publish])
 
   useEffect(() => {
     let live = true

@@ -136,6 +136,8 @@ export interface QuoteLine {
   label: string
   amountMinor: number
   amountFormatted: string
+  /** On the fee line of a method that charges its own fee (PAYMENT_FEE): the method's name. */
+  method?: string | null
 }
 
 export interface SignedQuote {
@@ -1244,6 +1246,8 @@ export interface OrderLine {
   label: string
   amountMinor: number
   amountFormatted: string
+  /** On the fee line of a method that charges its own fee (PAYMENT_FEE): the method's name. */
+  method?: string | null
 }
 
 export interface PaymentBreakdown {
