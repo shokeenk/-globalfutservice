@@ -338,9 +338,6 @@ gfs:
       enabled: ${GFS_FUTTRANSFER_AUTO_DISPATCH:false}
       max-k: ${GFS_FUTTRANSFER_AUTO_DISPATCH_MAX_K:}
       every: ${GFS_FUTTRANSFER_AUTO_DISPATCH_EVERY:PT15S}
-    # FUT Transfer's own progress page, linked for staff in the admin only: one order's
-    # "View Order Progress Page" address with {orderId} where its id goes. Empty: not linked.
-    progress-page-url: ${GFS_FUTTRANSFER_PROGRESS_URL:}
     base-url: ${GFS_FUTTRANSFER_BASE_URL:https://futtransfer.top}
     # The vendor's second domain. Status reads may fall back to it; placing an order never does.
     backup-base-url: ${GFS_FUTTRANSFER_BACKUP_BASE_URL:https://eatransfer.top}

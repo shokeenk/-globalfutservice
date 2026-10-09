@@ -135,29 +135,10 @@ describe("the FUT Transfer section's Tracking summary", () => {
     expect(line(summary, 'Delivered of ordered')).toHaveTextContent('420 of 500 K')
     expect(line(summary, 'Last reported')).not.toHaveTextContent('None yet')
     expect(line(summary, 'Held up by')).toHaveTextContent('Nothing')
-    // FUT Transfer's own progress page: its API gives no address for one, so none is made up
-    // while GFS_FUTTRANSFER_PROGRESS_URL is unset.
-    expect(line(summary, 'FUT Transfer progress page')).toHaveTextContent('Not linked: set GFS_FUTTRANSFER_PROGRESS_URL')
+    // The customer's page is the only link: FUT Transfer's own progress page is keyed by a code
+    // its API never returns, so it is not linked, and no address is made up for it.
     expect(within(summary).getAllByRole('link')).toHaveLength(1)
-  })
-
-  it("staff see both: the customer's page, and FUT Transfer's own progress page, each in a new tab", () => {
-    const partner = 'https://futtransfer.top/progress.php?id=vid-1'
-    const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
-      partnerProgressUrl: partner } }))
-
-    const links = within(summary).getAllByRole('link')
-    expect(links.map((a) => a.getAttribute('href'))).toEqual([URL, partner])
-    for (const a of links) {
-      expect(a).toHaveAttribute('target', '_blank')
-      expect(a).toHaveAttribute('rel', 'noopener noreferrer')
-    }
-    expect(line(summary, 'FUT Transfer progress page')).toHaveTextContent(partner)
-  })
-
-  it('no id from FUT Transfer yet: nothing to link to on its side', () => {
-    const summary = panel(section({ vendorOrder: detail({ vendorOrderId: null }) }))
-    expect(line(summary, 'FUT Transfer progress page')).toHaveTextContent('Once FUT Transfer has the order')
+    expect(within(summary).queryByText(/progress page/i)).toBeNull()
   })
 
   it.each<[string, Partial<VendorOrderDetail>, string]>([

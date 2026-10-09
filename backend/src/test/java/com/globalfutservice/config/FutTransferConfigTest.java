@@ -31,7 +31,7 @@ class FutTransferConfigTest {
                 new AppProperties.FutTransferOrder(300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1"), true,
                 Duration.ofHours(72), AppProperties.FutTransferOrderMode.PUBLIC_POOL,
                 new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, false,
-                        null), AppProperties.FutTransferAutoDispatch.OFF, null);
+                        null), AppProperties.FutTransferAutoDispatch.OFF);
     }
 
     private static AppProperties.FutTransferPublicPool pool(String threshold, boolean sendMaxPrice, String maxPrice) {
@@ -95,33 +95,6 @@ class FutTransferConfigTest {
                 .bind("a", AppProperties.FutTransferAutoDispatch.class).get();
         assertThat(limited.allows(2000)).isTrue();
         assertThat(limited.allows(2001)).isFalse();
-    }
-
-    @Test
-    @DisplayName("FUT Transfer's progress page: unset by default; set, an https:// address with the order's id put in")
-    void progressPage() {
-        AppProperties.FutTransfer unset = config("https://futtransfer.top", "https://eatransfer.top", "targetedSnipe", 1);
-        assertThat(unset.progressPageUrl()).isNull();
-        assertThat(unset.progressPageFor("3f2a-77")).isEmpty();
-        assertThat(withPage("  ").progressPageUrl()).isNull();
-
-        AppProperties.FutTransfer set = withPage("https://futtransfer.top/progress.php?id={orderId}");
-        assertThat(set.progressPageFor("3f2a-77")).hasValue("https://futtransfer.top/progress.php?id=3f2a-77");
-        assertThat(set.progressPageFor("a b&c")).hasValue("https://futtransfer.top/progress.php?id=a%20b%26c");
-        assertThat(set.progressPageFor(null)).isEmpty();
-
-        assertThatThrownBy(() -> withPage("http://futtransfer.top/progress.php?id={orderId}"))
-                .hasMessageContaining("progress-page-url must be an https:// address");
-        assertThatThrownBy(() -> withPage("https://futtransfer.top/progress.php"))
-                .hasMessageContaining("{orderId}");
-    }
-
-    private static AppProperties.FutTransfer withPage(String address) {
-        AppProperties.FutTransfer f = config("https://futtransfer.top", "https://eatransfer.top", "targetedSnipe", 1);
-        return new AppProperties.FutTransfer(f.enabled(), f.baseUrl(), f.apiUser(), f.apiKey(), f.transferMethod(),
-                f.riskLevel(), f.polling(), f.timeout(), f.maxDispatchAttempts(), f.permanentErrorCodes(),
-                f.backupBaseUrl(), f.order(), f.cooldownCheck(), f.reviewCredentialRetention(), f.orderMode(),
-                f.publicPool(), f.autoDispatch(), address);
     }
 
     @Test
