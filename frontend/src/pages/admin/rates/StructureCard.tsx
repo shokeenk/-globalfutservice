@@ -59,9 +59,13 @@ export function StructureCard({
   const [blocked, setBlocked] = useState(false)
 
   // A new live version -- this card's save, or a reload -- starts the draft again from it.
-  useEffect(() => {
+  // Only then, and while rendering: an effect would also run just after the card first
+  // appears, and overwrite whatever had been typed in that moment with the saved values.
+  const [startedFrom, setStartedFrom] = useState({ live, limits, currencies })
+  if (startedFrom.live !== live || startedFrom.limits !== limits || startedFrom.currencies !== currencies) {
+    setStartedFrom({ live, limits, currencies })
     setDraft(toDraft(live, limits, currencies))
-  }, [live, limits, currencies])
+  }
 
   const errors = useMemo(() => validate(draft, limits), [draft, limits])
   const invalid = hasErrors(errors)
