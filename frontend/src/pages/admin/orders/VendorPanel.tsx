@@ -323,7 +323,6 @@ function NextSend({ next }: { next: VendorNextSend }) {
 function TrackingSummary({ section }: { section: VendorSection }) {
   const v = section.vendorOrder
   const url = section.tracking?.customerUrl ?? null
-  const partnerUrl = section.tracking?.partnerProgressUrl ?? null
   const startedAt = section.tracking?.transferStartedAt ?? null
   const blocked = blockage(section)
   const [copied, setCopied] = useState(false)
@@ -355,16 +354,6 @@ function TrackingSummary({ section }: { section: VendorSection }) {
               </Button>
             </span>
           ) : 'Not yet: it is offered to the customer once FUT Transfer has the order.'}
-        </Line>
-        {/* Staff only: customers follow the order on our page above, and are never sent here. */}
-        <Line label="FUT Transfer progress page" wide>
-          {partnerUrl ? (
-            <a href={partnerUrl} target="_blank" rel="noopener noreferrer"
-               className="break-all font-semibold text-brand-400 hover:underline">
-              {partnerUrl}
-            </a>
-          ) : !v?.vendorOrderId ? 'Once FUT Transfer has the order and has given us its id.'
-            : 'Not linked: set GFS_FUTTRANSFER_PROGRESS_URL to show it here. Until then, open the partner order below from FUT Transfer’s dashboard.'}
         </Line>
         <Line label="Onboarded">{v?.submittedAt ? `Yes, ${dateTime(v.submittedAt)}` : 'No'}</Line>
         <Line label="Transfer started">{startedAt ? `Yes, ${dateTime(startedAt)}` : 'Not yet'}</Line>

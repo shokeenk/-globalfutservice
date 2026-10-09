@@ -19,7 +19,7 @@ class PlacementTermsTest {
         return new AppProperties.FutTransfer(true, "https://futtransfer.top", "api@example.test", "key", method, 1,
                 VendorTestSupport.POLLING, Duration.ofSeconds(15), 3, VendorTestSupport.DOCUMENTED_CODES,
                 "https://eatransfer.top", VendorTestSupport.METHOD_3_0, true, Duration.ofHours(72), mode, pool,
-                AppProperties.FutTransferAutoDispatch.OFF, null);
+                AppProperties.FutTransferAutoDispatch.OFF);
     }
 
     private static FutTransferPublicPool pool(BuyNowThresholdMode mode, String threshold, boolean send, String max) {

@@ -15,9 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The client's decisions, as application.yml ships them when Render sets none of the
  * variables: all three backup codes required; automatic sending to FUT Transfer off until it
- * is switched on, and then for every paid coin order with no amount limit; FUT Transfer's own
- * progress page not linked until its address is set. Read from the real file, so changing a
- * default there fails here.
+ * is switched on, and then for every paid coin order with no amount limit. Read from the real
+ * file, so changing a default there fails here.
  */
 class ShippedDecisionsTest {
 
@@ -47,11 +46,5 @@ class ShippedDecisionsTest {
         assertThat(auto.enabled()).isFalse();
         assertThat(auto.maxK()).isNull();
         assertThat(auto.allows(100_000)).isTrue();
-    }
-
-    @Test
-    @DisplayName("FUT Transfer's own progress page: not linked until its address is set")
-    void progressPage() throws Exception {
-        assertThat(shipped().bind("gfs.fut-transfer.progress-page-url", String.class).orElse("")).isEmpty();
     }
 }

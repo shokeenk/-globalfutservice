@@ -81,7 +81,7 @@ final class VendorTestSupport {
         AppProperties props = mock(AppProperties.class);
         when(props.futTransfer()).thenReturn(new AppProperties.FutTransfer(true, baseUrl, "api@example.test",
                 RAW_KEY, "targetedSnipe", 1, POLLING, timeout, 3, DOCUMENTED_CODES,
-                backupUrl, METHOD_3_0, true, Duration.ofHours(72), mode, pool, auto, null));
+                backupUrl, METHOD_3_0, true, Duration.ofHours(72), mode, pool, auto));
         when(props.publicUrl()).thenReturn("https://gfs.example.test");
         // The release checks the stored sign-in against the rules before sending it; these
         // tests' sign-in carries two backup codes, so two are what is required here.
@@ -89,17 +89,6 @@ final class VendorTestSupport {
                 new org.springframework.boot.context.properties.source.MapConfigurationPropertySource(
                         java.util.Map.of("f.backup-codes-required", String.valueOf(BACKUP_CODES.size()))))
                 .bind("f", AppProperties.Fulfilment.class).get());
-        return props;
-    }
-
-    /** The same settings with FUT Transfer's progress page address set, as GFS_FUTTRANSFER_PROGRESS_URL does. */
-    static AppProperties withProgressPage(AppProperties props, String address) {
-        AppProperties.FutTransfer f = props.futTransfer();
-        AppProperties.FutTransfer withPage = new AppProperties.FutTransfer(f.enabled(), f.baseUrl(), f.apiUser(),
-                f.apiKey(), f.transferMethod(), f.riskLevel(), f.polling(), f.timeout(), f.maxDispatchAttempts(),
-                f.permanentErrorCodes(), f.backupBaseUrl(), f.order(), f.cooldownCheck(),
-                f.reviewCredentialRetention(), f.orderMode(), f.publicPool(), f.autoDispatch(), address);
-        when(props.futTransfer()).thenReturn(withPage);
         return props;
     }
 

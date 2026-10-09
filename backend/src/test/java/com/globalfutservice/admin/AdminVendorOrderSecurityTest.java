@@ -70,7 +70,7 @@ class AdminVendorOrderSecurityTest {
             mvc.perform(post(BASE + action).with(authentication(as(AccountRole.OPERATOR))))
                     .andExpect(status().isForbidden());
         }
-        // The section, which carries FUT Transfer's own progress page: admins only, never a customer.
+        // The section, with the order's dealings with FUT Transfer: admins only, never a customer.
         mvc.perform(get(BASE.substring(0, BASE.length() - 1))).andExpect(status().isUnauthorized());
         mvc.perform(get(BASE.substring(0, BASE.length() - 1)).with(authentication(as(AccountRole.CUSTOMER))))
                 .andExpect(status().isForbidden());
