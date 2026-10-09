@@ -174,6 +174,7 @@ public class OrderMapper {
                 order.getPointsRedeemed(),
                 order.getPointsEarned(),
                 order.getReferralCode(),
+                order.getCouponCode(),
                 progress == null ? order.getSupplierAmountDelivered() : progress.deliveredK(),
                 progress == null ? order.getSupplierAmountOrdered() : Long.valueOf(progress.orderedK()),
                 order.getTransferStartedAt() != null,

@@ -242,6 +242,8 @@ export interface Order {
   pointsRedeemed: number
   pointsEarned: number
   referralCode: string | null
+  /** The coupon the order was placed with; null for none. */
+  couponCode?: string | null
   /** Coins delivered so far, from the supplier. Null before fulfilment starts. */
   deliveredCoins: number | null
   /** Coins the supplier was asked for. */

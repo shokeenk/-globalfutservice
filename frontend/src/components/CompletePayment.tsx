@@ -293,7 +293,7 @@ function PaymentSummary({ order, lines, totalFormatted, pay }: {
   const shown = payop ? [...payopLines(payop, lines), payopFeeLine(payop, t.order.payopSelectMethod)] : lines
   const context = {
     sku: order.sku, variant: order.variant, platform: order.platform, quantity: order.quantity,
-    referralCode: order.referralCode, pointsRedeemed: order.pointsRedeemed,
+    referralCode: order.referralCode, couponCode: order.couponCode ?? null, pointsRedeemed: order.pointsRedeemed,
   }
   return (
     <div className="rounded-panel border border-ink-400 bg-paper p-5 lg:sticky lg:top-24" data-testid="pay-summary">

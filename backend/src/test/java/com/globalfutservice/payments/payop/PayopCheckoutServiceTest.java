@@ -544,6 +544,37 @@ class PayopCheckoutServiceTest {
         }
 
         @Test
+        @DisplayName("a coaching order with a coupon: the invoice is the price after the coupon, plus the sheet fee")
+        void coachingWithCoupon() {
+            // €20.00 session, SAVE10 takes €2.00 off, and €0.45 of card fee for UPI, PayPal and USDT.
+            OrderEntity coaching = new OrderEntity("GFS-26-COACH001", "q_12", "FC27",
+                    com.globalfutservice.domain.catalog.Sku.COACHING, null, "SINGLE_SESSION", BigDecimal.ONE,
+                    com.globalfutservice.domain.orders.DeliveryMethod.SCHEDULED_SESSION, Currency.EUR, 2000, 1845, """
+                    {"quoteId":"q_12","currency":"EUR","couponCode":"SAVE10","lines":[
+                      {"code":"BASE","label":"Single session","amountMinor":2000,"amountFormatted":"€20.00"},
+                      {"code":"COUPON_DISCOUNT","label":"Coupon SAVE10 (10% off)","amountMinor":-200,"amountFormatted":"-€2.00"},
+                      {"code":"GATEWAY_FEE","label":"Payment processing (2.5%)","amountMinor":45,"amountFormatted":"€0.45"}
+                    ],"totalMinor":1845}
+                    """);
+            org.springframework.test.util.ReflectionTestUtils.setField(coaching, "id", 12L);
+            org.springframework.test.util.ReflectionTestUtils.setField(coaching, "status", OrderStatus.AWAITING_PAYMENT);
+            coaching.setGuestEmail("buyer@example.com");
+            when(orders.findById(12L)).thenReturn(Optional.of(coaching));
+
+            PayopCheckoutService.Options o = checkout.options(coaching, "DE");
+            assertThat(o.netMinor()).as("after the coupon, without the 2.5%").isEqualTo(1800);
+            // (18.00 + 0.30) / 0.96 = 19.0625 -> 19.07
+            assertThat(o.methods().get(0).totalMinor()).isEqualTo(1907);
+
+            checkout.start(coaching, 381, "DE", 1907, "en");
+            ArgumentCaptor<PayopClient.InvoiceRequest> sent = ArgumentCaptor.forClass(PayopClient.InvoiceRequest.class);
+            verify(client).createInvoice(sent.capture());
+            assertThat(sent.getValue().amount()).isEqualTo("19.07");
+            assertThat(reader.lines(coaching)).extracting(OrderDtos.OrderLineDto::code)
+                    .containsExactly("BASE", "COUPON_DISCOUNT", "PAYMENT_FEE");
+        }
+
+        @Test
         @DisplayName("UPI, PayPal and USDT keep the 2.5%: an order with no Payop invoice reads as placed")
         void cardFeeStays() {
             assertThat(reader.lines(eur)).extracting(OrderDtos.OrderLineDto::code)
