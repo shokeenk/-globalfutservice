@@ -114,6 +114,8 @@ class CustomerVocabularyTest {
         List<Path> files = List.of(
                 FRONTEND.resolve("components").resolve("ManualPayment.tsx"),
                 FRONTEND.resolve("components").resolve("PayopPayment.tsx"),
+                // The order summary beside the pay step, which shows the Payop fee and total.
+                FRONTEND.resolve("components").resolve("paySummary.tsx"),
                 FRONTEND.resolve("pages").resolve("PayopReturn.tsx"),
                 // Completing the payment of an unpaid order: the page, and what the server says.
                 FRONTEND.resolve("components").resolve("CompletePayment.tsx"),
@@ -121,6 +123,7 @@ class CustomerVocabularyTest {
                 BACKEND.resolve("payments").resolve("web").resolve("OrderPaymentController.java"),
                 BACKEND.resolve("payments").resolve("payop").resolve("PayopStartToken.java"),
                 BACKEND.resolve("payments").resolve("payop").resolve("PayopCheckoutService.java"),
+                BACKEND.resolve("payments").resolve("payop").resolve("PayopTerms.java"),
                 BACKEND.resolve("payments").resolve("web").resolve("PayopController.java"));
         for (Path file : files) {
             List<String> strings = literals(Files.readString(file));

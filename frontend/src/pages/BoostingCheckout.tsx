@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ManualPayment } from '../components/ManualPayment'
+import {
+  ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, type PaySummary,
+} from '../components/paySummary'
 import { PlatformIcon } from '../components/PlatformIcon'
 import { SiEa, SiEpicgames, SiSteam } from 'react-icons/si'
 import { RankBadge, hasBadge } from '../components/RankBadge'
@@ -90,6 +93,9 @@ export default function BoostingCheckout() {
   const [payChoice, setPayChoice] = useState<PayChoice | null>(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // What the pay step says the summary should show: the order as placed, or a Payop payment.
+  const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
 
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
   const [resumed, setResumed] = useState<Order | null>(null)
@@ -311,20 +317,22 @@ export default function BoostingCheckout() {
               )}
 
               {step === 'pay' && orderRef && account && (
-                <div className="space-y-5">
-                  {payChoices.length > 1 && (
-                    <PayChoices choices={payChoices} choice={payChoice} onChoice={setPayChoice} />
-                  )}
-                  <ManualPayment
-                    publicRef={orderRef}
-                    email={account.email}
-                    sku={sku}
-                    totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? ''}
-                    currency={created?.currency ?? resumed?.currency}
-                    initialMethod={payChoice && payChoice !== 'ONLINE' ? payChoice : undefined}
-                    onSubmitted={() => { setStep('done'); window.scrollTo({ top: 0 }) }}
-                  />
-                </div>
+                <PaySummaryProvider publish={setPaySummary}>
+                  <div className="space-y-5">
+                    {payChoices.length > 1 && (
+                      <PayChoices choices={payChoices} choice={payChoice} onChoice={setPayChoice} />
+                    )}
+                    <ManualPayment
+                      publicRef={orderRef}
+                      email={account.email}
+                      sku={sku}
+                      totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? ''}
+                      currency={created?.currency ?? resumed?.currency}
+                      initialMethod={payChoice && payChoice !== 'ONLINE' ? payChoice : undefined}
+                      onSubmitted={() => { setStep('done'); window.scrollTo({ top: 0 }) }}
+                    />
+                  </div>
+                </PaySummaryProvider>
               )}
 
               {step === 'processing' && orderRef && (
@@ -341,6 +349,7 @@ export default function BoostingCheckout() {
               onCouponInput={setCouponInput}
               onApplyCoupon={() => setCouponCode(couponInput)}
               editable={step === 'details'}
+              pay={step === 'pay' ? paySummary : ORDER_SUMMARY}
             />
           </div>
         )}
@@ -845,7 +854,7 @@ function SummaryCell({ label, value, badge }: { label: string; value: string; ba
 /* ---------------------------------------------------------------- order panel --- */
 
 function OrderPanel({
-  option, serviceName, quote, quoting, couponInput, onCouponInput, onApplyCoupon, editable,
+  option, serviceName, quote, quoting, couponInput, onCouponInput, onApplyCoupon, editable, pay,
 }: {
   option: CatalogOption | null
   serviceName: string
@@ -855,13 +864,24 @@ function OrderPanel({
   onCouponInput: (v: string) => void
   onApplyCoupon: () => void
   editable: boolean
+  /**
+   * How the order is being paid, on the pay step. A Payop payment is shown as the server
+   * priced it: no 2.5% card fee, the chosen method's own fee and total, and its pay button.
+   */
+  pay: PaySummary
 }) {
   const t = useT()
   const b = t.boostingCheckout
   const labels = useCatalogLabels()
 
+  const payop = pay.kind === 'payop' ? pay : null
   const base = quote?.lines.find((line) => line.code === 'BASE') ?? null
-  const extras = quote?.lines.filter((line) => line.code !== 'BASE' && line.amountMinor !== 0) ?? []
+  const extras = !quote ? []
+    : payop ? [
+      ...payopLines(payop, quote.lines).filter((line) => line.code !== 'BASE' && line.amountMinor !== 0),
+      payopFeeLine(payop, t.order.payopSelectMethod),
+    ]
+      : quote.lines.filter((line) => line.code !== 'BASE' && line.amountMinor !== 0)
 
   return (
     <aside className="hairline rounded-panel bg-paper p-5 lg:sticky lg:top-24">
@@ -893,7 +913,9 @@ function OrderPanel({
       <dl className="mt-4 space-y-2">
         {extras.map((line) => (
           <div key={line.code} className="flex items-baseline justify-between gap-3">
-            <dt className="text-[12.5px] text-chalk-muted">{line.label}</dt>
+            <dt className="text-[12.5px] text-chalk-muted">
+              {line.code === 'PAYMENT_FEE' ? labels.line(line) : line.label}
+            </dt>
             <dd className={`tnum text-[12.5px] font-semibold ${line.amountMinor < 0 ? 'text-ok' : 'text-chalk'}`}>
               {line.amountFormatted}
             </dd>
@@ -933,10 +955,13 @@ function OrderPanel({
 
       <div className="mt-4 flex items-baseline justify-between gap-3 rounded-edge bg-brand-500/[0.06] px-4 py-3">
         <p className="text-[13px] font-semibold text-chalk">{b.total}</p>
-        <p className="tnum text-[18px] font-semibold text-chalk">
-          {quoting && !quote ? <Spinner size={16} /> : quote?.totalFormatted ?? ''}
+        <p className="tnum text-[18px] font-semibold text-chalk" data-testid="summary-total">
+          {quoting && !quote ? <Spinner size={16} /> : payop ? payopTotal(payop) : quote?.totalFormatted ?? ''}
         </p>
       </div>
+
+      {/* A Payop payment starts here, under the total it charges. */}
+      {payop && <div className="mt-4"><PayopPayButton selection={payop} /></div>}
 
       <ul className="mt-5 grid grid-cols-1 gap-4 border-t border-ink-400 pt-5 sm:grid-cols-3">
         <TrustBadge title={b.trustSecureTitle} body={b.trustSecureBody} />

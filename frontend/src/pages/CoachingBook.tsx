@@ -4,6 +4,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CoachIcon } from '../components/CoachingIcons'
 import type { CoachIconName } from '../components/CoachingIcons'
 import { ManualPayment } from '../components/ManualPayment'
+import {
+  ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, withoutPaymentFees,
+  type PaySummary,
+} from '../components/paySummary'
 import { PlatformIcon } from '../components/PlatformIcon'
 import {
   Alert, Badge, Button, ButtonLink, Checkbox, Field, FieldError, Input, Section, Select, Spinner, Textarea,
@@ -18,7 +22,7 @@ import { useSeo } from '../lib/seo'
 import { offersLocalMethods, paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
 import { ScheduleStep, formatSlot, type ChosenSlot } from './coaching/ScheduleStep'
 import type {
-  CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, SignedQuote,
+  CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, QuoteLine, SignedQuote,
 } from '../lib/types'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
@@ -106,6 +110,8 @@ export default function CoachingBook() {
   const [error, setError] = useState<string | null>(null)
 
   const [quote, setQuote] = useState<SignedQuote | null>(null)
+  // What the pay step says the summary should show: the order as placed, or a Payop payment.
+  const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
   const [resumed, setResumed] = useState<Order | null>(null)
   const orderRef = created?.publicRef ?? resumed?.publicRef ?? null
@@ -389,16 +395,27 @@ export default function CoachingBook() {
           />
         )}
 
+        {/*
+          The ways to pay on the left, the order summary on the right -- the checkout's own
+          layout -- and stacked on a phone, the summary after them.
+        */}
         {step === 'pay' && orderRef && account && (
-          <div className="mx-auto max-w-2xl">
-            <ManualPayment
-              publicRef={orderRef}
-              email={account.email}
-              sku="COACHING"
-              totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? ''}
-              currency={created?.currency ?? resumed?.currency}
-              initialMethod={payChoice && payChoice !== 'ONLINE' ? payChoice : undefined}
-              onSubmitted={() => { setStep('success'); window.scrollTo({ top: 0 }) }}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start">
+            <PaySummaryProvider publish={setPaySummary}>
+              <ManualPayment
+                publicRef={orderRef}
+                email={account.email}
+                sku="COACHING"
+                totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? ''}
+                currency={created?.currency ?? resumed?.currency}
+                initialMethod={payChoice && payChoice !== 'ONLINE' ? payChoice : undefined}
+                onSubmitted={() => { setStep('success'); window.scrollTo({ top: 0 }) }}
+              />
+            </PaySummaryProvider>
+            <PaySummaryCard
+              lines={quote?.lines ?? resumed?.lines ?? []}
+              totalFormatted={created?.totalFormatted ?? resumed?.totalFormatted ?? quote?.totalFormatted ?? ''}
+              pay={paySummary}
             />
           </div>
         )}
@@ -724,6 +741,11 @@ function ReviewStep({
   const labels = useCatalogLabels()
   const platformLabel = platform === 'PLAYSTATION' ? b.platformPlayStation
     : platform === 'XBOX' ? b.platformXbox : platform === 'PC' ? b.platformPc : '—'
+  /*
+   * International pays through Payop, which never carries the 2.5% card fee: its method --
+   * and with it the fee and the total -- is chosen on the next step.
+   */
+  const payop = choice === 'INTERNATIONAL' && !!quote && offersLocalMethods(quote.currency)
 
   return (
     <div>
@@ -805,18 +827,12 @@ function ReviewStep({
               <div className="mt-4 flex justify-center"><Spinner /></div>
             ) : (
               <>
-                <ul className="mt-4 space-y-2">
-                  {quote.lines.filter((line) => line.amountMinor !== 0).map((line) => (
-                    <li key={line.code} className="flex justify-between gap-4 text-[13px] text-chalk-muted">
-                      <span>{line.label}</span>
-                      <span className="tnum shrink-0">{line.amountFormatted}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-3 flex items-baseline justify-between border-t border-ink-400 pt-3">
-                  <span className="text-body-sm font-semibold text-chalk">{b.total}</span>
-                  <span className="tnum display text-[1.4rem] text-chalk">{quote.totalFormatted}</span>
-                </div>
+                <SummaryLines
+                  lines={payop
+                    ? [...withoutPaymentFees(quote.lines), payopFeeLine(null, t.order.payopSelectMethod)]
+                    : quote.lines}
+                  totalFormatted={payop ? '—' : quote.totalFormatted}
+                />
               </>
             )}
 
@@ -857,6 +873,53 @@ function ReviewStep({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The order's price, line by line, and its total: the review step's and the pay step's. */
+function SummaryLines({ lines, totalFormatted }: { lines: QuoteLine[]; totalFormatted: string }) {
+  const t = useT()
+  const labels = useCatalogLabels()
+  return (
+    <>
+      <ul className="mt-4 space-y-2">
+        {lines.filter((line) => line.amountMinor !== 0 || line.code === 'PAYMENT_FEE').map((line) => (
+          <li key={line.code} className="flex justify-between gap-4 text-[13px] text-chalk-muted">
+            <span>{line.code === 'PAYMENT_FEE' ? labels.line(line) : line.label}</span>
+            <span className="tnum shrink-0">{line.amountFormatted}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-baseline justify-between border-t border-ink-400 pt-3">
+        <span className="text-body-sm font-semibold text-chalk">{t.coachingBook.total}</span>
+        <span className="tnum display text-[1.4rem] text-chalk" data-testid="summary-total">{totalFormatted}</span>
+      </div>
+    </>
+  )
+}
+
+/**
+ * The order summary beside the pay step. It follows how the customer pays: the order as
+ * placed for every way but International, and for a Payop payment the server's price -- no
+ * 2.5% card fee, the chosen method's own fee and total -- with the button that starts it.
+ */
+function PaySummaryCard({ lines, totalFormatted, pay }: {
+  lines: QuoteLine[]
+  totalFormatted: string
+  pay: PaySummary
+}) {
+  const t = useT()
+  const payop = pay.kind === 'payop' ? pay : null
+  return (
+    <div className="rounded-panel border border-ink-400 bg-paper p-5 shadow-e2 lg:sticky lg:top-24"
+         data-testid="pay-summary">
+      <p className="text-body-sm font-semibold text-chalk">{t.coachingBook.orderSummary}</p>
+      <SummaryLines
+        lines={payop ? [...payopLines(payop, lines), payopFeeLine(payop, t.order.payopSelectMethod)] : lines}
+        totalFormatted={payop ? payopTotal(payop) : totalFormatted}
+      />
+      {payop && <div className="mt-5"><PayopPayButton selection={payop} /></div>}
     </div>
   )
 }

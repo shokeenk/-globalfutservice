@@ -2,6 +2,7 @@ package com.globalfutservice.payments.payop;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -11,16 +12,25 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.globalfutservice.coaching.CoachingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.orders.OrderStatus;
+import com.globalfutservice.fulfilment.VendorOrderLedger;
+import com.globalfutservice.notify.DiscordBotClient;
+import com.globalfutservice.notify.discord.DiscordVerificationService;
 import com.globalfutservice.orders.OrderEntity;
+import com.globalfutservice.orders.OrderPaymentState;
 import com.globalfutservice.orders.OrderRepository;
+import com.globalfutservice.orders.web.OrderDtos;
+import com.globalfutservice.orders.web.OrderMapper;
 import com.globalfutservice.web.ApiExceptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,24 +67,25 @@ class PayopCheckoutServiceTest {
     private final OrderEntity usd = PayopFakes.order(8, "GFS-26-USD00001", Currency.USD, OrderStatus.AWAITING_PAYMENT);
     private final OrderEntity inr = PayopFakes.order(9, "GFS-26-INR00001", Currency.INR, OrderStatus.AWAITING_PAYMENT);
 
+    private final Clock clock = new Clock() {
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now.get();
+        }
+    };
+
     @BeforeEach
     void setUp() {
-        Clock clock = new Clock() {
-            @Override
-            public ZoneId getZone() {
-                return ZoneOffset.UTC;
-            }
-
-            @Override
-            public Clock withZone(ZoneId zone) {
-                return this;
-            }
-
-            @Override
-            public Instant instant() {
-                return now.get();
-            }
-        };
         AppProperties props = mock(AppProperties.class);
         when(props.payop()).thenAnswer(inv -> PayopStartupCheckTest.payop(enabled, "pub", "secret", "jwt", "606", null));
         when(props.publicUrl()).thenReturn("https://globalfutservices.com");
@@ -473,6 +484,90 @@ class PayopCheckoutServiceTest {
             assertThatThrownBy(() -> checkout.returnStatus("GFS-26-EUR00001", "nope"))
                     .isInstanceOf(ApiExceptions.NotFoundException.class);
             verify(orders, never()).findById(eq(99L));
+        }
+    }
+
+    @Nested
+    @DisplayName("a Payop payment carries the fee sheet's fee for its method, and never the 2.5% card fee")
+    class SheetFeeOnly {
+
+        private final OrderEntity gbp = PayopFakes.order(11, "GFS-26-GBP00001", Currency.GBP,
+                OrderStatus.AWAITING_PAYMENT);
+        private final OrderMapper reader = new OrderMapper(new ObjectMapper(), mock(AppProperties.class),
+                mock(DiscordVerificationService.class), mock(DiscordBotClient.class), mock(CoachingService.class),
+                mock(VendorOrderLedger.class), mock(OrderPaymentState.class), clock);
+
+        @BeforeEach
+        void gbp() {
+            when(fx.eurTo(Currency.GBP)).thenReturn(Optional.of(
+                    new FxRateService.RateUsed(new BigDecimal("0.8650"), "ECB", LocalDate.of(2026, 10, 2))));
+            when(orders.findById(11L)).thenReturn(Optional.of(gbp));
+        }
+
+        private OrderEntity order(Currency currency) {
+            return switch (currency) {
+                case EUR -> eur;
+                case USD -> usd;
+                case GBP -> gbp;
+                default -> throw new IllegalArgumentException(currency.name());
+            };
+        }
+
+        /*
+         * Each order: 100.00, a 10.00 coupon off, so 90.00 -- and 2.25 of card fee, 92.25, when
+         * paid with UPI, PayPal or USDT. Bank transfer's sheet fee is 0.30 EUR + 4.0%, the fixed
+         * part converted at the day's rate: (90.00 + 0.30 x rate) / 0.96, rounded up.
+         */
+        @ParameterizedTest(name = "{0}: total and invoice {2} = 90.00 + the sheet fee {1}; the 2.25 card fee nowhere")
+        @CsvSource({"EUR, 407, 9407, 94.07", "USD, 411, 9411, 94.11", "GBP, 403, 9403, 94.03"})
+        void inEveryCurrency(Currency currency, long fee, long total, String invoiceAmount) {
+            OrderEntity order = order(currency);
+            PayopCheckoutService.MethodOption bankTransfer = checkout.options(order, "DE").methods().get(0);
+            assertThat(bankTransfer.feeMinor()).isEqualTo(fee);
+            assertThat(bankTransfer.totalMinor()).isEqualTo(total).isEqualTo(9000 + fee);
+
+            checkout.start(order, 381, "DE", total, "en");
+            ArgumentCaptor<PayopClient.InvoiceRequest> sent = ArgumentCaptor.forClass(PayopClient.InvoiceRequest.class);
+            verify(client).createInvoice(sent.capture());
+            assertThat(sent.getValue().amount()).isEqualTo(invoiceAmount);
+
+            // From the moment the invoice is open, the order reads as this payment: its lines, its total.
+            List<OrderDtos.OrderLineDto> lines = reader.lines(order);
+            assertThat(lines).extracting(OrderDtos.OrderLineDto::code)
+                    .containsExactly("BASE", "COUPON_DISCOUNT", "PAYMENT_FEE");
+            assertThat(lines.get(2).label()).isEqualTo("Payment processing fee (Bank transfer)");
+            assertThat(lines.get(2).amountMinor()).isEqualTo(fee);
+            assertThat(lines.stream().mapToLong(OrderDtos.OrderLineDto::amountMinor).sum()).isEqualTo(total);
+            assertThat(reader.payableTotalMinor(order)).isEqualTo(total);
+            // UPI, PayPal and USDT are still paid at the order's own total, 2.5% included.
+            assertThat(order.getTotalMinor()).isEqualTo(9225);
+        }
+
+        @Test
+        @DisplayName("UPI, PayPal and USDT keep the 2.5%: an order with no Payop invoice reads as placed")
+        void cardFeeStays() {
+            assertThat(reader.lines(eur)).extracting(OrderDtos.OrderLineDto::code)
+                    .containsExactly("BASE", "COUPON_DISCOUNT", "GATEWAY_FEE");
+            assertThat(reader.payableTotalMinor(eur)).isEqualTo(9225);
+        }
+
+        @Test
+        @DisplayName("another method, then back: the order reads as whichever invoice is open; once none can be paid, as placed")
+        void swapsBothWays() {
+            long wallet = totalFor(eur, 700001);
+            checkout.start(eur, 700001, "DE", wallet, "en");
+            assertThat(reader.payableTotalMinor(eur)).isEqualTo(9485);
+            checkout.start(eur, 381, "DE", totalFor(eur, 381), "en");
+            assertThat(reader.lines(eur).get(2).label()).isEqualTo("Payment processing fee (Bank transfer)");
+            assertThat(reader.payableTotalMinor(eur)).isEqualTo(9407);
+            checkout.start(eur, 700001, "DE", wallet, "en");
+            assertThat(reader.lines(eur).get(2).label()).isEqualTo("Payment processing fee (Wallet)");
+            assertThat(reader.payableTotalMinor(eur)).isEqualTo(9485);
+
+            // A day on, nothing can be paid at Payop: the order is the one placed, card fee and all.
+            now.set(now.get().plus(Duration.ofHours(25)));
+            assertThat(reader.lines(eur)).extracting(OrderDtos.OrderLineDto::code).contains("GATEWAY_FEE");
+            assertThat(reader.payableTotalMinor(eur)).isEqualTo(9225);
         }
     }
 }

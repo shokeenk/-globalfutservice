@@ -3,10 +3,14 @@ import { useSearchParams } from 'react-router-dom'
 import { CredentialForm } from './CredentialForm'
 import { ManualPayment, ownerManualRoutes } from './ManualPayment'
 import { ownerPayopRoutes } from './PayopPayment'
+import {
+  ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, type PaySummary,
+} from './paySummary'
 import { Alert, Button, ButtonLink } from './ui'
+import { useCatalogLabels } from '../content/catalogLabels'
 import { useI18n } from '../i18n'
 import { ApiError, api } from '../lib/api'
-import type { Order, OrderPaymentView } from '../lib/types'
+import type { Order, OrderPaymentView, QuoteLine } from '../lib/types'
 import { ScheduleStep, formatSlot, type ChosenSlot } from '../pages/coaching/ScheduleStep'
 
 /**
@@ -16,7 +20,10 @@ import { ScheduleStep, formatSlot, type ChosenSlot } from '../pages/coaching/Sch
  * is the order's frozen total, never re-quoted and never converted into the display
  * currency. The payment step is the checkout's own (UPI, PayPal, crypto, and Payop under
  * International for orders not in INR), reached through the signed-in owner's routes,
- * where every number comes from the server and no amount is sent back.
+ * where every number comes from the server and no amount is sent back. Laid out as the
+ * checkout is: the ways to pay on the left, the order summary on the right, where the total
+ * appears once -- 2.5% card fee included for UPI, PayPal and crypto, and for Payop its
+ * method's own fee instead.
  *
  * <p>Before paying: a coaching order whose slot hold ran out has the slot checked again,
  * and the customer picks another time if it was taken; a coin order whose sign-in is gone
@@ -87,12 +94,15 @@ export function CompletePayment({
              className="rounded-panel border border-brand-500/50 bg-brand-500/[0.06] p-5">
       <p className="text-[14px] leading-relaxed text-chalk">{c.banner}</p>
       <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-        <dl>
-          <dt className="stamp text-[10.5px] text-chalk-faint">{c.amountDue}</dt>
-          <dd className="tnum mt-1 text-[20px] font-semibold text-chalk" data-testid="amount-due">
-            {order.totalFormatted}
-          </dd>
-        </dl>
+        {/* Once the payment step is open, the total is in its summary: shown once. */}
+        {!open && (
+          <dl>
+            <dt className="stamp text-[10.5px] text-chalk-faint">{c.amountDue}</dt>
+            <dd className="tnum mt-1 text-[20px] font-semibold text-chalk" data-testid="amount-due">
+              {order.totalFormatted}
+            </dd>
+          </dl>
+        )}
         {order.payBy && (
           <p className="text-[12.5px] font-semibold text-chalk-muted" data-testid="pay-by">
             {c.payBy(localTime(order.payBy, lang))}
@@ -126,6 +136,8 @@ function ResumePayment({ order, onChanged }: { order: Order; onChanged?: (order:
 
   const [view, setView] = useState<OrderPaymentView | null>(null)
   const [failed, setFailed] = useState(false)
+  // What the payment step says the summary should show: the order as placed, or a Payop payment.
+  const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
   const [reload, setReload] = useState(0)
   /** The coaching slot: being checked again, to be picked anew, or settled. */
   const [slot, setSlot] = useState<'checking' | 'pick' | 'settled' | null>(null)
@@ -238,18 +250,71 @@ function ResumePayment({ order, onChanged }: { order: Order; onChanged?: (order:
           {c.slotKept(formatSlot(view.coaching.startsAt))}
         </p>
       )}
-      <ManualPayment
-        publicRef={ref}
-        sku={order.sku}
-        totalFormatted={view.manual?.totalFormatted ?? view.amountDueFormatted}
-        currency={view.currency}
-        routes={manualRoutes}
-        payopRoutes={payopRoutes}
-        blocked={view.manualBlockedUntil
-          ? { until: view.manualBlockedUntil, invoiceUrl: view.payableInvoice?.url ?? null }
-          : null}
-        onSubmitted={() => void refreshOrder()}
-      />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.25fr_1fr] lg:items-start">
+        <PaySummaryProvider publish={setPaySummary}>
+          <ManualPayment
+            publicRef={ref}
+            sku={order.sku}
+            totalFormatted={view.manual?.totalFormatted ?? view.amountDueFormatted}
+            currency={view.currency}
+            routes={manualRoutes}
+            payopRoutes={payopRoutes}
+            blocked={view.manualBlockedUntil
+              ? { until: view.manualBlockedUntil, invoiceUrl: view.payableInvoice?.url ?? null }
+              : null}
+            onSubmitted={() => void refreshOrder()}
+          />
+        </PaySummaryProvider>
+        <PaymentSummary
+          order={order}
+          lines={view.manual?.lines ?? order.lines}
+          totalFormatted={view.manual?.totalFormatted ?? view.amountDueFormatted}
+          pay={paySummary}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The order summary beside the payment step. UPI, PayPal and crypto: the order as placed,
+ * 2.5% card fee included. A Payop payment: the server's price -- no card fee, the chosen
+ * method's own fee and total -- and the button that starts it.
+ */
+function PaymentSummary({ order, lines, totalFormatted, pay }: {
+  order: Order
+  lines: QuoteLine[]
+  totalFormatted: string
+  pay: PaySummary
+}) {
+  const { t } = useI18n()
+  const labels = useCatalogLabels()
+  const payop = pay.kind === 'payop' ? pay : null
+  const shown = payop ? [...payopLines(payop, lines), payopFeeLine(payop, t.order.payopSelectMethod)] : lines
+  const context = {
+    sku: order.sku, variant: order.variant, platform: order.platform, quantity: order.quantity,
+    referralCode: order.referralCode, pointsRedeemed: order.pointsRedeemed,
+  }
+  return (
+    <div className="rounded-panel border border-ink-400 bg-paper p-5 lg:sticky lg:top-24" data-testid="pay-summary">
+      <p className="stamp mb-3 text-chalk">{t.order.summaryTitle}</p>
+      <dl className="space-y-2">
+        {shown.filter((l) => l.amountMinor !== 0 || l.code === 'PAYMENT_FEE' || l.code === 'MARKET_TAX').map((l) => (
+          <div key={l.code} className="flex justify-between gap-4 text-[13px]">
+            <dt className={l.amountMinor < 0 ? 'text-ok' : 'text-chalk-muted'}>{labels.line(l, context)}</dt>
+            <dd className={`tnum shrink-0 ${l.amountMinor < 0 ? 'text-ok' : 'text-chalk'}`}>
+              {l.code === 'MARKET_TAX' && l.amountMinor === 0 ? t.order.taxIncludedShort : l.amountFormatted}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3 flex items-baseline justify-between border-t border-ink-400 pt-3">
+        <span className="text-[13px] font-semibold text-chalk">{t.order.total}</span>
+        <span className="tnum text-[18px] font-bold text-chalk" data-testid="summary-total">
+          {payop ? payopTotal(payop) : totalFormatted}
+        </span>
+      </div>
+      {payop && <div className="mt-4"><PayopPayButton selection={payop} /></div>}
     </div>
   )
 }

@@ -12,9 +12,12 @@ import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.orders.web.OrderDtos;
+import com.globalfutservice.orders.web.OrderMapper;
 import com.globalfutservice.payments.payop.PayopCallbackService;
 import com.globalfutservice.payments.payop.PayopCheckoutService;
 import com.globalfutservice.payments.payop.PayopClient;
+import com.globalfutservice.payments.payop.PayopStartToken;
 import com.globalfutservice.payments.payop.TrustedClientAddress;
 import com.globalfutservice.web.ApiExceptions;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,7 +25,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
@@ -43,6 +45,10 @@ import org.springframework.web.bind.annotation.RestController;
  * plus the email on the order, sent in the body, never in a URL. They return prices the
  * server worked out and a page to send the customer to; none of them can mark anything paid.
  * Only the IPN can, and only after Payop's own API confirms it.
+ *
+ * <p>No amount ever comes from the browser. Each method is offered with a token the server
+ * sealed its price into, and a payment is started from that token alone -- as the signed-in
+ * owner's "Complete your payment" does.
  */
 @RestController
 @RequestMapping("/api/v1/payments/payop")
@@ -55,20 +61,25 @@ public class PayopController {
     public record OptionsRequest(@NotBlank String order, @NotBlank String email, @NotBlank String country) {
     }
 
+    /** {@code token}: the server's sealed price for this method, the only thing that starts it. */
     public record MethodOptionDto(long methodId, String name, String type, long feeMinor, String feeFormatted,
-                                  long totalMinor, String totalFormatted) {
+                                  long totalMinor, String totalFormatted, String token) {
     }
 
     /**
+     * {@code lines}: the order's price before any payment fee -- its lines without the 2.5%
+     * card fee, which a Payop payment never carries -- that each method's fee is added to.
      * {@code unavailable}: null, or why nothing can be offered. {@code claimsBlockedUntil}:
      * when manual payment claims for this order open again, if a Payop invoice is payable.
      */
-    public record OptionsResponse(String currency, long netMinor, String netFormatted, String feeLabel,
-                                  List<MethodOptionDto> methods, String unavailable, Instant claimsBlockedUntil) {
+    public record OptionsResponse(String currency, long netMinor, String netFormatted,
+                                  List<OrderDtos.OrderLineDto> lines, List<MethodOptionDto> methods,
+                                  String unavailable, Instant claimsBlockedUntil) {
     }
 
-    public record StartRequest(@NotBlank String order, @NotBlank String email, @Positive long methodId,
-                               @NotBlank String country, @Positive long expectedTotalMinor, String language) {
+    /** {@code token}: one of the tokens the options came with. No amount, no method id. */
+    public record StartRequest(@NotBlank String order, @NotBlank String email, @NotBlank String token,
+                               String language) {
     }
 
     public record StartResponse(String redirectUrl, String invoiceId, long totalMinor, String totalFormatted,
@@ -85,15 +96,19 @@ public class PayopController {
     private final PayopCheckoutService checkout;
     private final PayopCallbackService callbacks;
     private final OrderService orders;
+    private final OrderMapper orderMapper;
+    private final PayopStartToken tokens;
     private final AppProperties props;
     private final TrustedClientAddress addresses;
     private final Set<InetAddress> payopAddresses;
 
     public PayopController(PayopCheckoutService checkout, PayopCallbackService callbacks, OrderService orders,
-                           AppProperties props) {
+                           OrderMapper orderMapper, PayopStartToken tokens, AppProperties props) {
         this.checkout = checkout;
         this.callbacks = callbacks;
         this.orders = orders;
+        this.orderMapper = orderMapper;
+        this.tokens = tokens;
         this.props = props;
         this.addresses = new TrustedClientAddress(props.payop().trustedProxies());
         this.payopAddresses = props.payop().ipnAllowedIps().stream()
@@ -103,30 +118,35 @@ public class PayopController {
     }
 
     @PostMapping("/options")
-    @Operation(summary = "The Payop methods for a country, each with its fee and total, worked out by the server")
+    @Operation(summary = "The Payop methods for a country, each with its fee, total and start token, "
+            + "worked out by the server")
     public ResponseEntity<OptionsResponse> options(@Valid @RequestBody OptionsRequest request) {
         OrderEntity order = orders.requireGuest(request.order(), request.email());
         PayopCheckoutService.Options o = checkout.options(order, request.country());
+        String iso = request.country().trim().toUpperCase(Locale.ROOT);
         List<MethodOptionDto> methods = o.methods().stream().map(m -> new MethodOptionDto(m.methodId(), m.name(),
                 m.type(), m.feeMinor(), Money.ofMinor(m.feeMinor(), o.currency()).format(), m.totalMinor(),
-                Money.ofMinor(m.totalMinor(), o.currency()).format())).toList();
+                Money.ofMinor(m.totalMinor(), o.currency()).format(),
+                tokens.issue(order, m.methodId(), iso, m.totalMinor()))).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new OptionsResponse(
                 o.currency().name(), o.netMinor(), Money.ofMinor(o.netMinor(), o.currency()).format(),
-                PayopCheckoutService.FEE_LABEL, methods, o.unavailable(),
+                orderMapper.netLines(order), methods, o.unavailable(),
                 checkout.claimsBlockedUntil(order.getId()).orElse(null)));
     }
 
     @PostMapping("/invoices")
-    @Operation(summary = "Start paying with a Payop method; returns the page to send the customer to",
+    @Operation(summary = "Start paying with the Payop method a token names; returns the page to send the customer to",
             description = """
-                    The total the customer was shown is sent back and checked against the server's own;
-                    if they differ nothing is created and the answer is 409 price_changed. Asking again
-                    for the same method returns the same invoice.
+                    The token is the one the options came with: it names the method, the country and the
+                    total the server priced. The price is worked out again; if it has moved nothing is
+                    created and the answer is 409 price_changed. Asking again for the same method returns
+                    the same invoice.
                     """)
     public ResponseEntity<StartResponse> start(@Valid @RequestBody StartRequest request) {
         OrderEntity order = orders.requireGuest(request.order(), request.email());
-        PayopCheckoutService.Started s = checkout.start(order, request.methodId(), request.country(),
-                request.expectedTotalMinor(), request.language());
+        PayopStartToken.Claims claim = tokens.verify(order, request.token());
+        PayopCheckoutService.Started s = checkout.start(order, claim.methodId(), claim.country(),
+                claim.totalMinor(), request.language());
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(
                 new StartResponse(s.redirectUrl(), s.invoiceId(), s.totalMinor(),
                         Money.ofMinor(s.totalMinor(), order.getCurrency()).format(), s.payableUntil()));

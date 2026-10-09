@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { ManualPayment } from '../components/ManualPayment'
+import {
+  ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, type PaySummary,
+} from '../components/paySummary'
 import { PageHeader } from '../components/PageHeader'
 import { EaSignInFields, useBackupCodes, validateEaSignIn } from '../components/EaSignInFields'
 import { PlatformCard } from '../components/PlatformCard'
@@ -102,6 +105,8 @@ export default function Order() {
   const [couponCode, setCouponCode] = useState(params.get('coupon') ?? '')
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
   const [step, setStep] = useState<Step>('configure')
+  // What the pay step says the summary should show: the order as placed, or a Payop payment.
+  const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
 
   const [quote, setQuote] = useState<SignedQuote | null>(null)
   const [quoting, setQuoting] = useState(false)
@@ -619,15 +624,17 @@ export default function Order() {
             cart they describe; the panel keeps the total, the points and the payment.
           */}
           {step !== 'configure' && quote && (
-            <CheckoutForm
-              quote={quote}
-              step={step}
-              setStep={setStep}
-              onRequote={() => void fetchQuote()}
-              pointsToRedeem={pointsToRedeem}
-              setPointsToRedeem={setPointsToRedeem}
-              maxRedeemable={maxRedeemable}
-            />
+            <PaySummaryProvider publish={setPaySummary}>
+              <CheckoutForm
+                quote={quote}
+                step={step}
+                setStep={setStep}
+                onRequote={() => void fetchQuote()}
+                pointsToRedeem={pointsToRedeem}
+                setPointsToRedeem={setPointsToRedeem}
+                maxRedeemable={maxRedeemable}
+              />
+            </PaySummaryProvider>
           )}
         </div>
 
@@ -648,6 +655,7 @@ export default function Order() {
             setPlatformTouched(true)
             revealFirstError()
           }}
+          pay={step === 'paying' ? paySummary : ORDER_SUMMARY}
         />
       </div>
       </Section>
@@ -839,7 +847,7 @@ function AmountReadout({ quantity, stepSize }: { quantity: number; stepSize: num
 
 function QuotePanel({
   quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
-  pointsToRedeem, setPointsToRedeem, maxRedeemable, platformMissing, onPlatformMissing,
+  pointsToRedeem, setPointsToRedeem, maxRedeemable, platformMissing, onPlatformMissing, pay,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -856,6 +864,11 @@ function QuotePanel({
   platformMissing: boolean
   /** Continue was pressed without one. */
   onPlatformMissing: () => void
+  /**
+   * How the order is being paid, on the pay step. A Payop payment is shown as the server
+   * priced it: no 2.5% card fee, the chosen method's own fee and total, and its pay button.
+   */
+  pay: PaySummary
 }) {
   const t = useT()
   const money = useMoney()
@@ -875,7 +888,10 @@ function QuotePanel({
   const isSaving = (line: QuoteLine) =>
     line.amountMinor < 0 || (line.code === 'MARKET_TAX' && line.amountMinor === 0)
 
-  const lines = quote?.lines ?? []
+  const payop = pay.kind === 'payop' ? pay : null
+  const lines = !quote ? []
+    : payop ? [...payopLines(payop, quote.lines), payopFeeLine(payop, t.order.payopSelectMethod)]
+      : quote.lines
   const charges = lines.filter((line) => !isSaving(line))
   const savings = lines.filter(isSaving)
   const savedMinor = savings.reduce((sum, line) => sum + Math.abs(Math.min(0, line.amountMinor)), 0)
@@ -1012,10 +1028,13 @@ function QuotePanel({
                 }}
               >
                 <span className="text-[13px] font-medium text-chalk">{t.order.total}</span>
-                <span className="tnum display text-display-md text-chalk">
-                  {quote.totalFormatted}
+                <span className="tnum display text-display-md text-chalk" data-testid="summary-total">
+                  {payop ? payopTotal(payop) : quote.totalFormatted}
                 </span>
               </div>
+
+              {/* A Payop payment starts here, under the total it charges. */}
+              {payop && <PayopPayButton selection={payop} />}
 
               {/*
                 The claim, immediately under the number it is about.

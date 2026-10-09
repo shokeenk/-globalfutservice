@@ -1,5 +1,6 @@
 package com.globalfutservice.orders.web;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.globalfutservice.pricing.web.QuoteDtos;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -119,7 +120,16 @@ public final class OrderDtos {
             String description) {
     }
 
-    public record OrderLineDto(String code, String label, long amountMinor, String amountFormatted) {
+    /**
+     * One line of an order's price. {@code method}: on the fee line of a payment method that
+     * charges its own fee (Payop), the method's name, so the line can say whose fee it is in
+     * the customer's language; absent on every other line.
+     */
+    public record OrderLineDto(String code, String label, long amountMinor, String amountFormatted,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) String method) {
+        public OrderLineDto(String code, String label, long amountMinor, String amountFormatted) {
+            this(code, label, amountMinor, amountFormatted, null);
+        }
     }
 
     public record OrderEventDto(

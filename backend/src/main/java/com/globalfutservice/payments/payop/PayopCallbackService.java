@@ -327,7 +327,8 @@ public class PayopCallbackService {
         payments.save(payment);
         a.paid(txid, clock.instant());
         invoices.save(a);
-        order.recordPayopPayment(a.getId(), a.getTotalMinor(), feeSnapshot(a));
+        order.recordPayopPayment(a.getId(), a.getTotalMinor(), PayopTerms.snapshot(a, mapper),
+                PayopTerms.paidBreakdown(order.getPriceBreakdown(), a, mapper));
     }
 
     /**
@@ -389,31 +390,6 @@ public class PayopCallbackService {
     private static boolean paidOrLater(OrderStatus status) {
         return status != OrderStatus.DRAFT && status != OrderStatus.AWAITING_PAYMENT
                 && status != OrderStatus.ABANDONED;
-    }
-
-    /** What the order keeps about the fee it was charged, exactly as charged. */
-    String feeSnapshot(PayopInvoiceEntity a) {
-        Map<String, Object> s = new LinkedHashMap<>();
-        s.put("provider", PROVIDER);
-        s.put("label", PayopCheckoutService.FEE_LABEL);
-        s.put("methodId", a.getMethodId());
-        s.put("methodName", a.getMethodName());
-        s.put("methodVersion", a.getMethodVersion());
-        s.put("fixedEur", a.getFixedEur().toPlainString());
-        s.put("percent", a.getPercent().toPlainString());
-        s.put("fxRate", a.getFxRate().toPlainString());
-        s.put("fxSource", a.getFxSource());
-        s.put("fxDate", a.getFxDate().toString());
-        s.put("currency", a.getCurrency().name());
-        s.put("netMinor", a.getNetMinor());
-        s.put("feeMinor", a.getFeeMinor());
-        s.put("totalMinor", a.getTotalMinor());
-        s.put("invoiceId", a.getInvoiceId());
-        try {
-            return mapper.writeValueAsString(s);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("could not record the Payop fee", e);
-        }
     }
 
     /** The ledger's copy of an IPN: identifiers and states only, no payer details. */
