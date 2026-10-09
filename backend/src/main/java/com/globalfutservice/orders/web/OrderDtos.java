@@ -168,6 +168,8 @@ public final class OrderDtos {
             long pointsRedeemed,
             long pointsEarned,
             String referralCode,
+            /** The coupon the order was placed with, as its price line names it; null for none. */
+            String couponCode,
 
             /*
               Live fulfilment, straight from the supplier.

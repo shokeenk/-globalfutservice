@@ -90,4 +90,12 @@ class OrderTrackingResponseTest {
         assertThat(r.orderedCoins()).isEqualTo(500L);
         assertThat(r.deliveredCoins()).isNull();
     }
+
+    @Test
+    @DisplayName("the coupon the order was placed with travels with it, so its price line can name it")
+    void couponCode() {
+        assertThat(mapper.toResponse(order, List.of(), true).couponCode()).isNull();
+        order.setCouponCode("SAVE10");
+        assertThat(mapper.toResponse(order, List.of(), true).couponCode()).isEqualTo("SAVE10");
+    }
 }

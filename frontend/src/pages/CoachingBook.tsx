@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CoachIcon } from '../components/CoachingIcons'
 import type { CoachIconName } from '../components/CoachingIcons'
+import { CouponRow } from '../components/CouponRow'
 import { ManualPayment } from '../components/ManualPayment'
 import {
   ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, withoutPaymentFees,
@@ -110,6 +111,9 @@ export default function CoachingBook() {
   const [error, setError] = useState<string | null>(null)
 
   const [quote, setQuote] = useState<SignedQuote | null>(null)
+  // The coupon the customer applied: what the next quote is asked to price.
+  const [couponCode, setCouponCode] = useState('')
+  const [requoting, setRequoting] = useState(false)
   // What the pay step says the summary should show: the order as placed, or a Payop payment.
   const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
@@ -192,18 +196,31 @@ export default function CoachingBook() {
    * payment-processing line as every other order, so the total a customer is about to
    * pay is not the package price, and the review screen shows the quote's own lines.
    */
-  async function fetchQuote(): Promise<SignedQuote> {
+  async function fetchQuote(code = couponCode): Promise<SignedQuote> {
     const fresh = await api.post<SignedQuote>('/api/v1/quotes', {
       sku: 'COACHING',
       platform: null,
       variant,
       quantity: '1',
       currency: catalog?.currency,
-      couponCode: null,
+      couponCode: code.trim() || null,
       pointsToRedeem: 0,
     })
     setQuote(fresh)
     return fresh
+  }
+
+  /*
+   * A coupon is priced by the server, as at the coin checkout: the quote is asked again
+   * with the code, and the code's own rules decide. The price on screen stays until the
+   * new one lands.
+   */
+  function applyCoupon(code: string) {
+    setCouponCode(code)
+    setRequoting(true)
+    fetchQuote(code)
+      .catch((e) => setError(e instanceof ApiError ? e.message : b.placeFailed))
+      .finally(() => setRequoting(false))
   }
 
   function goToSchedule() {
@@ -392,6 +409,9 @@ export default function CoachingBook() {
             touched={reviewTouched}
             placing={placing}
             onPay={() => void placeOrder()}
+            couponCode={couponCode}
+            requoting={requoting}
+            onApplyCoupon={applyCoupon}
           />
         )}
 
@@ -718,7 +738,7 @@ function DetailsStep({
 
 function ReviewStep({
   option, quote, platform, handle, rank, focus, slot, choices, choice, onChoice,
-  acceptedTerms, onAcceptedTerms, touched, placing, onPay,
+  acceptedTerms, onAcceptedTerms, touched, placing, onPay, couponCode, requoting, onApplyCoupon,
 }: {
   option: CatalogOption
   quote: SignedQuote | null
@@ -735,6 +755,10 @@ function ReviewStep({
   touched: boolean
   placing: boolean
   onPay: () => void
+  /** The coupon asked for, and the quote being priced again with it. */
+  couponCode: string
+  requoting: boolean
+  onApplyCoupon: (code: string) => void
 }) {
   const t = useT()
   const b = t.coachingBook
@@ -823,6 +847,17 @@ function ReviewStep({
         <div className="space-y-5">
           <div className="rounded-panel border border-ink-400 bg-paper p-5 shadow-e2">
             <p className="text-body-sm font-semibold text-chalk">{b.orderSummary}</p>
+            {/* The coin checkout's own coupon field, in the same place: the summary, above the price. */}
+            <div className="mt-4">
+              <CouponRow
+                key={quote?.couponCode ?? 'none'}
+                initial={couponCode}
+                applied={quote?.couponCode ?? null}
+                message={quote?.couponMessage ?? null}
+                busy={requoting || !quote}
+                onApply={onApplyCoupon}
+              />
+            </div>
             {!quote ? (
               <div className="mt-4 flex justify-center"><Spinner /></div>
             ) : (
