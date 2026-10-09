@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -124,11 +124,23 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers() })
 
 describe('coin checkout: your details and the sign-in', () => {
+  /*
+   * Getting to Pay is setup, so it uses plain events and a fake clock for the quote. The
+   * page waits 260 ms of quiet before pricing, and Continue only appears once a price has
+   * arrived. Waiting that out in real time made findByRole re-query the whole page every
+   * 50 ms and on every change, which is slow enough to near the timeout in a full run.
+   */
   async function toDetails() {
-    renderAt('/order', <Order />)
-    await userEvent.click(await screen.findByRole('button', { name: /PlayStation/ }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
-    return screen.findByRole('button', { name: /^Pay \$0\.90/ })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      renderAt('/order', <Order />)
+      fireEvent.click(screen.getByRole('button', { name: /PlayStation/ }))
+      await act(() => vi.runOnlyPendingTimersAsync())
+    } finally {
+      vi.useRealTimers()
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    return screen.getByRole('button', { name: /^Pay \$0\.90/ })
   }
 
   it('Pay is not greyed out; pressed empty, every missing answer shows under its field, and nothing is placed', async () => {
@@ -170,7 +182,7 @@ describe('coin checkout: your details and the sign-in', () => {
     fill(screen.getByLabelText(/EA account email/), 'ea@example.test')
     fill(screen.getByLabelText(/EA password/), 'correct-horse')
     for (const n of [1, 2, 3]) fill(screen.getByLabelText(new RegExp(`Backup code ${n}`, 'i')), '12345678')
-    for (const box of screen.getAllByRole('checkbox')) await userEvent.click(box)
+    for (const box of screen.getAllByRole('checkbox')) fireEvent.click(box)
 
     await userEvent.click(pay)
 
