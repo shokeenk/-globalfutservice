@@ -151,6 +151,13 @@ describe('checks, under the field, in the server’s words', () => {
 
     fill(pc.getByLabelText('Minimum (K)'), '55')
     expect(pc.getByText('The minimum must be a whole multiple of 10K, at least 10K.')).toBeInTheDocument()
+    // Off the step, it is shown in red and kept as typed -- never moved onto a step -- and
+    // Save refuses it without asking the server anything.
+    fireEvent.click(pc.getByRole('button', { name: 'Save PC prices' }))
+    expect(pc.getByText('Fix the errors above before saving.')).toBeInTheDocument()
+    expect(pc.getByLabelText('Minimum (K)')).toHaveValue('55')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.put).not.toHaveBeenCalled()
     fill(pc.getByLabelText('Minimum (K)'), '50')
     fill(pc.getByLabelText('Maximum (K)'), '20000')
     expect(pc.getByText('The maximum can be at most 10M.')).toBeInTheDocument()
