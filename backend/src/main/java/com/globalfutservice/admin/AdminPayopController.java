@@ -76,14 +76,31 @@ public class AdminPayopController {
                               int methods, int activeMethods, List<RateDto> rates, long needsAttention) {
     }
 
+    /** {@code source}: SHEET, from the pricing sheet, or MANUAL, priced by hand. */
     public record FeeDto(long methodId, String name, String type, String region, BigDecimal fixedEur,
                          BigDecimal percent, List<String> countries, List<String> currencies, boolean active,
-                         int version, Instant updatedAt, Long updatedBy) {
+                         int version, Instant updatedAt, Long updatedBy, String source) {
         static FeeDto of(PayopFeeMethodEntity m) {
             return new FeeDto(m.getMethodId(), m.getName(), m.getMethodType(), m.getRegion(), m.getFixedEur(),
                     m.getPercent(), m.countryList(), m.currencyList(), m.isActive(), m.getVersion(), m.getUpdatedAt(),
-                    m.getUpdatedBy());
+                    m.getUpdatedBy(), m.getSource());
         }
+    }
+
+    /** One method priced by hand, in full. An ID the table has is corrected; any other is added. */
+    public record ManualFeeRequest(@NotNull @jakarta.validation.constraints.Positive Long methodId,
+                                   @jakarta.validation.constraints.NotBlank String name,
+                                   @jakarta.validation.constraints.NotBlank String type, String region,
+                                   @NotNull BigDecimal fixedEur, @NotNull BigDecimal percent,
+                                   @NotNull List<String> countries, @NotNull List<String> currencies, Boolean active) {
+    }
+
+    /**
+     * A method Payop lists for the country checked: as Payop gives it, whether it takes cards,
+     * its fee row if the table has one, and whether customers there are offered it.
+     */
+    public record LiveMethodDto(long methodId, String title, String type, List<String> currencies,
+                                List<String> countries, boolean card, FeeDto fee, boolean offered) {
     }
 
     public record FeeEditRequest(@NotNull BigDecimal fixedEur, @NotNull BigDecimal percent,
@@ -185,6 +202,33 @@ public class AdminPayopController {
                 request.percent(), request.countries(), request.currencies(), request.active()), admin.id());
         methods.refresh();
         return noStore(FeeDto.of(row));
+    }
+
+    @PostMapping("/fees")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Price one method by hand -- add it, or correct it in full -- without importing the sheet; "
+            + "versioned and audited")
+    public ResponseEntity<FeeDto> saveManualFee(@Valid @RequestBody ManualFeeRequest request,
+                                                @CurrentAccount AccountPrincipal admin) {
+        PayopFeeMethodEntity row = fees.saveManual(new PayopFeeTableService.Manual(request.methodId(), request.name(),
+                request.type(), request.region(), request.fixedEur(), request.percent(), request.countries(),
+                request.currencies(), request.active() == null || request.active()), admin.id());
+        methods.refresh();
+        return noStore(FeeDto.of(row));
+    }
+
+    @GetMapping("/live-methods")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Payop check: every method Payop lists for a country, fetched now, with its fee if priced")
+    public ResponseEntity<List<LiveMethodDto>> liveMethods(@RequestParam(defaultValue = "IN") String country) {
+        String iso = country == null ? "" : country.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of(java.util.Locale.getISOCountries()).contains(iso)) {
+            throw new com.globalfutservice.web.ApiExceptions.BadRequestException("unknown_country",
+                    "That is not a two-letter country code.");
+        }
+        return noStore(methods.check(iso).stream().map(l -> new LiveMethodDto(l.live().id(), l.live().title(),
+                l.live().type(), l.live().currencies(), l.live().countries(), l.card(),
+                l.fee() == null ? null : FeeDto.of(l.fee()), l.offered())).toList());
     }
 
     @PostMapping(value = "/fees/import", consumes = "multipart/form-data")

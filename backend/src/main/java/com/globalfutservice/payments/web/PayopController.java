@@ -63,7 +63,11 @@ public class PayopController {
 
     /** {@code token}: the server's sealed price for this method, the only thing that starts it. */
     public record MethodOptionDto(long methodId, String name, String type, long feeMinor, String feeFormatted,
-                                  long totalMinor, String totalFormatted, String token) {
+                                  long totalMinor, String totalFormatted, String token, boolean card) {
+    }
+
+    /** Whether a card method is offered in a country: what the option is called there. */
+    public record OfferResponse(String country, boolean cards) {
     }
 
     /**
@@ -74,7 +78,7 @@ public class PayopController {
      */
     public record OptionsResponse(String currency, long netMinor, String netFormatted,
                                   List<OrderDtos.OrderLineDto> lines, List<MethodOptionDto> methods,
-                                  String unavailable, Instant claimsBlockedUntil) {
+                                  String unavailable, Instant claimsBlockedUntil, boolean cards) {
     }
 
     /** {@code token}: one of the tokens the options came with. No amount, no method id. */
@@ -127,11 +131,22 @@ public class PayopController {
         List<MethodOptionDto> methods = o.methods().stream().map(m -> new MethodOptionDto(m.methodId(), m.name(),
                 m.type(), m.feeMinor(), Money.ofMinor(m.feeMinor(), o.currency()).format(), m.totalMinor(),
                 Money.ofMinor(m.totalMinor(), o.currency()).format(),
-                tokens.issue(order, m.methodId(), iso, m.totalMinor()))).toList();
+                tokens.issue(order, m.methodId(), iso, m.totalMinor()), m.card())).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new OptionsResponse(
                 o.currency().name(), o.netMinor(), Money.ofMinor(o.netMinor(), o.currency()).format(),
                 orderMapper.netLines(order), methods, o.unavailable(),
-                checkout.claimsBlockedUntil(order.getId()).orElse(null)));
+                checkout.claimsBlockedUntil(order.getId()).orElse(null), o.cards()));
+    }
+
+    @GetMapping("/offer")
+    @Operation(summary = "Whether a card method is offered in a country: \"International / Cards\", or \"International\"")
+    public ResponseEntity<OfferResponse> offer(@RequestParam String country) {
+        String iso = country == null ? "" : country.trim().toUpperCase(Locale.ROOT);
+        if (!ISO_COUNTRIES.contains(iso)) {
+            throw new ApiExceptions.BadRequestException("unknown_country", "Choose your country from the list.");
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new OfferResponse(iso, checkout.cardsOffered(iso)));
     }
 
     @PostMapping("/invoices")

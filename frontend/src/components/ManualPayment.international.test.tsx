@@ -2,9 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /*
- * The payment panel's International tab, for every kind of order: Payop's local methods
- * for an order not in INR, the placeholder for an INR order, and -- when Payop cannot be
- * offered for an order that would have it -- said, never hidden.
+ * The payment panel's International tab, for every kind of order and every currency: Payop,
+ * starting from India for an INR order; "International / Cards" only where a card method is
+ * offered; and -- when Payop cannot be offered -- said, never hidden.
  */
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), upload: vi.fn() }))
@@ -50,11 +50,34 @@ describe('the International tab', () => {
       { order: 'GFS-26-C1', email: 'p@example.test', country: 'DE' })
   })
 
-  it('an INR order: the placeholder, and Payop is never asked', async () => {
+  it('an INR order: Payop too, its country starting at India, not guessed from where the visitor is', async () => {
     show('INR')
     fireEvent.click(await screen.findByRole('tab', { name: 'International' }))
-    expect(await screen.findByText('International payment options are coming soon')).toBeInTheDocument()
-    expect(api.post).not.toHaveBeenCalled()
+    expect(await screen.findByText('Pay with a local method')).toBeInTheDocument()
+    expect(api.post).toHaveBeenCalledWith('/api/v1/payments/payop/options',
+      { order: 'GFS-26-C1', email: 'p@example.test', country: 'IN' })
+    expect(screen.getByRole('combobox')).toHaveValue('IN')
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/payments/payop/country')
+    expect(api.get).toHaveBeenCalledWith('/api/v1/payments/payop/offer?country=IN')
+  })
+
+  it('"International / Cards" where the server says a card method is offered; back to "International" where not', async () => {
+    api.get.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/v1/payments/methods')) return METHODS
+      if (url === '/api/v1/payments/payop/offer?country=IN') return { country: 'IN', cards: true }
+      return new Promise(() => {})
+    })
+    // The country chosen in the panel has no card method: the name follows it.
+    api.post.mockResolvedValue({ currency: 'INR', netMinor: 9000, netFormatted: '₹90.00', lines: [], unavailable: null,
+      claimsBlockedUntil: null, cards: false,
+      methods: [{ methodId: 381, name: 'Bank transfer', type: 'bank_transfer', feeMinor: 407, feeFormatted: '₹4.07',
+        totalMinor: 9407, totalFormatted: '₹94.07', token: 't', card: false }] })
+    show('INR')
+
+    expect(await screen.findByRole('tab', { name: 'International / Cards' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'International / Cards' }))
+    expect(await screen.findByRole('tab', { name: 'International' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /Cards/ })).toBeNull()
   })
 
   it('Payop cannot be offered for an order that would have it: "Temporarily unavailable. Please use PayPal or crypto."',

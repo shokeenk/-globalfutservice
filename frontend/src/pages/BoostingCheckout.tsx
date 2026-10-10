@@ -16,7 +16,8 @@ import { SupportCard } from '../components/support/SupportCard'
 import { DiscordMessageUs } from '../components/DiscordMessageUs'
 import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
-import { offersLocalMethods, paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
+import { paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
+import { internationalCopy, useInternationalOffer } from '../components/internationalOffer'
 import { SEASON, useSeo } from '../lib/seo'
 import type {
   CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, SignedQuote,
@@ -165,6 +166,7 @@ export default function BoostingCheckout() {
    * own currency decides what International holds.
    */
   const orderCurrency = created?.currency ?? resumed?.currency ?? catalog?.currency
+  const offer = useInternationalOffer(orderCurrency)
   const payChoices: { key: PayChoice; title: string; body: string }[] = useMemo(() => {
     if (methods === null) return []
     const copy: Record<PayChoice, { title: string; body: string }> = {
@@ -172,13 +174,10 @@ export default function BoostingCheckout() {
       UPI: { title: b.payUpiTitle, body: b.payUpiBody },
       PAYPAL: { title: b.payPaypalTitle, body: b.payPaypalBody },
       CRYPTO: { title: b.payCryptoTitle, body: b.payCryptoBody },
-      INTERNATIONAL: {
-        title: t.order.payTabInternational,
-        body: offersLocalMethods(orderCurrency) ? t.order.payIntlChoiceLocal : t.order.payIntlTitle,
-      },
+      INTERNATIONAL: internationalCopy(t, offer.cards),
     }
     return paymentChoices(methods, !!policy?.onlinePaymentsEnabled).map((key) => ({ key, ...copy[key] }))
-  }, [policy, methods, b, t.order, orderCurrency])
+  }, [policy, methods, b, t, offer.cards])
 
   useEffect(() => {
     const first = payChoices[0]

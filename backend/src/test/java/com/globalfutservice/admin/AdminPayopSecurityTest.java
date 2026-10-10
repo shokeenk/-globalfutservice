@@ -179,4 +179,50 @@ class AdminPayopSecurityTest {
         mvc.perform(post(BASE + "/fx").contentType(MediaType.APPLICATION_JSON).content(RATE)
                 .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isOk());
     }
+
+    private static final String MANUAL = """
+            {"methodId": 900001, "name": "Visa / Mastercard", "type": "cards_international",
+             "fixedEur": 0.20, "percent": 3.5, "countries": ["IN"], "currencies": ["INR", "USD"]}
+            """;
+
+    @Test
+    @DisplayName("pricing a method by hand and the Payop check are an admin's: an operator is refused, nothing changes")
+    void manualAndCheckAdminOnly() throws Exception {
+        mvc.perform(post(BASE + "/fees").contentType(MediaType.APPLICATION_JSON).content(MANUAL)
+                .with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isForbidden());
+        mvc.perform(get(BASE + "/live-methods?country=IN").with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get(BASE + "/live-methods?country=IN")).andExpect(status().isUnauthorized());
+        verify(fees, never()).saveManual(any(), any());
+        verify(methods, never()).check(any());
+    }
+
+    @Test
+    @DisplayName("an admin prices a method by hand, recorded against their account, and checks what Payop lists")
+    void adminManualAndCheck() throws Exception {
+        PayopFeeMethodEntity card = PayopFeeMethodEntity.manual(900001, "Visa / Mastercard", "cards_international",
+                null, new BigDecimal("0.20"), new BigDecimal("3.5"), List.of("IN"), List.of("INR", "USD"), true, 1L,
+                Instant.EPOCH);
+        when(fees.saveManual(any(), any())).thenReturn(card);
+        mvc.perform(post(BASE + "/fees").contentType(MediaType.APPLICATION_JSON).content(MANUAL)
+                        .with(authentication(as(AccountRole.ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.source")
+                        .value("MANUAL"));
+        verify(fees).saveManual(org.mockito.ArgumentMatchers.argThat(m -> m.methodId() == 900001L
+                && m.type().equals("cards_international") && m.active()), org.mockito.ArgumentMatchers.eq(1L));
+        verify(methods).refresh();
+
+        when(methods.check("IN")).thenReturn(List.of(new PayopMethodsService.Listed(
+                new com.globalfutservice.payments.payop.PayopClient.AvailableMethod(900001, "Cards",
+                        "cards_international", List.of("INR"), List.of("IN")), card, true, true)));
+        mvc.perform(get(BASE + "/live-methods?country=in").with(authentication(as(AccountRole.ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$[0].methodId")
+                        .value(900001))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$[0].card")
+                        .value(true))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$[0].offered")
+                        .value(true));
+    }
 }

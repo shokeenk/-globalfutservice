@@ -44,6 +44,81 @@ function open() {
   render(<MemoryRouter><AdminPayop /></MemoryRouter>)
 }
 
+const LIVE = [
+  { methodId: 900001, title: 'Cards', type: 'cards_international', currencies: ['INR', 'USD'], countries: ['IN'],
+    card: true, fee: null, offered: false },
+  { methodId: 381, title: 'Bank transfer', type: 'bank_transfer', currencies: ['EUR'], countries: ['IN', 'DE'],
+    card: false, fee: FEES[0], offered: true },
+]
+
+describe('pricing a method by hand, and the Payop check', () => {
+  beforeEach(() => {
+    api.post.mockReset()
+    const base = api.get.getMockImplementation()!
+    api.get.mockImplementation(async (path: string) =>
+      (path.startsWith('/api/v1/admin/payop/live-methods') ? LIVE : base(path)))
+    api.post.mockImplementation(async (_path: string, body: { name: string }) => ({
+      ...FEES[0], methodId: 900001, name: body.name, type: 'cards_international', source: 'MANUAL', version: 1 }))
+  })
+
+  it('an admin adds the card method the sheet lacks: every field goes to the server, which checks and audits it', async () => {
+    role.current = 'ADMIN'
+    open()
+    await userEvent.click(await screen.findByRole('button', { name: /Fee table/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a method' }))
+    const dialog = screen.getByRole('dialog', { name: 'Price a method by hand' })
+    await userEvent.type(within(dialog).getByLabelText('Payop method ID'), '900001')
+    await userEvent.type(within(dialog).getByLabelText(/^Type/), 'cards_international')
+    await userEvent.type(within(dialog).getByLabelText('Name customers see'), 'Visa / Mastercard')
+    await userEvent.type(within(dialog).getByLabelText('Fixed part (EUR)'), '0.20')
+    await userEvent.type(within(dialog).getByLabelText('Percentage'), '3.5')
+    await userEvent.type(within(dialog).getByLabelText(/^Countries/), 'in')
+    await userEvent.type(within(dialog).getByLabelText('Processing currencies'), 'inr, usd')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(api.post).toHaveBeenCalledWith('/api/v1/admin/payop/fees', {
+      methodId: 900001, name: 'Visa / Mastercard', type: 'cards_international', region: null, fixedEur: 0.2,
+      percent: 3.5, countries: ['IN'], currencies: ['INR', 'USD'], active: true,
+    })
+    expect(await screen.findByText('Visa / Mastercard: priced by hand, version 1.')).toBeInTheDocument()
+  })
+
+  it('the Payop check: what Payop lists for India now, priced or not, and a fee added from it', async () => {
+    role.current = 'ADMIN'
+    open()
+    await userEvent.click(await screen.findByRole('button', { name: 'Payop check' }))
+    expect(screen.getByLabelText('Country to check')).toHaveValue('IN')
+    await userEvent.click(screen.getByRole('button', { name: 'Check with Payop' }))
+
+    const table = await screen.findByTestId('payop-check')
+    expect(api.get).toHaveBeenCalledWith('/api/v1/admin/payop/live-methods?country=IN')
+    const cards = within(table).getByText('900001').closest('tr') as HTMLElement
+    expect(cards).toHaveTextContent('cards_international')
+    expect(cards).toHaveTextContent('INR, USD')
+    expect(cards).toHaveTextContent('No fee')
+    expect(cards).toHaveTextContent('Hidden')
+    const bank = within(table).getByText('381').closest('tr') as HTMLElement
+    expect(bank).toHaveTextContent('0.30 EUR + 2.4%')
+    expect(bank).toHaveTextContent('Offered')
+    expect(within(bank).queryByRole('button', { name: 'Add fee' })).toBeNull()
+
+    await userEvent.click(within(cards).getByRole('button', { name: 'Add fee' }))
+    const dialog = screen.getByRole('dialog', { name: 'Price a method by hand' })
+    expect(within(dialog).getByLabelText('Payop method ID')).toHaveValue('900001')
+    expect(within(dialog).getByLabelText(/^Type/)).toHaveValue('cards_international')
+    expect(within(dialog).getByLabelText(/^Countries/)).toHaveValue('IN')
+  })
+
+  it('an operator sees neither: no "Add a method", no Payop check', async () => {
+    role.current = 'OPERATOR'
+    open()
+    await userEvent.click(await screen.findByRole('button', { name: /Fee table/ }))
+    expect(await screen.findByText('Bank transfer', { selector: 'td' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add a method' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Payop check' })).toBeNull()
+  })
+})
+
 describe('Payop administration', () => {
   it('always shows the merchant-pays rule, whether Payop is on, and the currencies with no rate', async () => {
     role.current = 'OPERATOR'

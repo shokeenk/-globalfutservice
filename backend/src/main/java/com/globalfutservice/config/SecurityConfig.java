@@ -278,6 +278,7 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/v1/payments/payop/invoices").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/payments/payop/return-status").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/payments/payop/country").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/payments/payop/offer").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/payments/payop/callback").permitAll()
 
                     // --- operations ---------------------------------------------------

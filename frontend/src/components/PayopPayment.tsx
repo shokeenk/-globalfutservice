@@ -34,6 +34,8 @@ export interface MethodOption {
   totalFormatted: string
   /** The server's sealed price for this method: the only thing that starts it. */
   token: string
+  /** It takes cards. */
+  card?: boolean
 }
 
 export interface Options {
@@ -45,6 +47,8 @@ export interface Options {
   methods: MethodOption[]
   /** Why nothing can be offered ("NO_RATE", "PAYOP_UNAVAILABLE"), or null. */
   unavailable: string | null
+  /** At least one method takes cards: the option is "International / Cards". */
+  cards?: boolean
   /** While a Payop invoice for the order can still be paid. */
   claimsBlockedUntil: string | null
 }
@@ -83,8 +87,10 @@ interface OwnerOptions {
     methodId: number; name: string; type: string; feeMinor: number; feeFormatted: string
     breakdown: { totalMinor: number; totalFormatted: string }
     token: string
+    card?: boolean
   }[]
   manualBlockedUntil: string | null
+  cards?: boolean
 }
 
 /**
@@ -102,10 +108,12 @@ export function ownerPayopRoutes(publicRef: string): PayopRoutes {
         netFormatted: o.netFormatted,
         lines: o.lines ?? [],
         unavailable: o.unavailable,
+        cards: o.cards,
         claimsBlockedUntil: o.manualBlockedUntil,
         methods: o.methods.map((m) => ({
           methodId: m.methodId, name: m.name, type: m.type, feeMinor: m.feeMinor, feeFormatted: m.feeFormatted,
           totalMinor: m.breakdown.totalMinor, totalFormatted: m.breakdown.totalFormatted, token: m.token,
+          card: m.card,
         })),
       }
     },
@@ -120,7 +128,7 @@ export function retryTime(e: ApiError, lang: string): string {
 }
 
 export function PayopPayment({
-  publicRef, email, onUnavailable, routes,
+  publicRef, email, onUnavailable, routes, defaultCountry, onCards,
 }: {
   publicRef: string
   /** The email on the order: checkout's routes only. */
@@ -129,6 +137,10 @@ export function PayopPayment({
   onUnavailable: () => void
   /** Another way to reach the order than checkout's; see {@link ownerPayopRoutes}. */
   routes?: PayopRoutes
+  /** Where the country starts: India for an INR order. Changeable; otherwise it is guessed. */
+  defaultCountry?: string
+  /** Whether a card method is offered for the country chosen, each time its methods arrive. */
+  onCards?: (cards: boolean) => void
 }) {
   const { t, lang } = useI18n()
   const via = useMemo(() => routes ?? guestPayopRoutes(publicRef, email ?? ''), [routes, publicRef, email])
@@ -142,8 +154,13 @@ export function PayopPayment({
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
 
-  // A first guess at the country: Cloudflare's, then the browser's. Always changeable.
+  // A first guess at the country: India for an INR order, else Cloudflare's, then the
+  // browser's. Always changeable.
   useEffect(() => {
+    if (defaultCountry) {
+      setCountry((current) => current ?? defaultCountry)
+      return
+    }
     let live = true
     api.get<{ country: string | null }>('/api/v1/payments/payop/country')
       .then((found) => countryCode(found.country))
@@ -155,7 +172,7 @@ export function PayopPayment({
         setGuessed(guess !== null)
       })
     return () => { live = false }
-  }, [])
+  }, [defaultCountry])
 
   useEffect(() => {
     if (!country) return
@@ -166,6 +183,7 @@ export function PayopPayment({
       .then((found) => {
         if (!live) return
         setOptions(found)
+        onCards?.(!found.unavailable && found.methods.some((m) => m.card === true))
         setMethodId((current) => (found.methods.some((m) => m.methodId === current) ? current : null))
       })
       .catch((e) => {
@@ -178,7 +196,7 @@ export function PayopPayment({
       })
       .finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [country, via, reload, onUnavailable])
+  }, [country, via, reload, onUnavailable, onCards])
 
   const names = useMemo(
     () => COUNTRY_CODES
@@ -307,6 +325,12 @@ export function PayopPayment({
             ))}
           </div>
           <p className="text-[12px] leading-snug text-chalk-faint">{t.order.payopFeeNote}</p>
+          {/* Indian cards are often closed to payments from abroad until the bank opens them. */}
+          {country === 'IN' && options.methods.some((m) => m.card === true) && (
+            <p className="text-[12px] font-medium leading-snug text-chalk-muted" data-testid="card-note">
+              {t.order.payopCardNote}
+            </p>
+          )}
         </div>
       )}
     </div>

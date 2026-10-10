@@ -116,6 +116,8 @@ class CustomerVocabularyTest {
                 FRONTEND.resolve("components").resolve("PayopPayment.tsx"),
                 // The order summary beside the pay step, which shows the Payop fee and total.
                 FRONTEND.resolve("components").resolve("paySummary.tsx"),
+                // What International is called: with cards only where a card method is offered.
+                FRONTEND.resolve("components").resolve("internationalOffer.ts"),
                 FRONTEND.resolve("pages").resolve("PayopReturn.tsx"),
                 // Completing the payment of an unpaid order: the page, and what the server says.
                 FRONTEND.resolve("components").resolve("CompletePayment.tsx"),

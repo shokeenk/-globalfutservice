@@ -64,7 +64,8 @@ class PayopMethodsServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(fees.findByActiveTrue()).thenAnswer(inv -> List.copyOf(table));
+        when(fees.findByActiveTrue()).thenAnswer(inv -> table.stream().filter(PayopFeeMethodEntity::isActive).toList());
+        when(fees.findAll()).thenAnswer(inv -> List.copyOf(table));
         AppProperties props = mock(AppProperties.class);
         when(props.payop()).thenReturn(PayopStartupCheckTest.payop(true, "pub", "secret", "jwt", "606", null));
         when(props.publicUrl()).thenReturn("https://globalfutservices.com");
@@ -152,5 +153,52 @@ class PayopMethodsServiceTest {
         table.add(fee(2, "Alpha Wallet", List.of("AT")));
         when(client.availableMethods()).thenReturn(List.of(live(1, "z", List.of("AT")), live(2, "a", List.of("AT"))));
         assertThat(ids("AT")).containsExactly(2L, 1L);
+    }
+
+    private static PayopFeeMethodEntity cardFee(long id, String name, List<String> countries) {
+        return PayopFeeMethodEntity.manual(id, name, "cards_international", null, new BigDecimal("0.20"),
+                new BigDecimal("3.5"), countries, List.of("INR", "USD"), true, 9L, Instant.EPOCH);
+    }
+
+    @Test
+    @DisplayName("a method priced by hand is offered in Payop's countries for it; one Payop lists without a fee is not")
+    void pricedByHand() {
+        table.add(cardFee(900001, "Visa / Mastercard", List.of("IN")));
+        when(client.availableMethods()).thenReturn(List.of(
+                new PayopClient.AvailableMethod(900001, "Cards", "cards_international", List.of("INR", "USD"),
+                        List.of("IN", "US")),
+                new PayopClient.AvailableMethod(900002, "UPI via Payop", "ewallet", List.of("INR"), List.of("IN"))));
+
+        PayopMethodsService.Availability india = service.forCountry("IN");
+        assertThat(india.methods()).singleElement().satisfies(o -> {
+            assertThat(o.fee().getMethodId()).isEqualTo(900001L);
+            assertThat(o.card()).isTrue();
+        });
+    }
+
+    @Test
+    @DisplayName("Payop check: every method Payop lists for the country, priced or not, and which customers are offered")
+    void check() {
+        table.add(cardFee(900001, "Visa / Mastercard", List.of("IN")));
+        PayopFeeMethodEntity off = fee(381, "Bank", List.of("IN"));
+        off.change("Bank", "bank_transfer", "Asia", off.getFixedEur(), off.getPercent(), List.of("IN"), List.of("INR"),
+                false, 9L, Instant.EPOCH);
+        table.add(off);
+        when(client.availableMethods()).thenReturn(List.of(
+                new PayopClient.AvailableMethod(900001, "Cards", "cards_international", List.of("INR"), List.of("IN")),
+                new PayopClient.AvailableMethod(381, "Bank", "bank_transfer", List.of("INR"), List.of("IN")),
+                new PayopClient.AvailableMethod(900002, "Netbanking", "bank_transfer", List.of("INR"), List.of("IN")),
+                new PayopClient.AvailableMethod(5, "Sofort", "bank_transfer", List.of("EUR"), List.of("DE"))));
+
+        List<PayopMethodsService.Listed> india = service.check("IN");
+
+        assertThat(india).extracting(l -> l.live().id()).containsExactly(381L, 900001L, 900002L);
+        PayopMethodsService.Listed bank = india.get(0);
+        assertThat(bank.fee()).isNotNull();
+        assertThat(bank.offered()).as("priced, but switched off").isFalse();
+        assertThat(india.get(1).offered()).isTrue();
+        assertThat(india.get(1).card()).isTrue();
+        assertThat(india.get(2).fee()).as("Payop lists it; nothing prices it").isNull();
+        assertThat(india.get(2).offered()).isFalse();
     }
 }

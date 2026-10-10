@@ -18,6 +18,8 @@ public class PayopFeeAuditEntity {
 
     public static final String IMPORTED = "IMPORTED";
     public static final String UPDATED = "UPDATED";
+    /** A method an admin added by hand, outside the pricing sheet. */
+    public static final String ADDED = "ADDED";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

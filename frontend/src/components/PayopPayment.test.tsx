@@ -209,11 +209,25 @@ describe('the International tab', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'International' }))
   }
 
-  it('INR orders never see Payop: the placeholder, and no Payop request at all', async () => {
+  it('INR orders get Payop: India to start with, the method\'s fee only, and the card note under card methods', async () => {
+    api.post.mockResolvedValue({ ...OPTIONS, currency: 'INR', cards: true, methods: [
+      { methodId: 900001, name: 'Visa / Mastercard', type: 'cards_international', feeMinor: 2203, feeFormatted: '₹22.03',
+        totalMinor: 11203, totalFormatted: '₹112.03', token: 'sealed-900001', card: true }] })
     await openInternational('INR')
-    expect(screen.getByText('International payment options are coming soon')).toBeInTheDocument()
-    expect(api.post).not.toHaveBeenCalled()
-    expect(api.get).not.toHaveBeenCalledWith('/api/v1/payments/payop/country')
+
+    expect(await screen.findByRole('button', { name: /Visa \/ Mastercard/ })).toBeInTheDocument()
+    expect(api.post).toHaveBeenCalledWith('/api/v1/payments/payop/options',
+      { order: 'GFS-26-EUR00001', email: 'buyer@example.com', country: 'IN' })
+    expect(screen.getByTestId('card-note')).toHaveTextContent('Your card must allow international payments.')
+    await userEvent.click(screen.getByRole('button', { name: /Visa \/ Mastercard/ }))
+    expect(summary().getByTestId('line-PAYMENT_FEE')).toHaveTextContent('₹22.03')
+    expect(summary().queryByTestId('line-GATEWAY_FEE')).toBeNull()
+    expect(summary().getByTestId('total')).toHaveTextContent('₹112.03')
+
+    // Another country: no card note there.
+    api.post.mockResolvedValue(OPTIONS)
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'DE')
+    await waitFor(() => expect(screen.queryByTestId('card-note')).toBeNull())
   })
 
   it('other currencies get Payop when it is on', async () => {
@@ -242,7 +256,7 @@ describe('the International tab', () => {
     expect(summary().getByTestId('total')).toHaveTextContent('€92.25')
   })
 
-  it('an order not in INR, with Payop off: says it is temporarily unavailable -- never hidden as "coming soon"',
+  it('Payop off: says it is temporarily unavailable, whatever the currency',
     async () => {
       api.post.mockRejectedValue(new ApiError(404, 'not_found'))
       await openInternational('EUR')

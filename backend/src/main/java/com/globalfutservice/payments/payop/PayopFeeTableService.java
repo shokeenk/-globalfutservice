@@ -27,9 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
  * says, kept in the database rather than in code.
  *
  * <p>Filled by uploading the sheet (never committed); afterwards an admin can correct a single
- * method by hand. Every change, imported or edited, bumps the method's version and leaves an
- * audit row with the before and after, so the fee on any invoice can be traced to the exact
- * row it was worked out from.
+ * method by hand, or add one the sheet does not list -- a card method, say. Every change,
+ * imported or by hand, bumps the method's version and leaves an audit row with the before and
+ * after, so the fee on any invoice can be traced to the exact row it was worked out from. A
+ * method added by hand is kept when the sheet is imported again, unless the sheet lists it.
  */
 @Service
 public class PayopFeeTableService {
@@ -38,17 +39,27 @@ public class PayopFeeTableService {
 
     private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
     private static final Pattern CURRENCY = Pattern.compile("[A-Z]{3}");
+    /** Payop's own method types: cards_international, bank_transfer, ewallet... */
+    private static final Pattern TYPE = Pattern.compile("[a-z][a-z0-9_]{1,39}");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     /** A sanity ceiling on the fixed part; the sheet's largest is a few EUR. */
     private static final BigDecimal MAX_FIXED_EUR = BigDecimal.valueOf(100);
 
-    /** What an import did, for the admin who ran it. */
-    public record ImportResult(int methods, int added, int changed, int unchanged, int deactivated) {
+    /**
+     * What an import did, for the admin who ran it. {@code keptManual}: methods added by hand
+     * that the sheet does not list, left on as they were.
+     */
+    public record ImportResult(int methods, int added, int changed, int unchanged, int deactivated, int keptManual) {
     }
 
     /** An admin's correction to one method. Name, type and region stay as imported. */
     public record Edit(BigDecimal fixedEur, BigDecimal percent, List<String> countries, List<String> currencies,
                        boolean active) {
+    }
+
+    /** One method priced by hand, in full: added when the table has no such ID, else corrected. */
+    public record Manual(long methodId, String name, String type, String region, BigDecimal fixedEur,
+                         BigDecimal percent, List<String> countries, List<String> currencies, boolean active) {
     }
 
     private final PayopFeeMethodRepository methods;
@@ -94,19 +105,24 @@ public class PayopFeeTableService {
                         m.fixedEur(), m.percent(), m.countries(), m.currencies(), actorId, now));
                 record(row, PayopFeeAuditEntity.IMPORTED, null, actorId, now);
                 added++;
-            } else if (row.isActive() && same(row, m)) {
+            } else if (row.isActive() && !row.isManual() && same(row, m)) {
                 unchanged++;
             } else {
                 String before = snapshot(row);
                 row.change(m.name(), m.type(), m.region(), m.fixedEur(), m.percent(), m.countries(), m.currencies(),
                         true, actorId, now);
+                row.takenBySheet();
                 record(row, PayopFeeAuditEntity.IMPORTED, before, actorId, now);
                 changed++;
             }
         }
         int deactivated = 0;
+        int keptManual = 0;
         for (PayopFeeMethodEntity gone : held.values()) {
-            if (gone.isActive()) {
+            if (gone.isManual()) {
+                // Priced by hand because the sheet does not have it: still not in the sheet is no news.
+                keptManual++;
+            } else if (gone.isActive()) {
                 String before = snapshot(gone);
                 gone.change(gone.getName(), gone.getMethodType(), gone.getRegion(), gone.getFixedEur(),
                         gone.getPercent(), gone.countryList(), gone.currencyList(), false, actorId, now);
@@ -114,9 +130,52 @@ public class PayopFeeTableService {
                 deactivated++;
             }
         }
-        log.info("Payop fee table imported: {} methods, {} added, {} changed, {} unchanged, {} switched off",
-                sheet.size(), added, changed, unchanged, deactivated);
-        return new ImportResult(sheet.size(), added, changed, unchanged, deactivated);
+        log.info("Payop fee table imported: {} methods, {} added, {} changed, {} unchanged, {} switched off, "
+                        + "{} priced by hand kept", sheet.size(), added, changed, unchanged, deactivated, keptManual);
+        return new ImportResult(sheet.size(), added, changed, unchanged, deactivated, keptManual);
+    }
+
+    /**
+     * One method priced by hand: added -- marked MANUAL, so a later import of the sheet keeps
+     * it -- or, for an ID the table has, corrected in full, name and type included. The same
+     * checks as the import and the edit, versioned and audited the same way.
+     */
+    @Transactional
+    public PayopFeeMethodEntity saveManual(Manual m, Long actorId) {
+        if (m.methodId() <= 0) {
+            throw new ApiExceptions.BadRequestException("The method ID is Payop's number for the method: a positive "
+                    + "whole number");
+        }
+        String name = m.name() == null ? "" : m.name().trim();
+        if (name.isEmpty() || name.length() > 120) {
+            throw new ApiExceptions.BadRequestException("A method needs a name, up to 120 characters");
+        }
+        String type = m.type() == null ? "" : m.type().trim().toLowerCase(Locale.ROOT);
+        if (!TYPE.matcher(type).matches()) {
+            throw new ApiExceptions.BadRequestException("The type is Payop's, e.g. cards_international or "
+                    + "bank_transfer: lower-case letters, digits and underscores");
+        }
+        String region = m.region() == null || m.region().isBlank() ? null : m.region().trim();
+        BigDecimal fixed = fixedEur(m.fixedEur());
+        BigDecimal percent = percent(m.percent());
+        List<String> countries = countries(m.countries());
+        List<String> currencies = currencies(m.currencies());
+        Instant now = clock.instant();
+        java.util.Optional<PayopFeeMethodEntity> held = methods.findById(m.methodId());
+        if (held.isEmpty()) {
+            PayopFeeMethodEntity row = methods.save(PayopFeeMethodEntity.manual(m.methodId(), name, type, region, fixed,
+                    percent, countries, currencies, m.active(), actorId, now));
+            record(row, PayopFeeAuditEntity.ADDED, null, actorId, now);
+            log.info("Payop method {} ({}) priced by hand by account {}", m.methodId(), type, actorId);
+            return row;
+        }
+        PayopFeeMethodEntity row = held.get();
+        String before = snapshot(row);
+        row.change(name, type, region, fixed, percent, countries, currencies, m.active(), actorId, now);
+        record(row, PayopFeeAuditEntity.UPDATED, before, actorId, now);
+        log.info("Payop method {} corrected by hand by account {}: now version {}", m.methodId(), actorId,
+                row.getVersion());
+        return row;
     }
 
     /** An admin's correction to one method: checked, versioned and audited. */
@@ -124,16 +183,8 @@ public class PayopFeeTableService {
     public PayopFeeMethodEntity update(long methodId, Edit edit, Long actorId) {
         PayopFeeMethodEntity row = methods.findById(methodId)
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("No Payop method " + methodId + " in the fee table"));
-        BigDecimal fixed = edit.fixedEur();
-        if (fixed == null || fixed.signum() < 0 || fixed.compareTo(MAX_FIXED_EUR) > 0
-                || fixed.stripTrailingZeros().scale() > 2) {
-            throw new ApiExceptions.BadRequestException("The fixed fee must be between 0 and 100 EUR, to the cent");
-        }
-        BigDecimal percent = edit.percent();
-        if (percent == null || percent.signum() < 0 || percent.compareTo(HUNDRED) >= 0
-                || percent.stripTrailingZeros().scale() > 3) {
-            throw new ApiExceptions.BadRequestException("The percentage must be at least 0 and under 100, to 3 decimals");
-        }
+        BigDecimal fixed = fixedEur(edit.fixedEur());
+        BigDecimal percent = percent(edit.percent());
         List<String> countries = countries(edit.countries());
         List<String> currencies = currencies(edit.currencies());
         String before = snapshot(row);
@@ -162,6 +213,22 @@ public class PayopFeeTableService {
                 && java.util.Objects.equals(row.getRegion(), m.region())
                 && row.getFixedEur().compareTo(m.fixedEur()) == 0 && row.getPercent().compareTo(m.percent()) == 0
                 && row.countryList().equals(m.countries()) && row.currencyList().equals(m.currencies());
+    }
+
+    private static BigDecimal fixedEur(BigDecimal fixed) {
+        if (fixed == null || fixed.signum() < 0 || fixed.compareTo(MAX_FIXED_EUR) > 0
+                || fixed.stripTrailingZeros().scale() > 2) {
+            throw new ApiExceptions.BadRequestException("The fixed fee must be between 0 and 100 EUR, to the cent");
+        }
+        return fixed;
+    }
+
+    private static BigDecimal percent(BigDecimal percent) {
+        if (percent == null || percent.signum() < 0 || percent.compareTo(HUNDRED) >= 0
+                || percent.stripTrailingZeros().scale() > 3) {
+            throw new ApiExceptions.BadRequestException("The percentage must be at least 0 and under 100, to 3 decimals");
+        }
+        return percent;
     }
 
     private static List<String> countries(List<String> in) {
@@ -216,6 +283,7 @@ public class PayopFeeTableService {
         s.put("countries", row.countryList());
         s.put("currencies", row.currencyList());
         s.put("active", row.isActive());
+        s.put("source", row.getSource());
         s.put("version", row.getVersion());
         try {
             return json.writeValueAsString(s);
