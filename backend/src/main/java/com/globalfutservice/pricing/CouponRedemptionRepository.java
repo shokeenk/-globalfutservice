@@ -12,4 +12,7 @@ public interface CouponRedemptionRepository extends JpaRepository<CouponRedempti
     Optional<CouponRedemptionEntity> findByOrderId(Long orderId);
 
     boolean existsByOrderId(Long orderId);
+
+    /** Whether any order holds a redemption of this coupon. */
+    boolean existsByCouponId(Long couponId);
 }

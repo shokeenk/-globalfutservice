@@ -67,7 +67,7 @@ public class CouponService {
         if (rawCode == null || rawCode.isBlank()) {
             return Optional.empty();
         }
-        return coupons.findByCode(Coupon.normalise(rawCode))
+        return coupons.findByCodeAndDeletedAtIsNull(Coupon.normalise(rawCode))
                 .filter(c -> usableBy(c, accountId, subtotal).isEmpty())
                 .map(c -> new Resolved(c.getId(), c.getCode(), c.getDiscountBps()));
     }
@@ -84,7 +84,7 @@ public class CouponService {
         if (rawCode == null || rawCode.isBlank()) {
             return Optional.empty();
         }
-        Optional<CouponEntity> found = coupons.findByCode(Coupon.normalise(rawCode));
+        Optional<CouponEntity> found = coupons.findByCodeAndDeletedAtIsNull(Coupon.normalise(rawCode));
         if (found.isEmpty()) {
             return Optional.of("That code is not valid.");
         }
@@ -126,7 +126,7 @@ public class CouponService {
     /** The id behind a code, for the order path which already knows the code applies. */
     @Transactional(readOnly = true)
     public Optional<Long> resolveIdFor(String rawCode) {
-        return coupons.findByCode(Coupon.normalise(rawCode)).map(CouponEntity::getId);
+        return coupons.findByCodeAndDeletedAtIsNull(Coupon.normalise(rawCode)).map(CouponEntity::getId);
     }
 
     /**

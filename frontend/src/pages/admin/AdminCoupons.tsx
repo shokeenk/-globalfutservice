@@ -4,9 +4,11 @@ import {
 } from '../../components/ui'
 import { ApiError, api } from '../../lib/api'
 import { AdminPage } from './shell/AdminPage'
+import { Modal } from './ui/Modal'
 import { dateTime } from '../../lib/format'
 import { useSeo } from '../../lib/seo'
-import type { Coupon } from '../../lib/types'
+import type { Coupon, DeletedCoupon } from '../../lib/types'
+import { useAuth } from '../../state/AuthContext'
 
 /** The ceiling, mirrored from Coupon.MAX_DISCOUNT_BPS. The server refuses anything above. */
 const MAX_PERCENT = 20
@@ -18,12 +20,25 @@ const MAX_PERCENT = 20
  * — so the common mistakes are caught before a round trip. None of it is trusted: the
  * server re-checks everything, and the database refuses an over-ceiling row even if both
  * layers above it are wrong. This is the convenience, not the control.
+ *
+ * <p>An admin can delete a coupon. One no order has used is gone; one that orders have
+ * used is kept for them -- their discount and frozen prices stay as they are -- and is
+ * hidden here and refused at checkout. Either way its code can be issued again. Deleted
+ * coupons can be looked at, read-only, under "Show deleted coupons".
  */
 export default function AdminCoupons() {
   useSeo({ title: 'Coupons', noindex: true })
 
+  const { account } = useAuth()
+  const isAdmin = account?.role === 'ADMIN'
   const [coupons, setCoupons] = useState<Coupon[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<Coupon | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [showDeleted, setShowDeleted] = useState(false)
+  const [deletedVersion, setDeletedVersion] = useState(0)
 
   const load = useCallback(async () => {
     try {
@@ -39,6 +54,31 @@ export default function AdminCoupons() {
     void load()
   }, [load])
 
+  const closeConfirm = useCallback(() => {
+    setConfirming(null)
+    setDeleteError(null)
+  }, [])
+
+  async function confirmDelete() {
+    if (!confirming || deleting) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const deleted = await api.del<{ id: number; code: string; outcome: DeletedCoupon['outcome'] }>(
+        `/api/v1/admin/coupons/${confirming.id}`)
+      setNotice(deleted.outcome === 'REMOVED'
+        ? `${deleted.code} deleted. No order had used it.`
+        : `${deleted.code} deleted. Orders that used it keep their discount.`)
+      setConfirming(null)
+      setDeletedVersion((n) => n + 1)
+      await load()
+    } catch (e) {
+      setDeleteError(e instanceof ApiError ? e.message : 'Could not delete that coupon.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <>
       <AdminPage
@@ -47,6 +87,7 @@ export default function AdminCoupons() {
         description="Discount codes customers can apply at checkout."
       >
       {error && <Alert tone="warn">{error}</Alert>}
+      {notice && <div className="mb-5"><Alert tone="ok">{notice}</Alert></div>}
 
       <CreateCoupon onCreated={load} />
 
@@ -78,11 +119,34 @@ export default function AdminCoupons() {
             </thead>
             <tbody className="divide-y divide-ink-400">
               {coupons.map((coupon) => (
-                <CouponRow key={coupon.id} coupon={coupon} onChanged={load} />
+                <CouponRow key={coupon.id} coupon={coupon} onChanged={load}
+                           onDelete={isAdmin ? () => { setNotice(null); setConfirming(coupon) } : undefined} />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      <label className="mt-6 inline-flex cursor-pointer items-center gap-2 text-[13px] text-chalk-muted">
+        <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)}
+               className="h-4 w-4 accent-brand-500" />
+        Show deleted coupons
+      </label>
+      {showDeleted && <DeletedCoupons version={deletedVersion} />}
+
+      {confirming && (
+        <Modal title={`Delete coupon ${confirming.code}?`} onClose={closeConfirm}>
+          <p className="text-[13.5px] leading-relaxed text-chalk-muted">
+            Customers will no longer be able to use it. Orders that already used it are not affected.
+          </p>
+          {deleteError && <div className="mt-4"><Alert tone="warn">{deleteError}</Alert></div>}
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={closeConfirm} disabled={deleting}>Cancel</Button>
+            <Button size="sm" onClick={() => void confirmDelete()} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
+        </Modal>
       )}
       </AdminPage>
     </>
@@ -249,7 +313,12 @@ function CreateCoupon({ onCreated }: { onCreated: () => void }) {
 
 /* ---------------------------------------------------------------------- row ------- */
 
-function CouponRow({ coupon, onChanged }: { coupon: Coupon; onChanged: () => void }) {
+function CouponRow({ coupon, onChanged, onDelete }: {
+  coupon: Coupon
+  onChanged: () => void
+  /** Admins only: asks to delete it. */
+  onDelete?: () => void
+}) {
   const [busy, setBusy] = useState(false)
 
   async function toggle() {
@@ -299,7 +368,68 @@ function CouponRow({ coupon, onChanged }: { coupon: Coupon; onChanged: () => voi
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => void toggle()}>
           {coupon.active ? 'Switch off' : 'Switch on'}
         </Button>
+        {onDelete && (
+          <Button variant="ghost" size="sm" disabled={busy} onClick={onDelete}
+                  aria-label={`Delete coupon ${coupon.code}`}>
+            Delete
+          </Button>
+        )}
       </td>
     </tr>
+  )
+}
+
+/* ------------------------------------------------------------------ deleted ------- */
+
+/**
+ * Coupons that were deleted, read-only: what each was, what deleting did to it, and who did
+ * it when. Kept ones are the codes past orders still show.
+ */
+function DeletedCoupons({ version }: { version: number }) {
+  const [rows, setRows] = useState<DeletedCoupon[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    api.get<DeletedCoupon[]>('/api/v1/admin/coupons/deleted')
+      .then((found) => { if (live) { setRows(found); setError(null) } })
+      .catch((e) => { if (live) setError(e instanceof ApiError ? e.message : 'Could not load deleted coupons.') })
+    return () => { live = false }
+  }, [version])
+
+  if (error) return <div className="mt-4"><Alert tone="warn">{error}</Alert></div>
+  if (!rows) return <Skeleton className="mt-4 h-32 w-full" />
+  if (rows.length === 0) {
+    return <p className="mt-4 text-[13px] text-chalk-faint">No coupon has been deleted.</p>
+  }
+  return (
+    <div className="surface mt-4 overflow-x-auto" data-testid="deleted-coupons">
+      <table className="w-full min-w-[760px] text-left text-sm">
+        <thead className="border-b border-ink-400 bg-ink-500">
+          <tr className="text-[11.5px] uppercase tracking-wider text-chalk-faint">
+            <th scope="col" className="px-5 py-3.5 font-semibold">Code</th>
+            <th scope="col" className="px-5 py-3.5 font-semibold">Off</th>
+            <th scope="col" className="px-5 py-3.5 font-semibold">Used</th>
+            <th scope="col" className="px-5 py-3.5 font-semibold">Deleted</th>
+            <th scope="col" className="px-5 py-3.5 font-semibold">By</th>
+            <th scope="col" className="px-5 py-3.5 font-semibold">Kept</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ink-400">
+          {rows.map((d) => (
+            <tr key={`${d.couponId}-${d.deletedAt}`}>
+              <td className="tnum px-5 py-3.5 font-semibold text-chalk-muted">{d.code}</td>
+              <td className="tnum px-5 py-3.5 text-chalk-muted">{d.discountPercent}%</td>
+              <td className="tnum px-5 py-3.5 text-chalk-muted">{d.redeemedCount}</td>
+              <td className="px-5 py-3.5 text-[12.5px] text-chalk-muted">{dateTime(d.deletedAt)}</td>
+              <td className="px-5 py-3.5 text-[12.5px] text-chalk-muted">{d.deletedBy ?? '—'}</td>
+              <td className="px-5 py-3.5 text-[12.5px] text-chalk-muted">
+                {d.outcome === 'HIDDEN' ? 'Yes, for the orders that used it' : 'No: never used, removed'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

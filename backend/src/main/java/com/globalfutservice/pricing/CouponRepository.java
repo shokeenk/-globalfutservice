@@ -13,11 +13,16 @@ import java.util.Optional;
 
 public interface CouponRepository extends JpaRepository<CouponEntity, Long> {
 
-    Optional<CouponEntity> findByCode(String code);
+    /**
+     * The coupon a code names now. A deleted coupon names nothing: its code is not valid
+     * at checkout, and may belong to a newer coupon.
+     */
+    Optional<CouponEntity> findByCodeAndDeletedAtIsNull(String code);
 
-    boolean existsByCode(String code);
+    boolean existsByCodeAndDeletedAtIsNull(String code);
 
-    Page<CouponEntity> findAllByOrderByCreatedAtDesc(Pageable pageable);
+    /** The admin's list: every coupon not deleted, newest first. */
+    Page<CouponEntity> findAllByDeletedAtIsNullOrderByCreatedAtDesc(Pageable pageable);
 
     /**
      * Claim one redemption, atomically.
@@ -39,6 +44,7 @@ public interface CouponRepository extends JpaRepository<CouponEntity, Long> {
                set c.redeemedCount = c.redeemedCount + 1
              where c.id = :id
                and c.active = true
+               and c.deletedAt is null
                and (c.maxRedemptions is null or c.redeemedCount < c.maxRedemptions)
             """)
     int claimRedemption(@Param("id") Long id);

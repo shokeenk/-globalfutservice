@@ -35,6 +35,12 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>,
 
     boolean existsByQuoteId(String quoteId);
 
+    /**
+     * Whether an order placed since {@code since} carries this coupon code: one whose
+     * redemption was handed back (abandoned, refunded) still shows the discount it had.
+     */
+    boolean existsByCouponCodeAndCreatedAtGreaterThanEqual(String couponCode, java.time.Instant since);
+
     Page<OrderEntity> findByAccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);
 
     /**

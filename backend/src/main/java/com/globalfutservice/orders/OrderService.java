@@ -232,14 +232,18 @@ public class OrderService {
             // cannot be captured. Bind the ids first.
             final Long orderId = order.getId();
             final Long buyerId = account == null ? null : account.getId();
-            couponService.resolveIdFor(quote.couponCode()).ifPresent(couponId ->
-                    couponService.redeem(
-                            couponId,
-                            quote.couponCode(),
-                            orderId,
-                            buyerId,
-                            discountBpsOf(quote),
-                            Math.abs(discountMinorOf(quote))));
+            // Deleted since the quote was priced: the discount no longer exists. Refused as a
+            // stale price, so the checkout prices again -- and says the code is not valid.
+            Long couponId = couponService.resolveIdFor(quote.couponCode()).orElseThrow(() ->
+                    new ApiExceptions.ConflictException("quote_expired",
+                            "That code can no longer be used. Check the new price and try again."));
+            couponService.redeem(
+                    couponId,
+                    quote.couponCode(),
+                    orderId,
+                    buyerId,
+                    discountBpsOf(quote),
+                    Math.abs(discountMinorOf(quote)));
         }
 
         // Debit points inside the same transaction, re-checking the live balance. The
