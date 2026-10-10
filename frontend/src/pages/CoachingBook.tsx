@@ -20,7 +20,8 @@ import { ApiError, api } from '../lib/api'
 import { SupportCard } from '../components/support/SupportCard'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { useSeo } from '../lib/seo'
-import { offersLocalMethods, paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
+import { paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
+import { internationalCopy, useInternationalOffer } from '../components/internationalOffer'
 import { ScheduleStep, formatSlot, type ChosenSlot } from './coaching/ScheduleStep'
 import type {
   CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, QuoteLine, SignedQuote,
@@ -161,6 +162,7 @@ export default function CoachingBook() {
    * which decides what International holds.
    */
   const orderCurrency = quote?.currency ?? catalog?.currency
+  const offer = useInternationalOffer(orderCurrency)
   const payChoices: { key: PayChoice; title: string; body: string; icon: CoachIconName }[] = useMemo(() => {
     if (methods === null) return []
     const copy: Record<PayChoice, { title: string; body: string; icon: CoachIconName }> = {
@@ -168,14 +170,10 @@ export default function CoachingBook() {
       UPI: { title: b.payUpiTitle, body: b.payUpiBody, icon: 'qr' },
       PAYPAL: { title: b.payPaypalTitle, body: b.payPaypalBody, icon: 'globe' },
       CRYPTO: { title: b.payCryptoTitle, body: b.payCryptoBody, icon: 'lock' },
-      INTERNATIONAL: {
-        title: t.order.payTabInternational,
-        body: offersLocalMethods(orderCurrency) ? t.order.payIntlChoiceLocal : t.order.payIntlTitle,
-        icon: 'bank',
-      },
+      INTERNATIONAL: { ...internationalCopy(t, offer.cards), icon: 'bank' },
     }
     return paymentChoices(methods, !!policy?.onlinePaymentsEnabled).map((key) => ({ key, ...copy[key] }))
-  }, [policy, methods, b, t.order, orderCurrency])
+  }, [policy, methods, b, t, offer.cards])
 
   useEffect(() => {
     const first = payChoices[0]
@@ -769,7 +767,7 @@ function ReviewStep({
    * International pays through Payop, which never carries the 2.5% card fee: its method --
    * and with it the fee and the total -- is chosen on the next step.
    */
-  const payop = choice === 'INTERNATIONAL' && !!quote && offersLocalMethods(quote.currency)
+  const payop = choice === 'INTERNATIONAL' && !!quote
 
   return (
     <div>

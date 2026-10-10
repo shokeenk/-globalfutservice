@@ -42,6 +42,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>From the moment an invoice is opened, the order reads as that payment (its lines and
  * total, for the customer and for staff) for as long as the invoice can be paid.
  *
+ * <p>Offered for an order in any currency, INR included: the invoice is in the order's
+ * currency and Payop converts it for the method.
+ *
  * <p>One active attempt per order, held by a unique index. Asking again for the same method
  * hands back the invoice already made, so a double click or a retry never creates a second
  * charge. Choosing another method replaces the attempt: Payop cannot cancel an invoice, so
@@ -67,15 +70,23 @@ public class PayopCheckoutService {
     private static final List<PayopInvoiceEntity.Status> ACTIVE =
             List.of(PayopInvoiceEntity.Status.CREATING, PayopInvoiceEntity.Status.OPEN);
 
-    /** One method the customer can pick, priced for this order. */
-    public record MethodOption(long methodId, String name, String type, long feeMinor, long totalMinor) {
+    /** One method the customer can pick, priced for this order. {@code card}: it takes cards. */
+    public record MethodOption(long methodId, String name, String type, long feeMinor, long totalMinor,
+                               boolean card) {
+        public MethodOption(long methodId, String name, String type, long feeMinor, long totalMinor) {
+            this(methodId, name, type, feeMinor, totalMinor, type != null && type.toLowerCase(Locale.ROOT).contains("card"));
+        }
     }
 
     /**
      * What the customer is offered. {@code unavailable} names why there is nothing to pick
-     * ("NO_RATE", "PAYOP_UNAVAILABLE"), or is null.
+     * ("NO_RATE", "PAYOP_UNAVAILABLE"), or is null. {@code cards}: at least one method takes cards.
      */
-    public record Options(Currency currency, long netMinor, List<MethodOption> methods, String unavailable) {
+    public record Options(Currency currency, long netMinor, List<MethodOption> methods, String unavailable,
+                          boolean cards) {
+        public Options(Currency currency, long netMinor, List<MethodOption> methods, String unavailable) {
+            this(currency, netMinor, methods, unavailable, methods.stream().anyMatch(MethodOption::card));
+        }
     }
 
     /** A payment ready for the customer: where to send them. */
@@ -138,9 +149,21 @@ public class PayopCheckoutService {
         for (PayopMethodsService.Offered m : available.methods()) {
             PayopFeeCalculator.FeeQuote fee = price(net, currency, m.fee(), rate.get());
             out.add(new MethodOption(m.fee().getMethodId(), m.fee().getName(), m.fee().getMethodType(),
-                    fee.feeMinor(), fee.totalMinor()));
+                    fee.feeMinor(), fee.totalMinor(), m.card()));
         }
         return new Options(currency, net, out, null);
+    }
+
+    /**
+     * Whether a card method is offered in {@code country}, for naming the option before any
+     * order is priced ("International / Cards"). False when Payop is off or cannot be asked.
+     */
+    public boolean cardsOffered(String country) {
+        if (!props.payop().enabled()) {
+            return false;
+        }
+        PayopMethodsService.Availability available = methods.forCountry(country(country));
+        return !available.unavailable() && available.methods().stream().anyMatch(PayopMethodsService.Offered::card);
     }
 
     /* ------------------------------------------------------------------- start --- */
@@ -425,10 +448,6 @@ public class PayopCheckoutService {
     private void requirePayable(OrderEntity order) {
         if (!props.payop().enabled()) {
             throw new ApiExceptions.NotFoundException("This payment option is not available.");
-        }
-        if (order.getCurrency() == Currency.INR) {
-            throw new ApiExceptions.BadRequestException("payop_not_for_inr",
-                    "This payment option is for orders in other currencies.");
         }
         if (order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
             throw new ApiExceptions.ConflictException("payment_not_pending",

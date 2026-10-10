@@ -165,12 +165,14 @@ class ResumePaymentServiceTest {
         }
 
         @Test
-        @DisplayName("INR orders are never offered Payop")
-        void inrNoPayop() {
+        @DisplayName("Payop is offered for an order in any currency, INR included, whenever it is on")
+        void payopForEveryCurrency() {
             OrderEntity inr = order(2, Sku.TRADING_SERVICE, DeliveryMethod.PLAYER_AUCTION, Currency.INR,
                     OrderStatus.AWAITING_PAYMENT);
-            assertThat(service.view(inr, "en").payopOffered()).isFalse();
+            assertThat(service.view(inr, "en").payopOffered()).isTrue();
             assertThat(service.view(eur(), "en").payopOffered()).isTrue();
+            // UPI on the same INR order keeps its 2.5% card fee.
+            assertThat(codes(service.view(inr, "en").manual())).contains("GATEWAY_FEE");
         }
 
         @Test

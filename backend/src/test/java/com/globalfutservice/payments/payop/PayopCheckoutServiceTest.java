@@ -147,16 +147,52 @@ class PayopCheckoutServiceTest {
             assertThat(totalFor(usd, 381)).isEqualTo(9411);
         }
 
+        /** India, with a card method priced by hand: 0.20 EUR + 3.5%. */
+        private void indiaWithCards() {
+            when(fx.eurTo(Currency.INR)).thenReturn(Optional.of(
+                    new FxRateService.RateUsed(new BigDecimal("90.50"), "ECB", LocalDate.of(2026, 10, 2))));
+            when(orders.findById(9L)).thenReturn(Optional.of(inr));
+            PayopFeeMethodEntity cards = PayopFeeMethodEntity.manual(900001, "Visa / Mastercard", "cards_international",
+                    null, new BigDecimal("0.20"), new BigDecimal("3.5"), List.of("IN"), List.of("INR", "USD"), true, 9L,
+                    Instant.EPOCH);
+            when(methods.forCountry("IN")).thenReturn(new PayopMethodsService.Availability(List.of(
+                    new PayopMethodsService.Offered(cards, new PayopClient.AvailableMethod(900001, "Cards",
+                            "cards_international", List.of("INR"), List.of("IN")))), false));
+        }
+
         @Test
-        @DisplayName("INR orders never see Payop")
-        void notForInr() {
-            assertThatThrownBy(() -> checkout.options(inr, "DE"))
-                    .isInstanceOfSatisfying(ApiExceptions.BadRequestException.class,
-                            e -> assertThat(e.code()).isEqualTo("payop_not_for_inr"));
-            assertThatThrownBy(() -> checkout.start(inr, 381, "DE", 9407, "en"))
-                    .isInstanceOf(ApiExceptions.BadRequestException.class);
-            verify(methods, never()).forCountry(anyString());
-            verify(client, never()).createInvoice(any());
+        @DisplayName("INR orders are offered Payop: the method's fee only, never the 2.5%, invoiced in INR")
+        void inr() {
+            indiaWithCards();
+            PayopCheckoutService.Options o = checkout.options(inr, "IN");
+
+            assertThat(o.currency()).isEqualTo(Currency.INR);
+            assertThat(o.netMinor()).as("₹92.25 by UPI, less its ₹2.25 card fee").isEqualTo(9000);
+            assertThat(o.cards()).isTrue();
+            // 0.20 EUR at 90.50 = ₹18.10; (₹90.00 + ₹18.10) / 0.965 = ₹112.0207 -> ₹112.03
+            assertThat(o.methods()).singleElement().satisfies(m -> {
+                assertThat(m.card()).isTrue();
+                assertThat(m.feeMinor()).isEqualTo(2203);
+                assertThat(m.totalMinor()).isEqualTo(11203).isEqualTo(9000 + 2203);
+            });
+
+            checkout.start(inr, 900001, "IN", 11203, "en");
+            ArgumentCaptor<PayopClient.InvoiceRequest> sent = ArgumentCaptor.forClass(PayopClient.InvoiceRequest.class);
+            verify(client).createInvoice(sent.capture());
+            assertThat(sent.getValue().currency()).isEqualTo(Currency.INR);
+            assertThat(sent.getValue().amount()).isEqualTo("112.03");
+            // UPI on the same order is still paid at its own total, 2.5% included.
+            assertThat(inr.getTotalMinor()).isEqualTo(9225);
+        }
+
+        @Test
+        @DisplayName("named for what is offered: cards where a card method is offered, not where none is, nor when off")
+        void cardsOffered() {
+            indiaWithCards();
+            assertThat(checkout.cardsOffered("IN")).isTrue();
+            assertThat(checkout.cardsOffered("de")).as("bank transfer and a wallet").isFalse();
+            enabled = false;
+            assertThat(checkout.cardsOffered("IN")).isFalse();
         }
 
         @Test

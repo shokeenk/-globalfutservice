@@ -19,6 +19,10 @@ import type { Tone } from './ui/status'
  * if Payop's answer passes every check an IPN's would. Changing a fee, loading a pricing
  * sheet, entering an exchange rate and accepting a payment by hand are an admin's, as the
  * endpoints behind them are; for an operator those controls are simply not drawn.
+ *
+ * <p>An admin can also price one method by hand -- the card method the sheet does not list --
+ * and run the Payop check: every method Payop lists for a country right now, and whether
+ * customers there are offered it.
  */
 
 interface Rate { currency: string; rate: number | null; source: string | null; date: string | null; current: boolean }
@@ -46,6 +50,29 @@ interface Fee {
   active: boolean
   version: number
   updatedAt: string
+  /** SHEET: from the pricing sheet. MANUAL: priced by hand; an import keeps it. */
+  source?: 'SHEET' | 'MANUAL'
+}
+
+/** One method Payop lists for the country checked, with its fee row if priced. */
+interface LiveMethod {
+  methodId: number
+  title: string | null
+  type: string | null
+  currencies: string[]
+  countries: string[]
+  card: boolean
+  fee: Fee | null
+  offered: boolean
+}
+
+/** What the "Add a method" form starts from: blank, or a method Payop lists without a fee. */
+interface ManualDraft {
+  methodId: string
+  name: string
+  type: string
+  countries: string
+  currencies: string
 }
 
 interface Invoice {
@@ -68,9 +95,11 @@ interface Rejected { payload: string; receivedAt: string }
 
 interface Audit { methodId: number; version: number; action: string; before: string | null; after: string; at: string }
 
-interface ImportResult { methods: number; added: number; changed: number; unchanged: number; deactivated: number }
+interface ImportResult {
+  methods: number; added: number; changed: number; unchanged: number; deactivated: number; keptManual?: number
+}
 
-type View = 'payments' | 'refused' | 'fees' | 'rates'
+type View = 'payments' | 'refused' | 'fees' | 'rates' | 'check'
 
 const STATUS_TONE: Record<string, Tone> = {
   PAID: 'green', OPEN: 'blue', CREATING: 'blue', REVIEW: 'amber', DUPLICATE: 'red', FAILED: 'grey', EXPIRED: 'grey',
@@ -142,6 +171,7 @@ export default function AdminPayop() {
             { key: 'refused', label: 'Refused notifications', count: null },
             { key: 'fees', label: 'Fee table', count: overview?.methods ?? null },
             { key: 'rates', label: 'Exchange rates', count: null },
+            ...(isAdmin ? [{ key: 'check', label: 'Payop check', count: null }] : []),
           ]}
         />
       </div>
@@ -151,6 +181,7 @@ export default function AdminPayop() {
         {view === 'refused' && <RefusedNotifications />}
         {view === 'fees' && <Fees isAdmin={isAdmin} say={say} onChanged={loadOverview} />}
         {view === 'rates' && <Rates isAdmin={isAdmin} say={say} onChanged={loadOverview} />}
+        {view === 'check' && isAdmin && <PayopCheck say={say} onChanged={loadOverview} />}
       </div>
     </AdminPage>
   )
@@ -392,6 +423,7 @@ function Fees({ isAdmin, say, onChanged }: {
   const [filter, setFilter] = useState('')
   const [editing, setEditing] = useState<Fee | null>(null)
   const [importing, setImporting] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [history, setHistory] = useState<Audit[] | null>(null)
 
   const load = useCallback(() => {
@@ -417,6 +449,7 @@ function Fees({ isAdmin, say, onChanged }: {
           <div className="flex gap-2">
             <AdminButton size="sm" onClick={() => api.get<Audit[]>('/api/v1/admin/payop/fees/audit').then(setHistory)
               .catch(() => say('error', 'The change history did not load.'))}>Change history</AdminButton>
+            {isAdmin && <AdminButton size="sm" onClick={() => setAdding(true)}>Add a method</AdminButton>}
             {isAdmin && <AdminButton size="sm" variant="primary" onClick={() => setImporting(true)}>Import pricing sheet</AdminButton>}
           </div>
         </div>
@@ -433,7 +466,7 @@ function Fees({ isAdmin, say, onChanged }: {
                     {shown.map((r) => (
                       <tr key={r.methodId} className="border-t border-admin-line align-top">
                         <td className="px-3 py-3 tabular-nums text-admin-muted">{r.methodId}</td>
-                        <td className="px-3 py-3 font-medium">{r.name}<span className="block text-[11.5px] font-normal text-admin-faint">{r.type} · v{r.version}</span></td>
+                        <td className="px-3 py-3 font-medium">{r.name}<span className="block text-[11.5px] font-normal text-admin-faint">{r.type} · v{r.version}{r.source === 'MANUAL' ? ' · priced by hand' : ''}</span></td>
                         <td className="px-3 py-3 text-admin-muted">{r.region ?? '—'}</td>
                         <td className="px-3 py-3 tabular-nums">{Number(r.fixedEur).toFixed(2)} EUR + {r.percent}%</td>
                         <td className="max-w-[220px] px-3 py-3 text-admin-muted">{r.countries.includes('*') ? 'Everywhere' : r.countries.join(', ')}</td>
@@ -453,11 +486,17 @@ function Fees({ isAdmin, say, onChanged }: {
           onSaved={() => { setEditing(null); say('ok', `${editing.name}: saved as a new version.`); load(); onChanged() }}
           onError={(text) => say('error', text)} />
       )}
+      {adding && (
+        <ManualFeeEditor onClose={() => setAdding(false)}
+          onSaved={(saved) => { setAdding(false); say('ok', `${saved.name}: priced by hand, version ${saved.version}.`); load(); onChanged() }}
+          onError={(text) => say('error', text)} />
+      )}
       {importing && (
         <SheetImport onClose={() => setImporting(false)}
           onDone={(r) => {
             setImporting(false)
-            say('ok', `Imported ${r.methods} methods: ${r.added} added, ${r.changed} changed, ${r.unchanged} unchanged, ${r.deactivated} switched off.`)
+            say('ok', `Imported ${r.methods} methods: ${r.added} added, ${r.changed} changed, ${r.unchanged} unchanged, ${r.deactivated} switched off`
+              + (r.keptManual ? `, ${r.keptManual} priced by hand kept.` : '.'))
             load(); onChanged()
           }}
           onError={(text) => say('error', text)} />
@@ -539,6 +578,161 @@ function FeeEditor({ fee, onClose, onSaved, onError }: {
   )
 }
 
+/**
+ * Pricing one method by hand: Payop's ID for it, its name and type, and its fee. A method
+ * the table already has is corrected as a new version; any other is added, and an import of
+ * the sheet keeps it. The server checks it as it checks the sheet.
+ */
+function ManualFeeEditor({ draft, onClose, onSaved, onError }: {
+  draft?: ManualDraft
+  onClose: () => void
+  onSaved: (saved: Fee) => void
+  onError: (text: string) => void
+}) {
+  const [methodId, setMethodId] = useState(draft?.methodId ?? '')
+  const [name, setName] = useState(draft?.name ?? '')
+  const [type, setType] = useState(draft?.type ?? '')
+  const [fixedEur, setFixedEur] = useState('')
+  const [percent, setPercent] = useState('')
+  const [countries, setCountries] = useState(draft?.countries ?? '')
+  const [currencies, setCurrencies] = useState(draft?.currencies ?? '')
+  const [active, setActive] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    if (busy) return
+    setBusy(true)
+    try {
+      onSaved(await api.post<Fee>('/api/v1/admin/payop/fees', {
+        methodId: Number(methodId), name: name.trim(), type: type.trim(), region: null,
+        fixedEur: Number(fixedEur), percent: Number(percent),
+        countries: listOf(countries), currencies: listOf(currencies), active,
+      }))
+    } catch (e) {
+      onError(e instanceof ApiError ? e.message : 'The method was not saved.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const input = 'mt-1 h-10 w-full rounded-admin-control border border-admin-line px-3 text-[13px]'
+  return (
+    <Modal title="Price a method by hand" onClose={onClose} width="max-w-[560px]">
+      <div className="space-y-3 text-[13.5px] text-admin-ink">
+        <p className="text-admin-muted">
+          For a method the pricing sheet does not list, such as cards. Use Payop&rsquo;s own ID and type for it (the Payop
+          check shows them). Importing the sheet again keeps it. An ID already in the table is saved as a new version.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block"><span className="text-[12.5px] text-admin-muted">Payop method ID</span>
+            <input className={input} inputMode="numeric" value={methodId}
+              onChange={(e) => setMethodId(e.target.value.replace(/\D/g, ''))} /></label>
+          <label className="block"><span className="text-[12.5px] text-admin-muted">Type (e.g. cards_international)</span>
+            <input className={input} value={type} onChange={(e) => setType(e.target.value)} /></label>
+        </div>
+        <label className="block"><span className="text-[12.5px] text-admin-muted">Name customers see</span>
+          <input className={input} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} /></label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block"><span className="text-[12.5px] text-admin-muted">Fixed part (EUR)</span>
+            <input className={input} inputMode="decimal" value={fixedEur} onChange={(e) => setFixedEur(e.target.value)} /></label>
+          <label className="block"><span className="text-[12.5px] text-admin-muted">Percentage</span>
+            <input className={input} inputMode="decimal" value={percent} onChange={(e) => setPercent(e.target.value)} /></label>
+        </div>
+        <label className="block"><span className="text-[12.5px] text-admin-muted">Countries (two-letter codes, or * for everywhere)</span>
+          <input className={input} value={countries} onChange={(e) => setCountries(e.target.value)} /></label>
+        <label className="block"><span className="text-[12.5px] text-admin-muted">Processing currencies</span>
+          <input className={input} value={currencies} onChange={(e) => setCurrencies(e.target.value)} /></label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Offered to customers
+        </label>
+        <div className="flex justify-end gap-2">
+          <AdminButton onClick={onClose}>Cancel</AdminButton>
+          <AdminButton variant="primary" disabled={busy} onClick={() => void save()}>Save</AdminButton>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/* -------------------------------------------------------------- payop check --- */
+
+/**
+ * What Payop lists for a country right now, fetched fresh: each method's ID, title, type,
+ * currencies and countries, whether it takes cards, its fee if the table has one, and
+ * whether customers there are offered it. A method with no fee can be priced from here.
+ */
+function PayopCheck({ say, onChanged }: { say: (tone: 'ok' | 'error', text: string) => void; onChanged: () => void }) {
+  const [country, setCountry] = useState('IN')
+  const [rows, setRows] = useState<LiveMethod[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  const [pricing, setPricing] = useState<ManualDraft | null>(null)
+
+  const check = useCallback(async (code: string) => {
+    setBusy(true)
+    setFailed(null)
+    try {
+      setRows(await api.get<LiveMethod[]>(`/api/v1/admin/payop/live-methods?country=${encodeURIComponent(code)}`))
+    } catch (e) {
+      setRows(null)
+      setFailed(e instanceof ApiError ? e.message : 'Payop could not be asked just now.')
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  return (
+    <>
+      <TableCard header={
+        <div className="flex flex-wrap items-center gap-3 border-b border-admin-line px-4 py-3">
+          <label className="flex items-center gap-2 text-[13px] text-admin-muted">Country
+            <input value={country} onChange={(e) => setCountry(e.target.value.toUpperCase().slice(0, 2))}
+              aria-label="Country to check" className="h-9 w-16 rounded-admin-control border border-admin-line px-3 text-[13px] uppercase" />
+          </label>
+          <AdminButton size="sm" variant="primary" disabled={busy || country.length !== 2}
+            onClick={() => void check(country)}>{busy ? 'Asking Payop…' : 'Check with Payop'}</AdminButton>
+          <p className="text-[12.5px] text-admin-faint">Every method Payop lists for this country now. Offered: listed, priced and on.</p>
+        </div>
+      }>
+        <table className="w-full min-w-[980px] text-[13px]">
+          <thead><tr><Th>ID</Th><Th>Title</Th><Th>Type</Th><Th>Currencies</Th><Th>Countries</Th><Th>Fee</Th><Th>Offered</Th><Th /></tr></thead>
+          {failed ? <TableState kind="error" columns={8} title={failed} onRetry={() => void check(country)} />
+            : !rows ? <TableState kind="empty" columns={8} title="Choose a country and check">India is filled in.</TableState>
+              : rows.length === 0 ? <TableState kind="empty" columns={8} title={`Payop lists no method for ${country}`} />
+                : (
+                  <tbody data-testid="payop-check">
+                    {rows.map((m) => (
+                      <tr key={m.methodId} className="border-t border-admin-line align-top">
+                        <td className="px-3 py-3 tabular-nums text-admin-muted">{m.methodId}</td>
+                        <td className="px-3 py-3 font-medium">{m.title ?? '—'}{m.card && <span className="ml-2"><StatusBadge label="Cards" tone="blue" /></span>}</td>
+                        <td className="px-3 py-3 text-admin-muted">{m.type ?? '—'}</td>
+                        <td className="px-3 py-3 text-admin-muted">{m.currencies.join(', ') || '—'}</td>
+                        <td className="max-w-[220px] px-3 py-3 text-admin-muted">{m.countries.join(', ') || 'Not limited by Payop'}</td>
+                        <td className="px-3 py-3 tabular-nums">{m.fee ? `${Number(m.fee.fixedEur).toFixed(2)} EUR + ${m.fee.percent}%` : 'No fee'}</td>
+                        <td className="px-3 py-3"><StatusBadge label={m.offered ? 'Offered' : 'Hidden'} tone={m.offered ? 'green' : 'grey'} /></td>
+                        <td className="px-3 py-3 text-right">
+                          {!m.fee && (
+                            <AdminButton size="sm" onClick={() => setPricing({
+                              methodId: String(m.methodId), name: m.title ?? '', type: m.type ?? '',
+                              countries: m.countries.join(', ') || country, currencies: m.currencies.join(', '),
+                            })}>Add fee</AdminButton>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
+        </table>
+      </TableCard>
+      {pricing && (
+        <ManualFeeEditor draft={pricing} onClose={() => setPricing(null)}
+          onSaved={(saved) => { setPricing(null); say('ok', `${saved.name}: priced by hand, version ${saved.version}.`); onChanged(); void check(country) }}
+          onError={(text) => say('error', text)} />
+      )}
+    </>
+  )
+}
+
 function SheetImport({ onClose, onDone, onError }: {
   onClose: () => void
   onDone: (result: ImportResult) => void
@@ -568,7 +762,8 @@ function SheetImport({ onClose, onDone, onError }: {
       <div className="space-y-3 text-[13.5px] text-admin-ink">
         <p className="text-admin-muted">
           All or nothing: if any row cannot be read, or the count is not what you expect, nothing changes and each problem
-          is listed. Methods the sheet no longer has are switched off. The file is read and not kept.
+          is listed. Methods the sheet no longer has are switched off, except those priced by hand. The file is read and not
+          kept.
         </p>
         <input type="file" accept=".xlsx" aria-label="Pricing sheet" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         <label className="block"><span className="text-[12.5px] text-admin-muted">How many methods it should have (optional)</span>

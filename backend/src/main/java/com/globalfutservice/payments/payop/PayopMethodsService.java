@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.notify.PaymentAlert;
+import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,27 @@ public class PayopMethodsService {
 
     /** One method a customer can pick: its fee row, and Payop's own entry for it. */
     public record Offered(PayopFeeMethodEntity fee, PayopClient.AvailableMethod live) {
+
+        /** Whether it takes cards: Payop's type for it, or the fee table's, names cards. */
+        public boolean card() {
+            return isCard(fee, live);
+        }
+    }
+
+    /**
+     * For staff: one method Payop lists for a country, with its fee row if the table has one,
+     * and whether customers there are offered it -- live, priced and switched on.
+     */
+    public record Listed(PayopClient.AvailableMethod live, PayopFeeMethodEntity fee, boolean card, boolean offered) {
+    }
+
+    /** Whether a method takes cards ("cards_international", "cards_local", "card"...). */
+    public static boolean isCard(PayopFeeMethodEntity fee, PayopClient.AvailableMethod live) {
+        return mentionsCard(live == null ? null : live.type()) || mentionsCard(fee == null ? null : fee.getMethodType());
+    }
+
+    private static boolean mentionsCard(String type) {
+        return type != null && type.toLowerCase(java.util.Locale.ROOT).contains("card");
     }
 
     /** What the customer can pick, or that Payop could not be asked just now. */
@@ -93,6 +115,32 @@ public class PayopMethodsService {
         out.sort(Comparator.comparing((Offered o) -> o.fee().getName(), String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(o -> o.fee().getMethodId()));
         return new Availability(out, false);
+    }
+
+    /**
+     * For staff checking what Payop offers: every method Payop lists for {@code country} --
+     * or lists for no country in particular -- fetched fresh, each with its fee row, if any,
+     * and whether customers there are offered it.
+     */
+    @Transactional(readOnly = true)
+    public List<Listed> check(String country) {
+        refresh();
+        List<PayopClient.AvailableMethod> live = live().orElseThrow(() -> new ApiExceptions.ConflictException(
+                "payop_unavailable", "Payop's list of methods could not be fetched just now. Try again in a minute."));
+        Map<Long, PayopFeeMethodEntity> rows = fees.findAll().stream()
+                .collect(Collectors.toMap(PayopFeeMethodEntity::getMethodId, Function.identity()));
+        List<Listed> out = new ArrayList<>();
+        for (PayopClient.AvailableMethod m : live) {
+            if (!m.countries().isEmpty() && !m.countries().contains(country)) {
+                continue;
+            }
+            PayopFeeMethodEntity fee = rows.get(m.id());
+            boolean offered = fee != null && fee.isActive() && servesCountry(m, fee, country);
+            out.add(new Listed(m, fee, isCard(fee, m), offered));
+        }
+        out.sort(Comparator.comparing((Listed l) -> l.live().title() == null ? "" : l.live().title(),
+                String.CASE_INSENSITIVE_ORDER).thenComparing(l -> l.live().id()));
+        return out;
     }
 
     /** One method, if it is offered in {@code country} right now. */
@@ -153,8 +201,9 @@ public class PayopMethodsService {
         notifications.paymentAlert(new PaymentAlert(null,
                 fresh.size() == 1 ? "A Payop method has no fee" : fresh.size() + " Payop methods have no fee",
                 "Payop lists these as available, but the fee table does not price them, so customers are not "
-                        + "offered them: " + list + ". If they should be offered, add them to the pricing sheet "
-                        + "and import it again, or ask Payop to switch them off.",
+                        + "offered them: " + list + ". If they should be offered, add each one's fee in "
+                        + "Admin -> Payments -> International (Payop) -> Fee table, or add them to the pricing "
+                        + "sheet and import it again; otherwise ask Payop to switch them off.",
                 "METHOD_UNPRICED", props.publicUrl() + "/admin/payop"));
     }
 }

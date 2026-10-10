@@ -184,7 +184,10 @@ class PayopControllerTest {
                 .andExpect(jsonPath("$.netMinor").value(9000))
                 .andExpect(jsonPath("$.methods[0].totalMinor").value(9407))
                 .andExpect(jsonPath("$.methods[0].feeMinor").value(407))
-                .andExpect(jsonPath("$.methods[0].token").value("sealed-381"));
+                .andExpect(jsonPath("$.methods[0].token").value("sealed-381"))
+                // A bank transfer: no card method, so the option is not called "Cards".
+                .andExpect(jsonPath("$.methods[0].card").value(false))
+                .andExpect(jsonPath("$.cards").value(false));
         mvc.perform(get("/api/v1/payments/payop/country").header("CF-IPCountry", "de"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.country").value("DE"));
         mvc.perform(get("/api/v1/payments/payop/country").header("CF-IPCountry", "T1"))
@@ -217,5 +220,21 @@ class PayopControllerTest {
                                 + "\"country\":\"DE\",\"expectedTotalMinor\":1}"))
                 .andExpect(status().isBadRequest());
         verify(checkout, never()).start(any(), anyLong(), anyString(), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("what the option is called in a country -- with cards or without -- is open to anyone, and nothing else")
+    void offer() throws Exception {
+        when(checkout.cardsOffered("IN")).thenReturn(true);
+        when(checkout.cardsOffered("DE")).thenReturn(false);
+        mvc.perform(get("/api/v1/payments/payop/offer").param("country", "in"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.country").value("IN"))
+                .andExpect(jsonPath("$.cards").value(true));
+        mvc.perform(get("/api/v1/payments/payop/offer").param("country", "DE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cards").value(false));
+        mvc.perform(get("/api/v1/payments/payop/offer").param("country", "India"))
+                .andExpect(status().isBadRequest());
     }
 }

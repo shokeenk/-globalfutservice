@@ -110,7 +110,7 @@ describe('coaching checkout: the ways to pay', () => {
     expect(names[0]).toMatch(/^UPI/)
     expect(names[1]).toMatch(/^PayPal/)
     expect(names[2]).toMatch(/^Crypto/)
-    expect(names[3]).toBe('InternationalPay with a local method: bank transfer, cards or wallets in your country')
+    expect(names[3]).toBe('InternationalPay with a local method: bank transfer or wallets in your country')
   })
 
   it('choosing International and paying opens the payment step on it, for this order\'s currency', async () => {
@@ -122,12 +122,25 @@ describe('coaching checkout: the ways to pay', () => {
     expect(await screen.findByTestId('panel')).toHaveTextContent('INTERNATIONAL|USD')
   })
 
-  it('INR: International is listed too, without local methods (INR orders never see Payop)', async () => {
+  it('INR: International offers Payop too, and opens the payment step on it', async () => {
     catalog.currency = 'INR'
     await toPaymentStep()
     const international = screen.getByRole('radio', { name: /^International/ })
-    expect(international).toHaveTextContent('International payment options are coming soon')
-    expect(international).not.toHaveTextContent(/local method/)
+    expect(international).toHaveTextContent('Pay with a local method')
+    await userEvent.click(international)
+    await userEvent.click(screen.getByRole('checkbox'))
+    await userEvent.click(screen.getByRole('button', { name: /Pay now/ }))
+    expect(await screen.findByTestId('panel')).toHaveTextContent('INTERNATIONAL|INR')
+  })
+
+  it('INR with a card method offered in India: "International / Cards", "Pay by card or with a local method"', async () => {
+    catalog.currency = 'INR'
+    const plain = api.get.getMockImplementation()!
+    api.get.mockImplementation(async (path: string) =>
+      (path === '/api/v1/payments/payop/offer?country=IN' ? { country: 'IN', cards: true } : plain(path)))
+    await toPaymentStep()
+    expect(await screen.findByRole('radio', { name: /^International \/ Cards/ }))
+      .toHaveTextContent('International / CardsPay by card or with a local method in your country.')
   })
 
   it('the review step: International drops the 2.5% and leaves the fee to the method chosen next', async () => {

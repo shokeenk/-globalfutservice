@@ -1136,12 +1136,9 @@ const en = {
     payTabCrypto: 'Crypto',
     payTabInternational: 'International',
     /** The International entry in a checkout's list of ways to pay, for an order not in INR. */
-    payIntlChoiceLocal: 'Pay with a local method: bank transfer, cards or wallets in your country',
-    payIntlBadge: 'Coming soon',
-    payIntlTitle: 'International payment options are coming soon',
-    payIntlBody: (methods: string[]) =>
-      `For now, please use ${methods.join(' or ')} for international orders.`,
-    payIntlNote: 'This is where more ways to pay from outside India will appear.',
+    payIntlChoiceLocal: 'Pay with a local method: bank transfer or wallets in your country',
+    payTabInternationalCards: 'International / Cards',
+    payIntlChoiceCards: 'Pay by card or with a local method in your country.',
     payIntlUse: (method: string) => `Pay with ${method}`,
     payopTitle: 'Pay with a local method',
     payopIntro: 'Pay the way people pay in your country (bank transfer, wallet or cash) through our international payment partner, Payop.',
@@ -1157,6 +1154,7 @@ const en = {
     payopFeeLine: 'Payment processing fee',
     payopSelectMethod: 'Select a payment method',
     payopPay: 'Continue to payment',
+    payopCardNote: 'Your card must allow international payments.',
     payopFeeNote: 'The fee depends on the payment method you choose and is shown before you pay.',
     payopRedirectNote: 'You will be taken to Payop’s secure page to finish. Your order updates as soon as Payop confirms the payment.',
     payopPriceChanged: 'The total for this method has changed. Check the new total, then continue.',

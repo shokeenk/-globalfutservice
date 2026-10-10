@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { INTERNATIONAL, ONLINE, offersLocalMethods, paymentChoices, paymentMethods } from './paymentMethods'
+import { INTERNATIONAL, ONLINE, paymentChoices, paymentMethods } from './paymentMethods'
 import type { ManualPaymentOption } from './types'
+import { internationalCopy } from '../components/internationalOffer'
+import en from '../i18n/en'
+import es from '../i18n/es'
+import fr from '../i18n/fr'
 
 /** What the server offers an order of each kind: the same methods, only the UPI account differs. */
 function offered(upi: string): ManualPaymentOption[] {
@@ -30,12 +34,16 @@ describe('one list of ways to pay', () => {
     expect(paymentChoices(offered('x'), false)).toEqual(['UPI', 'PAYPAL', 'CRYPTO', INTERNATIONAL])
   })
 
-  it('International holds the local methods for an order in any currency but INR -- the order\'s currency', () => {
-    expect(offersLocalMethods('INR')).toBe(false)
-    for (const currency of ['USD', 'EUR', 'GBP']) expect(offersLocalMethods(currency)).toBe(true)
-    // No order currency known: nothing is promised.
-    expect(offersLocalMethods(null)).toBe(false)
-    expect(offersLocalMethods(undefined)).toBe(false)
+  it('International is "International / Cards" only where a card method is offered, and never says cards otherwise', () => {
+    expect(internationalCopy(en, true)).toEqual({
+      title: 'International / Cards', body: 'Pay by card or with a local method in your country.' })
+    expect(internationalCopy(es, true).title).toBe('Internacional / Tarjetas')
+    expect(internationalCopy(fr, true).title).toBe('International / Cartes')
+    for (const dictionary of [en, es, fr]) {
+      const plain = internationalCopy(dictionary, false)
+      expect(plain.title).toBe(dictionary.order.payTabInternational)
+      expect(`${plain.title} ${plain.body}`).not.toMatch(/card|tarjeta|carte/i)
+    }
   })
 })
 
@@ -57,6 +65,13 @@ describe('every place that shows the ways to pay builds them from this list', ()
       /import \{[^}]*paymentMethods[^}]*\} from '\.\.\/lib\/paymentMethods'/)
     expect(SOURCES['/src/pages/Order.tsx']).toMatch(/<ManualPayment\b/)
     expect(SOURCES['/src/components/CompletePayment.tsx']).toMatch(/<ManualPayment\b/)
+  })
+
+  it('International is for every currency: no checkout, panel or "Complete your payment" keeps INR out of it', () => {
+    const inrRule = Object.entries(SOURCES)
+      .filter(([, text]) => /offersLocalMethods|payop_not_for_inr|InternationalSoon/.test(text))
+      .map(([path]) => path)
+    expect(inrRule).toEqual([])
   })
 
   it('nobody lists the methods by hand any more', () => {

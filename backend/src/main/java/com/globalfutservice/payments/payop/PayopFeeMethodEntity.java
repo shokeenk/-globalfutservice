@@ -52,6 +52,16 @@ public class PayopFeeMethodEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Where the row came from: SHEET, the pricing sheet's import, or MANUAL, an admin's own
+     * entry. Importing the sheet again leaves a MANUAL row alone unless the sheet lists it.
+     */
+    @Column(nullable = false)
+    private String source = SHEET;
+
+    public static final String SHEET = "SHEET";
+    public static final String MANUAL = "MANUAL";
+
     protected PayopFeeMethodEntity() {
         // JPA
     }
@@ -72,6 +82,30 @@ public class PayopFeeMethodEntity {
     }
 
     /** A new price or availability: the version moves on, so old invoices keep naming the old one. */
+    /** A method an admin priced by hand, outside the sheet. */
+    public static PayopFeeMethodEntity manual(long methodId, String name, String methodType, String region,
+                                              BigDecimal fixedEur, BigDecimal percent, List<String> countries,
+                                              List<String> currencies, boolean active, Long by, Instant at) {
+        PayopFeeMethodEntity row = new PayopFeeMethodEntity(methodId, name, methodType, region, fixedEur, percent,
+                countries, currencies, by, at);
+        row.active = active;
+        row.source = MANUAL;
+        return row;
+    }
+
+    /** The sheet lists this method now: imports manage it from here on. */
+    public void takenBySheet() {
+        this.source = SHEET;
+    }
+
+    public boolean isManual() {
+        return MANUAL.equals(source);
+    }
+
+    public String getSource() {
+        return source;
+    }
+
     public void change(String name, String methodType, String region, BigDecimal fixedEur, BigDecimal percent,
                        List<String> countries, List<String> currencies, boolean active, Long by, Instant at) {
         this.name = name;

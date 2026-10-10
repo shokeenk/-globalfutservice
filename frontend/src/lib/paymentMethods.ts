@@ -5,8 +5,10 @@ import type { ManualPaymentMethod, ManualPaymentOption } from './types'
  * coaching -- and for "Complete your payment".
  *
  * <p>The manual methods the server offers for the order (UPI, PayPal, crypto: whichever
- * have an address configured), then International. International is always listed; what
- * is inside it follows the order's currency (see {@link offersLocalMethods}).
+ * have an address configured), then International. International is always listed, and
+ * holds Payop for an order in any currency, INR included. It is called "International /
+ * Cards" where a card method is offered for the customer's country (see
+ * components/internationalOffer), and "International" otherwise.
  *
  * <p>Built here and nowhere else. Coaching's checkout once listed its methods by hand,
  * left International out, and its customers never saw "Pay with a local method".
@@ -27,13 +29,4 @@ export function paymentMethods(offered: readonly ManualPaymentOption[]): Payment
 /** A checkout's choices: the gateway first when it is on, then {@link paymentMethods}. */
 export function paymentChoices(offered: readonly ManualPaymentOption[], onlineEnabled: boolean): PaymentChoiceKey[] {
   return [...(onlineEnabled ? [ONLINE] : []), ...paymentMethods(offered)]
-}
-
-/**
- * Whether International holds Payop's local methods ("Pay with a local method") for an
- * order in this currency. Decided by the ORDER's currency -- never the display currency or
- * where the visitor is: INR orders never see Payop.
- */
-export function offersLocalMethods(orderCurrency: string | null | undefined): boolean {
-  return !!orderCurrency && orderCurrency !== 'INR'
 }

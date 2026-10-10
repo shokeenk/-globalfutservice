@@ -41,9 +41,9 @@ import java.util.Optional;
  * <p><b>Nothing new is created but the payment.</b> The order keeps its reference, its
  * price and its currency; the customer's display currency never enters into it. Manual
  * methods (UPI, PayPal, crypto) are paid at the order's own total, which carries the card
- * fee the quote froze. A Payop method is paid at that total less the card fee, plus the
- * method's own fee -- one fee line or the other, never both
- * ({@link OrderMapper#paymentLines}).
+ * fee the quote froze. A Payop method -- offered in every currency, INR included -- is paid at
+ * that total less the card fee, plus the method's own fee: one fee line or the other, never
+ * both ({@link OrderMapper#paymentLines}).
  *
  * <p><b>Through the existing flows.</b> A claim goes through {@link ManualPaymentService}
  * (the ticket, the "awaiting verification" email and the operator alert follow exactly as
@@ -74,7 +74,7 @@ public class ResumePaymentService {
 
     /** One Payop method, priced for this order, and the token that starts paying with it. */
     public record PayopMethod(long methodId, String name, String type, long feeMinor, String feeFormatted,
-                              Breakdown breakdown, String token) {
+                              Breakdown breakdown, String token, boolean card) {
     }
 
     /**
@@ -85,7 +85,7 @@ public class ResumePaymentService {
      */
     public record PayopOptions(String currency, long netMinor, String netFormatted,
                                List<OrderDtos.OrderLineDto> lines, String unavailable,
-                               List<PayopMethod> methods, Instant manualBlockedUntil) {
+                               List<PayopMethod> methods, Instant manualBlockedUntil, boolean cards) {
     }
 
     /**
@@ -188,8 +188,9 @@ public class ResumePaymentService {
                 order.total().format());
     }
 
+    /** For an order in any currency, INR included, whenever Payop is on. */
     private boolean payopOffered(OrderEntity order) {
-        return props.payop().enabled() && order.getCurrency() != Currency.INR;
+        return props.payop().enabled();
     }
 
     /** A coin order delivered by sign-in whose sign-in is not (or no longer) held. */
@@ -212,11 +213,11 @@ public class ResumePaymentService {
                         Money.ofMinor(m.feeMinor(), o.currency()).format(),
                         new Breakdown(orderMapper.paymentLines(order, m.feeMinor(), m.name()),
                                 m.totalMinor(), Money.ofMinor(m.totalMinor(), o.currency()).format()),
-                        tokens.issue(order, m.methodId(), iso, m.totalMinor())))
+                        tokens.issue(order, m.methodId(), iso, m.totalMinor()), m.card()))
                 .toList();
         return new PayopOptions(o.currency().name(), o.netMinor(), Money.ofMinor(o.netMinor(), o.currency()).format(),
                 orderMapper.netLines(order), o.unavailable(), methods,
-                payop.claimsBlockedUntil(order.getId()).orElse(null));
+                payop.claimsBlockedUntil(order.getId()).orElse(null), o.cards());
     }
 
     /**

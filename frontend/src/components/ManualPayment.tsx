@@ -5,7 +5,8 @@ import { ApiError, api } from '../lib/api'
 import type { ManualPaymentClaim, ManualPaymentMethod, ManualPaymentOption } from '../lib/types'
 import { PayopPayment, type PayopRoutes } from './PayopPayment'
 import { ORDER_SUMMARY, usePublishPaySummary } from './paySummary'
-import { INTERNATIONAL, offersLocalMethods, paymentMethods, type PaymentMethodKey } from '../lib/paymentMethods'
+import { INTERNATIONAL, paymentMethods, type PaymentMethodKey } from '../lib/paymentMethods'
+import { useInternationalOffer } from './internationalOffer'
 
 /** Where a payment claim and its screenshot are sent. */
 export interface ManualRoutes {
@@ -85,8 +86,8 @@ function qrFor(method: ManualPaymentMethod, sku: string): string {
 /**
  * The tabs across the top: the shared list of ways to pay (lib/paymentMethods), the same
  * for every kind of order. `INTERNATIONAL` is the storefront's own, not a
- * ManualPaymentMethod: behind it is Payop for an order in a currency other than INR, and
- * the "coming soon" panel for an INR order.
+ * ManualPaymentMethod: behind it is Payop, for an order in any currency -- INR included,
+ * starting from India -- and it is "International / Cards" where a card method is offered.
  */
 type PaymentTab = PaymentMethodKey
 
@@ -137,14 +138,18 @@ export function ManualPayment({
   // Set when the API says Payop is not on: the tab then says it is coming, as before.
   const [payopOff, setPayopOff] = useState(false)
   const payopUnavailable = useCallback(() => setPayopOff(true), [])
-  const localMethods = offersLocalMethods(currency)
+  // "International / Cards" when a card method is offered: for the country the panel starts
+  // from, then for whichever the customer picks in it.
+  const offer = useInternationalOffer(currency)
+  const [panelCards, setPanelCards] = useState<boolean | null>(null)
+  const cards = panelCards ?? offer.cards
 
   /*
    * The order summary beside this step shows the order as placed -- 2.5% card fee included --
    * for every way of paying but Payop, which reports its own choice there (PayopPayment).
    */
   const publish = usePublishPaySummary()
-  const showingPayop = method === INTERNATIONAL && localMethods && !payopOff
+  const showingPayop = method === INTERNATIONAL && !payopOff
   useEffect(() => {
     if (!showingPayop) publish?.(ORDER_SUMMARY)
   }, [showingPayop, publish])
@@ -285,7 +290,7 @@ export function ManualPayment({
     UPI: t.order.payTabUpi,
     PAYPAL: t.order.payTabPaypal,
     CRYPTO: t.order.payTabCrypto,
-    INTERNATIONAL: t.order.payTabInternational,
+    INTERNATIONAL: cards ? t.order.payTabInternationalCards : t.order.payTabInternational,
   }
   const tabs: PaymentTab[] = paymentMethods(options)
 
@@ -321,7 +326,7 @@ export function ManualPayment({
               'transition-colors duration-200',
               tab === method
                 ? 'bg-brand-500 text-paper'
-                : tab === INTERNATIONAL && localMethods && payopOff
+                : tab === INTERNATIONAL && payopOff
                   ? 'bg-ink-700 text-chalk-faint'
                   : 'bg-ink-700 text-chalk-muted hover:text-chalk',
             ].join(' ')}
@@ -331,22 +336,16 @@ export function ManualPayment({
         ))}
       </div>
 
-      {method === INTERNATIONAL && localMethods && payopOff ? (
+      {method === INTERNATIONAL && payopOff ? (
         <LocalMethodsUnavailable
           alternatives={options
             .filter((option) => option.method === 'PAYPAL' || option.method === 'CRYPTO')
             .map((option) => ({ method: option.method, name: label[option.method] }))}
           onUse={(next) => { setMethod(next); setError(null) }}
         />
-      ) : method === INTERNATIONAL && localMethods ? (
-        <PayopPayment publicRef={publicRef} email={email} onUnavailable={payopUnavailable} routes={payopRoutes} />
       ) : method === INTERNATIONAL ? (
-        <InternationalSoon
-          alternatives={options
-            .filter((option) => option.method === 'PAYPAL' || option.method === 'CRYPTO')
-            .map((option) => ({ method: option.method, name: label[option.method] }))}
-          onUse={(next) => { setMethod(next); setError(null) }}
-        />
+        <PayopPayment publicRef={publicRef} email={email} onUnavailable={payopUnavailable} routes={payopRoutes}
+                      defaultCountry={currency === 'INR' ? 'IN' : undefined} onCards={setPanelCards} />
       ) : active && blocked ? (
         <LocalMethodOpen blocked={blocked} lang={lang} />
       ) : active && (
@@ -581,55 +580,6 @@ function ProofPicker({
               {t.order.payProofRemove}
             </button>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------ international --- */
-
-/**
- * A placeholder, and it says so.
- *
- * <p>Selectable rather than disabled: a tab that cannot be chosen gives no way to read why.
- * Choosing this one shows what is coming and the ways to pay today, with a button straight
- * to each -- nothing to type and nothing to submit, so it cannot pass for a payment method
- * that failed. The alternatives come from what is configured, so this never names a method
- * that has been switched off.
- */
-function InternationalSoon({
-  alternatives, onUse,
-}: {
-  alternatives: { method: ManualPaymentMethod; name: string }[]
-  onUse: (method: ManualPaymentMethod) => void
-}) {
-  const t = useT()
-  return (
-    <div
-      role="tabpanel"
-      className="rounded-panel border border-dashed border-ink-400 bg-ink-700/40 px-5 py-8 text-center"
-    >
-      <span className="inline-block rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px]
-                       font-semibold uppercase tracking-[0.14em] text-brand-400">
-        {t.order.payIntlBadge}
-      </span>
-      <h4 className="display mt-3 text-[15px] text-chalk">{t.order.payIntlTitle}</h4>
-      {alternatives.length > 0 && (
-        <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-chalk-muted">
-          {t.order.payIntlBody(alternatives.map((a) => a.name))}
-        </p>
-      )}
-      <p className="mx-auto mt-1.5 max-w-sm text-[12px] leading-snug text-chalk-faint">
-        {t.order.payIntlNote}
-      </p>
-      {alternatives.length > 0 && (
-        <div className="mt-5 flex flex-wrap justify-center gap-2">
-          {alternatives.map((a) => (
-            <Button key={a.method} size="md" variant="secondary" onClick={() => onUse(a.method)}>
-              {t.order.payIntlUse(a.name)}
-            </Button>
-          ))}
         </div>
       )}
     </div>

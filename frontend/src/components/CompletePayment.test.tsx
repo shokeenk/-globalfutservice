@@ -132,12 +132,12 @@ describe('an unpaid order', () => {
       .toHaveAttribute('href', 'https://checkout.payop.com/en/payment/invoice-preprocessing/i-1')
   })
 
-  it('an INR order is never offered Payop', async () => {
-    answer(view({ currency: 'INR', payopOffered: false }))
+  it('an INR order is offered Payop too, starting from India', async () => {
+    answer(view({ currency: 'INR', payopOffered: true }))
     show(order({ sku: 'TRADING_SERVICE', currency: 'INR', totalFormatted: '₹8,250.00' }))
     await open()
     fireEvent.click(await screen.findByRole('tab', { name: 'International' }))
-    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining('payop'), expect.anything())
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/payop/options`, { country: 'IN' }))
   })
 })
 
