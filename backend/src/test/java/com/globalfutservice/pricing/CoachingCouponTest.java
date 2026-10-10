@@ -82,7 +82,7 @@ class CoachingCouponTest {
         when(buyer.getPublicId()).thenReturn("acc_buyer");
         when(buyer.isFirstOrder()).thenReturn(false);
         when(redemptions.countByCouponIdAndAccountId(any(), anyLong())).thenReturn(0L);
-        when(coupons.findByCode(any())).thenReturn(Optional.empty());
+        when(coupons.findByCodeAndDeletedAtIsNull(any())).thenReturn(Optional.empty());
     }
 
     private static RateCard card(String variant, String label, long priceMinor) {
@@ -94,7 +94,7 @@ class CoachingCouponTest {
     private CouponEntity coupon(String code) {
         CouponEntity c = new CouponEntity(code, 1_000, null);
         ReflectionTestUtils.setField(c, "id", 3L);
-        when(coupons.findByCode(code)).thenReturn(Optional.of(c));
+        when(coupons.findByCodeAndDeletedAtIsNull(code)).thenReturn(Optional.of(c));
         return c;
     }
 

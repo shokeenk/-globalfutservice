@@ -183,6 +183,17 @@ export interface Coupon {
   createdAt: string
 }
 
+/** A coupon an admin deleted, read-only: REMOVED when no order had used it, HIDDEN when kept for its orders. */
+export interface DeletedCoupon {
+  couponId: number
+  code: string
+  discountPercent: number
+  redeemedCount: number
+  outcome: 'REMOVED' | 'HIDDEN'
+  deletedBy: string | null
+  deletedAt: string
+}
+
 export interface PaymentIntent {
   provider: string
   providerOrderId: string

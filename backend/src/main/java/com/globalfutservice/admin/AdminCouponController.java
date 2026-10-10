@@ -1,6 +1,10 @@
 package com.globalfutservice.admin;
 
 import com.globalfutservice.domain.pricing.Coupon;
+import com.globalfutservice.identity.AccountEntity;
+import com.globalfutservice.identity.AccountRepository;
+import com.globalfutservice.pricing.CouponDeletionEntity;
+import com.globalfutservice.pricing.CouponDeletionRepository;
 import com.globalfutservice.pricing.CouponEntity;
 import com.globalfutservice.pricing.CouponRepository;
 import com.globalfutservice.security.AccountPrincipal;
@@ -20,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +35,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Coupon administration.
@@ -38,8 +45,11 @@ import java.util.List;
  * orders; deciding what the business charges, and who gets to pay less, is a different
  * authority.
  *
- * <p>Coupons are never deleted, only deactivated. An expired campaign still has to explain
- * the orders it discounted, and a deleted row would orphan every redemption pointing at it.
+ * <p>Deleting one ({@link CouponDeletion}) removes a coupon no order has used, and keeps --
+ * marked deleted -- one that orders have: an expired campaign still has to explain the
+ * orders it discounted, and removing its row would orphan every redemption pointing at it.
+ * A deleted coupon is gone from the list and from checkout, and its code can be issued
+ * again. Switching one off, as before, keeps it listed and its code taken.
  */
 @RestController
 @RequestMapping("/api/v1/admin/coupons")
@@ -49,9 +59,16 @@ public class AdminCouponController {
     private static final Logger log = LoggerFactory.getLogger(AdminCouponController.class);
 
     private final CouponRepository coupons;
+    private final CouponDeletion deletion;
+    private final CouponDeletionRepository deletions;
+    private final AccountRepository accounts;
 
-    public AdminCouponController(CouponRepository coupons) {
+    public AdminCouponController(CouponRepository coupons, CouponDeletion deletion,
+                                 CouponDeletionRepository deletions, AccountRepository accounts) {
         this.coupons = coupons;
+        this.deletion = deletion;
+        this.deletions = deletions;
+        this.accounts = accounts;
     }
 
     // ------------------------------------------------------------------ records ------
@@ -114,14 +131,26 @@ public class AdminCouponController {
             Instant createdAt) {
     }
 
+    /**
+     * {@code outcome}: REMOVED when no order had used it and it was deleted outright; HIDDEN
+     * when orders had, and it was kept for them.
+     */
+    public record DeleteResponse(Long id, String code, String outcome) {
+    }
+
+    /** A deleted coupon, read-only: what it was, what deleting did, and who did it when. */
+    public record DeletedView(Long couponId, String code, int discountPercent, int redeemedCount, String outcome,
+                              String deletedBy, Instant deletedAt) {
+    }
+
     // ------------------------------------------------------------------ endpoints ----
 
     @GetMapping
     @PreAuthorize("hasRole('OPERATOR')")
-    @Operation(summary = "Every coupon, newest first")
+    @Operation(summary = "Every coupon that is not deleted, newest first")
     @Transactional(readOnly = true)
     public List<CouponView> list(@RequestParam(defaultValue = "100") int size) {
-        return coupons.findAllByOrderByCreatedAtDesc(
+        return coupons.findAllByDeletedAtIsNullOrderByCreatedAtDesc(
                         PageRequest.of(0, Math.min(Math.max(size, 1), 200)))
                 .getContent().stream().map(AdminCouponController::toView).toList();
     }
@@ -136,7 +165,7 @@ public class AdminCouponController {
         String code = Coupon.normalise(request.code());
         // Checked here for a civil message; the unique index is what actually enforces it
         // when two admins create the same code in the same second.
-        if (coupons.existsByCode(code)) {
+        if (coupons.existsByCodeAndDeletedAtIsNull(code)) {
             throw new ApiExceptions.ConflictException("coupon_exists",
                     "A coupon with that code already exists.");
         }
@@ -181,7 +210,8 @@ public class AdminCouponController {
     @Operation(summary = "Update a coupon's limits, or switch it off")
     @Transactional
     public CouponView update(@PathVariable Long id, @Valid @RequestBody UpdateRequest request) {
-        CouponEntity coupon = coupons.findForUpdate(id)
+        // A deleted coupon is read-only: there is nothing left to switch on or change.
+        CouponEntity coupon = coupons.findForUpdate(id).filter(c -> !c.isDeleted())
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("No such coupon."));
 
         if (request.description() != null) {
@@ -212,6 +242,33 @@ public class AdminCouponController {
 
         coupons.save(coupon);
         return toView(coupon);
+    }
+
+    /**
+     * Delete a coupon: outright when no order has used it, otherwise kept for those orders
+     * and marked deleted. Either way it leaves the list and checkout, and its code is free.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Delete a coupon; one orders have used is kept for them, hidden and never applied again")
+    public DeleteResponse delete(@CurrentAccount AccountPrincipal principal, @PathVariable Long id) {
+        CouponDeletion.Deleted deleted = deletion.delete(id, principal.id());
+        return new DeleteResponse(deleted.id(), deleted.code(), deleted.outcome().name());
+    }
+
+    @GetMapping("/deleted")
+    @PreAuthorize("hasRole('OPERATOR')")
+    @Operation(summary = "Coupons that were deleted, newest first: read-only")
+    @Transactional(readOnly = true)
+    public List<DeletedView> deleted(@RequestParam(defaultValue = "100") int size) {
+        List<CouponDeletionEntity> rows = deletions.findAllByOrderByDeletedAtDesc(
+                PageRequest.of(0, Math.min(Math.max(size, 1), 200))).getContent();
+        Map<Long, String> who = accounts.findAllById(rows.stream().map(CouponDeletionEntity::getDeletedBy)
+                        .filter(java.util.Objects::nonNull).distinct().toList()).stream()
+                .collect(Collectors.toMap(AccountEntity::getId, AccountEntity::getEmail, (a, b) -> a));
+        return rows.stream().map(d -> new DeletedView(d.getCouponId(), d.getCode(), d.getDiscountBps() / 100,
+                d.getRedeemedCount(), d.getOutcome().name(), d.getDeletedBy() == null ? null : who.get(d.getDeletedBy()),
+                d.getDeletedAt())).toList();
     }
 
     private static CouponView toView(CouponEntity c) {

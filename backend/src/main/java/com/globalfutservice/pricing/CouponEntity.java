@@ -54,6 +54,16 @@ public class CouponEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
+    /**
+     * Set when an admin deleted a coupon that orders had used: it is kept for them, and is
+     * never listed or applied again. Its code is then free for a new coupon.
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @Column(name = "deleted_by")
+    private Long deletedBy;
+
     protected CouponEntity() {
     }
 
@@ -164,6 +174,25 @@ public class CouponEntity {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public Long getDeletedBy() {
+        return deletedBy;
+    }
+
+    /** Deleted, but kept: orders used it. Never applied again; the code is free for a new coupon. */
+    public void markDeleted(Long by, Instant at) {
+        this.deletedAt = at;
+        this.deletedBy = by;
+        this.updatedAt = at;
     }
 
     private void touch() {
