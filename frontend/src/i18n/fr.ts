@@ -1667,10 +1667,10 @@ const fr: Dictionary = {
   champs: {
     infoTitle: 'Informations sur le boosting Champions',
     infoBody:
-      'Notre objectif est d’obtenir les victoires FUT Champions que vous avez choisies. Si nous ' +
-      'obtenons moins de victoires, vous pouvez choisir un remboursement éligible ou du Crédit ' +
-      'boutique GFS. Vos résultats finaux et le détail du règlement vous seront envoyés par e-mail. ' +
-      'Pour toute aide, contactez notre',
+      'Notre objectif est d’obtenir les victoires FUT Champions que tu as choisies. Si nous ' +
+      'obtenons moins de victoires, tu peux choisir un remboursement éligible ou du Crédit ' +
+      'boutique GFS. Tes résultats finaux et le détail du règlement te seront envoyés par e-mail. ' +
+      'Pour toute aide, contacte notre',
     liveChat: 'assistance par chat en direct',
     detailsEyebrow: 'Détails de la commande Champions',
     resultsTitle: 'Résultats de la commande Champions',
@@ -1689,27 +1689,27 @@ const fr: Dictionary = {
     statusRefundPaid: 'Payé',
     statusCreditPending: 'Crédit boutique en attente',
     statusCreditIssued: 'Émis',
-    footnote: 'Vos résultats finaux et le détail du règlement ont aussi été envoyés à votre adresse e-mail enregistrée.',
-    getRefund: 'Obtenir un remboursement',
-    getCredit: 'Obtenir du Crédit boutique GFS',
+    footnote: 'Tes résultats finaux et le détail du règlement ont aussi été envoyés à ton adresse e-mail enregistrée.',
+    getRefund: 'Obtiens un remboursement',
+    getCredit: 'Obtiens du Crédit boutique GFS',
     chooseByCredit: (date: string): string =>
-      `Choisissez avant le ${date}. Sans choix de votre part, vous recevrez du Crédit boutique GFS.`,
+      `Choisis avant le ${date}. Si tu ne choisis pas, tu recevras du Crédit boutique GFS.`,
     chooseByRefund: (date: string): string =>
-      `Choisissez avant le ${date}. Sans choix de votre part, vous recevrez un remboursement.`,
+      `Choisis avant le ${date}. Si tu ne choisis pas, tu recevras un remboursement.`,
     confirmRefund: (amount: string): string =>
-      `Obtenir un remboursement de ${amount} ? Vous ne pourrez plus modifier ce choix.`,
+      `Obtenir un remboursement de ${amount} ? Tu ne pourras plus modifier ce choix.`,
     confirmCredit: (amount: string): string =>
-      `Obtenir ${amount} en Crédit boutique GFS ? Vous ne pourrez plus modifier ce choix.`,
+      `Obtenir ${amount} en Crédit boutique GFS ? Tu ne pourras plus modifier ce choix.`,
     confirm: 'Confirmer',
     cancel: 'Annuler',
-    chooseFailed: 'Votre choix n’a pas pu être enregistré. Veuillez réessayer.',
+    chooseFailed: 'Ton choix n’a pas pu être enregistré. Réessaie.',
     creditOnly: 'Cette commande a été payée en partie avec du Crédit boutique GFS : la différence est donc rendue en crédit boutique.',
     cancelled: 'Cette commande a été remboursée en totalité.',
     timelineDelivered: (wins: string): string => `${wins} victoires obtenues`,
     events: {
       winsUpdated: (wins: string): string => `Victoires obtenues mises à jour : ${wins}`,
-      choseRefund: 'Vous avez choisi un remboursement',
-      choseCredit: 'Vous avez choisi du Crédit boutique GFS',
+      choseRefund: 'Tu as choisi un remboursement',
+      choseCredit: 'Tu as choisi du Crédit boutique GFS',
       methodRefund: 'Mode de règlement : remboursement',
       methodCredit: 'Mode de règlement : Crédit boutique GFS',
       defaultedRefund: 'Aucun choix dans les délais : un remboursement a été sélectionné',
@@ -1724,14 +1724,14 @@ const fr: Dictionary = {
     use: 'Utiliser mon Crédit boutique GFS',
     available: (amount: string): string => `${amount} disponibles`,
     applied: (amount: string): string => `${amount} appliqués à cette commande`,
-    coversAll: 'Votre crédit boutique couvre cette commande. Il n’y a rien à payer.',
+    coversAll: 'Ton crédit boutique couvre cette commande. Il n’y a rien à payer.',
     paidTitle: 'Payé avec le Crédit boutique GFS',
-    paidBody: 'Votre crédit boutique a couvert toute la commande : il n’y a rien à payer. Votre commande est confirmée.',
-    trackOrder: 'Suivre votre commande',
+    paidBody: 'Ton crédit boutique a couvert toute la commande : il n’y a rien à payer. Ta commande est confirmée.',
+    trackOrder: 'Suivre ta commande',
     balanceTitle: 'Crédit boutique GFS',
-    balanceNone: 'Vous n’avez pas de crédit boutique.',
+    balanceNone: 'Tu n’as pas de crédit boutique.',
     balanceHelp:
-      'Utilisez-le au paiement des commandes dans la même devise. Il n’expire pas et ne peut pas être ' +
+      'Utilise-le au paiement des commandes dans la même devise. Il n’expire pas et ne peut pas être ' +
       'retiré en espèces.',
     entries: {
       ISSUED: 'Ajouté',
