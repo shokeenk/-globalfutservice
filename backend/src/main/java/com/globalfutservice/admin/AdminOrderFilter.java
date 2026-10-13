@@ -63,8 +63,8 @@ public record AdminOrderFilter(
     /**
      * A service tab or dropdown value, as the SKUs it covers.
      *
-     * <p>BOOSTING is the one group: the page has a single Boosting tab over two SKUs. The
-     * dropdown can still pick either on its own.
+     * <p>BOOSTING is the one group: the page has a single Boosting tab over the four services
+     * played on a customer's account. The dropdown can still pick each on its own.
      */
     static Set<Sku> services(String value) {
         if (blank(value)) {
@@ -72,9 +72,12 @@ public record AdminOrderFilter(
         }
         return switch (value.trim().toUpperCase(Locale.ROOT)) {
             case "COINS" -> EnumSet.of(Sku.TRADING_SERVICE);
-            case "BOOSTING" -> EnumSet.of(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS);
+            case "BOOSTING" -> EnumSet.of(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS, Sku.BOOST_OBJECTIVES,
+                    Sku.BOOST_TOURNAMENTS);
             case "CHAMPS" -> EnumSet.of(Sku.BOOST_CHAMPS);
             case "RIVALS" -> EnumSet.of(Sku.BOOST_RIVALS);
+            case "OBJECTIVES" -> EnumSet.of(Sku.BOOST_OBJECTIVES);
+            case "TOURNAMENTS" -> EnumSet.of(Sku.BOOST_TOURNAMENTS);
             case "COACHING" -> EnumSet.of(Sku.COACHING);
             default -> throw new ApiExceptions.BadRequestException("Unknown service filter.");
         };

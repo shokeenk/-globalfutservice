@@ -142,7 +142,8 @@ class AdminOrderPageSecurityTest {
         ArgumentCaptor<AdminOrderFilter> filter = ArgumentCaptor.forClass(AdminOrderFilter.class);
         // Size is capped at 100 whatever the page asks for.
         verify(queries).search(filter.capture(), eq(2), eq(100));
-        assertThat(filter.getValue().skus()).containsExactlyInAnyOrder(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS);
+        assertThat(filter.getValue().skus()).containsExactlyInAnyOrder(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS,
+                Sku.BOOST_OBJECTIVES, Sku.BOOST_TOURNAMENTS);
         assertThat(filter.getValue().search()).isEqualTo("rahul");
     }
 

@@ -5,8 +5,9 @@ import {
 } from '../../components/ui'
 import { ApiError, api } from '../../lib/api'
 import { dateTime } from '../../lib/format'
+import { listingImageSrc } from '../../lib/listings'
 import { useSeo } from '../../lib/seo'
-import type { Order, VendorSection } from '../../lib/types'
+import type { ListingSnapshot, Order, VendorSection } from '../../lib/types'
 import { useAuth } from '../../state/AuthContext'
 import { statusTone } from '../Track'
 import { releasePreview, releaseQuestion } from './orders/confirmations'
@@ -241,6 +242,12 @@ export default function AdminOrder() {
               booster reads this panel, and a launcher is the kind of detail that gets
               skimmed past in a one-line title.
             */}
+            {/*
+              An Objectives or Tournaments order: the listing as the customer bought it, frozen
+              when the order was placed. Editing or deleting the listing does not move this.
+            */}
+            {order.listing && <ListingAsOrdered snapshot={order.listing} />}
+
             {order.sku.startsWith('BOOST_') && order.platform && (
               <div className="mt-6 border-t border-ink-400 pt-5">
                 <p className="stamp mb-4">Boosting account</p>
@@ -510,6 +517,58 @@ function Secret({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-brand-500/25 bg-brand-50 p-3">
       <p className="text-[10.5px] uppercase tracking-wider text-brand-400">{label}</p>
       <p className="mt-1 select-all break-all font-mono text-[13px] text-chalk">{value}</p>
+    </div>
+  )
+}
+
+/** Everything an Objectives or Tournaments order was sold with, for the booster working it. */
+function ListingAsOrdered({ snapshot }: { snapshot: ListingSnapshot }) {
+  const time = [snapshot.estimatedTime, snapshot.schedulingNote].filter(Boolean).join(' · ')
+  return (
+    <div className="mt-6 border-t border-ink-400 pt-5" data-testid="admin-listing-snapshot">
+      <p className="stamp mb-4">Listing as ordered</p>
+      <div className="flex items-start gap-4">
+        {snapshot.imageUrl && (
+          <span className="grid h-24 w-20 shrink-0 place-items-center">
+            <img src={listingImageSrc(snapshot.imageUrl) ?? undefined} alt="" aria-hidden="true" className="h-full w-full object-contain" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-chalk-faint">
+            {snapshot.categoryName} · listing #{snapshot.listingId}
+          </p>
+          <p className="mt-1 text-[15px] font-semibold text-chalk">{snapshot.title}</p>
+          {snapshot.subtitle && <p className="text-[13px] text-chalk-muted">{snapshot.subtitle}</p>}
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
+        <Detail label="Pricing" value={snapshot.pricingType === 'PER_HOUR' ? 'Per hour' : 'Fixed price'} />
+        {snapshot.hours != null && <Detail label="Hours" value={String(snapshot.hours)} />}
+        {snapshot.hours != null && <Detail label="Price per hour" value={snapshot.unitPriceFormatted} />}
+        <Detail label="Listing price" value={`${snapshot.priceFormatted} (${snapshot.currency})`} />
+        <Detail label="Required games" value={snapshot.requiredGames != null ? String(snapshot.requiredGames) : '—'} />
+        <Detail label="Estimated time" value={time || '—'} />
+        {snapshot.reward && <Detail label="Reward" value={snapshot.reward} />}
+      </dl>
+      {snapshot.requirements.length > 0 && (
+        <div className="mt-4">
+          <p className="text-[12.5px] font-semibold text-chalk">Tasks</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13px] text-chalk-muted">
+            {snapshot.requirements.map((task, index) => <li key={index} className="whitespace-pre-line">{task}</li>)}
+          </ul>
+        </div>
+      )}
+      {snapshot.customerInstructions && (
+        <div className="mt-4">
+          <p className="text-[12.5px] font-semibold text-chalk">Customer instructions</p>
+          <p className="mt-1 whitespace-pre-line text-[13px] text-chalk-muted">{snapshot.customerInstructions}</p>
+        </div>
+      )}
+      {snapshot.hourlyAcknowledgedAt && (
+        <p className="mt-4 text-[12.5px] text-chalk-muted">
+          Ticked at checkout, {dateTime(snapshot.hourlyAcknowledgedAt)}: &ldquo;{snapshot.hourlyAcknowledgement}&rdquo;
+        </p>
+      )}
     </div>
   )
 }

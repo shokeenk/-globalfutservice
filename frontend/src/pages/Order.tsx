@@ -37,7 +37,9 @@ type Step = 'configure' | 'details' | 'paying' | 'placed'
 /** Where each non-coin service lives, for when the configurator cannot sell it. */
 const SERVICE_LANDING: Record<string, string> = {
   BOOST_CHAMPS: '/boosting',
-  BOOST_RIVALS: '/boosting',
+  BOOST_RIVALS: '/boosting?category=rivals',
+  BOOST_OBJECTIVES: '/boosting?category=objectives',
+  BOOST_TOURNAMENTS: '/boosting?category=tournaments',
   COACHING: '/coaching',
   CARDS: '/cards',
 }
@@ -335,6 +337,9 @@ export default function Order() {
   */
   if (requestedSku.startsWith('BOOST_')) {
     const wanted = params.get('variant')
+    // An Objectives or Tournaments listing is opened by its id.
+    const listing = /^LISTING_(\d+)$/.exec(wanted ?? '')
+    if (listing) return <Navigate replace to={`/boosting/checkout?listing=${listing[1]}`} />
     return (
       <Navigate
         replace

@@ -213,7 +213,14 @@ public class OrderMapper {
                 coaching ? coachingProgress(order) : null,
                 payment.state(),
                 payment.payBy(),
-                results == null ? null : results.customer(order));
+                results == null ? null : results.customer(order),
+                listingView(order));
+    }
+
+    /** The frozen listing of an Objectives or Tournaments order, never the listing as it is now. */
+    private static com.globalfutservice.catalog.listing.ListingSnapshot.View listingView(OrderEntity order) {
+        var snapshot = com.globalfutservice.catalog.listing.ListingSnapshot.fromJson(order.getListingSnapshot());
+        return snapshot == null ? null : snapshot.view();
     }
 
     private OrderDtos.CoachingProgressDto coachingProgress(OrderEntity order) {

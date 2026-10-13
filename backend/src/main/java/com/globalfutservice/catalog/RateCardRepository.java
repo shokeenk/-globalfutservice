@@ -48,6 +48,17 @@ public interface RateCardRepository extends JpaRepository<RateCardEntity, Long> 
             """)
     List<Currency> findLiveCurrencies(@Param("season") String season);
 
+    /**
+     * The same, leaving out some services: an Objectives draft priced in a currency nothing
+     * else is sold in must not put that currency in the picker.
+     */
+    @Query("""
+            select distinct r.currency from RateCardEntity r
+            where r.validTo is null and r.season = :season and r.sku not in :except
+            """)
+    List<Currency> findLiveCurrenciesExcept(@Param("season") String season,
+                                            @Param("except") java.util.Collection<Sku> except);
+
     /** Every season with at least one live row, for telling an operator what exists. */
     @Query("""
             select distinct r.season from RateCardEntity r

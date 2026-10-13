@@ -72,7 +72,9 @@ const SKU_ROUTE: Record<string, string> = {
   TRADING_SERVICE: '/order',
   COACHING: '/coaching',
   BOOST_CHAMPS: '/boosting',
-  BOOST_RIVALS: '/boosting',
+  BOOST_RIVALS: '/boosting?category=rivals',
+  BOOST_OBJECTIVES: '/boosting?category=objectives',
+  BOOST_TOURNAMENTS: '/boosting?category=tournaments',
   CARDS: '/cards',
 }
 

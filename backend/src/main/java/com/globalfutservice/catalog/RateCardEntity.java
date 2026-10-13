@@ -115,7 +115,19 @@ public class RateCardEntity {
         return new RateCard(
                 season, sku, platform, variant, label,
                 Money.ofMinor(unitPriceMinor, currency),
-                minQuantity, maxQuantity, stepQuantity);
+                minQuantity, maxQuantity, stepQuantity, null, priceUnit);
+    }
+
+    /**
+     * When this price starts, on a row not yet saved: the time of the change that wrote it,
+     * from the caller's clock, rather than whenever the object happened to be built.
+     */
+    public RateCardEntity startingAt(Instant at) {
+        if (id != null) {
+            throw new IllegalStateException("A saved price keeps its start.");
+        }
+        this.validFrom = at;
+        return this;
     }
 
     public boolean isLive() {

@@ -32,6 +32,9 @@ import java.util.Objects;
  * @param priceVersion   the coin price version this row was read from, recorded on the
  *                       quote so an order can be explained against it; null for rows that
  *                       are not coin prices
+ * @param unit           how the price turns a quantity into a base price. The service's
+ *                       own unit, except for an Objectives or Tournaments listing priced
+ *                       {@link PriceUnit#PER_HOUR}, whose quantity is the hours chosen
  */
 public record RateCard(
         String season,
@@ -43,7 +46,8 @@ public record RateCard(
         BigDecimal minQuantity,
         BigDecimal maxQuantity,
         BigDecimal stepQuantity,
-        Long priceVersion) {
+        Long priceVersion,
+        PriceUnit unit) {
 
     /** A row with no coin price version: boosting, coaching, and tests. */
     public RateCard(String season, Sku sku, Platform platform, String variant, String label, Money unitPrice,
@@ -51,17 +55,25 @@ public record RateCard(
         this(season, sku, platform, variant, label, unitPrice, minQuantity, maxQuantity, stepQuantity, null);
     }
 
+    /** A row priced in its service's own unit. */
+    public RateCard(String season, Sku sku, Platform platform, String variant, String label, Money unitPrice,
+                    BigDecimal minQuantity, BigDecimal maxQuantity, BigDecimal stepQuantity, Long priceVersion) {
+        this(season, sku, platform, variant, label, unitPrice, minQuantity, maxQuantity, stepQuantity,
+                priceVersion, sku == null ? null : sku.unit());
+    }
+
     public RateCard {
         Objects.requireNonNull(season, "season");
         Objects.requireNonNull(sku, "sku");
         Objects.requireNonNull(unitPrice, "unitPrice");
+        Objects.requireNonNull(unit, "unit");
         if (unitPrice.isNegative()) {
             throw new IllegalArgumentException("unitPrice must not be negative");
         }
-        if (sku.unit() == PriceUnit.PER_MILLION) {
-            Objects.requireNonNull(minQuantity, "minQuantity required for PER_MILLION");
-            Objects.requireNonNull(maxQuantity, "maxQuantity required for PER_MILLION");
-            Objects.requireNonNull(stepQuantity, "stepQuantity required for PER_MILLION");
+        if (unit != PriceUnit.FLAT) {
+            Objects.requireNonNull(minQuantity, "minQuantity required for " + unit);
+            Objects.requireNonNull(maxQuantity, "maxQuantity required for " + unit);
+            Objects.requireNonNull(stepQuantity, "stepQuantity required for " + unit);
             if (minQuantity.signum() <= 0) {
                 throw new IllegalArgumentException("minQuantity must be positive");
             }
@@ -72,6 +84,12 @@ public record RateCard(
                 throw new IllegalArgumentException("stepQuantity must be positive");
             }
         }
+    }
+
+    /** "1 hour", "50 hours". */
+    public static String hours(BigDecimal hours) {
+        String n = hours.stripTrailingZeros().toPlainString();
+        return n + ("1".equals(n) ? " hour" : " hours");
     }
 
     public Currency currency() {
@@ -94,10 +112,22 @@ public record RateCard(
      * @throws IllegalArgumentException with a message safe to show a customer
      */
     public void validateQuantity(BigDecimal quantity) {
-        if (sku.unit() == PriceUnit.FLAT) {
+        if (unit == PriceUnit.FLAT) {
             return;
         }
         Objects.requireNonNull(quantity, "quantity");
+        if (unit == PriceUnit.PER_HOUR) {
+            // Whole hours, from the least to the listing's cap. Never assumed: no hours is
+            // refused before this is reached.
+            String range = "Choose between " + hours(minQuantity) + " and " + hours(maxQuantity) + ".";
+            if (quantity.stripTrailingZeros().scale() > 0) {
+                throw new IllegalArgumentException("Choose a whole number of hours. " + range);
+            }
+            if (quantity.compareTo(minQuantity) < 0 || quantity.compareTo(maxQuantity) > 0) {
+                throw new IllegalArgumentException(range);
+            }
+            return;
+        }
         // In the unit the customer chose the amount in: "50K", not "0.05M".
         if (quantity.compareTo(minQuantity) < 0) {
             throw new IllegalArgumentException("Minimum order is " + CoinAmount.describe(minQuantity) + " coins");

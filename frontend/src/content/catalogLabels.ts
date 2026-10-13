@@ -3,6 +3,7 @@ import { useT } from '../i18n'
 import { useCatalog } from '../state/CatalogContext'
 import { coinsParts } from '../lib/format'
 import type { QuoteLine } from '../lib/types'
+import { isListingSku } from '../lib/listings'
 
 /**
  * Localising the strings that arrive from the server.
@@ -81,6 +82,8 @@ export function useCatalogLabels() {
    */
   const option = useCallback(
     (o: { variant?: string | null; platform?: string | null; label?: string | null }): string => {
+      // A listing's title is the team's own, shown as they typed it.
+      if (o.variant?.startsWith('LISTING_')) return o.label ?? o.variant
       if (o.variant) return variant(o.variant, o.label)
       return o.label ?? o.platform ?? ''
     },
@@ -115,6 +118,9 @@ export function useCatalogLabels() {
           // sentence, because the server composes it from a service name and a variant
           // that this module can already localise individually.
           if (!context?.sku) return l.label
+          // An Objectives or Tournaments listing is named by the team, in their words, and
+          // the server froze that name with the order: there is nothing here to translate.
+          if (isListingSku(context.sku)) return l.label
           const name = service(context.sku, null)
           const detail = context.variant
             ? variant(context.variant, null)

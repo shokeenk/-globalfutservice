@@ -36,6 +36,65 @@ export interface CatalogOption {
    * on every option that is not coins.
    */
   coin?: CatalogCoin | null
+  /**
+   * An Objectives or Tournaments listing: its card and its checkout, as the GFS team wrote
+   * them in Service Listings. Missing on every other option.
+   */
+  listing?: CatalogListing | null
+}
+
+/** The services written listing by listing in Service Listings: see lib/listings. */
+export type ListingSku = 'BOOST_OBJECTIVES' | 'BOOST_TOURNAMENTS'
+
+/** One Objectives or Tournaments listing as the storefront shows it. Content is the admin's, as typed. */
+export interface CatalogListing {
+  id: number
+  title: string
+  subtitle: string | null
+  /** The artwork, if any; shown on the card only when `showImage`. */
+  imageUrl: string | null
+  imageWidth: number | null
+  imageHeight: number | null
+  showImage: boolean
+  pricingType: 'FIXED' | 'PER_HOUR'
+  /** Per hour only: whole hours, from this to `maxHours`. */
+  minHours: number | null
+  maxHours: number | null
+  /** Replaces the generated "what we'll do" text in checkout when set. */
+  overview: string | null
+  /** One task per line. */
+  requirements: string[]
+  requiredGames: number | null
+  estimatedTime: string | null
+  schedulingNote: string | null
+  reward: string | null
+  customerInstructions: string | null
+}
+
+/** What an Objectives or Tournaments order was sold as, frozen when it was placed. */
+export interface ListingSnapshot {
+  listingId: number
+  category: ListingSku
+  categoryName: string
+  title: string
+  subtitle: string | null
+  overview: string | null
+  requirements: string[]
+  requiredGames: number | null
+  estimatedTime: string | null
+  schedulingNote: string | null
+  reward: string | null
+  customerInstructions: string | null
+  pricingType: 'FIXED' | 'PER_HOUR'
+  hours: number | null
+  unitPriceMinor: number
+  unitPriceFormatted: string
+  priceMinor: number
+  priceFormatted: string
+  currency: string
+  imageUrl: string | null
+  hourlyAcknowledgedAt: string | null
+  hourlyAcknowledgement: string | null
 }
 
 /** A coin price structure, as the storefront reads it. Amounts in whole thousands of coins. */
@@ -303,6 +362,8 @@ export interface Order {
   payBy?: string | null
   /** A Champions order's result once Wins Achieved is recorded; null otherwise. */
   result?: OrderResult | null
+  /** An Objectives or Tournaments order: the listing as it was sold. Null otherwise. */
+  listing?: ListingSnapshot | null
 }
 
 /** The wins of a Champions order and what the difference settles to, as the customer sees it. */
@@ -602,10 +663,42 @@ export interface AdminListing {
   /** LISTING when set on this page, CONFIGURATION when it still comes from the server's settings. */
   successRateSource?: 'LISTING' | 'CONFIGURATION' | null
   bestValue: boolean
+  /** Objectives and Tournaments: everything the team wrote. Missing for the rest. */
+  detail?: AdminServiceListing | null
+}
+
+/** An Objectives or Tournaments listing as the admin edits it. */
+export interface AdminServiceListing {
+  id: number
+  sku: ListingSku
+  variant: string
+  title: string
+  subtitle: string | null
+  overview: string | null
+  /** As typed: one requirement per line. */
+  requirements: string | null
+  requiredGames: number | null
+  estimatedTime: string | null
+  schedulingNote: string | null
+  reward: string | null
+  customerInstructions: string | null
+  pricingType: 'FIXED' | 'PER_HOUR'
+  maxHours: number
+  showImage: boolean
+  image: { id: number; url: string; width: number; height: number; sizeBytes: number } | null
+  active: boolean
+  displayOrder: number
+  prices: Record<string, { minor: number; formatted: string }>
+  createdBy: string
+  createdAt: string
+  updatedBy: string
+  updatedAt: string
+  /** The latest changes, newest first: only on a single listing's read. */
+  changes: { action: string; detail: string | null; by: string; at: string }[]
 }
 
 export interface AdminListingCategory {
-  sku: 'BOOST_CHAMPS' | 'BOOST_RIVALS' | 'COACHING'
+  sku: 'BOOST_CHAMPS' | 'BOOST_RIVALS' | 'COACHING' | ListingSku
   name: string
   listings: AdminListing[]
   /** Boosting only: DEFAULT (the last tier), CHOSEN, or NONE. */

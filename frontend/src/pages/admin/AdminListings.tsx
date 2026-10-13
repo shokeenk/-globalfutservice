@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { LuArrowRight, LuChevronRight, LuGraduationCap, LuPlus, LuShield, LuTrophy, LuX } from 'react-icons/lu'
+import { LuArrowRight, LuChevronRight, LuGamepad2, LuGraduationCap, LuPlus, LuShield, LuTarget, LuTrophy, LuX } from 'react-icons/lu'
 import type { IconType } from 'react-icons'
 import { RankBadge } from '../../components/RankBadge'
 import { useT } from '../../i18n'
 import { api } from '../../lib/api'
 import { useSeo } from '../../lib/seo'
-import type { AdminListing, AdminListingCategory, AdminListingsOverview } from '../../lib/types'
+import type { AdminListing, AdminListingCategory, AdminListingsOverview, AdminServiceListing } from '../../lib/types'
+import { isListingSku, listingImageSrc } from '../../lib/listings'
 import { AdminPage } from './shell/AdminPage'
 import { ListingEditor } from './listings/ListingEditor'
+import { ServiceListingEditor } from './listings/ServiceListingEditor'
 import { AdminButton } from './ui/controls'
 import { TONE_CLASSES } from './ui/Badge'
 import type { Tone } from './ui/status'
@@ -17,16 +19,21 @@ const CATEGORY: Record<string, { icon: IconType; tone: Tone; description: string
   BOOST_CHAMPS: { icon: LuTrophy, tone: 'red', description: 'FUT Champions win packages, each to a Champion or Elite rank.' },
   BOOST_RIVALS: { icon: LuShield, tone: 'violet', description: 'Division Rivals climbs, one division at a time, and extra wins.' },
   COACHING: { icon: LuGraduationCap, tone: 'blue', description: 'One-to-one sessions. Session lengths are set in the coaching diary.' },
+  BOOST_OBJECTIVES: { icon: LuTarget, tone: 'red', description: 'Manage player objectives and rewards shown on the website.' },
+  BOOST_TOURNAMENTS: { icon: LuGamepad2, tone: 'violet', description: 'Tournament services shown on the website.' },
 }
 
 /**
- * Service Listings: what boosting and coaching cost, and how boosting is shown.
+ * Service Listings: what boosting, coaching, Objectives and Tournaments cost, and how they
+ * are shown.
  *
  * <p>Admin only, like the coin rate card: this changes what customers are charged. A price
  * change closes the old price and opens a new one, as the rate card always has, so orders
- * already placed keep theirs. Coins are not here; they are on Coin rates. Tournaments and
- * Objectives, drawn in the reference, are not services the site sells yet, so they are
- * not here either.
+ * already placed keep theirs. Coins are not here; they are on Coin rates.
+ *
+ * <p>Champs, Rivals and Coaching are tiers named in the site's translations. Objectives
+ * and Tournaments are written here in full -- title, artwork, tasks, price -- by their own
+ * editor.
  *
  * <p>The selected service, the open listing and the Add form live in the address.
  */
@@ -59,6 +66,7 @@ export default function AdminListings() {
   const selected = category?.listings.find((l) => l.variant === selectedVariant) ?? null
 
   const titleOf = useCallback((l: AdminListing) => {
+    if (l.detail) return l.detail.title
     const table = t.catalog.variants as Record<string, string | undefined>
     return table[l.variant] ?? l.label
   }, [t])
@@ -87,7 +95,7 @@ export default function AdminListings() {
     <AdminPage
       eyebrow="Listings"
       title="Service Listings"
-      description="Manage your boosting and coaching services, update prices and details."
+      description="Manage boosting, objectives and tournament services. Add, edit or remove listings."
       action={(
         <AdminButton variant="primary" onClick={() => navigate({ pathname: '/admin/services/listings/new', search: params.toString() })}>
           <LuPlus aria-hidden="true" className="h-4 w-4" />
@@ -121,7 +129,30 @@ export default function AdminListings() {
           <ListingGrid category={category} selected={selected?.variant ?? null} titleOf={titleOf} search={search}
             onClearSearch={() => select({ search: null })} onEdit={(l) => select({ listing: l.variant })} />
 
-          {editorOpen && (
+          {editorOpen && isListingSku(category.sku) && (
+            <ServiceListingEditor
+              mode={adding ? 'add' : 'edit'}
+              sku={category.sku}
+              listing={adding ? null : selected?.detail ?? null}
+              currencies={data.currencies}
+              onClose={closeEditor}
+              onCategory={(sku) => navigate({ pathname: '/admin/services/listings/new',
+                search: new URLSearchParams({ service: sku }).toString() }, { replace: true })}
+              onSaved={(saved: AdminServiceListing, message) => {
+                setNotice(message)
+                void load()
+                navigate({ pathname: '/admin/services/listings', search: new URLSearchParams({
+                  service: saved.sku, listing: saved.variant }).toString() }, { replace: true })
+              }}
+              onDeleted={(message) => {
+                setNotice(message)
+                void load()
+                closeEditor()
+              }}
+            />
+          )}
+
+          {editorOpen && !isListingSku(category.sku) && (
             <ListingEditor
               mode={adding ? 'add' : 'edit'}
               category={category}
@@ -129,6 +160,8 @@ export default function AdminListings() {
               title={selected ? titleOf(selected) : ''}
               currencies={data.currencies}
               onClose={closeEditor}
+              onCategory={(sku) => navigate({ pathname: '/admin/services/listings/new',
+                search: new URLSearchParams({ service: sku }).toString() }, { replace: true })}
               onSaved={(overview, message) => { setData(overview); setNotice(`${message} New prices apply to orders placed from now on.`) }}
               onAdded={(sku, variant) => {
                 setNotice('Listing added. It is on sale on the boosting page now.')
@@ -223,8 +256,26 @@ function ListingGrid({
           <button type="button" onClick={onClearSearch} className="font-medium text-admin-red-text underline">Clear</button>
         </p>
       )}
-      <ul className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 2xl:grid-cols-3">
+      {sorted.length === 0 && !search && (
+        <p className="rounded-admin-card border border-dashed border-admin-line px-4 py-10 text-center text-[13px] text-admin-muted">
+          No listings yet. Use Add Listing to create the first one.
+        </p>
+      )}
+      {/*
+        Listings carry artwork beside their words, so each card keeps at least 230px and the
+        grid drops to fewer columns rather than squeezing a title into a sliver.
+      */}
+      <ul className={isListingSku(category.sku)
+        ? 'grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3.5'
+        : 'grid grid-cols-1 gap-3.5 sm:grid-cols-2 2xl:grid-cols-3'}>
         {sorted.map((l) => {
+          if (l.detail) {
+            return (
+              <li key={l.variant}>
+                <ServiceListingCard listing={l} detail={l.detail} on={l.variant === selected} onEdit={() => onEdit(l)} />
+              </li>
+            )
+          }
           const on = l.variant === selected
           const inr = l.prices.INR
           return (
@@ -270,5 +321,61 @@ function ListingGrid({
         })}
       </ul>
     </section>
+  )
+}
+
+/** An Objectives or Tournaments listing in the grid: its artwork, words and price, as the website shows them. */
+function ServiceListingCard({ listing, detail, on, onEdit }: {
+  listing: AdminListing
+  detail: AdminServiceListing
+  on: boolean
+  onEdit: () => void
+}) {
+  const price = listing.prices.INR?.formatted ?? Object.values(listing.prices)[0]?.formatted ?? 'No price'
+  const image = listingImageSrc(detail.image?.url)
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      aria-pressed={on}
+      aria-label={`Edit ${detail.title}${listing.active ? '' : ' (inactive)'}`}
+      className={`relative flex h-full min-h-[170px] w-full flex-col overflow-hidden rounded-admin-card border bg-white p-4 text-left
+                  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-red ${
+                    on ? 'border-admin-red ring-1 ring-admin-red' : 'border-admin-line'} ${listing.active ? '' : 'opacity-60'}
+                  hover:border-[#E9A7AE]`}
+    >
+      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-[3px] ${
+        detail.sku === 'BOOST_TOURNAMENTS' ? 'bg-admin-violet-icon' : 'bg-admin-red'}`} />
+      <span className="flex gap-3">
+        <span className="min-w-0 flex-1">
+          <span className="flex min-h-[20px] flex-wrap gap-1.5">
+            {!listing.active && (
+              <span className="rounded-[5px] bg-admin-grey-tint px-2 py-0.5 text-[10.5px] font-semibold uppercase text-admin-grey-ink">
+                Inactive
+              </span>
+            )}
+            {detail.pricingType === 'PER_HOUR' && (
+              <span className="rounded-[5px] bg-[#FEF1F2] px-2 py-0.5 text-[10.5px] font-semibold uppercase text-admin-red-text">
+                Per hour
+              </span>
+            )}
+          </span>
+          <span className="mt-1 block break-words text-[14px] font-semibold leading-snug text-admin-ink">{detail.title}</span>
+          {detail.subtitle && <span className="mt-1 block break-words text-[12.5px] text-admin-muted">{detail.subtitle}</span>}
+        </span>
+        {image && (
+          <span className="grid h-[80px] w-[64px] shrink-0 place-items-center">
+            <img src={image} alt="" aria-hidden="true" className="h-full w-full object-contain" />
+          </span>
+        )}
+      </span>
+      <span className="mt-auto block pt-3 text-[20px] font-bold tabular-nums text-admin-red-text">
+        {price}{detail.pricingType === 'PER_HOUR' && listing.prices.INR ? ' / hour' : ''}
+      </span>
+      <span className="mt-2 flex items-center gap-1.5 border-t border-admin-line pt-2.5 text-[13px] font-semibold text-admin-ink">
+        Edit
+        <LuArrowRight aria-hidden="true" className="h-4 w-4 text-admin-red" />
+      </span>
+    </button>
   )
 }

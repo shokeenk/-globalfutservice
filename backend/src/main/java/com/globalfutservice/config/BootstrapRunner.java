@@ -1,6 +1,7 @@
 package com.globalfutservice.config;
 
 import com.globalfutservice.catalog.SeasonPriceCheck;
+import com.globalfutservice.catalog.listing.ListingDrafts;
 import com.globalfutservice.fulfilment.OrderModeReport;
 import com.globalfutservice.payments.payop.PayopStartupCheck;
 import com.globalfutservice.domain.crypto.SecureIds;
@@ -42,10 +43,13 @@ public class BootstrapRunner implements ApplicationRunner {
     private final MailProperties mail;
     private final SeasonPriceCheck seasonPrices;
     private final PayopStartupCheck payop;
+    /** The client's two hourly Objectives drafts, created once. */
+    private final ListingDrafts listingDrafts;
 
     public BootstrapRunner(AccountRepository accounts, PasswordEncoder passwordEncoder,
                            PaymentGateway gateway, AppProperties props, MailProperties mail,
-                           SeasonPriceCheck seasonPrices, PayopStartupCheck payop) {
+                           SeasonPriceCheck seasonPrices, PayopStartupCheck payop, ListingDrafts listingDrafts) {
+        this.listingDrafts = listingDrafts;
         this.accounts = accounts;
         this.passwordEncoder = passwordEncoder;
         this.gateway = gateway;
@@ -64,6 +68,7 @@ public class BootstrapRunner implements ApplicationRunner {
         // Payop on without its credentials, or an unreadable token expiry, stops here too.
         payop.verify();
         createBootstrapAdmin();
+        listingDrafts.ensure();
         reportConfiguration();
     }
 

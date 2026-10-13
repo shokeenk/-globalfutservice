@@ -10,7 +10,7 @@ import { SERVICE_TABS, STATUS_TABS } from '../ui/status'
  * colleague, shows exactly the same table.
  */
 export interface OrderFilters {
-  /** COINS, BOOSTING, CHAMPS, RIVALS, COACHING, or '' for all. */
+  /** COINS, BOOSTING, CHAMPS, RIVALS, OBJECTIVES, TOURNAMENTS, COACHING, or '' for all. */
   service: string
   /** Comma-separated real statuses, or '' for all. */
   status: string
@@ -100,6 +100,8 @@ export function skusFor(service: string): string[] {
   switch (service) {
     case 'CHAMPS': return ['BOOST_CHAMPS']
     case 'RIVALS': return ['BOOST_RIVALS']
+    case 'OBJECTIVES': return ['BOOST_OBJECTIVES']
+    case 'TOURNAMENTS': return ['BOOST_TOURNAMENTS']
     default: return SERVICE_TABS.find((tab) => tab.key === service)?.skus ?? []
   }
 }

@@ -1,6 +1,7 @@
 package com.globalfutservice.catalog;
 
 import com.globalfutservice.coaching.CoachingSettingsService;
+import com.globalfutservice.catalog.listing.ServiceListingService;
 import com.globalfutservice.catalog.web.CatalogDtos;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.Platform;
@@ -11,6 +12,7 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.pricing.PricingPolicy;
 import com.globalfutservice.web.ApiExceptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,14 @@ public class CatalogService {
     public CatalogService(RateCardRepository repository, AppProperties props, PricingPolicy policy,
                           CoachingSettingsService coachingSettings, ListingSettings listingSettings,
                           CoinPricingService coinPricing) {
+        this(repository, props, policy, coachingSettings, listingSettings, coinPricing, null);
+    }
+
+    @Autowired
+    public CatalogService(RateCardRepository repository, AppProperties props, PricingPolicy policy,
+                          CoachingSettingsService coachingSettings, ListingSettings listingSettings,
+                          CoinPricingService coinPricing, ServiceListingService serviceListings) {
+        this.serviceListings = serviceListings;
         this.coinPricing = coinPricing;
         this.listingSettings = listingSettings;
         this.repository = repository;
@@ -54,6 +64,9 @@ public class CatalogService {
 
     /** Coin prices, which live in their own structures rather than the rate card. */
     private final CoinPricingService coinPricing;
+
+    /** Objectives and Tournaments: what the team wrote, and whether each is on sale. */
+    private final ServiceListingService serviceListings;
 
     @Transactional(readOnly = true)
     public CatalogDtos.CatalogResponse catalogue(Currency currency) {
@@ -83,7 +96,8 @@ public class CatalogService {
             bySku.put(Sku.TRADING_SERVICE, coins);
         }
         for (RateCardEntity row : rows) {
-            if (row.getSku() == Sku.TRADING_SERVICE) {
+            // Coins are above; Objectives and Tournaments below, listing by listing.
+            if (row.getSku() == Sku.TRADING_SERVICE || row.getSku().isListingService()) {
                 continue;
             }
             bySku.computeIfAbsent(row.getSku(), k -> new ArrayList<>()).add(
@@ -113,6 +127,26 @@ public class CatalogService {
                             null));
         }
 
+        /*
+         * Objectives and Tournaments: only listings switched on, in the team's display order,
+         * and only those priced in this currency -- one with no price here is not on sale here,
+         * as a Champs tier with none is not.
+         */
+        if (serviceListings != null) {
+            for (ServiceListingService.OnSale sale : serviceListings.onSale(currency)) {
+                RateCardEntity row = sale.row();
+                ServiceListingService.PublicView view = sale.view();
+                boolean hourly = "PER_HOUR".equals(view.pricingType());
+                bySku.computeIfAbsent(sale.listing().getSku(), k -> new ArrayList<>()).add(
+                        new CatalogDtos.CatalogOption(null, row.getVariant(), view.title(), row.getUnitPriceMinor(),
+                                Money.ofMinor(row.getUnitPriceMinor(), row.getCurrency()).format(),
+                                hourly ? java.math.BigDecimal.ONE : null,
+                                hourly ? java.math.BigDecimal.valueOf(view.maxHours()) : null,
+                                hourly ? java.math.BigDecimal.ONE : null,
+                                null, false, null, view));
+            }
+        }
+
         List<CatalogDtos.ServiceGroup> services = new ArrayList<>();
         // Iterate the enum, not the map, so the storefront receives every service in a
         // stable order — including the ones that are priced but not yet sellable, which
@@ -139,7 +173,7 @@ public class CatalogService {
     @Transactional(readOnly = true)
     public List<Currency> availableCurrencies() {
         java.util.Set<Currency> live = java.util.EnumSet.noneOf(Currency.class);
-        live.addAll(repository.findLiveCurrencies(props.season()));
+        live.addAll(repository.findLiveCurrenciesExcept(props.season(), ServiceListingService.SKUS));
         live.addAll(coinPricing.pricedCurrencies(props.season()));
         List<String> enabled = props.pricing().enabledCurrencies();
         List<Currency> out = live.stream().filter(c -> enabled.contains(c.name())).sorted().toList();
@@ -157,6 +191,13 @@ public class CatalogService {
                                     java.math.BigDecimal quantity) {
         if (sku == Sku.TRADING_SERVICE) {
             return coinPricing.rateCard(platform, currency, quantity);
+        }
+        // A listing is priced only while it is on sale, from its own title and pricing type.
+        if (sku.isListingService()) {
+            if (serviceListings == null) {
+                throw new ApiExceptions.NotFoundException("That option is not available right now.");
+            }
+            return serviceListings.rateCard(sku, variant, currency);
         }
         return repository.findLive(props.season(), sku, platform, variant, currency)
                 .orElseThrow(() -> new ApiExceptions.NotFoundException(

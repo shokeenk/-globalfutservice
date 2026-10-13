@@ -35,6 +35,9 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>,
 
     boolean existsByQuoteId(String quoteId);
 
+    /** Orders placed for one Objectives or Tournaments listing, whichever category it was in. */
+    long countByVariantAndSkuIn(String variant, java.util.Collection<com.globalfutservice.domain.catalog.Sku> skus);
+
     /**
      * Whether an order placed since {@code since} carries this coupon code: one whose
      * redemption was handed back (abandoned, refunded) still shows the discount it had.

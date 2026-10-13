@@ -110,13 +110,13 @@ export const STATUS_TABS: Array<{ key: string; label: string; statuses: string[]
 ]
 
 /**
- * The service tabs, and what each covers. Boosting is Champs and Rivals together; the
- * Service dropdown can still pick either one.
+ * The service tabs, and what each covers. Boosting is Champs, Rivals, Objectives and
+ * Tournaments together; the Service dropdown can still pick each one.
  */
 export const SERVICE_TABS: Array<{ key: string; label: string; skus: string[] }> = [
   { key: '', label: 'All Orders', skus: [] },
   { key: 'COINS', label: 'Coins', skus: ['TRADING_SERVICE'] },
-  { key: 'BOOSTING', label: 'Boosting', skus: ['BOOST_CHAMPS', 'BOOST_RIVALS'] },
+  { key: 'BOOSTING', label: 'Boosting', skus: ['BOOST_CHAMPS', 'BOOST_RIVALS', 'BOOST_OBJECTIVES', 'BOOST_TOURNAMENTS'] },
   { key: 'COACHING', label: 'Coaching', skus: ['COACHING'] },
 ]
 
@@ -127,6 +127,8 @@ export const SERVICE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'BOOSTING', label: 'Boosting (all)' },
   { value: 'CHAMPS', label: 'Champs Boosting' },
   { value: 'RIVALS', label: 'Rivals Boosting' },
+  { value: 'OBJECTIVES', label: 'Objectives' },
+  { value: 'TOURNAMENTS', label: 'Tournaments' },
   { value: 'COACHING', label: 'Coaching' },
 ]
 
@@ -135,6 +137,8 @@ export const SERVICE_TAG: Record<string, StatusStyle> = {
   TRADING_SERVICE: { label: 'Coins', tone: 'amber' },
   BOOST_CHAMPS: { label: 'Champs', tone: 'red' },
   BOOST_RIVALS: { label: 'Rivals', tone: 'violet' },
+  BOOST_OBJECTIVES: { label: 'Objectives', tone: 'red' },
+  BOOST_TOURNAMENTS: { label: 'Tournaments', tone: 'violet' },
   COACHING: { label: 'Coaching', tone: 'blue' },
 }
 

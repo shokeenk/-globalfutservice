@@ -58,6 +58,9 @@ public class SeasonPriceCheck {
             Set<Sku> skus = rates.findLiveForSeason(season, currency).stream()
                     .map(RateCardEntity::getSku)
                     .filter(sku -> sku != Sku.TRADING_SERVICE)
+                    // Objectives and Tournaments are on sale listing by listing, when the team
+                    // switches one on: a draft's price says nothing is for sale, and none is a gap.
+                    .filter(sku -> !sku.isListingService())
                     .collect(Collectors.toCollection(() -> EnumSet.noneOf(Sku.class)));
             if (coinPriced.contains(currency)) {
                 skus.add(Sku.TRADING_SERVICE);
@@ -98,7 +101,8 @@ public class SeasonPriceCheck {
      */
     static List<String> gaps(String season, Map<Currency, Set<Sku>> priced,
                              Supplier<List<String>> liveSeasons) {
-        List<Sku> sellable = Arrays.stream(Sku.values()).filter(Sku::sellable).toList();
+        List<Sku> sellable = Arrays.stream(Sku.values())
+                .filter(Sku::sellable).filter(sku -> !sku.isListingService()).toList();
 
         boolean anythingOnSale = priced.values().stream()
                 .anyMatch(skus -> skus.stream().anyMatch(Sku::sellable));
