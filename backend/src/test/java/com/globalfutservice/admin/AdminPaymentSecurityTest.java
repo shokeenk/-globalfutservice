@@ -2,7 +2,6 @@ package com.globalfutservice.admin;
 
 import com.globalfutservice.config.SecurityConfig;
 import com.globalfutservice.domain.money.Currency;
-import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.identity.AccountRole;
 import com.globalfutservice.payments.RefundEntity;
 import com.globalfutservice.payments.RefundService;
@@ -69,7 +68,7 @@ class AdminPaymentSecurityTest {
     private static AdminPaymentQueries.Row row() {
         return new AdminPaymentQueries.Row(4L, "GFS-26-CN43SP05", "=cmd|' /C calc'!A0", "rahul07@example.test",
                 "UPI", "412345678901", "9166172359@ybl", "SUCCESS", "READY_FOR_DELIVERY", 102500, "₹1,025.00", "INR",
-                Instant.parse("2026-09-26T10:04:00Z"), Instant.parse("2026-09-26T10:30:00Z"), "Vinay", null, true, null);
+                Instant.parse("2026-09-26T10:04:00Z"), Instant.parse("2026-09-26T10:30:00Z"), "Vinay", null, true, null, null);
     }
 
     @Test
@@ -134,8 +133,8 @@ class AdminPaymentSecurityTest {
     @Test
     @DisplayName("an admin records a refund; the method is checked")
     void adminRefunds() throws Exception {
-        when(refunds.record(eq("GFS-26-REFUND01"), eq(ManualPaymentMethod.UPI), anyString(), anyString(), eq(1L), eq("acc_staff")))
-                .thenReturn(new RefundEntity(9L, 102500, Currency.INR, ManualPaymentMethod.UPI, "412345678901", "Could not deliver", 1L));
+        when(refunds.record(eq("GFS-26-REFUND01"), eq(com.globalfutservice.payments.RefundMethod.UPI), anyString(), anyString(), eq(1L), eq("acc_staff")))
+                .thenReturn(new RefundEntity(9L, 102500, Currency.INR, com.globalfutservice.payments.RefundMethod.UPI, "412345678901", "Could not deliver", 1L));
         mvc.perform(post(BASE + "/refunds").contentType(MediaType.APPLICATION_JSON).content(REFUND)
                         .with(authentication(as(AccountRole.ADMIN))))
                 .andExpect(status().isCreated());

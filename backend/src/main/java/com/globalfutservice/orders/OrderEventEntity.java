@@ -52,6 +52,18 @@ public class OrderEventEntity {
 
     private String reason;
 
+    /**
+     * Names a row the customer's page words in their own language, with {@code detail} as
+     * its one value ("SETTLEMENT_PAID", "₹475.00"). Null for an ordinary status change.
+     */
+    private String kind;
+
+    private String detail;
+
+    /** Staff's alone -- an admin's note, a proof upload. Never shown to the customer (V47). */
+    @Column(name = "staff_only", nullable = false)
+    private boolean staffOnly;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -67,6 +79,15 @@ public class OrderEventEntity {
         this.actorId = actorId;
         this.actorLabel = actorLabel;
         this.reason = reason;
+    }
+
+    public OrderEventEntity(Long orderId, OrderStatus fromStatus, OrderStatus toStatus,
+                            Actor actorType, Long actorId, String actorLabel, String reason,
+                            String kind, String detail, boolean staffOnly) {
+        this(orderId, fromStatus, toStatus, actorType, actorId, actorLabel, reason);
+        this.kind = kind;
+        this.detail = detail;
+        this.staffOnly = staffOnly;
     }
 
     public Long getId() {
@@ -95,6 +116,18 @@ public class OrderEventEntity {
 
     public String getReason() {
         return reason;
+    }
+
+    public String getKind() {
+        return kind;
+    }
+
+    public String getDetail() {
+        return detail;
+    }
+
+    public boolean isStaffOnly() {
+        return staffOnly;
     }
 
     public Instant getCreatedAt() {

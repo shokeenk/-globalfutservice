@@ -33,6 +33,10 @@ const ROWS: AdminPayment[] = [
   payment({ claimId: 2, publicRef: 'GFS-26-7XPENDNG', status: 'PENDING', method: 'CRYPTO', customerName: null, reference: '0xabc' }),
   payment({ claimId: 3, publicRef: 'GFS-26-REFUNDED', status: 'REFUNDED', method: 'PAYPAL',
     refund: { amountMinor: 825000, amountFormatted: '₹8,250.00', method: 'UPI', reference: 'RF-1', reason: 'Could not deliver', at: '2026-09-26T12:00:00Z', by: 'Vinay' } }),
+  payment({ claimId: 4, publicRef: 'GFS-26-592VBQ2Z', amountMinor: 389500, amountFormatted: '₹3,895.00',
+    orderStatus: 'DELIVERED',
+    settlementRefund: { amountMinor: 47500, amountFormatted: '₹475.00', method: 'PAYOP', reference: 'RF-9001',
+      reason: 'Champions settlement: 14 of 15 wins achieved', at: '2026-10-15T05:00:00Z', by: 'Vinay' } }),
 ]
 
 const OVERVIEW: AdminPaymentOverview = {
@@ -141,6 +145,28 @@ describe('Payments page', () => {
     const panel = await screen.findByRole('complementary', { name: 'Payment details' })
     expect(within(panel).getByText('RF-1')).toBeInTheDocument()
     expect(within(panel).getByText('Could not deliver')).toBeInTheDocument()
+  })
+
+  it('shows a Champions settlement refund on a payment that stays a Success', async () => {
+    renderAt('/admin/payments?payment=4')
+    const panel = await screen.findByRole('complementary', { name: 'Payment details' })
+    const section = within(panel).getByTestId('settlement-refund')
+    expect(section).toHaveTextContent('Partial refund: Champions settlement')
+    expect(section).toHaveTextContent('₹475.00')
+    expect(section).toHaveTextContent('Payop')
+    expect(section).toHaveTextContent('RF-9001')
+    expect(section).toHaveTextContent('Champions settlement: 14 of 15 wins achieved')
+  })
+
+  it('offers Payop as a way the money went back, its reference the Payop refund ID', async () => {
+    renderAt('/admin/payments?payment=1')
+    const panel = await screen.findByRole('complementary', { name: 'Payment details' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Record Refund' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Record Refund' })
+    const methods = within(dialog).getByLabelText(/Sent back by/)
+    expect(within(methods).getAllByRole('option').map((o) => o.textContent)).toEqual(['UPI', 'PayPal', 'USDT (TRON)', 'Payop'])
+    expect(within(dialog).getByLabelText(/Reference of the money/)).toHaveAttribute('placeholder',
+      'UTR, PayPal refund ID, transaction hash or Payop refund ID')
   })
 
   it('records a refund for the full total, after saying what it does', async () => {

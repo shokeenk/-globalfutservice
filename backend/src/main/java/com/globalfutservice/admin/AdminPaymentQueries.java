@@ -49,6 +49,9 @@ public class AdminPaymentQueries {
                      r.amount_minor as refund_minor, r.currency as refund_currency, r.method as refund_method,
                      r.reference as refund_reference, r.reason as refund_reason, r.created_at as refunded_at,
                      coalesce(nullif(trim(ra.display_name), ''), ra.email) as refunded_by,
+                     sr.amount_minor as settled_minor, sr.currency as settled_currency, sr.method as settled_method,
+                     sr.reference as settled_reference, sr.reason as settled_reason, sr.created_at as settled_at,
+                     coalesce(nullif(trim(sa.display_name), ''), sa.email) as settled_by,
                      case when c.status = 'SUBMITTED' then 'PENDING'
                           when c.status = 'REJECTED' then 'FAILED'
                           when o.status = 'REFUNDED' then 'REFUNDED'
@@ -57,8 +60,10 @@ public class AdminPaymentQueries {
                 join orders o on o.id = c.order_id
                 left join account a on a.id = o.account_id
                 left join account rv on rv.id = c.reviewed_by
-                left join refund r on r.order_id = o.id and c.status = 'VERIFIED'
+                left join refund r on r.order_id = o.id and r.kind = 'FULL' and c.status = 'VERIFIED'
                 left join account ra on ra.id = r.created_by
+                left join refund sr on sr.order_id = o.id and sr.kind = 'SETTLEMENT' and c.status = 'VERIFIED'
+                left join account sa on sa.id = sr.created_by
             )""";
 
     static final Set<String> STATUSES = Set.of("SUCCESS", "PENDING", "FAILED", "REFUNDED");
@@ -84,7 +89,12 @@ public class AdminPaymentQueries {
                       long amountMinor, String amountFormatted, String currency, Instant submittedAt,
                       Instant reviewedAt, String reviewedBy, String reviewNote, boolean hasProof,
                       /** Present when a refund was recorded; a Refunded row without one predates the record. */
-                      Refund refund) {
+                      Refund refund,
+                      /**
+                       * Part of the payment sent back for a Champions result: wins not achieved.
+                       * The payment stays a Success -- the order was delivered.
+                       */
+                      Refund settlementRefund) {
     }
 
     public record Page(List<Row> items, long total, int page, int size) {
@@ -180,7 +190,8 @@ public class AdminPaymentQueries {
             clauses.add("""
                     (lower(public_ref) like :p escape '\\' or lower(email) like :p escape '\\'
                      or lower(reference) like :p escape '\\' or lower(coalesce(name, '')) like :p escape '\\'
-                     or lower(coalesce(refund_reference, '')) like :p escape '\\')""");
+                     or lower(coalesce(refund_reference, '')) like :p escape '\\'
+                     or lower(coalesce(settled_reference, '')) like :p escape '\\')""");
         }
         return clauses.isEmpty() ? " " : " where " + String.join(" and ", clauses) + " ";
     }
@@ -196,12 +207,20 @@ public class AdminPaymentQueries {
                     rs.getString("refund_method"), rs.getString("refund_reference"), rs.getString("refund_reason"),
                     instant(rs, "refunded_at"), rs.getString("refunded_by"));
         }
+        Refund settlementRefund = null;
+        long settledMinor = rs.getLong("settled_minor");
+        if (!rs.wasNull()) {
+            Currency settledCurrency = Currency.valueOf(rs.getString("settled_currency").trim());
+            settlementRefund = new Refund(settledMinor, Money.ofMinor(settledMinor, settledCurrency).format(),
+                    rs.getString("settled_method"), rs.getString("settled_reference"), rs.getString("settled_reason"),
+                    instant(rs, "settled_at"), rs.getString("settled_by"));
+        }
         return new Row(rs.getLong("claim_id"), rs.getString("public_ref"), rs.getString("name"), rs.getString("email"),
                 rs.getString("method"), rs.getString("reference"), rs.getString("destination"),
                 rs.getString("pay_status"), rs.getString("order_status"), amount,
                 Money.ofMinor(amount, currency).format(), currency.name(), instant(rs, "submitted_at"),
                 instant(rs, "reviewed_at"), rs.getString("reviewed_by"), rs.getString("review_note"),
-                rs.getBoolean("has_proof"), refund);
+                rs.getBoolean("has_proof"), refund, settlementRefund);
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {

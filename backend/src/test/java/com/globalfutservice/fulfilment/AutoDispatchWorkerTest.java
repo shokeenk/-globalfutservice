@@ -120,7 +120,8 @@ class AutoDispatchWorkerTest {
                 mock(PaymentGateway.class), mock(QuoteService.class), mock(LoyaltyService.class),
                 mock(AffiliateService.class), vault, notifications, mock(AccountRepository.class),
                 mock(CoachingService.class), mock(CouponService.class), mock(CustomerFeedService.class),
-                new ObjectMapper(), p, NOW, AfterCommit.immediate(), queue);
+                new ObjectMapper(), p, NOW, AfterCommit.immediate(), queue,
+                mock(com.globalfutservice.storecredit.StoreCreditService.class), mock(com.globalfutservice.orders.result.ResultRules.class), mock(com.globalfutservice.orders.result.OrderResultRepository.class));
         OrderEntity coins = new OrderEntity("GFS-26-UNIT0009", "q_9", "FC27", Sku.TRADING_SERVICE, null, null,
                 BigDecimal.ONE, DeliveryMethod.PLAYER_AUCTION, Currency.INR, 10000, 10000, "{}");
         ReflectionTestUtils.setField(coins, "id", 9L);
@@ -145,7 +146,8 @@ class AutoDispatchWorkerTest {
                 mock(PaymentGateway.class), mock(QuoteService.class), mock(LoyaltyService.class),
                 mock(AffiliateService.class), vault, notifications, mock(AccountRepository.class),
                 mock(CoachingService.class), mock(CouponService.class), mock(CustomerFeedService.class),
-                new ObjectMapper(), p, NOW, AfterCommit.immediate(), queue);
+                new ObjectMapper(), p, NOW, AfterCommit.immediate(), queue,
+                mock(com.globalfutservice.storecredit.StoreCreditService.class), mock(com.globalfutservice.orders.result.ResultRules.class), mock(com.globalfutservice.orders.result.OrderResultRepository.class));
         CredentialDtos.SubmitCredentialsRequest signIn = new CredentialDtos.SubmitCredentialsRequest(
                 "ea@example.test", "correct-horse", List.of("11112222", "33334444", "55556666"), null, null,
                 true, true, true, true);

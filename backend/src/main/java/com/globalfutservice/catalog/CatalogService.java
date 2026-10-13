@@ -198,6 +198,8 @@ public class CatalogService {
                         && props.razorpay().keyId() != null && !props.razorpay().keyId().isBlank()
                         && props.razorpay().keySecret() != null && !props.razorpay().keySecret().isBlank(),
                 props.notifications().emailEnabled(),
-                f.backupCodesRequired());
+                f.backupCodesRequired(),
+                props.champs() != null && props.champs().settlementEnabled(),
+                props.champs() == null ? 5 : props.champs().choiceDays());
     }
 }

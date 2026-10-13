@@ -4,6 +4,7 @@ import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.notify.email.CalendarInvite;
 import com.globalfutservice.notify.email.CoachingEmails;
 import com.globalfutservice.notify.email.EmailTemplate;
+import com.globalfutservice.notify.email.ChampionsEmails;
 import com.globalfutservice.notify.email.TransactionalEmails;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
@@ -196,6 +197,12 @@ public class EmailNotifier implements Notifier {
 
     @Override
     public void orderDelivered(OrderNotification n) {
+        if (n.settlement() != null) {
+            // A Champions order with its result: wins, what is owed and how to choose, in the
+            // branded template, with the button to the result on the order page.
+            sendHtml(n, ChampionsEmails.delivered(n, brand(), resultUrl(n), supportUrl(n)));
+            return;
+        }
         if (TransactionalEmails.isCoins(n)) {
             sendHtml(n, TransactionalEmails.orderDelivered(n, brand(), trackUrl(n)));
         } else {
@@ -398,6 +405,20 @@ public class EmailNotifier implements Notifier {
      */
     private String trackUrl(OrderNotification n) {
         return com.globalfutservice.orders.TrackingLinks.trackUrl(publicUrl(), n.publicRef());
+    }
+
+    /** A Champions settlement paid or issued: the customer's email. */
+    @Override
+    public void settlementSettled(OrderNotification n) {
+        if (n.settlement() == null || n.settlement().settlementFormatted() == null) {
+            return;
+        }
+        sendHtml(n, ChampionsEmails.settled(n, brand(), resultUrl(n), supportUrl(n)));
+    }
+
+    /** The order's tracking page, opened at its Champions result. */
+    private String resultUrl(OrderNotification n) {
+        return trackUrl(n) + "#order-result";
     }
 
     /** The order's support page on this site, with the live chat. */

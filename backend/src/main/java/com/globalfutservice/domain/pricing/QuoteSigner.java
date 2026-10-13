@@ -76,6 +76,14 @@ public final class QuoteSigner {
         if (q.priceVersion() != null) {
             sb.append(SEP).append(q.priceVersion());
         }
+        /*
+         * The store credit it spends, only when it spends some: every quote without credit
+         * keeps the form it had, and one with credit cannot be replayed as one without -- or
+         * with more of it -- because the amount is what the order debits.
+         */
+        if (q.storeCreditMinor() > 0) {
+            sb.append(SEP).append("sc").append(q.storeCreditMinor());
+        }
         return sb.toString();
     }
 }

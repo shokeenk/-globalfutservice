@@ -135,6 +135,14 @@ public interface Notifier {
         // Channels opt in by overriding.
     }
 
+    /**
+     * A Champions settlement was paid or issued -- by an admin, or by the default after the
+     * choice window. The customer's email; {@code notification.settlement()} carries it.
+     */
+    default void settlementSettled(OrderNotification notification) {
+        // Channels opt in by overriding.
+    }
+
     /** The screenshot for a claim, which arrives a moment after the claim itself. */
     default void paymentProofAttached(PaymentProofNotification notification) {
         // Channels opt in by overriding. Only a channel that can show an image should.

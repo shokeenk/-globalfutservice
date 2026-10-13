@@ -138,7 +138,8 @@ class BackupCodeRulesTest {
                 mock(NotificationService.class), mock(AccountRepository.class), mock(CoachingService.class),
                 mock(CouponService.class), mock(CustomerFeedService.class), new ObjectMapper(), props,
                 Clock.systemUTC(), AfterCommit.immediate(),
-                mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class));
+                mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class),
+                mock(com.globalfutservice.storecredit.StoreCreditService.class), mock(com.globalfutservice.orders.result.ResultRules.class), mock(com.globalfutservice.orders.result.OrderResultRepository.class));
 
         private OrderEntity unpaidCoinOrder() {
             when(props.fulfilment()).thenReturn(new Binder(new MapConfigurationPropertySource(

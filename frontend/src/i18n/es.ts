@@ -1657,6 +1657,81 @@ const es: Dictionary = {
     signInAgain:
       'Antes de pagar necesitamos de nuevo tus datos de acceso de EA. Los que enviaste se borran 24 horas después, por tu seguridad.',
   },
+  champs: {
+    infoTitle: 'Información sobre el boosting de Champions',
+    infoBody:
+      'Nuestro objetivo es conseguir las victorias de FUT Champions que has elegido. Si conseguimos ' +
+      'menos victorias, puedes elegir un reembolso admisible o Crédito de tienda GFS. Te enviaremos ' +
+      'por correo electrónico tus resultados finales y los detalles de la liquidación. Si necesitas ' +
+      'ayuda, contacta con nuestro',
+    liveChat: 'Soporte por chat en vivo',
+    detailsEyebrow: 'Detalles del pedido de Champions',
+    resultsTitle: 'Resultados del pedido de Champions',
+    winsOrdered: 'Victorias pedidas',
+    winsAchieved: 'Victorias conseguidas',
+    wins: (n: number): string => (n === 1 ? '1 victoria' : `${n} victorias`),
+    allAchieved: 'Todas las victorias conseguidas',
+    settlementAmount: 'Importe de la liquidación',
+    refundAmount: 'Importe del reembolso',
+    creditAmount: 'Importe del crédito de tienda',
+    settlementMethod: 'Forma de liquidación',
+    methodRefund: 'Reembolso',
+    methodCredit: 'Crédito de tienda GFS',
+    statusPending: 'Pendiente',
+    statusRefundPending: 'Reembolso pendiente',
+    statusRefundPaid: 'Pagado',
+    statusCreditPending: 'Crédito de tienda pendiente',
+    statusCreditIssued: 'Emitido',
+    footnote: 'También hemos enviado tus resultados finales y los detalles de la liquidación a tu correo registrado.',
+    getRefund: 'Obtener un reembolso',
+    getCredit: 'Obtener Crédito de tienda GFS',
+    chooseByCredit: (date: string): string =>
+      `Elige antes del ${date}. Si no eliges, recibirás Crédito de tienda GFS.`,
+    chooseByRefund: (date: string): string =>
+      `Elige antes del ${date}. Si no eliges, recibirás un reembolso.`,
+    confirmRefund: (amount: string): string =>
+      `¿Obtener un reembolso de ${amount}? No podrás cambiar esta elección más adelante.`,
+    confirmCredit: (amount: string): string =>
+      `¿Obtener ${amount} como Crédito de tienda GFS? No podrás cambiar esta elección más adelante.`,
+    confirm: 'Confirmar',
+    cancel: 'Cancelar',
+    chooseFailed: 'No se ha podido guardar tu elección. Inténtalo de nuevo.',
+    creditOnly: 'Este pedido se pagó en parte con Crédito de tienda GFS, así que la diferencia se devuelve como crédito de tienda.',
+    cancelled: 'Este pedido se reembolsó por completo.',
+    timelineDelivered: (wins: string): string => `${wins} victorias conseguidas`,
+    events: {
+      winsUpdated: (wins: string): string => `Victorias conseguidas actualizadas: ${wins}`,
+      choseRefund: 'Has elegido un reembolso',
+      choseCredit: 'Has elegido Crédito de tienda GFS',
+      methodRefund: 'Forma de liquidación: reembolso',
+      methodCredit: 'Forma de liquidación: Crédito de tienda GFS',
+      defaultedRefund: 'No se eligió a tiempo: se ha seleccionado un reembolso',
+      refundPaid: (amount: string): string => `Reembolso de ${amount} pagado`,
+      creditIssued: (amount: string): string => `Crédito de tienda GFS de ${amount} emitido`,
+      creditIssuedAuto: (amount: string, days: number): string =>
+        `Crédito de tienda GFS de ${amount} emitido automáticamente tras ${days} días`,
+    },
+  },
+
+  storeCredit: {
+    use: 'Usar mi Crédito de tienda GFS',
+    available: (amount: string): string => `${amount} disponibles`,
+    applied: (amount: string): string => `${amount} aplicados a este pedido`,
+    coversAll: 'Tu crédito de tienda cubre este pedido. No hay nada que pagar.',
+    paidTitle: 'Pagado con Crédito de tienda GFS',
+    paidBody: 'Tu crédito de tienda ha cubierto todo el pedido, así que no hay nada que pagar. Tu pedido está confirmado.',
+    trackOrder: 'Seguir tu pedido',
+    balanceTitle: 'Crédito de tienda GFS',
+    balanceNone: 'No tienes crédito de tienda.',
+    balanceHelp:
+      'Úsalo al pagar pedidos en la misma moneda. No caduca y no se puede retirar en efectivo.',
+    entries: {
+      ISSUED: 'Añadido',
+      SPENT: 'Usado',
+      RETURNED: 'Devuelto',
+    } as Record<string, string>,
+  },
+
   catalog: {
     services: {
       TRADING_SERVICE: 'Comprar monedas',
@@ -1693,6 +1768,7 @@ const es: Dictionary = {
       coupon: (code: string): string => `Cupón ${code}`,
       referral: (code: string): string => `Código de creador ${code}`,
       tierDiscount: 'Descuento de miembro',
+      storeCredit: 'Crédito de tienda GFS',
     },
   },
 }

@@ -73,7 +73,8 @@ public record AppProperties(
         @Valid @NotNull Campaigns campaigns,
         @Valid @NotNull Tawk tawk,
         @Valid @NotNull Payop payop,
-        @Valid @NotNull Fx fx) {
+        @Valid @NotNull Fx fx,
+        @Valid @NotNull Champs champs) {
 
     public record Security(
             /** HS256 signing key for access tokens. Minimum 32 bytes. */
@@ -256,6 +257,26 @@ public record AppProperties(
      * behind, changeable or withdrawable without a deploy, and obviously an input rather
      * than a result to anyone reading the code.
      */
+    /**
+     * Champions results and their settlement: wins achieved against wins ordered, and the
+     * difference refunded or given as GFS Store Credit.
+     */
+    public record Champs(
+            /**
+             * Off: no information card at checkout, Wins Achieved is not required to deliver
+             * and the default job does nothing. Results already recorded still show.
+             */
+            @DefaultValue("true") boolean settlementEnabled,
+            /** How long the customer has to choose, from when the result is recorded. */
+            @DefaultValue("5") @Min(1) @Max(60) int choiceDays,
+            /** What they get when they do not choose: STORE_CREDIT is issued there and then. */
+            @DefaultValue("STORE_CREDIT") @Pattern(regexp = "(?i)STORE_CREDIT|REFUND") String defaultMethod) {
+
+        public boolean defaultIsStoreCredit() {
+            return !"REFUND".equalsIgnoreCase(defaultMethod == null ? "" : defaultMethod.trim());
+        }
+    }
+
     public record Boosting(
             /** {@code VARIANT:basisPoints}, e.g. {@code WINS_15:9500} for 95%. */
             @DefaultValue({}) List<String> successRatePerVariant) {

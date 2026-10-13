@@ -76,7 +76,8 @@ class CoinPreviewParityTest {
                 coins.rateCard(inv.getArgument(1), inv.getArgument(3), inv.getArgument(4)));
         QuoteService quotes = new QuoteService(catalog, engine,
                 new QuoteSigner("test-only-quote-secret-00000000000000000000000000000"), mock(LoyaltyService.class),
-                mock(AffiliateService.class), mock(CouponService.class), Clock.systemUTC());
+                mock(AffiliateService.class), mock(CouponService.class),
+                mock(com.globalfutservice.storecredit.StoreCreditService.class), Clock.systemUTC());
 
         // The page's draft is the live structure, unchanged, as the admin opens it.
         var draft = new AdminCoinPricingController.Draft(50, 1000, 10, List.of(100), List.of(

@@ -17,6 +17,9 @@ import { looksLikeEmail } from '../lib/validation'
 import type { MyCoaching, Order, OrderSummary } from '../lib/types'
 import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
+import { useCatalog } from '../state/CatalogContext'
+import { ChampionsResultCard } from '../components/champs/ChampionsResultCard'
+import { resultEventText } from '../components/champs/resultEvents'
 
 /**
  * The tracking page. Staff who open a customer's tracking link -- from the admin's Orders
@@ -191,7 +194,10 @@ function CustomerTrack() {
    * after which nothing changes.
    */
   useEffect(() => {
-    if (!order || ['COMPLETED', 'ABANDONED', 'REFUNDED', 'CREDITED'].includes(order.status)) return
+    // A finished order has nothing left to change -- unless a Champions settlement on it is
+    // still owed, which can outlive the order's own completion.
+    if (!order || (['COMPLETED', 'ABANDONED', 'REFUNDED', 'CREDITED'].includes(order.status)
+      && order.result?.status !== 'PENDING')) return
     const ref = order.publicRef
     const refresh = () => {
       if (signedIn) {
@@ -731,6 +737,8 @@ export function OrderView({
 }) {
   const t = useT()
   const labels = useCatalogLabels()
+  const { policy } = useCatalog()
+  const choiceDays = policy?.champsChoiceDays ?? 5
   return (
     <Reveal direction="left" className="plate ticks overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-400/50
@@ -769,6 +777,19 @@ export function OrderView({
           */}
           <Detail label={t.track.deliveryMethod} value={deliveryLabel(order, t)} />
         </dl>
+
+        {/*
+          The Champions result, once Wins Achieved is recorded: between the order's
+          particulars and its breakdown. Staff's read-only view shows it without the
+          customer's buttons.
+        */}
+        {order.result && (
+          <ChampionsResultCard
+            order={{ ...order, result: order.result }}
+            canChoose={signedIn && !readOnly}
+            onChanged={onSubmitted}
+          />
+        )}
 
         {order.lines.length > 0 && (
           <div>
@@ -827,7 +848,9 @@ export function OrderView({
                       : 'border border-ink-300 bg-ink',
                   ].join(' ')}
                 />
-                <p className="text-[13px] text-chalk">{event.reason ?? event.toStatus}</p>
+                <p className="text-[13px] text-chalk">
+                  {resultEventText(event, t, choiceDays) ?? event.reason ?? event.toStatus}
+                </p>
                 <p className="text-[11.5px] text-chalk-faint">{dateTime(event.at)}</p>
               </li>
             ))}

@@ -172,7 +172,14 @@ public final class CatalogDtos {
              * shows that many boxes and asks for every one, so the number lives in one
              * setting rather than in an array literal in each form.
              */
-            int backupCodesRequired) {
+            int backupCodesRequired,
+            /**
+             * Whether Champions results are settled (GFS_CHAMPS_SETTLEMENT_ENABLED): the checkout
+             * shows its Champions information card only when they are.
+             */
+            boolean champsSettlementEnabled,
+            /** Days a Champions customer has to choose a refund or store credit (GFS_CHAMPS_CHOICE_DAYS). */
+            int champsChoiceDays) {
     }
 
     public record TierView(

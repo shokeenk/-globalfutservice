@@ -18,6 +18,8 @@ import { ticketLink } from '../lib/discordTicket'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
 import { internationalCopy, useInternationalOffer } from '../components/internationalOffer'
+import { StoreCreditRow } from '../components/StoreCredit'
+import { ChampionsInfoCard } from '../components/champs/ChampionsInfoCard'
 import { SEASON, useSeo } from '../lib/seo'
 import type {
   CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, SignedQuote,
@@ -87,6 +89,8 @@ export default function BoostingCheckout() {
 
   const [couponInput, setCouponInput] = useState(params.get('coupon') ?? '')
   const [couponCode, setCouponCode] = useState(params.get('coupon') ?? '')
+  // Spend the customer's GFS Store Credit on this order; offered only when they hold some.
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
   const [quote, setQuote] = useState<SignedQuote | null>(null)
   const [quoting, setQuoting] = useState(false)
 
@@ -154,12 +158,13 @@ export default function BoostingCheckout() {
       currency: catalog.currency,
       couponCode: couponCode.trim() || null,
       pointsToRedeem: 0,
+      useStoreCredit,
     })
       .then((fresh) => { if (live) setQuote(fresh) })
       .catch((e) => { if (live) setError(e instanceof ApiError ? e.message : b.placeFailed) })
       .finally(() => { if (live) setQuoting(false) })
     return () => { live = false }
-  }, [sku, variant, catalog, options.length, couponCode, step, b.placeFailed])
+  }, [sku, variant, catalog, options.length, couponCode, useStoreCredit, step, b.placeFailed])
 
   /*
    * The ways to pay: the shared list every checkout uses (lib/paymentMethods). The order's
@@ -196,6 +201,13 @@ export default function BoostingCheckout() {
       : null
 
   async function proceedToPayment(order: CreateOrderResponse) {
+    // Covered in full by store credit: already paid, so there is no payment step.
+    if (!order.payment) {
+      setPlacing(false)
+      setStep('done')
+      window.scrollTo({ top: 0 })
+      return
+    }
     if (payChoice === 'ONLINE' && !isStubGateway(order.payment)) {
       await openCheckout(order.payment, order.publicRef, {
         onDismiss: () => setPlacing(false),
@@ -312,6 +324,7 @@ export default function BoostingCheckout() {
                   disabled={placing || !quote}
                   placing={placing}
                   onContinue={() => void placeOrder()}
+                  champs={sku === 'BOOST_CHAMPS' && !!policy?.champsSettlementEnabled}
                 />
               )}
 
@@ -349,6 +362,8 @@ export default function BoostingCheckout() {
               onApplyCoupon={() => setCouponCode(couponInput)}
               editable={step === 'details'}
               pay={step === 'pay' ? paySummary : ORDER_SUMMARY}
+              useStoreCredit={useStoreCredit}
+              onStoreCredit={setUseStoreCredit}
             />
           </div>
         )}
@@ -415,7 +430,7 @@ function CheckoutHeader({ current }: { current: number }) {
 
 function DetailsStep({
   platform, onPlatform, launcher, onLauncher,
-  touched, disabled, placing, onContinue,
+  touched, disabled, placing, onContinue, champs = false,
 }: {
   platform: BoostPlatform | null
   onPlatform: (next: BoostPlatform) => void
@@ -426,6 +441,8 @@ function DetailsStep({
   disabled: boolean
   placing: boolean
   onContinue: () => void
+  /** A Champions order: the information card goes between the platform and the Discord block. */
+  champs?: boolean
 }) {
   const t = useT()
   const b = t.boostingCheckout
@@ -505,6 +522,12 @@ function DetailsStep({
             <FieldError id="boost-launcher-error" className="mt-3">{b.needLauncher}</FieldError>
           )}
           <InfoNote>{b.pcNote}</InfoNote>
+        </div>
+      )}
+
+      {champs && (
+        <div className="mt-6 border-t border-ink-400 pt-6">
+          <ChampionsInfoCard />
         </div>
       )}
 
@@ -854,6 +877,7 @@ function SummaryCell({ label, value, badge }: { label: string; value: string; ba
 
 function OrderPanel({
   option, serviceName, quote, quoting, couponInput, onCouponInput, onApplyCoupon, editable, pay,
+  useStoreCredit = false, onStoreCredit,
 }: {
   option: CatalogOption | null
   serviceName: string
@@ -868,6 +892,9 @@ function OrderPanel({
    * priced it: no 2.5% card fee, the chosen method's own fee and total, and its pay button.
    */
   pay: PaySummary
+  /** Spend GFS Store Credit: offered while the order can still be changed. */
+  useStoreCredit?: boolean
+  onStoreCredit?: (next: boolean) => void
 }) {
   const t = useT()
   const b = t.boostingCheckout
@@ -913,7 +940,7 @@ function OrderPanel({
         {extras.map((line) => (
           <div key={line.code} className="flex items-baseline justify-between gap-3">
             <dt className="text-[12.5px] text-chalk-muted">
-              {line.code === 'PAYMENT_FEE' ? labels.line(line) : line.label}
+              {line.code === 'PAYMENT_FEE' || line.code === 'STORE_CREDIT' ? labels.line(line) : line.label}
             </dt>
             <dd className={`tnum text-[12.5px] font-semibold ${line.amountMinor < 0 ? 'text-ok' : 'text-chalk'}`}>
               {line.amountFormatted}
@@ -936,6 +963,12 @@ function OrderPanel({
       </div>
       {quote?.couponMessage && (
         <p className="mt-2 text-[12px] text-chalk-faint">{quote.couponMessage}</p>
+      )}
+
+      {editable && onStoreCredit && (
+        <div className="mt-4">
+          <StoreCreditRow quote={quote} use={useStoreCredit} onChange={onStoreCredit} busy={quoting} />
+        </div>
       )}
 
       {/*

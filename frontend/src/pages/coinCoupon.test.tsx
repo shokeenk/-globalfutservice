@@ -66,3 +66,39 @@ it('a coupon on coins: sent with the quote, and the server\'s answer shown under
   expect(within(screen.getByRole('tablist', { name: 'Your order' })).getByRole('tab', { name: /Discount/ }))
     .toHaveAttribute('aria-selected', 'true')
 })
+
+it('GFS Store Credit on coins: offered with the balance, and using it is asked of the server', async () => {
+  api.get.mockResolvedValue([])
+  api.post.mockReset()
+  api.post.mockImplementation(async (_path: string, body: { platform?: string; useStoreCredit?: boolean }) => ({
+    quoteId: 'q1', season: 'FC26', sku: 'TRADING_SERVICE', platform: body.platform, variant: null, quantity: '0.1',
+    currency: 'USD',
+    lines: body.useStoreCredit
+      ? [{ code: 'BASE', label: 'Coins', amountMinor: 900, amountFormatted: '$9.00' },
+        { code: 'STORE_CREDIT', label: 'GFS Store Credit', amountMinor: -500, amountFormatted: '-$5.00' },
+        { code: 'GATEWAY_FEE', label: 'Payment processing (2.5%)', amountMinor: 10, amountFormatted: '$0.10' }]
+      : [{ code: 'BASE', label: 'Coins', amountMinor: 900, amountFormatted: '$9.00' },
+        { code: 'GATEWAY_FEE', label: 'Payment processing (2.5%)', amountMinor: 23, amountFormatted: '$0.23' }],
+    subtotalMinor: 900, totalMinor: body.useStoreCredit ? 410 : 923,
+    totalFormatted: body.useStoreCredit ? '$4.10' : '$9.23', pointsRedeemed: 0, pointsEarned: 0, referralCode: null,
+    couponCode: null, couponMessage: null, issuedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 600_000).toISOString(), signature: 'x',
+    storeCreditMinor: body.useStoreCredit ? 500 : 0, storeCreditAvailableMinor: 500,
+    storeCreditAvailableFormatted: '$5.00' }))
+
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    render(<MemoryRouter initialEntries={['/order']}><Routes><Route path="/order" element={<Order />} /></Routes></MemoryRouter>)
+    fireEvent.click(screen.getByRole('button', { name: /PLAYSTATION/ }))
+    await act(() => vi.runOnlyPendingTimersAsync())
+    const row = screen.getByTestId('store-credit')
+    expect(row).toHaveTextContent('$5.00 available')
+    fireEvent.click(within(row).getByRole('checkbox'))
+    await act(() => vi.runOnlyPendingTimersAsync())
+  } finally {
+    vi.useRealTimers()
+  }
+  await waitFor(() => expect(api.post.mock.calls[api.post.mock.calls.length - 1]?.[1])
+    .toMatchObject({ useStoreCredit: true }))
+  expect(await screen.findByText('$5.00 applied to this order')).toBeInTheDocument()
+})

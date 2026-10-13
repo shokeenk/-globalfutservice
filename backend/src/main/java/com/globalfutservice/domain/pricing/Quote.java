@@ -39,10 +39,24 @@ public record Quote(
         Instant issuedAt,
         Instant expiresAt,
         /** The coin price version that priced it; null for boosting and coaching. Signed. */
-        Long priceVersion) {
+        Long priceVersion,
+        /** GFS Store Credit this order spends, in its currency; 0 for none. Signed. */
+        long storeCreditMinor) {
+
+    /** Without store credit. */
+    public Quote(String quoteId, String season, Sku sku, Platform platform, String variant, BigDecimal quantity,
+                 Currency currency, List<QuoteLine> lines, Money subtotal, Money total, long pointsRedeemed,
+                 long pointsEarned, String referralCode, String couponCode, Instant issuedAt, Instant expiresAt,
+                 Long priceVersion) {
+        this(quoteId, season, sku, platform, variant, quantity, currency, lines, subtotal, total, pointsRedeemed,
+                pointsEarned, referralCode, couponCode, issuedAt, expiresAt, priceVersion, 0L);
+    }
 
     public Quote {
         lines = List.copyOf(lines);
+        if (storeCreditMinor < 0) {
+            throw new IllegalArgumentException("storeCreditMinor must not be negative");
+        }
     }
 
     public boolean isExpiredAt(Instant now) {

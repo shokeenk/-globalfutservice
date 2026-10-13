@@ -69,7 +69,7 @@ class CoachingCouponTest {
     private final CouponRedemptionRepository redemptions = mock(CouponRedemptionRepository.class);
     private final QuoteService quotes = new QuoteService(catalog, engine, new QuoteSigner(SECRET),
             mock(LoyaltyService.class), mock(AffiliateService.class), new CouponService(coupons, redemptions, clock),
-            clock);
+            mock(com.globalfutservice.storecredit.StoreCreditService.class), clock);
     private final AccountEntity buyer = mock(AccountEntity.class);
 
     @BeforeEach

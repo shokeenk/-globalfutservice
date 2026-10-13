@@ -166,9 +166,21 @@ public final class PricingEngine {
             net = BigDecimal.ZERO;
         }
 
-        BigDecimal gatewayFee = gatewayFee(net);
+        /*
+         * GFS Store Credit, in the order's own currency, after everything else and before
+         * the fee. It pays for part of the order the way money would, so the fee is charged
+         * only on what is left to pay with money -- and when the credit covers the lot, there
+         * is nothing to pay and no fee. Whole minor units only: credit is money, not a rate.
+         */
+        long storeCreditMinor = Math.max(0L, Math.min(customer.storeCreditMinor(), round(net)));
+        BigDecimal payable = net.subtract(BigDecimal.valueOf(storeCreditMinor), MC);
+        if (payable.signum() < 0) {
+            payable = BigDecimal.ZERO;
+        }
 
-        BigDecimal exactTotal = net.add(gatewayFee, MC);
+        BigDecimal gatewayFee = gatewayFee(payable);
+
+        BigDecimal exactTotal = payable.add(gatewayFee, MC);
 
         // ---- single rounding point ---------------------------------------------------
         long totalMinor = exactTotal.setScale(0, RoundingMode.HALF_UP).longValueExact();
@@ -179,14 +191,15 @@ public final class PricingEngine {
         long referralMinor = round(referralDiscount);
         long tierMinor = round(tierDiscount);
         long walletMinor = walletRedemption.longValueExact();
+        long creditMinor = -storeCreditMinor;
         long gatewayMinor = round(gatewayFee);
 
         long lineSum = baseMinor + marketTaxMinor + couponMinor + referralMinor + tierMinor
-                + walletMinor + gatewayMinor;
+                + walletMinor + creditMinor + gatewayMinor;
         // Fold the sub-paisa residual into BASE so the column adds up on screen.
         baseMinor += (totalMinor - lineSum);
 
-        List<QuoteLine> lines = new ArrayList<>(7);
+        List<QuoteLine> lines = new ArrayList<>(8);
         lines.add(new QuoteLine(LineCode.BASE, baseLabel(rateCard, qty), Money.ofMinor(baseMinor, currency)));
         /*
          * Shown whenever EA's cut is relevant, including when it costs nothing.
@@ -226,6 +239,9 @@ public final class PricingEngine {
                     pointsRedeemed + " reward points redeemed",
                     Money.ofMinor(walletMinor, currency)));
         }
+        if (creditMinor != 0) {
+            lines.add(new QuoteLine(LineCode.STORE_CREDIT, "GFS Store Credit", Money.ofMinor(creditMinor, currency)));
+        }
         if (gatewayMinor != 0) {
             lines.add(new QuoteLine(LineCode.GATEWAY_FEE,
                     "Payment processing (" + pct(policy.gatewayFeeBps()) + ")",
@@ -256,7 +272,8 @@ public final class PricingEngine {
                 couponApplies ? customer.couponCode() : null,
                 now,
                 now.plus(policy.quoteTtl()),
-                rateCard.priceVersion());
+                rateCard.priceVersion(),
+                storeCreditMinor);
     }
 
     /**

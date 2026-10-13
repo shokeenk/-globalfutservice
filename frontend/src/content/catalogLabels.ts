@@ -139,6 +139,8 @@ export function useCatalogLabels() {
           return t.catalog.lines.referral(context?.referralCode ?? '')
         case 'TIER_DISCOUNT':
           return t.catalog.lines.tierDiscount
+        case 'STORE_CREDIT':
+          return t.catalog.lines.storeCredit
         default:
           // An unknown code is a server ahead of this bundle. Its own label is the
           // best available answer and is never wrong, only untranslated.

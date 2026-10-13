@@ -42,7 +42,8 @@ class QuotePriceVersionTest {
             GatewayFeeMode.PASS_THROUGH, 2_000, Currency.INR, 100L, 200_000L, 20L, Duration.ofMinutes(10), true),
             Clock.systemUTC(), () -> "q_test0001");
     private final QuoteService quotes = new QuoteService(mock(CatalogService.class), engine, signer,
-            mock(LoyaltyService.class), mock(AffiliateService.class), mock(CouponService.class), Clock.systemUTC());
+            mock(LoyaltyService.class), mock(AffiliateService.class), mock(CouponService.class),
+            mock(com.globalfutservice.storecredit.StoreCreditService.class), Clock.systemUTC());
 
     private Quote coins(Long version) {
         RateCard card = new RateCard("FC26", Sku.TRADING_SERVICE, Platform.PLAYSTATION, null, "PlayStation",

@@ -134,6 +134,25 @@ class CustomerVocabularyTest {
         }
     }
 
+    @Test
+    @DisplayName("Champions results and GFS Store Credit, on the page and from the server, use none of the partner's words")
+    void championsAndStoreCredit() throws Exception {
+        List<Path> files = List.of(
+                FRONTEND.resolve("components").resolve("champs").resolve("ChampionsInfoCard.tsx"),
+                FRONTEND.resolve("components").resolve("champs").resolve("ChampionsResultCard.tsx"),
+                FRONTEND.resolve("components").resolve("champs").resolve("resultEvents.ts"),
+                FRONTEND.resolve("components").resolve("StoreCredit.tsx"),
+                BACKEND.resolve("orders").resolve("result").resolve("OrderResultService.java"),
+                BACKEND.resolve("orders").resolve("web").resolve("OrderResultController.java"),
+                BACKEND.resolve("storecredit").resolve("StoreCreditService.java"),
+                BACKEND.resolve("notify").resolve("email").resolve("ChampionsEmails.java"));
+        for (Path file : files) {
+            List<String> strings = literals(Files.readString(file));
+            assertThat(strings).as(file.getFileName().toString()).isNotEmpty();
+            assertClean(file.getFileName().toString(), strings);
+        }
+    }
+
     /**
      * Customers are never told to run /verify: Discord refuses to register the command.
      * Emails, the order ticket's texts, what the order page is sent, and the storefront's

@@ -361,7 +361,7 @@ public final class TransactionalEmails {
 
     // ---------------------------------------------------------------- delivered
 
-    private static final String TERMS_NOTICE = "Please note that under our Terms, receipt of this email closes the "
+    static final String TERMS_NOTICE = "Please note that under our Terms, receipt of this email closes the "
             + "refund window for this order.";
 
     public static String deliveredSubject(OrderNotification n) {
@@ -520,7 +520,7 @@ public final class TransactionalEmails {
      * is what stops the two kinds of email being confused for each other, and it is the
      * sentence that makes the promotional unsubscribe honest when it says "promotional".
      */
-    private static String orderFooterNote() {
+    static String orderFooterNote() {
         return "You are receiving this email because you placed an order with Global FUT "
                 + "Services. This is a transactional message about that order, not marketing.";
     }

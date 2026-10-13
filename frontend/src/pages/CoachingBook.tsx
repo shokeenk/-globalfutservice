@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CoachIcon } from '../components/CoachingIcons'
 import type { CoachIconName } from '../components/CoachingIcons'
 import { CouponRow } from '../components/CouponRow'
+import { StoreCreditRow } from '../components/StoreCredit'
 import { ManualPayment } from '../components/ManualPayment'
 import {
   ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, withoutPaymentFees,
@@ -115,6 +116,8 @@ export default function CoachingBook() {
   // The coupon the customer applied: what the next quote is asked to price.
   const [couponCode, setCouponCode] = useState('')
   const [requoting, setRequoting] = useState(false)
+  // Spend the customer's GFS Store Credit; offered only when they hold some in this currency.
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
   // What the pay step says the summary should show: the order as placed, or a Payop payment.
   const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
@@ -194,7 +197,7 @@ export default function CoachingBook() {
    * payment-processing line as every other order, so the total a customer is about to
    * pay is not the package price, and the review screen shows the quote's own lines.
    */
-  async function fetchQuote(code = couponCode): Promise<SignedQuote> {
+  async function fetchQuote(code = couponCode, credit = useStoreCredit): Promise<SignedQuote> {
     const fresh = await api.post<SignedQuote>('/api/v1/quotes', {
       sku: 'COACHING',
       platform: null,
@@ -203,9 +206,19 @@ export default function CoachingBook() {
       currency: catalog?.currency,
       couponCode: code.trim() || null,
       pointsToRedeem: 0,
+      useStoreCredit: credit,
     })
     setQuote(fresh)
     return fresh
+  }
+
+  /* Store credit on or off: priced again by the server, as a coupon is. */
+  function toggleStoreCredit(next: boolean) {
+    setUseStoreCredit(next)
+    setRequoting(true)
+    fetchQuote(couponCode, next)
+      .catch((e) => setError(e instanceof ApiError ? e.message : b.placeFailed))
+      .finally(() => setRequoting(false))
   }
 
   /*
@@ -243,6 +256,13 @@ export default function CoachingBook() {
   }
 
   async function proceedToPayment(order: CreateOrderResponse) {
+    // Covered in full by store credit: already paid, and the slot already booked.
+    if (!order.payment) {
+      setPlacing(false)
+      setStep('success')
+      window.scrollTo({ top: 0 })
+      return
+    }
     if (payChoice === 'ONLINE' && !isStubGateway(order.payment)) {
       await openCheckout(order.payment, order.publicRef, {
         onDismiss: () => setPlacing(false),
@@ -410,6 +430,8 @@ export default function CoachingBook() {
             couponCode={couponCode}
             requoting={requoting}
             onApplyCoupon={applyCoupon}
+            useStoreCredit={useStoreCredit}
+            onStoreCredit={toggleStoreCredit}
           />
         )}
 
@@ -737,6 +759,7 @@ function DetailsStep({
 function ReviewStep({
   option, quote, platform, handle, rank, focus, slot, choices, choice, onChoice,
   acceptedTerms, onAcceptedTerms, touched, placing, onPay, couponCode, requoting, onApplyCoupon,
+  useStoreCredit = false, onStoreCredit,
 }: {
   option: CatalogOption
   quote: SignedQuote | null
@@ -757,6 +780,9 @@ function ReviewStep({
   couponCode: string
   requoting: boolean
   onApplyCoupon: (code: string) => void
+  /** Spend GFS Store Credit on the order. */
+  useStoreCredit?: boolean
+  onStoreCredit?: (next: boolean) => void
 }) {
   const t = useT()
   const b = t.coachingBook
@@ -856,6 +882,11 @@ function ReviewStep({
                 onApply={onApplyCoupon}
               />
             </div>
+            {onStoreCredit && (
+              <div className="mt-4">
+                <StoreCreditRow quote={quote} use={useStoreCredit} onChange={onStoreCredit} busy={requoting} />
+              </div>
+            )}
             {!quote ? (
               <div className="mt-4 flex justify-center"><Spinner /></div>
             ) : (
@@ -919,7 +950,7 @@ function SummaryLines({ lines, totalFormatted }: { lines: QuoteLine[]; totalForm
       <ul className="mt-4 space-y-2">
         {lines.filter((line) => line.amountMinor !== 0 || line.code === 'PAYMENT_FEE').map((line) => (
           <li key={line.code} className="flex justify-between gap-4 text-[13px] text-chalk-muted">
-            <span>{line.code === 'PAYMENT_FEE' ? labels.line(line) : line.label}</span>
+            <span>{line.code === 'PAYMENT_FEE' || line.code === 'STORE_CREDIT' ? labels.line(line) : line.label}</span>
             <span className="tnum shrink-0">{line.amountFormatted}</span>
           </li>
         ))}

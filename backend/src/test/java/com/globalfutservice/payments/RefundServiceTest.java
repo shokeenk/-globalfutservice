@@ -4,7 +4,6 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStatus;
-import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
 import com.globalfutservice.web.ApiExceptions;
@@ -34,6 +33,7 @@ class RefundServiceTest {
 
     private OrderService orders;
     private RefundRepository refunds;
+    private com.globalfutservice.orders.result.OrderResultRepository results;
     private RefundService service;
     private OrderEntity order;
 
@@ -41,7 +41,8 @@ class RefundServiceTest {
     void setUp() {
         orders = mock(OrderService.class);
         refunds = mock(RefundRepository.class);
-        service = new RefundService(orders, refunds);
+        results = mock(com.globalfutservice.orders.result.OrderResultRepository.class);
+        service = new RefundService(orders, refunds, results);
         order = mock(OrderEntity.class);
         when(order.getId()).thenReturn(9L);
         when(order.getTotalMinor()).thenReturn(102500L);
@@ -55,7 +56,7 @@ class RefundServiceTest {
     @Test
     @DisplayName("records the full total and refunds the order, telling the customer how and not why")
     void records() {
-        RefundEntity refund = service.record("GFS-26-REFUND01", ManualPaymentMethod.UPI, " 412345678901 ",
+        RefundEntity refund = service.record("GFS-26-REFUND01", RefundMethod.UPI, " 412345678901 ",
                 "Customer abusive in ticket; do not serve again", 1L, "acc_admin");
 
         assertThat(refund.getAmountMinor()).isEqualTo(102500L);
@@ -71,13 +72,13 @@ class RefundServiceTest {
     @Test
     @DisplayName("a second refund on the same order is refused, before and during a race")
     void once() {
-        when(refunds.existsByOrderId(9L)).thenReturn(true);
-        assertThatThrownBy(() -> service.record("GFS-26-REFUND01", ManualPaymentMethod.PAYPAL, "x", "y", 1L, "a"))
+        when(refunds.existsByOrderIdAndKind(9L, RefundEntity.Kind.FULL)).thenReturn(true);
+        assertThatThrownBy(() -> service.record("GFS-26-REFUND01", RefundMethod.PAYPAL, "x", "y", 1L, "a"))
                 .isInstanceOf(ApiExceptions.ConflictException.class).hasMessageContaining("already recorded");
 
-        when(refunds.existsByOrderId(9L)).thenReturn(false);
+        when(refunds.existsByOrderIdAndKind(9L, RefundEntity.Kind.FULL)).thenReturn(false);
         when(refunds.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("refund_order_uk"));
-        assertThatThrownBy(() -> service.record("GFS-26-REFUND01", ManualPaymentMethod.PAYPAL, "x", "y", 1L, "a"))
+        assertThatThrownBy(() -> service.record("GFS-26-REFUND01", RefundMethod.PAYPAL, "x", "y", 1L, "a"))
                 .isInstanceOf(ApiExceptions.ConflictException.class).hasMessageContaining("already recorded");
         verify(orders, never()).transition(any(), any(), any(), any(), anyString(), anyString());
     }
@@ -89,7 +90,7 @@ class RefundServiceTest {
     void notRefundable(OrderStatus status) {
         when(order.getStatus()).thenReturn(status);
 
-        assertThatThrownBy(() -> service.record("GFS-26-REFUND01", ManualPaymentMethod.UPI, "x", "y", 1L, "a"))
+        assertThatThrownBy(() -> service.record("GFS-26-REFUND01", RefundMethod.UPI, "x", "y", 1L, "a"))
                 .isInstanceOf(ApiExceptions.ConflictException.class)
                 .hasMessage(RefundService.whyNot(status));
         verify(refunds, never()).saveAndFlush(any());
@@ -101,7 +102,7 @@ class RefundServiceTest {
     @DisplayName("allowed wherever an operator could already refund")
     void refundable(OrderStatus status) {
         when(order.getStatus()).thenReturn(status);
-        service.record("GFS-26-REFUND01", ManualPaymentMethod.CRYPTO, "0xabc", "Could not deliver", 1L, "a");
+        service.record("GFS-26-REFUND01", RefundMethod.CRYPTO, "0xabc", "Could not deliver", 1L, "a");
         verify(refunds).saveAndFlush(any());
     }
 

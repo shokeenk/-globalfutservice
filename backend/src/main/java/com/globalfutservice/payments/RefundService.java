@@ -1,17 +1,22 @@
 package com.globalfutservice.payments;
 
+import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.orders.Actor;
 import com.globalfutservice.domain.orders.OrderStateMachine;
 import com.globalfutservice.domain.orders.OrderStatus;
-import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.orders.result.OrderResultEntity;
+import com.globalfutservice.orders.result.OrderResultRepository;
+import com.globalfutservice.orders.result.SettlementCalculator;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 /**
  * Recording money sent back to a customer.
@@ -32,17 +37,24 @@ public class RefundService {
 
     private final OrderService orders;
     private final RefundRepository refunds;
+    private final OrderResultRepository results;
 
-    public RefundService(OrderService orders, RefundRepository refunds) {
+    public RefundService(OrderService orders, RefundRepository refunds, OrderResultRepository results) {
         this.orders = orders;
         this.refunds = refunds;
+        this.results = results;
     }
 
+    /**
+     * Records the full refund. When part of the order was already settled -- a Champions
+     * settlement paid as a refund or as store credit -- the refund is the total less that,
+     * and the customer's line says so.
+     */
     @Transactional
-    public RefundEntity record(String publicRef, ManualPaymentMethod method, String reference,
+    public RefundEntity record(String publicRef, RefundMethod method, String reference,
                                String reason, Long adminId, String adminLabel) {
         OrderEntity order = orders.requireAny(publicRef);
-        if (refunds.existsByOrderId(order.getId())) {
+        if (refunds.existsByOrderIdAndKind(order.getId(), RefundEntity.Kind.FULL)) {
             throw new ApiExceptions.ConflictException("already_refunded",
                     "A refund is already recorded for " + publicRef + ".");
         }
@@ -51,10 +63,20 @@ public class RefundService {
             throw new ApiExceptions.ConflictException("not_refundable", whyNot(status));
         }
 
+        Optional<OrderResultEntity> settled = results.findById(order.getId()).filter(OrderResultEntity::isSettled);
+        long settledMinor = settled.map(OrderResultEntity::getSettlementMinor).orElse(0L);
+        long amount = SettlementCalculator.moneyBackOnFullRefund(order.getTotalMinor(), settledMinor);
+        if (amount == 0) {
+            throw new ApiExceptions.ConflictException("nothing_to_refund",
+                    "Everything paid for " + publicRef + " in money was already settled. "
+                            + "Nothing is left to refund.");
+        }
+        Money refunded = Money.ofMinor(amount, order.getCurrency());
+
         RefundEntity refund;
         try {
-            refund = refunds.saveAndFlush(new RefundEntity(order.getId(), order.getTotalMinor(),
-                    order.getCurrency(), method, reference.trim(), reason.trim(), adminId));
+            refund = refunds.saveAndFlush(new RefundEntity(order.getId(), amount,
+                    order.getCurrency(), method, reference.trim(), reason.trim(), adminId, RefundEntity.Kind.FULL));
         } catch (DataIntegrityViolationException raced) {
             // Two admins recording the same refund at once: the unique index kept one.
             throw new ApiExceptions.ConflictException("already_refunded",
@@ -64,11 +86,16 @@ public class RefundService {
         // The customer reads this line on their order page, so it says what they would want
         // to know -- how much, how, and the reference to look for -- and not the reason,
         // which is written for staff.
-        orders.transition(order, OrderStatus.REFUNDED, Actor.OPERATOR, adminId, adminLabel,
-                "Refunded " + order.total().format() + " by " + label(method)
-                        + ", reference " + reference.trim() + ".");
+        String line = "Refunded " + refunded.format() + " by " + method.label()
+                + ", reference " + reference.trim() + ".";
+        if (settled.isPresent()) {
+            line += " " + Money.ofMinor(settledMinor, order.getCurrency()).format() + " was already settled "
+                    + (settled.get().getMethod() == OrderResultEntity.Method.STORE_CREDIT
+                    ? "as GFS Store Credit." : "as a refund.");
+        }
+        orders.transition(order, OrderStatus.REFUNDED, Actor.OPERATOR, adminId, adminLabel, line);
 
-        log.info("Admin {} recorded a refund of {} on order {}", adminLabel, order.total().format(), publicRef);
+        log.info("Admin {} recorded a refund of {} on order {}", adminLabel, refunded.format(), publicRef);
         return refund;
     }
 
@@ -82,11 +109,5 @@ public class RefundService {
         };
     }
 
-    static String label(ManualPaymentMethod method) {
-        return switch (method) {
-            case UPI -> "UPI";
-            case PAYPAL -> "PayPal";
-            case CRYPTO -> "USDT (TRON)";
-        };
-    }
+
 }
