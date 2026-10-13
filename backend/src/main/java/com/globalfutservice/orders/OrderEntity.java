@@ -125,6 +125,10 @@ public class OrderEntity {
     @Column(name = "points_redeemed", nullable = false)
     private long pointsRedeemed;
 
+    /** GFS Store Credit this order spent, from its signed quote (V48). Zero for none. */
+    @Column(name = "store_credit_minor", nullable = false)
+    private long storeCreditMinor;
+
     @Column(name = "points_earned", nullable = false)
     private long pointsEarned;
 
@@ -454,6 +458,14 @@ public class OrderEntity {
 
     public void setPointsRedeemed(long pointsRedeemed) {
         this.pointsRedeemed = pointsRedeemed;
+    }
+
+    public long getStoreCreditMinor() {
+        return storeCreditMinor;
+    }
+
+    public void setStoreCreditMinor(long storeCreditMinor) {
+        this.storeCreditMinor = storeCreditMinor;
     }
 
     public long getPointsEarned() {

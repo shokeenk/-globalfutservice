@@ -138,7 +138,17 @@ public final class OrderDtos {
             String actorType,
             String actorLabel,
             String reason,
-            Instant at) {
+            Instant at,
+            /** A row the customer's page words itself, and its one value; null otherwise. */
+            @JsonInclude(JsonInclude.Include.NON_NULL) String kind,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String detail,
+            /** Staff's alone. Only ever true on the staff view: the customer's never carries one. */
+            @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean staffOnly) {
+
+        public OrderEventDto(String fromStatus, String toStatus, String actorType, String actorLabel, String reason,
+                             Instant at) {
+            this(fromStatus, toStatus, actorType, actorLabel, reason, at, null, null, false);
+        }
     }
 
     /**
@@ -231,7 +241,13 @@ public final class OrderDtos {
               stops being payable.
             */
             String paymentState,
-            Instant payBy) {
+            Instant payBy,
+
+            /*
+              A Champions order's result once Wins Achieved is recorded: the wins, what is
+              owed and how it is settled. Null on every other order and before delivery.
+            */
+            com.globalfutservice.orders.result.ResultDtos.CustomerView result) {
     }
 
     /**

@@ -6,7 +6,7 @@ import java.util.Optional;
 
 public interface RefundRepository extends JpaRepository<RefundEntity, Long> {
 
-    Optional<RefundEntity> findByOrderId(Long orderId);
+    Optional<RefundEntity> findByOrderIdAndKind(Long orderId, RefundEntity.Kind kind);
 
-    boolean existsByOrderId(Long orderId);
+    boolean existsByOrderIdAndKind(Long orderId, RefundEntity.Kind kind);
 }

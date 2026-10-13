@@ -228,6 +228,28 @@ public class LoyaltyService {
     }
 
     /**
+     * A Champions settlement on an order whose points have already landed: takes back the
+     * share of them the settled amount paid for, never taking the balance below zero.
+     *
+     * @return the points actually taken back -- fewer than asked when the balance is lower
+     */
+    @Transactional
+    public long deductForSettlement(Long accountId, Long orderId, long points, String orderRef, Long actorId) {
+        if (accountId == null || points <= 0
+                || repository.existsByOrderIdAndEntryType(orderId, PointsEntryType.SETTLEMENT_DEDUCTION)) {
+            return 0L;
+        }
+        long taken = Math.min(points, Math.max(0L, repository.balanceOf(accountId)));
+        if (taken == 0) {
+            return 0L;
+        }
+        repository.save(new PointsLedgerEntity(accountId, orderId, PointsEntryType.SETTLEMENT_DEDUCTION,
+                PointsWallet.signedAmount(PointsEntryType.SETTLEMENT_DEDUCTION, taken),
+                "Settled on order " + orderRef, actorId));
+        return taken;
+    }
+
+    /**
      * Store credit and goodwill grants.
      *
      * <p>An upheld guarantee claim settled as credit is issued here: the wallet already

@@ -8,7 +8,7 @@ import { StatusBadge } from '../ui/Badge'
 import { buttonClasses } from '../ui/controls'
 import { dateAndTime } from '../ui/format'
 import { MethodMark } from '../ui/MethodMark'
-import { METHOD_LABEL, PAY_STATUS } from '../ui/status'
+import { PAY_STATUS, REFUND_METHOD_LABEL } from '../ui/status'
 import { reviewClaim } from './review'
 
 /**
@@ -134,7 +134,7 @@ export function PaymentPanel({
               {p.refund ? (
                 <dl className="mt-2 space-y-1.5 text-[13px]">
                   <div className="flex gap-3"><dt className="w-24 text-admin-faint">Amount</dt><dd>{p.refund.amountFormatted}</dd></div>
-                  <div className="flex gap-3"><dt className="w-24 text-admin-faint">Sent by</dt><dd>{METHOD_LABEL[p.refund.method] ?? p.refund.method}</dd></div>
+                  <div className="flex gap-3"><dt className="w-24 text-admin-faint">Sent by</dt><dd>{REFUND_METHOD_LABEL[p.refund.method] ?? p.refund.method}</dd></div>
                   <div className="flex gap-3"><dt className="w-24 text-admin-faint">Reference</dt><dd style={{ overflowWrap: 'anywhere' }}>{p.refund.reference}</dd></div>
                   <div className="flex gap-3"><dt className="w-24 text-admin-faint">Reason</dt><dd>{p.refund.reason}</dd></div>
                   <div className="flex gap-3"><dt className="w-24 text-admin-faint">Recorded</dt>
@@ -145,6 +145,25 @@ export function PaymentPanel({
                   This order was marked refunded before refunds were recorded, so there is no amount or reference on file.
                 </p>
               )}
+            </section>
+          )}
+
+          {p.settlementRefund && (
+            <section aria-labelledby="settlement-refund" className="mt-5 rounded-admin-control border border-admin-line p-4"
+                     data-testid="settlement-refund">
+              <h3 id="settlement-refund" className="text-[14px] font-semibold text-admin-ink">
+                Partial refund: Champions settlement
+              </h3>
+              <dl className="mt-2 space-y-1.5 text-[13px]">
+                <div className="flex gap-3"><dt className="w-24 text-admin-faint">Amount</dt><dd>{p.settlementRefund.amountFormatted}</dd></div>
+                <div className="flex gap-3"><dt className="w-24 text-admin-faint">Sent by</dt>
+                  <dd>{REFUND_METHOD_LABEL[p.settlementRefund.method] ?? p.settlementRefund.method}</dd></div>
+                <div className="flex gap-3"><dt className="w-24 text-admin-faint">Reference</dt>
+                  <dd style={{ overflowWrap: 'anywhere' }}>{p.settlementRefund.reference}</dd></div>
+                <div className="flex gap-3"><dt className="w-24 text-admin-faint">For</dt><dd>{p.settlementRefund.reason}</dd></div>
+                <div className="flex gap-3"><dt className="w-24 text-admin-faint">Recorded</dt>
+                  <dd>{dateAndTime(p.settlementRefund.at)}{p.settlementRefund.by ? ` by ${p.settlementRefund.by}` : ''}</dd></div>
+              </dl>
             </section>
           )}
 

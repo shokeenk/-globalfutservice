@@ -36,6 +36,13 @@ import com.globalfutservice.payments.PaymentGateway;
 import com.globalfutservice.payments.PaymentRepository;
 import com.globalfutservice.pricing.CouponService;
 import com.globalfutservice.pricing.QuoteService;
+import com.globalfutservice.notify.SettlementNotice;
+import com.globalfutservice.orders.result.OrderResultEntity;
+import com.globalfutservice.orders.result.OrderResultRepository;
+import com.globalfutservice.orders.result.ResultKind;
+import com.globalfutservice.orders.result.ResultRules;
+import com.globalfutservice.orders.result.SettlementCalculator;
+import com.globalfutservice.storecredit.StoreCreditService;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,6 +90,12 @@ public class OrderService {
     private final AutoDispatchQueue autoDispatch;
     private final AfterCommit afterCommit;
 
+    /** GFS Store Credit: spent when an order is placed, given back if it is abandoned or refunded. */
+    private final StoreCreditService storeCredit;
+    /** Champions results: the one a delivery needs, and the settlement a refund accounts for. */
+    private final ResultRules resultRules;
+    private final OrderResultRepository results;
+
     public OrderService(OrderRepository orders, OrderEventRepository events,
                         PaymentRepository payments, PaymentGateway gateway,
                         QuoteService quoteService, LoyaltyService loyaltyService,
@@ -91,7 +104,11 @@ public class OrderService {
                         CoachingService coachingService, CouponService couponService,
                         CustomerFeedService feed,
                         ObjectMapper mapper, AppProperties props, Clock clock,
-                        AfterCommit afterCommit, AutoDispatchQueue autoDispatch) {
+                        AfterCommit afterCommit, AutoDispatchQueue autoDispatch,
+                        StoreCreditService storeCredit, ResultRules resultRules, OrderResultRepository results) {
+        this.storeCredit = storeCredit;
+        this.resultRules = resultRules;
+        this.results = results;
         this.afterCommit = afterCommit;
         this.autoDispatch = autoDispatch;
         this.feed = feed;
@@ -254,6 +271,33 @@ public class OrderService {
                     quote.pointsRedeemed(), order.getPublicRef());
         }
 
+        // Spend store credit the same way, re-checking the balance under a lock: the quote
+        // priced it, it did not reserve it. A balance that no longer covers it refuses the
+        // order, and the whole method rolls back.
+        if (quote.storeCreditMinor() > 0) {
+            storeCredit.spend(account == null ? null : account.getId(), order.getId(), quote.currency(),
+                    quote.storeCreditMinor(), order.getPublicRef());
+            order.setStoreCreditMinor(quote.storeCreditMinor());
+        }
+
+        /*
+         * Covered in full by store credit: nothing to pay, so no payment step. The order is
+         * paid by the system here and carries on exactly as any paid order does -- queued,
+         * a coaching slot confirmed, coins dispatched.
+         */
+        if (order.getTotalMinor() == 0 && order.getStoreCreditMinor() > 0) {
+            transition(order, OrderStatus.AWAITING_PAYMENT, Actor.SYSTEM, null,
+                    "store credit", "Covered by GFS Store Credit");
+            markPaid(order, "GFS Store Credit");
+            return new OrderDtos.CreateOrderResponse(
+                    order.getPublicRef(),
+                    order.getStatus().name(),
+                    order.getTotalMinor(),
+                    order.total().format(),
+                    order.getCurrency().name(),
+                    null);
+        }
+
         PaymentGateway.GatewayOrder gatewayOrder = gateway.createOrder(
                 order.getPublicRef(),
                 order.total(),
@@ -327,8 +371,26 @@ public class OrderService {
     @Transactional
     public OrderEntity transition(OrderEntity order, OrderStatus to, Actor actor,
                                   Long actorId, String actorLabel, String reason) {
+        return transition(order, to, actor, actorId, actorLabel, reason, null, null);
+    }
+
+    /**
+     * The same, with the history row named for the customer's page: a Champions delivery
+     * carries its wins ("RESULT_DELIVERED", "14") so the row reads "DELIVERED -- 14 Wins
+     * Achieved" in the customer's language.
+     */
+    @Transactional
+    public OrderEntity transition(OrderEntity order, OrderStatus to, Actor actor, Long actorId,
+                                  String actorLabel, String reason, String eventKind, String eventDetail) {
         OrderStatus from = order.getStatus();
         OrderStateMachine.assertTransition(from, to);
+
+        // A Champions order is delivered with its result: Wins Achieved first, then delivered.
+        if (to == OrderStatus.DELIVERED && order.getId() != null && !results.existsById(order.getId())
+                && resultRules.requiresResult(order)) {
+            throw new ApiExceptions.ConflictException("wins_achieved_required",
+                    "Choose Wins Achieved before marking this order delivered.");
+        }
 
         Instant now = clock.instant();
         order.setStatus(to);
@@ -358,6 +420,15 @@ public class OrderService {
                 // campaign slot, and leaving it claimed quietly shrinks every campaign by
                 // the number of orders that were reversed.
                 couponService.release(order.getId());
+                // Store credit it spent goes back too -- less any part of a settlement already
+                // paid that the money refund could not cover -- and a settlement still owed
+                // is closed: the full refund replaces it.
+                long settled = settledOn(order);
+                storeCredit.giveBack(order.getAccountId(), order.getId(), order.getCurrency(),
+                        SettlementCalculator.creditBackOnFullRefund(
+                                order.getStoreCreditMinor(), order.getTotalMinor(), settled),
+                        order.getPublicRef(), "Returned from refunded order");
+                closeOwedResult(order, now);
                 vaultService.purge(order.getId(), "order refunded");
             }
             case CREDITED -> {
@@ -370,6 +441,7 @@ public class OrderService {
                         / props.pricing().pointValueMinor();
                 loyaltyService.adjust(order.getAccountId(), order.getId(), creditPoints,
                         "Guarantee settled as store credit on " + order.getPublicRef(), actorId);
+                closeOwedResult(order, now);
                 vaultService.purge(order.getId(), "guarantee settled as credit");
             }
             case ABANDONED -> {
@@ -377,6 +449,9 @@ public class OrderService {
                     loyaltyService.reverseRedemption(order.getAccountId(), order.getId(),
                             order.getPointsRedeemed(), order.getPublicRef());
                 }
+                // And any store credit it spent: an order nobody paid for keeps none of it.
+                storeCredit.giveBack(order.getAccountId(), order.getId(), order.getCurrency(),
+                        order.getStoreCreditMinor(), order.getPublicRef(), "Returned from unpaid order");
                 // Same for an abandoned checkout, and this is the one that matters most:
                 // publicly-shared codes get abandoned far more than they get paid, so a
                 // campaign would otherwise drain on carts nobody ever completed.
@@ -394,7 +469,8 @@ public class OrderService {
         }
 
         OrderEntity saved = orders.save(order);
-        record(saved, from, to, actor, actorId, actorLabel, reason);
+        events.save(new OrderEventEntity(saved.getId(), from, to, actor, actorId, actorLabel, reason,
+                eventKind, eventDetail, false));
 
         tellTheCustomer(saved, to);
 
@@ -441,8 +517,14 @@ public class OrderService {
         String what = describe(order);
         String link = "/track?ref=" + ref;
         switch (to) {
-            case AWAITING_PAYMENT -> feed.record(order.getAccountId(), NotificationKind.ORDER_PLACED,
-                    "Order placed", what + " — waiting for payment.", link, ref);
+            case AWAITING_PAYMENT -> {
+                // Covered by store credit: it is paid in the same breath, and "Payment
+                // confirmed" says so. "Waiting for payment" would be untrue.
+                if (order.getTotalMinor() > 0) {
+                    feed.record(order.getAccountId(), NotificationKind.ORDER_PLACED,
+                            "Order placed", what + " — waiting for payment.", link, ref);
+                }
+            }
             case CREDENTIALS_PENDING -> feed.record(order.getAccountId(), NotificationKind.ACTION_NEEDED,
                     "We need your EA sign-in",
                     "Your order cannot start until we have it. It is encrypted and deleted when the "
@@ -765,6 +847,45 @@ public class OrderService {
     }
 
     /**
+     * A row on the order's history that is not a status change: a settlement, a note. Written
+     * at the order's current status.
+     *
+     * @param kind      names the row for the customer's page, which words it itself; null for none
+     * @param detail    its one value, such as an amount
+     * @param staffOnly never shown to the customer -- not their page, not an email
+     */
+    @Transactional
+    public void note(OrderEntity order, Actor actor, Long actorId, String actorLabel, String reason,
+                     String kind, String detail, boolean staffOnly) {
+        events.save(new OrderEventEntity(order.getId(), order.getStatus(), order.getStatus(), actor, actorId,
+                actorLabel, reason, kind, detail, staffOnly));
+    }
+
+    /** What has already been settled on the order's result, as a refund or store credit; 0 for none. */
+    private long settledOn(OrderEntity order) {
+        if (order.getId() == null) {
+            return 0L;
+        }
+        return results.findById(order.getId())
+                .filter(OrderResultEntity::isSettled)
+                .map(OrderResultEntity::getSettlementMinor)
+                .orElse(0L);
+    }
+
+    /** A settlement still owed when the order is refunded or credited in full is owed no longer. */
+    private void closeOwedResult(OrderEntity order, Instant now) {
+        if (order.getId() == null) {
+            return;
+        }
+        results.findById(order.getId())
+                .filter(r -> r.getStatus() == OrderResultEntity.Status.PENDING)
+                .ifPresent(r -> {
+                    r.cancel(now);
+                    results.save(r);
+                });
+    }
+
+    /**
      * The notification shape for an order.
      *
      * <p>Public so the manual-payment flow can raise the customer's "awaiting
@@ -788,7 +909,26 @@ public class OrderService {
                 props.publicUrl() + "/admin/orders/" + order.getPublicRef(),
                 coachingSummary(order),
                 session.map(s -> s.getStartsAt()).orElse(null),
-                session.map(s -> s.getCustomerTimezone()).orElse(null));
+                session.map(s -> s.getCustomerTimezone()).orElse(null),
+                settlementNotice(order));
+    }
+
+    /** The order's result for its emails, or null: built from the result alone, never from history. */
+    private SettlementNotice settlementNotice(OrderEntity order) {
+        if (order.getId() == null || ResultKind.forSku(order.getSku()).isEmpty()) {
+            return null;
+        }
+        return results.findById(order.getId()).map(r -> new SettlementNotice(
+                r.getKind().name(),
+                r.getTargetLevel(),
+                r.getAchievedLevel(),
+                r.isBelowLowest(),
+                r.getSettlementMinor() > 0 ? Money.ofMinor(r.getSettlementMinor(), r.getCurrency()).format() : null,
+                r.getMethod() == null ? null : r.getMethod().name(),
+                r.getStatus().name(),
+                r.awaitsChoice() ? r.getChooseBy() : null,
+                r.getMethodSetBy() == OrderResultEntity.SetBy.AUTOMATIC,
+                props.champs() == null || props.champs().defaultIsStoreCredit())).orElse(null);
     }
 
     /**

@@ -1,7 +1,6 @@
 package com.globalfutservice.payments;
 
 import com.globalfutservice.domain.money.Currency;
-import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -15,10 +14,20 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
-/** Money sent back to a customer by hand, and how. One per order: full refunds only. */
+/**
+ * Money sent back to a customer by hand, and how. At most one of each kind per order: the
+ * full refund, and a Champions settlement paid back for wins not achieved (V47).
+ */
 @Entity
 @Table(name = "refund")
 public class RefundEntity {
+
+    public enum Kind {
+        /** The order's total, less anything already settled; the order is Refunded. */
+        FULL,
+        /** A Champions settlement. The order is not Refunded by it. */
+        SETTLEMENT
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,7 +46,11 @@ public class RefundEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
-    private ManualPaymentMethod method;
+    private RefundMethod method;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, updatable = false)
+    private Kind kind = Kind.FULL;
 
     @Column(nullable = false, updatable = false)
     private String reference;
@@ -54,7 +67,13 @@ public class RefundEntity {
     protected RefundEntity() {
     }
 
-    public RefundEntity(Long orderId, long amountMinor, Currency currency, ManualPaymentMethod method,
+    public RefundEntity(Long orderId, long amountMinor, Currency currency, RefundMethod method,
+                        String reference, String reason, Long createdBy, Kind kind) {
+        this(orderId, amountMinor, currency, method, reference, reason, createdBy);
+        this.kind = kind;
+    }
+
+    public RefundEntity(Long orderId, long amountMinor, Currency currency, RefundMethod method,
                         String reference, String reason, Long createdBy) {
         this.orderId = orderId;
         this.amountMinor = amountMinor;
@@ -81,8 +100,12 @@ public class RefundEntity {
         return currency;
     }
 
-    public ManualPaymentMethod getMethod() {
+    public RefundMethod getMethod() {
         return method;
+    }
+
+    public Kind getKind() {
+        return kind;
     }
 
     public String getReference() {

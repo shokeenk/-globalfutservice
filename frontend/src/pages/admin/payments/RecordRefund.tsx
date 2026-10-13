@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { ApiError, api } from '../../../lib/api'
 import { buttonClasses } from '../ui/controls'
 import { Modal } from '../ui/Modal'
-import { METHOD_LABEL } from '../ui/status'
+import { REFUND_METHOD_LABEL } from '../ui/status'
 
 const field = 'mt-1 h-10 w-full rounded-admin-control border border-admin-line bg-white px-3 text-[13.5px] '
   + 'text-admin-ink focus:border-admin-red focus:outline-none focus:ring-2 focus:ring-admin-red/20'
@@ -46,7 +46,7 @@ export function RecordRefund({
     event.preventDefault()
     if (!ready || saving) return
     const what = amountFormatted ? `${amountFormatted} on ${publicRef.trim()}` : `the full total of ${publicRef.trim()}`
-    if (!window.confirm(`Record a refund of ${what}, sent by ${METHOD_LABEL[method]} with reference `
+    if (!window.confirm(`Record a refund of ${what}, sent by ${REFUND_METHOD_LABEL[method]} with reference `
       + `${reference.trim()}?\n\nThe order becomes Refunded: points spent are returned, the coupon is `
       + `released and any sign-in held is deleted. This cannot be undone.`)) return
     setSaving(true)
@@ -80,14 +80,14 @@ export function RecordRefund({
         <label className="mt-3 block text-[12.5px] font-medium text-admin-ink">
           Sent back by
           <select value={method} onChange={(e) => setMethod(e.target.value)} className={field}>
-            {Object.entries(METHOD_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {Object.entries(REFUND_METHOD_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
 
         <label className="mt-3 block text-[12.5px] font-medium text-admin-ink">
           Reference of the money sent back
           <input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={120}
-            placeholder="UTR, PayPal refund ID or transaction hash" className={field} />
+            placeholder="UTR, PayPal refund ID, transaction hash or Payop refund ID" className={field} />
         </label>
 
         <label className="mt-3 block text-[12.5px] font-medium text-admin-ink">

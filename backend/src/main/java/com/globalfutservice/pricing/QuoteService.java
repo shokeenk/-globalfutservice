@@ -16,6 +16,7 @@ import com.globalfutservice.domain.pricing.QuoteSigner;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.loyalty.LoyaltyService;
 import com.globalfutservice.pricing.web.QuoteDtos;
+import com.globalfutservice.storecredit.StoreCreditService;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.web.ApiExceptions;
 import org.springframework.stereotype.Service;
@@ -44,11 +45,13 @@ public class QuoteService {
     private final LoyaltyService loyaltyService;
     private final AffiliateService affiliateService;
     private final CouponService couponService;
+    private final StoreCreditService storeCredit;
     private final Clock clock;
 
     public QuoteService(CatalogService catalogService, PricingEngine engine, QuoteSigner signer,
                         LoyaltyService loyaltyService, AffiliateService affiliateService,
-                        CouponService couponService, Clock clock) {
+                        CouponService couponService, StoreCreditService storeCredit, Clock clock) {
+        this.storeCredit = storeCredit;
         this.catalogService = catalogService;
         this.engine = engine;
         this.signer = signer;
@@ -89,15 +92,19 @@ public class QuoteService {
          * arithmetic over value objects, so running it twice costs microseconds, and the
          * subtotal is unaffected by any discount, so the second pass cannot move it.
          */
+        // What the customer holds in this currency: spent when they ask, offered either way.
+        long creditHeld = account == null ? 0L : storeCredit.balance(account.getId(), currency);
+        long creditToSpend = Boolean.TRUE.equals(request.useStoreCredit()) ? creditHeld : 0L;
+
         Quote provisional = engine.quote(
-                rate, request.quantity(), contextFor(account, request, null));
+                rate, request.quantity(), contextFor(account, request, null, creditToSpend));
 
         Optional<CouponService.Resolved> coupon =
                 couponService.resolve(request.couponCode(), accountId, provisional.subtotal());
 
         Quote quote = coupon
                 .map(c -> engine.quote(rate, request.quantity(),
-                        contextFor(account, request, c)))
+                        contextFor(account, request, c, creditToSpend)))
                 .orElse(provisional);
 
         // Only explain a code that was supplied and did not apply. Explaining one that
@@ -107,7 +114,8 @@ public class QuoteService {
                 : couponService.explain(request.couponCode(), accountId, provisional.subtotal())
                         .orElse(null);
 
-        return toDto(quote, signer.sign(quote, binding(account)), message);
+        return toDto(quote, signer.sign(quote, binding(account)), message,
+                creditHeld > 0 ? Money.ofMinor(creditHeld, currency) : null);
     }
 
     /**
@@ -116,7 +124,8 @@ public class QuoteService {
      */
     private CustomerPricingContext contextFor(AccountEntity account,
                                               QuoteDtos.QuoteRequest request,
-                                              CouponService.Resolved coupon) {
+                                              CouponService.Resolved coupon,
+                                              long storeCreditMinor) {
         String couponCode = coupon == null ? null : coupon.code();
         int couponBps = coupon == null ? 0 : coupon.discountBps();
         if (account == null) {
@@ -145,7 +154,8 @@ public class QuoteService {
                 normaliseCode(code),
                 discountBps,
                 couponCode,
-                couponBps);
+                couponBps,
+                storeCreditMinor);
     }
 
     /**
@@ -188,6 +198,11 @@ public class QuoteService {
     }
 
     public QuoteDtos.SignedQuote toDto(Quote quote, String signature, String couponMessage) {
+        return toDto(quote, signature, couponMessage, null);
+    }
+
+    /** @param creditHeld the customer's store credit in the quote's currency, or null for none */
+    public QuoteDtos.SignedQuote toDto(Quote quote, String signature, String couponMessage, Money creditHeld) {
         List<QuoteDtos.QuoteLineDto> lines = quote.lines().stream()
                 .map(l -> new QuoteDtos.QuoteLineDto(
                         l.code().name(), l.label(), l.amount().minor(), l.amount().format()))
@@ -213,7 +228,10 @@ public class QuoteService {
                 quote.issuedAt(),
                 quote.expiresAt(),
                 signature,
-                quote.priceVersion());
+                quote.priceVersion(),
+                quote.storeCreditMinor(),
+                creditHeld == null ? null : creditHeld.minor(),
+                creditHeld == null ? null : creditHeld.format());
     }
 
     private Quote fromDto(QuoteDtos.SignedQuote dto) {
@@ -241,7 +259,8 @@ public class QuoteService {
                     dto.couponCode(),
                     dto.issuedAt(),
                     dto.expiresAt(),
-                    dto.priceVersion());
+                    dto.priceVersion(),
+                    dto.storeCreditMinor());
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new ApiExceptions.BadRequestException("malformed_quote",
                     "That price could not be read. Please refresh and try again.");

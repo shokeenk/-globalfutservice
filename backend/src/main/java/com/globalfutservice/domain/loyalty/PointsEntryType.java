@@ -21,7 +21,13 @@ public enum PointsEntryType {
     /** Goodwill or promotional grant, always attributed to an operator. Positive. */
     MANUAL_ADJUSTMENT(1, true),
     /** Daily check-in grant. Positive, once per account per calendar day. */
-    DAILY_BONUS(1, true);
+    DAILY_BONUS(1, true),
+    /**
+     * Points a Champions settlement took back from an order whose points had already
+     * landed: the share of them the settled amount paid for. Negative, and counted against
+     * lifetime exactly like CLAWBACK -- it is part of the order being reversed.
+     */
+    SETTLEMENT_DEDUCTION(-1, true);
 
     private final int sign;
     private final boolean countsTowardLifetime;

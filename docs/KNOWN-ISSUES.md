@@ -207,3 +207,29 @@ headers in the nginx template can go in at the same time.
 **Evidence:** observed. On 2 October 2026 `https://globalfutservices.com/` and a deep route
 both answered with `rndr-id` and `Server: cloudflare`, `x-content-type-options: nosniff`, and
 no `Content-Security-Policy`; `/api/v1/catalog` answered JSON on the same origin.
+
+---
+
+## 9. Orders paid through Payop do not appear on the Payments page
+
+**Where:** `AdminPaymentQueries` (the Payments page, its totals, tabs and CSV export)
+
+The page is built from `manual_payment_claim`: one row per UPI, PayPal or USDT payment a
+customer reported. A Payop payment is never a claim -- it is a `payop_invoice` confirmed by
+Payop's IPN or by reconciliation -- so an order paid through International (Payop) has no row
+there. It is missing from the list, from the Success, Pending, Failed and Refunds tabs, from
+this month's and last month's totals, and from the export. A refund recorded on such an
+order is missing for the same reason.
+
+The order itself is fine: it is paid, its page shows the payment, and the Payop panel in
+Admin → Payments → International (Payop) lists the invoice.
+
+**When it bites:** an admin reconciling the month from the Payments page, or looking there
+for a refund recorded on a card-paid order.
+
+**What it would take:** a second source in the query -- paid Payop invoices joined to their
+orders and refunds -- shown as their own method ("International (Payop)") beside the three
+manual rails, with the totals and the export following.
+
+**Evidence:** read in the code. `AdminPaymentQueries` selects only from
+`manual_payment_claim`, and nothing writes a claim for a Payop payment.

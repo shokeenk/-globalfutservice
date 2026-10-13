@@ -122,6 +122,10 @@ export interface Policy {
   customerEmailsEnabled: boolean
   /** EA backup codes a coin order's sign-in must include (GFS_BACKUP_CODES_REQUIRED). */
   backupCodesRequired?: number
+  /** Champions results are settled (GFS_CHAMPS_SETTLEMENT_ENABLED): the checkout shows its card. */
+  champsSettlementEnabled?: boolean
+  /** Days a Champions customer has to choose a refund or store credit. */
+  champsChoiceDays?: number
 }
 
 export interface LoyaltyTierView {
@@ -164,6 +168,11 @@ export interface SignedQuote {
   signature: string
   /** The coin price version that priced this quote; null for other services. */
   priceVersion?: number | null
+  /** GFS Store Credit this order spends, in its currency; 0 for none. Signed. */
+  storeCreditMinor?: number
+  /** The customer's store credit in this currency, used or not; null when they have none. */
+  storeCreditAvailableMinor?: number | null
+  storeCreditAvailableFormatted?: string | null
 }
 
 export interface Coupon {
@@ -210,7 +219,8 @@ export interface CreateOrderResponse {
   totalMinor: number
   totalFormatted: string
   currency: string
-  payment: PaymentIntent
+  /** Null when there is nothing to pay: the order was covered by store credit and is already paid. */
+  payment: PaymentIntent | null
 }
 
 export interface OrderEvent {
@@ -220,6 +230,11 @@ export interface OrderEvent {
   actorLabel: string | null
   reason: string | null
   at: string
+  /** A row the customer's page words itself (a Champions result or settlement), and its value. */
+  kind?: string
+  detail?: string
+  /** Staff's alone. Only ever on the staff view; the customer's timeline never carries one. */
+  staffOnly?: boolean
 }
 
 export interface CoachingProgress {
@@ -286,7 +301,31 @@ export interface Order {
    */
   paymentState?: PaymentState | null
   payBy?: string | null
+  /** A Champions order's result once Wins Achieved is recorded; null otherwise. */
+  result?: OrderResult | null
 }
+
+/** The wins of a Champions order and what the difference settles to, as the customer sees it. */
+export interface OrderResult {
+  kind: string
+  targetLevel: number
+  achievedLevel: number
+  belowLowest: boolean
+  allAchieved: boolean
+  /** What is owed, in the order's currency; null when nothing is. */
+  settlementMinor: number | null
+  settlementFormatted: string | null
+  method: SettlementMethod | null
+  status: SettlementStatus
+  /** Until when the customer can choose; null once a method is set. */
+  chooseBy: string | null
+  /** False when only store credit is possible (the order was paid partly with credit). */
+  refundAllowed: boolean
+  defaultMethod: SettlementMethod
+}
+
+export type SettlementMethod = 'REFUND' | 'STORE_CREDIT'
+export type SettlementStatus = 'NONE' | 'PENDING' | 'PAID' | 'ISSUED' | 'CANCELLED'
 
 export type PaymentState = 'UNPAID' | 'SUBMITTED' | 'EXPIRED'
 
@@ -514,7 +553,15 @@ export interface AdminPayment {
   hasProof: boolean
   /** The record of money sent back. A Refunded payment without one predates the records. */
   refund?: {
-    amountMinor: number; amountFormatted: string; method: ManualPaymentMethod; reference: string
+    amountMinor: number; amountFormatted: string; method: string; reference: string
+    reason: string; at: string; by?: string | null
+  } | null
+  /**
+   * Part of the payment sent back for a Champions result: wins not achieved. The payment stays
+   * a Success; the order was delivered.
+   */
+  settlementRefund?: {
+    amountMinor: number; amountFormatted: string; method: string; reference: string
     reason: string; at: string; by?: string | null
   } | null
 }

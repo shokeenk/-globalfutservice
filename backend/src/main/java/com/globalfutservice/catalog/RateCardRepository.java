@@ -66,6 +66,22 @@ public interface RateCardRepository extends JpaRepository<RateCardEntity, Long> 
                                      @Param("sku") Sku sku,
                                      @Param("currency") Currency currency);
 
+    /**
+     * The rows one service had on sale at an instant, in one currency: what an order placed
+     * then was priced against. A price change closes a row and opens another, so this is the
+     * price list exactly as it stood, however it has changed since.
+     */
+    @Query("""
+            select r from RateCardEntity r
+            where r.season = :season and r.sku = :sku and r.currency = :currency
+              and r.validFrom <= :at and (r.validTo is null or r.validTo > :at)
+            order by r.sortOrder
+            """)
+    List<RateCardEntity> findOnSaleAt(@Param("season") String season,
+                                      @Param("sku") Sku sku,
+                                      @Param("currency") Currency currency,
+                                      @Param("at") java.time.Instant at);
+
     /** Every price one listing has had this season, in every currency, newest first. */
     List<RateCardEntity> findBySeasonAndSkuAndVariantOrderByValidFromDesc(String season, Sku sku, String variant);
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
+import { StoreCreditBalance } from '../components/StoreCredit'
 import { Badge, ButtonLink, Checkbox, EmptyState, Section, Skeleton } from '../components/ui'
 import { useT } from '../i18n'
 import { api } from '../lib/api'
@@ -265,6 +266,8 @@ export default function Account() {
                 </p>
               </Reveal>
             )}
+
+            <StoreCreditBalance className="plate p-5" />
 
             {/* Only for people who have actually bought coaching — an empty sessions
                 card on every account page is clutter for the majority who never will. */}

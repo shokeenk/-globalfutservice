@@ -34,6 +34,14 @@ public enum LineCode {
     TIER_DISCOUNT,
     /** loyalty points spent on this order (negative) */
     WALLET_REDEMPTION,
+    /**
+     * GFS Store Credit spent on this order (negative), in the order's own currency.
+     *
+     * <p>After every discount and the points, and before the fee: credit pays for part of
+     * the order the way money would, so the payment fee is charged only on what is left
+     * to pay with money.
+     */
+    STORE_CREDIT,
     /** payment-processing fee */
     GATEWAY_FEE
 }

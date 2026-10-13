@@ -40,5 +40,19 @@ public record OrderNotification(
         /* Coaching: the session this order holds or has booked, and the customer's time
            zone, so the confirmation can say when in their own time. Both null otherwise. */
         java.time.Instant sessionStartsAt,
-        String sessionTimezone) {
+        String sessionTimezone,
+        /**
+         * A Champions order's result and settlement, once recorded; null on every other
+         * order. Read by the customer's delivery and settlement emails. Never carries a
+         * staff-only note.
+         */
+        SettlementNotice settlement) {
+
+    public OrderNotification(String publicRef, String status, String serviceLabel, String amountFormatted,
+                             String customerEmail, String customerDiscord, String deliveryMethod, String sku,
+                             String platform, String adminDeepLink, String coachingDetails,
+                             java.time.Instant sessionStartsAt, String sessionTimezone) {
+        this(publicRef, status, serviceLabel, amountFormatted, customerEmail, customerDiscord, deliveryMethod, sku,
+                platform, adminDeepLink, coachingDetails, sessionStartsAt, sessionTimezone, null);
+    }
 }

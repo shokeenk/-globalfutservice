@@ -132,6 +132,12 @@ public class NotificationService {
         each(notifier -> notifier.orderDelivered(n));
     }
 
+    /** Off the admin's request: raised after the settlement has committed. */
+    @Async
+    public void settlementSettled(OrderNotification n) {
+        each(notifier -> notifier.settlementSettled(n));
+    }
+
     @Async
     public void coachingReminder(String email, String sessionRef, Instant startsAt, String zone) {
         CoachingNotification n = new CoachingNotification(email, sessionRef, startsAt, zone);

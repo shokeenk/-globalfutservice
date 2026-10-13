@@ -33,7 +33,8 @@ class QuotePlatformTest {
 
     private final CatalogService catalog = mock(CatalogService.class);
     private final QuoteService quotes = new QuoteService(catalog, mock(PricingEngine.class), mock(QuoteSigner.class),
-            mock(LoyaltyService.class), mock(AffiliateService.class), mock(CouponService.class), Clock.systemUTC());
+            mock(LoyaltyService.class), mock(AffiliateService.class), mock(CouponService.class),
+            mock(com.globalfutservice.storecredit.StoreCreditService.class), Clock.systemUTC());
 
     private static QuoteDtos.QuoteRequest coins(String platform) {
         return new QuoteDtos.QuoteRequest("TRADING_SERVICE", platform, null, new BigDecimal("0.5"), "USD", null, null, 0L);

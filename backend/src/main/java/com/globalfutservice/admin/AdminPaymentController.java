@@ -2,9 +2,9 @@ package com.globalfutservice.admin;
 
 import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.money.Money;
-import com.globalfutservice.domain.payments.ManualPaymentMethod;
 import com.globalfutservice.identity.AccountRole;
 import com.globalfutservice.payments.RefundEntity;
+import com.globalfutservice.payments.RefundMethod;
 import com.globalfutservice.payments.RefundService;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
@@ -124,7 +124,8 @@ public class AdminPaymentController {
         List<AdminPaymentQueries.Row> rows = queries.export(filter(status, method, from, to, search), EXPORT_CAP);
         Csv csv = new Csv().row(List.of("Submitted (IST)", "Order", "Customer name", "Email", "Method",
                 "Paid to", "Reference", "Currency", "Amount", "Status", "Order status", "Reviewed (IST)",
-                "Reviewed by", "Review note", "Refund reference", "Refunded (IST)", "Refund reason"));
+                "Reviewed by", "Review note", "Refund reference", "Refunded (IST)", "Refund reason",
+                "Settlement refund", "Settlement reference", "Settled (IST)"));
         for (AdminPaymentQueries.Row r : rows) {
             List<Object> cells = new ArrayList<>();
             cells.add(time(r.submittedAt()));
@@ -144,6 +145,10 @@ public class AdminPaymentController {
             cells.add(r.refund() == null ? null : r.refund().reference());
             cells.add(r.refund() == null ? null : time(r.refund().at()));
             cells.add(r.refund() == null ? null : r.refund().reason());
+            cells.add(r.settlementRefund() == null ? null
+                    : Money.ofMinor(r.settlementRefund().amountMinor(), Currency.valueOf(r.currency())).toMajor());
+            cells.add(r.settlementRefund() == null ? null : r.settlementRefund().reference());
+            cells.add(r.settlementRefund() == null ? null : time(r.settlementRefund().at()));
             csv.row(cells);
         }
         log.info("Admin {} exported {} payment(s){}", admin.publicId(), rows.size(),
@@ -174,8 +179,8 @@ public class AdminPaymentController {
     /**
      * Records money sent back to a customer, and marks the order Refunded.
      *
-     * <p>The full order total, in the order's currency: the amount is not typed, so it
-     * cannot be mistyped. Nothing is sent to the customer from here except the usual
+     * <p>The full order total, in the order's currency, less anything already settled on it
+     * (a Champions settlement): the amount is not typed, so it cannot be mistyped. Nothing is sent to the customer from here except the usual
      * "Order refunded" line on their order page and bell; the money itself was sent by hand.
      */
     @PostMapping("/refunds")
@@ -183,9 +188,9 @@ public class AdminPaymentController {
     @Operation(summary = "Record a refund sent by hand and mark the order Refunded (admin)")
     public ResponseEntity<RefundRecorded> refund(@Valid @RequestBody RefundRequest request,
                                                  @CurrentAccount AccountPrincipal admin) {
-        ManualPaymentMethod method;
+        RefundMethod method;
         try {
-            method = ManualPaymentMethod.valueOf(request.method().trim().toUpperCase(Locale.ROOT));
+            method = RefundMethod.valueOf(request.method().trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new ApiExceptions.BadRequestException("Unknown refund method.");
         }

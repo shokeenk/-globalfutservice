@@ -22,6 +22,9 @@ package com.globalfutservice.domain.pricing;
  *                        engine clamps this to {@link Coupon#MAX_DISCOUNT_BPS} regardless
  *                        of what it is handed, because a discount arriving from a caller
  *                        is the one number in this record most worth distrusting
+ * @param storeCreditMinor GFS Store Credit to spend on this order, in its currency: the
+ *                        customer's balance when they chose to use it, 0 otherwise. The
+ *                        engine spends no more than the order costs
  */
 public record CustomerPricingContext(
         long walletPoints,
@@ -31,7 +34,16 @@ public record CustomerPricingContext(
         String referralCode,
         int referralDiscountBps,
         String couponCode,
-        int couponDiscountBps) {
+        int couponDiscountBps,
+        long storeCreditMinor) {
+
+    /** Without store credit, as every caller priced before it existed. */
+    public CustomerPricingContext(long walletPoints, long requestedPoints, long lifetimePoints, boolean firstOrder,
+                                  String referralCode, int referralDiscountBps, String couponCode,
+                                  int couponDiscountBps) {
+        this(walletPoints, requestedPoints, lifetimePoints, firstOrder, referralCode, referralDiscountBps,
+                couponCode, couponDiscountBps, 0L);
+    }
 
     public CustomerPricingContext {
         if (walletPoints < 0) {
@@ -52,6 +64,9 @@ public record CustomerPricingContext(
         if (couponDiscountBps > Coupon.MAX_DISCOUNT_BPS) {
             throw new IllegalArgumentException(
                     "couponDiscountBps exceeds the coupon ceiling");
+        }
+        if (storeCreditMinor < 0) {
+            throw new IllegalArgumentException("storeCreditMinor must not be negative");
         }
     }
 

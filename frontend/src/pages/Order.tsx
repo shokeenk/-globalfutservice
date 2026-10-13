@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LoyaltyCurrencyNotice, useLoyaltyActive } from '../components/LoyaltyNotice'
 import { CouponRow } from '../components/CouponRow'
+import { StoreCreditRow } from '../components/StoreCredit'
 import { ManualPayment } from '../components/ManualPayment'
 import {
   ORDER_SUMMARY, PaySummaryProvider, PayopPayButton, payopFeeLine, payopLines, payopTotal, type PaySummary,
@@ -105,6 +106,8 @@ export default function Order() {
   // Accepts ?coupon= so a code can be shared as a link rather than typed off a stream.
   const [couponCode, setCouponCode] = useState(params.get('coupon') ?? '')
   const [pointsToRedeem, setPointsToRedeem] = useState(0)
+  // Spend the customer's GFS Store Credit; offered only when they hold some in this currency.
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
   const [step, setStep] = useState<Step>('configure')
   // What the pay step says the summary should show: the order as placed, or a Payop payment.
   const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
@@ -229,6 +232,7 @@ export default function Order() {
         currency: catalog.currency,
         couponCode: couponCode.trim() || null,
         pointsToRedeem: account ? pointsToRedeem : 0,
+        useStoreCredit: account ? useStoreCredit : false,
       })
       if (!controller.signal.aborted) setQuote(next)
     } catch (e) {
@@ -239,7 +243,7 @@ export default function Order() {
     } finally {
       if (!controller.signal.aborted) setQuoting(false)
     }
-  }, [platform, quantity, couponCode, pointsToRedeem, catalog, account,
+  }, [platform, quantity, couponCode, pointsToRedeem, useStoreCredit, catalog, account,
       service, isFlat, selected?.variant])
 
   useEffect(() => {
@@ -657,6 +661,8 @@ export default function Order() {
             revealFirstError()
           }}
           pay={step === 'paying' ? paySummary : ORDER_SUMMARY}
+          useStoreCredit={useStoreCredit}
+          onStoreCredit={setUseStoreCredit}
         />
       </div>
       </Section>
@@ -849,6 +855,7 @@ function AmountReadout({ quantity, stepSize }: { quantity: number; stepSize: num
 function QuotePanel({
   quote, quoting, error, step, setStep, onRequote, couponCode, onApplyCoupon,
   pointsToRedeem, setPointsToRedeem, maxRedeemable, platformMissing, onPlatformMissing, pay,
+  useStoreCredit = false, onStoreCredit,
 }: {
   quote: SignedQuote | null
   quoting: boolean
@@ -870,6 +877,9 @@ function QuotePanel({
    * priced it: no 2.5% card fee, the chosen method's own fee and total, and its pay button.
    */
   pay: PaySummary
+  /** Spend GFS Store Credit: offered until the order is placed. */
+  useStoreCredit?: boolean
+  onStoreCredit?: (next: boolean) => void
 }) {
   const t = useT()
   const money = useMoney()
@@ -929,6 +939,10 @@ function QuotePanel({
             setPointsToRedeem={setPointsToRedeem}
             maxRedeemable={maxRedeemable}
           />
+
+          {onStoreCredit && step !== 'paying' && step !== 'placed' && (
+            <StoreCreditRow quote={quote} use={useStoreCredit} onChange={onStoreCredit} busy={quoting} />
+          )}
 
           {quoting && !quote && (
             <>
@@ -1379,6 +1393,11 @@ function CheckoutForm({
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Covered in full by store credit: already paid, so there is no payment step.
+  if (placed && !placed.payment) {
+    return <PaidWithStoreCredit order={placed} onDone={() => navigate('/track')} />
   }
 
   if (placed) {
@@ -2301,6 +2320,21 @@ function DeliveryInformation({
 
 /* ------------------------------------------------------------ payment step --- */
 
+/** An order GFS Store Credit paid for in full: nothing to pay, and where to follow it. */
+function PaidWithStoreCredit({ order, onDone }: { order: CreateOrderResponse; onDone: () => void }) {
+  const t = useT()
+  return (
+    <div className="animate-rise space-y-4 border-t border-ink-400 pt-5" data-testid="paid-with-credit">
+      <div className="flex items-center gap-3">
+        <Badge tone="ok">{t.storeCredit.paidTitle}</Badge>
+        <span className="tnum text-[13px] font-semibold text-chalk">{order.publicRef}</span>
+      </div>
+      <p className="text-[13px] leading-relaxed text-chalk-muted">{t.storeCredit.paidBody}</p>
+      <Button full onClick={onDone}>{t.storeCredit.trackOrder}</Button>
+    </div>
+  )
+}
+
 function PaymentStage({
   order, sku, email, onDone,
 }: {
@@ -2319,15 +2353,18 @@ function PaymentStage({
   const [error, setError] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
   const [settled, setSettled] = useState(false)
-  const stub = isStubGateway(order.payment)
+  // Never null here: an order with nothing to pay is shown PaidWithStoreCredit instead.
+  const intent = order.payment
+  const stub = !intent || isStubGateway(intent)
   const isCoaching = sku === 'COACHING'
   const isTrading = sku === 'TRADING_SERVICE'
 
   async function pay() {
+    if (!intent) return
     setOpening(true)
     setError(null)
     try {
-      await openCheckout(order.payment, order.publicRef, {
+      await openCheckout(intent, order.publicRef, {
         onDismiss: () => setOpening(false),
         onSuccess: () => {
           setOpening(false)

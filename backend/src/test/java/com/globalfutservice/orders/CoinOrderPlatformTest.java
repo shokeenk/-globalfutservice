@@ -46,7 +46,8 @@ class CoinOrderPlatformTest {
             mock(NotificationService.class), mock(AccountRepository.class), mock(CoachingService.class),
             mock(CouponService.class), mock(CustomerFeedService.class), new ObjectMapper(),
             mock(AppProperties.class), Clock.systemUTC(), AfterCommit.immediate(),
-                mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class));
+                mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class),
+                mock(com.globalfutservice.storecredit.StoreCreditService.class), mock(com.globalfutservice.orders.result.ResultRules.class), mock(com.globalfutservice.orders.result.OrderResultRepository.class));
 
     @Test
     @DisplayName("a coin order whose quote has no platform is refused before anything is recorded")

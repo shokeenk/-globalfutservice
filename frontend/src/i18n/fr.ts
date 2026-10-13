@@ -1664,6 +1664,82 @@ const fr: Dictionary = {
     signInAgain:
       'Avant de payer, nous avons de nouveau besoin de tes identifiants EA. Ceux que tu as envoyés sont supprimés 24 heures après, pour ta sécurité.',
   },
+  champs: {
+    infoTitle: 'Informations sur le boosting Champions',
+    infoBody:
+      'Notre objectif est d’obtenir les victoires FUT Champions que tu as choisies. Si nous ' +
+      'obtenons moins de victoires, tu peux choisir un remboursement éligible ou du Crédit ' +
+      'boutique GFS. Tes résultats finaux et le détail du règlement te seront envoyés par e-mail. ' +
+      'Pour toute aide, contacte notre',
+    liveChat: 'assistance par chat en direct',
+    detailsEyebrow: 'Détails de la commande Champions',
+    resultsTitle: 'Résultats de la commande Champions',
+    winsOrdered: 'Victoires commandées',
+    winsAchieved: 'Victoires obtenues',
+    wins: (n: number): string => (n === 1 ? '1 victoire' : `${n} victoires`),
+    allAchieved: 'Toutes les victoires obtenues',
+    settlementAmount: 'Montant du règlement',
+    refundAmount: 'Montant du remboursement',
+    creditAmount: 'Montant du crédit boutique',
+    settlementMethod: 'Mode de règlement',
+    methodRefund: 'Remboursement',
+    methodCredit: 'Crédit boutique GFS',
+    statusPending: 'En attente',
+    statusRefundPending: 'Remboursement en attente',
+    statusRefundPaid: 'Payé',
+    statusCreditPending: 'Crédit boutique en attente',
+    statusCreditIssued: 'Émis',
+    footnote: 'Tes résultats finaux et le détail du règlement ont aussi été envoyés à ton adresse e-mail enregistrée.',
+    getRefund: 'Obtiens un remboursement',
+    getCredit: 'Obtiens du Crédit boutique GFS',
+    chooseByCredit: (date: string): string =>
+      `Choisis avant le ${date}. Si tu ne choisis pas, tu recevras du Crédit boutique GFS.`,
+    chooseByRefund: (date: string): string =>
+      `Choisis avant le ${date}. Si tu ne choisis pas, tu recevras un remboursement.`,
+    confirmRefund: (amount: string): string =>
+      `Obtenir un remboursement de ${amount} ? Tu ne pourras plus modifier ce choix.`,
+    confirmCredit: (amount: string): string =>
+      `Obtenir ${amount} en Crédit boutique GFS ? Tu ne pourras plus modifier ce choix.`,
+    confirm: 'Confirmer',
+    cancel: 'Annuler',
+    chooseFailed: 'Ton choix n’a pas pu être enregistré. Réessaie.',
+    creditOnly: 'Cette commande a été payée en partie avec du Crédit boutique GFS : la différence est donc rendue en crédit boutique.',
+    cancelled: 'Cette commande a été remboursée en totalité.',
+    timelineDelivered: (wins: string): string => `${wins} victoires obtenues`,
+    events: {
+      winsUpdated: (wins: string): string => `Victoires obtenues mises à jour : ${wins}`,
+      choseRefund: 'Tu as choisi un remboursement',
+      choseCredit: 'Tu as choisi du Crédit boutique GFS',
+      methodRefund: 'Mode de règlement : remboursement',
+      methodCredit: 'Mode de règlement : Crédit boutique GFS',
+      defaultedRefund: 'Aucun choix dans les délais : un remboursement a été sélectionné',
+      refundPaid: (amount: string): string => `Remboursement de ${amount} payé`,
+      creditIssued: (amount: string): string => `Crédit boutique GFS de ${amount} émis`,
+      creditIssuedAuto: (amount: string, days: number): string =>
+        `Crédit boutique GFS de ${amount} émis automatiquement après ${days} jours`,
+    },
+  },
+
+  storeCredit: {
+    use: 'Utiliser mon Crédit boutique GFS',
+    available: (amount: string): string => `${amount} disponibles`,
+    applied: (amount: string): string => `${amount} appliqués à cette commande`,
+    coversAll: 'Ton crédit boutique couvre cette commande. Il n’y a rien à payer.',
+    paidTitle: 'Payé avec le Crédit boutique GFS',
+    paidBody: 'Ton crédit boutique a couvert toute la commande : il n’y a rien à payer. Ta commande est confirmée.',
+    trackOrder: 'Suivre ta commande',
+    balanceTitle: 'Crédit boutique GFS',
+    balanceNone: 'Tu n’as pas de crédit boutique.',
+    balanceHelp:
+      'Utilise-le au paiement des commandes dans la même devise. Il n’expire pas et ne peut pas être ' +
+      'retiré en espèces.',
+    entries: {
+      ISSUED: 'Ajouté',
+      SPENT: 'Utilisé',
+      RETURNED: 'Rendu',
+    } as Record<string, string>,
+  },
+
   catalog: {
     services: {
       TRADING_SERVICE: 'Acheter des crédits',
@@ -1700,6 +1776,7 @@ const fr: Dictionary = {
       coupon: (code: string): string => `Code promo ${code}`,
       referral: (code: string): string => `Code créateur ${code}`,
       tierDiscount: 'Remise membre',
+      storeCredit: 'Crédit boutique GFS',
     },
   },
 }

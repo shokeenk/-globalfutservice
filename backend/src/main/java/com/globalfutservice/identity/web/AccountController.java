@@ -5,6 +5,7 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.loyalty.LoyaltyTier;
 import com.globalfutservice.loyalty.LoyaltyService;
+import com.globalfutservice.storecredit.StoreCreditService;
 import com.globalfutservice.loyalty.LoyaltyStatus;
 import com.globalfutservice.marketing.MarketingPreferenceService;
 import com.globalfutservice.security.AccountPrincipal;
@@ -41,9 +42,11 @@ public class AccountController {
     private final LoyaltyService loyaltyService;
     private final AppProperties props;
     private final MarketingPreferenceService marketing;
+    private final StoreCreditService storeCredit;
 
     public AccountController(LoyaltyService loyaltyService, AppProperties props,
-                             MarketingPreferenceService marketing) {
+                             MarketingPreferenceService marketing, StoreCreditService storeCredit) {
+        this.storeCredit = storeCredit;
         this.loyaltyService = loyaltyService;
         this.props = props;
         this.marketing = marketing;
@@ -103,6 +106,45 @@ public class AccountController {
                         props.pricing().earnPointsPerUnit(),
                         props.pricing().maxWalletRedemptionBps(),
                         statement));
+    }
+
+    public record CreditBalance(String currency, long minor, String formatted) {
+    }
+
+    public record CreditEntry(String type, String currency, long amountMinor, String amountFormatted,
+                              String description, Instant at) {
+    }
+
+    /**
+     * GFS Store Credit: what the customer holds in each currency, and its recent movements.
+     * Kept apart from points on purpose -- it is money in a currency, spends on orders in that
+     * currency, and has nothing to do with tiers.
+     */
+    public record StoreCreditResponse(List<CreditBalance> balances, List<CreditEntry> statement) {
+    }
+
+    @GetMapping("/store-credit")
+    @Operation(summary = "GFS Store Credit balances and recent statement")
+    public ResponseEntity<StoreCreditResponse> storeCredit(
+            @CurrentAccount AccountPrincipal principal,
+            @RequestParam(defaultValue = "25") int size) {
+        if (principal == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in.");
+        }
+        List<CreditBalance> balances = storeCredit.balances(principal.id()).entrySet().stream()
+                .map(e -> new CreditBalance(e.getKey().name(), e.getValue(),
+                        Money.ofMinor(e.getValue(), e.getKey()).format()))
+                .toList();
+        List<CreditEntry> statement = storeCredit
+                .statement(principal.id(), PageRequest.of(0, Math.min(Math.max(size, 1), 100)))
+                .getContent().stream()
+                .map(e -> new CreditEntry(e.getEntryType().name(), e.getCurrency().name(), e.getAmountMinor(),
+                        Money.ofMinor(e.getAmountMinor(), e.getCurrency()).format(), e.getDescription(),
+                        e.getCreatedAt()))
+                .toList();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(new StoreCreditResponse(balances, statement));
     }
 
     /**

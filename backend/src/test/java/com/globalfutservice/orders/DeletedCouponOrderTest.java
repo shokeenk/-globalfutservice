@@ -63,7 +63,8 @@ class DeletedCouponOrderTest {
             mock(LoyaltyService.class), mock(AffiliateService.class), mock(CredentialVaultService.class),
             mock(NotificationService.class), mock(AccountRepository.class), mock(CoachingService.class),
             coupons, mock(CustomerFeedService.class), new ObjectMapper(), props, Clock.systemUTC(),
-            AfterCommit.immediate(), mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class));
+            AfterCommit.immediate(), mock(com.globalfutservice.fulfilment.AutoDispatchQueue.class),
+                mock(com.globalfutservice.storecredit.StoreCreditService.class), mock(com.globalfutservice.orders.result.ResultRules.class), mock(com.globalfutservice.orders.result.OrderResultRepository.class));
 
     @Test
     @DisplayName("priced with a code since deleted: refused as a stale price, and no redemption is claimed")

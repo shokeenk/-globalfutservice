@@ -1902,6 +1902,87 @@ const en = {
    * shows inside the game in every locale, and a player has to be able to match what
    * they bought to what is on their console.
    */
+  /*
+    Champions results: the information card at checkout, the results card on the
+    tracking page, and its history rows. The checkout card's copy is the client's, word
+    for word; "Live Chat Support" is the link at its end.
+  */
+  champs: {
+    infoTitle: 'Champions Boosting Information',
+    infoBody:
+      'We aim to achieve your selected FUT Champions wins. If we achieve fewer wins, you can choose ' +
+      'an eligible refund or GFS Store Credit. Your final results and settlement details will be ' +
+      'shared by email. For assistance, contact our',
+    liveChat: 'Live Chat Support',
+    detailsEyebrow: 'Champions order details',
+    resultsTitle: 'Champions Order Results',
+    winsOrdered: 'Wins Ordered',
+    winsAchieved: 'Wins Achieved',
+    wins: (n: number): string => (n === 1 ? '1 Win' : `${n} Wins`),
+    allAchieved: 'All wins achieved',
+    settlementAmount: 'Settlement Amount',
+    refundAmount: 'Refund Amount',
+    creditAmount: 'Store Credit Amount',
+    settlementMethod: 'Settlement Method',
+    methodRefund: 'Refund',
+    methodCredit: 'GFS Store Credit',
+    statusPending: 'Pending',
+    statusRefundPending: 'Refund Pending',
+    statusRefundPaid: 'Paid',
+    statusCreditPending: 'Store Credit Pending',
+    statusCreditIssued: 'Issued',
+    footnote: 'Your final results and settlement details have also been sent to your registered email.',
+    getRefund: 'Get a refund',
+    getCredit: 'Get GFS Store Credit',
+    chooseByCredit: (date: string): string =>
+      `Choose by ${date}. If you don't choose, you'll receive GFS Store Credit.`,
+    chooseByRefund: (date: string): string =>
+      `Choose by ${date}. If you don't choose, you'll receive a refund.`,
+    confirmRefund: (amount: string): string =>
+      `Get a refund of ${amount}? You can't change this choice later.`,
+    confirmCredit: (amount: string): string =>
+      `Get ${amount} as GFS Store Credit? You can't change this choice later.`,
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    chooseFailed: 'Your choice could not be saved. Please try again.',
+    creditOnly: 'This order was paid partly with GFS Store Credit, so the difference is returned as store credit.',
+    cancelled: 'This order was refunded in full.',
+    timelineDelivered: (wins: string): string => `${wins} Wins Achieved`,
+    events: {
+      winsUpdated: (wins: string): string => `Wins achieved updated: ${wins}`,
+      choseRefund: 'You chose a refund',
+      choseCredit: 'You chose GFS Store Credit',
+      methodRefund: 'Settlement method: Refund',
+      methodCredit: 'Settlement method: GFS Store Credit',
+      defaultedRefund: 'No choice was made in time: a refund was selected',
+      refundPaid: (amount: string): string => `Refund of ${amount} paid`,
+      creditIssued: (amount: string): string => `GFS Store Credit of ${amount} issued`,
+      creditIssuedAuto: (amount: string, days: number): string =>
+        `GFS Store Credit of ${amount} issued automatically after ${days} days`,
+    },
+  },
+
+  /* GFS Store Credit: spent at checkout, and its balance on Rewards and the account page. */
+  storeCredit: {
+    use: 'Use my GFS Store Credit',
+    available: (amount: string): string => `${amount} available`,
+    applied: (amount: string): string => `${amount} applied to this order`,
+    coversAll: 'Your store credit covers this order. There is nothing to pay.',
+    paidTitle: 'Paid with GFS Store Credit',
+    paidBody: 'Your store credit covered the whole order, so there is nothing to pay. Your order is confirmed.',
+    trackOrder: 'Track your order',
+    balanceTitle: 'GFS Store Credit',
+    balanceNone: 'You have no store credit.',
+    balanceHelp:
+      'Use it at checkout on orders in the same currency. It does not expire, and it cannot be ' +
+      'withdrawn as cash.',
+    entries: {
+      ISSUED: 'Added',
+      SPENT: 'Used',
+      RETURNED: 'Returned',
+    } as Record<string, string>,
+  },
+
   catalog: {
     services: {
       TRADING_SERVICE: 'Buy Coins',
@@ -1945,6 +2026,7 @@ const en = {
       coupon: (code: string): string => `Coupon ${code}`,
       referral: (code: string): string => `Creator code ${code}`,
       tierDiscount: 'Member discount',
+      storeCredit: 'GFS Store Credit',
     },
   },
 }/*

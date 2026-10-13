@@ -13,6 +13,8 @@ import { releasePreview, releaseQuestion } from './orders/confirmations'
 import { PaymentPanel } from './orders/PaymentPanel'
 import { approveReplacedBy } from './orders/vendor'
 import { VendorPanel } from './orders/VendorPanel'
+import { ChampionsResultPanel, WinsSelect } from './orders/ChampionsResultPanel'
+import { EMPTY_DRAFT, resultInput, type ResultView, type WinsDraft } from './orders/champs'
 import { AdminPage } from './shell/AdminPage'
 
 type Revealed = {
@@ -48,6 +50,10 @@ export default function AdminOrder() {
   const { account } = useAuth()
   const isAdmin = account?.role === 'ADMIN'
   const [vendor, setVendor] = useState<VendorSection | null>(null)
+  // A Champions order's result, and Wins Achieved as it is being entered: one value, shared by
+  // the Actions dropdown and the Champions card.
+  const [result, setResult] = useState<ResultView | null>(null)
+  const [draft, setDraft] = useState<WinsDraft>(EMPTY_DRAFT)
 
   const loadVendor = useCallback(async () => {
     if (!isAdmin) return
@@ -69,6 +75,9 @@ export default function AdminOrder() {
       ])
       setOrder(detail)
       setTransitions(queue.find((o) => o.publicRef === publicRef)?.availableTransitions ?? [])
+      setResult(detail.sku === 'BOOST_CHAMPS'
+        ? await api.get<ResultView>(`/api/v1/admin/orders/${publicRef}/result`).catch(() => null)
+        : null)
       setError(null)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not load that order.')
@@ -83,14 +92,33 @@ export default function AdminOrder() {
     void loadVendor()
   }, [loadVendor])
 
+  /** Delivering a Champions order records Wins Achieved with it, or not at all. */
+  const needsWins = !!result?.applies && !result.result
+
   async function transition(target: string) {
+    let deliverWith: ReturnType<typeof resultInput> | null = null
+    if (target === 'DELIVERED' && needsWins && result) {
+      deliverWith = resultInput(draft, result)
+      if (!deliverWith.ok) {
+        setError(deliverWith.error)
+        return
+      }
+    }
     setBusy(target)
     setError(null)
     try {
-      await api.post(`/api/v1/admin/orders/${publicRef}/transition`, {
-        toStatus: target,
-        reason: reason.trim() || null,
-      })
+      if (deliverWith?.ok) {
+        await api.post(`/api/v1/admin/orders/${publicRef}/result/deliver`, {
+          result: deliverWith.input,
+          reason: reason.trim() || null,
+        })
+        setDraft(EMPTY_DRAFT)
+      } else {
+        await api.post(`/api/v1/admin/orders/${publicRef}/transition`, {
+          toStatus: target,
+          reason: reason.trim() || null,
+        })
+      }
       setReason('')
       // The vault is emptied by the state machine on completion, so anything on
       // screen is stale the moment the order moves.
@@ -197,6 +225,17 @@ export default function AdminOrder() {
               <Detail label="Points earned" value={String(order.pointsEarned)} />
             </dl>
 
+            {order.sku === 'BOOST_CHAMPS' && result && (
+              <ChampionsResultPanel
+                publicRef={order.publicRef}
+                view={result}
+                isAdmin={isAdmin}
+                draft={draft}
+                onDraft={setDraft}
+                onChanged={(next) => { setResult(next); void load() }}
+              />
+            )}
+
             {/*
               Where a boosting order is played. The service label carries it too, but the
               booster reads this panel, and a launcher is the kind of detail that gets
@@ -285,6 +324,11 @@ export default function AdminOrder() {
                     {event.reason && (
                       <p className="mt-0.5 text-[12.5px] text-chalk-muted">{event.reason}</p>
                     )}
+                    {event.staffOnly && (
+                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-400">
+                        Staff only · not shown to the customer
+                      </p>
+                    )}
                     <p className="text-[11.5px] text-chalk-faint">
                       {dateTime(event.at)} · {event.actorType}
                       {event.actorLabel ? ` · ${event.actorLabel}` : ''}
@@ -305,6 +349,23 @@ export default function AdminOrder() {
                 Marking this delivered sends the delivery email, closes the refund window and
                 starts the guarantee clock. It cannot be undone.
               </Alert>
+            )}
+
+            {/* Champions: Wins Achieved first. The same value as the Champions card's. */}
+            {transitions.includes('DELIVERED') && needsWins && result && (
+              <div className="mt-4">
+                <Field label="Wins Achieved" required>
+                  {(props) => (
+                    <WinsSelect
+                      {...props}
+                      view={result}
+                      value={draft.level}
+                      onChange={(level) => setDraft({ ...draft, level })}
+                      testId="wins-actions"
+                    />
+                  )}
+                </Field>
+              </div>
             )}
 
             <div className="mt-4">
@@ -367,6 +428,7 @@ export default function AdminOrder() {
                   full
                   variant={target === 'DELIVERED' ? 'primary' : 'secondary'}
                   loading={busy === target}
+                  disabled={target === 'DELIVERED' && needsWins && draft.level === null}
                   onClick={() => void transition(target)}
                 >
                   {TRANSITION_LABELS[target] ?? target}

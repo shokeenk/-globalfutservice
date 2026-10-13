@@ -46,7 +46,18 @@ public final class QuoteDtos {
             String couponCode,
 
             @PositiveOrZero(message = "Points cannot be negative")
-            Long pointsToRedeem) {
+            Long pointsToRedeem,
+
+            /**
+             * Spend the customer's GFS Store Credit in this currency on the order. A yes or no,
+             * never an amount: how much is the server's to work out from the balance.
+             */
+            Boolean useStoreCredit) {
+
+        public QuoteRequest(String sku, String platform, String variant, BigDecimal quantity, String currency,
+                            String referralCode, String couponCode, Long pointsToRedeem) {
+            this(sku, platform, variant, quantity, currency, referralCode, couponCode, pointsToRedeem, null);
+        }
     }
 
     public record QuoteLineDto(String code, String label, long amountMinor, String amountFormatted) {
@@ -91,6 +102,24 @@ public final class QuoteDtos {
              * The coin price version that priced this quote, null for other services. Signed,
              * and frozen on the order with the rest of the quote.
              */
-            Long priceVersion) {
+            Long priceVersion,
+            /** GFS Store Credit this order spends, in its currency; 0 for none. Signed. */
+            long storeCreditMinor,
+            /**
+             * The customer's store credit in this currency, whether or not it is used, so the
+             * checkout can offer it. Null when they have none. Not part of the price.
+             */
+            Long storeCreditAvailableMinor,
+            String storeCreditAvailableFormatted) {
+
+        public SignedQuote(String quoteId, String season, String sku, String platform, String variant,
+                           BigDecimal quantity, String currency, List<QuoteLineDto> lines, long subtotalMinor,
+                           long totalMinor, String totalFormatted, long pointsRedeemed, long pointsEarned,
+                           String referralCode, String couponCode, String couponMessage, Instant issuedAt,
+                           Instant expiresAt, String signature, Long priceVersion) {
+            this(quoteId, season, sku, platform, variant, quantity, currency, lines, subtotalMinor, totalMinor,
+                    totalFormatted, pointsRedeemed, pointsEarned, referralCode, couponCode, couponMessage, issuedAt,
+                    expiresAt, signature, priceVersion, 0L, null, null);
+        }
     }
 }

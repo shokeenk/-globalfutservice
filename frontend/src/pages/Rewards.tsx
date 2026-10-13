@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LoyaltyCurrencyNotice } from '../components/LoyaltyNotice'
 import { PageHeader } from '../components/PageHeader'
+import { StoreCreditBalance } from '../components/StoreCredit'
 import { Reveal } from '../motion/Reveal'
 import { Alert, Badge, Button, ButtonLink, Card, Section, Spinner } from '../components/ui'
 import { useT } from '../i18n'
@@ -373,6 +374,9 @@ function YourStanding() {
           </div>
         )}
       </div>
+
+      {/* GFS Store Credit beside the points: money in a currency, apart from the tier ladder. */}
+      <StoreCreditBalance className="mt-6 border-t border-ink-400 pt-5" />
     </Card>
   )
 }

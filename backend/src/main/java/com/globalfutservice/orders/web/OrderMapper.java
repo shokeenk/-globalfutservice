@@ -13,6 +13,7 @@ import com.globalfutservice.fulfilment.VendorOrderLedger;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderEventEntity;
 import com.globalfutservice.orders.OrderPaymentState;
+import com.globalfutservice.orders.result.OrderResultViews;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.notify.DiscordBotClient;
 import com.globalfutservice.notify.discord.DiscordVerificationService;
@@ -55,12 +56,20 @@ public class OrderMapper {
         this(mapper, props, verification, bot, coachingService, vendorOrders, paymentState, Clock.systemUTC());
     }
 
-    /** The constructor Spring uses: with two and neither marked, it looks for one with no arguments. */
-    @Autowired
     public OrderMapper(ObjectMapper mapper, AppProperties props,
                        DiscordVerificationService verification, DiscordBotClient bot,
                        CoachingService coachingService, VendorOrderLedger vendorOrders,
                        OrderPaymentState paymentState, Clock clock) {
+        this(mapper, props, verification, bot, coachingService, vendorOrders, paymentState, clock, null);
+    }
+
+    /** The constructor Spring uses: with several and none marked, it looks for one with no arguments. */
+    @Autowired
+    public OrderMapper(ObjectMapper mapper, AppProperties props,
+                       DiscordVerificationService verification, DiscordBotClient bot,
+                       CoachingService coachingService, VendorOrderLedger vendorOrders,
+                       OrderPaymentState paymentState, Clock clock, OrderResultViews results) {
+        this.results = results;
         this.clock = clock;
         this.paymentState = paymentState;
         this.vendorOrders = vendorOrders;
@@ -73,6 +82,9 @@ public class OrderMapper {
 
     /** What a held coin order is waiting for the customer to do. */
     private final VendorOrderLedger vendorOrders;
+
+    /** A Champions order's result, for its tracking page. Null where nothing reads one. */
+    private final OrderResultViews results;
 
     private final OrderPaymentState paymentState;
 
@@ -131,7 +143,16 @@ public class OrderMapper {
     public OrderDtos.OrderResponse toResponse(OrderEntity order,
                                               List<OrderEventEntity> timeline,
                                               boolean credentialsSubmitted) {
-        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toCustomerEventDto);
+        return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto);
+    }
+
+    /**
+     * The rows a customer may read: every one but staff's own -- an admin's note, a proof
+     * upload. Filtered here, where the customer's response is built, so no page or caller
+     * has to remember to.
+     */
+    public static List<OrderEventEntity> customerTimeline(List<OrderEventEntity> timeline) {
+        return timeline.stream().filter(e -> !e.isStaffOnly()).toList();
     }
 
     /** The order as staff read it: every timeline row exactly as it was written. */
@@ -191,7 +212,8 @@ public class OrderMapper {
                 discordAccess(order),
                 coaching ? coachingProgress(order) : null,
                 payment.state(),
-                payment.payBy());
+                payment.payBy(),
+                results == null ? null : results.customer(order));
     }
 
     private OrderDtos.CoachingProgressDto coachingProgress(OrderEntity order) {
@@ -382,7 +404,7 @@ public class OrderMapper {
         }
         String reason = raw.reason() != null && raw.reason().startsWith(LEGACY_SUPPLIER_REASON) ? null : raw.reason();
         return new OrderDtos.OrderEventDto(raw.fromStatus(), raw.toStatus(), raw.actorType(), SYSTEM_LABEL, reason,
-                raw.at());
+                raw.at(), raw.kind(), raw.detail(), false);
     }
 
     /** What every system row on a customer's timeline is signed. */
@@ -398,7 +420,10 @@ public class OrderMapper {
                 event.getActorType().name(),
                 event.getActorLabel(),
                 event.getReason(),
-                event.getCreatedAt());
+                event.getCreatedAt(),
+                event.getKind(),
+                event.getDetail(),
+                event.isStaffOnly());
     }
 
     /**

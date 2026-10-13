@@ -252,6 +252,14 @@ gfs:
   boosting:
     success-rate-per-variant: ${GFS_BOOSTING_SUCCESS_RATES:WINS_13:9200,WINS_14:9400,WINS_15:9500}
 
+  # Champions results: Wins Achieved at delivery, and fewer wins than ordered settled as a
+  # refund or GFS Store Credit. The customer has choice-days to choose; then the default
+  # method applies (STORE_CREDIT is issued automatically; REFUND is set for an admin to pay).
+  champs:
+    settlement-enabled: ${GFS_CHAMPS_SETTLEMENT_ENABLED:true}
+    choice-days: ${GFS_CHAMPS_CHOICE_DAYS:5}
+    default-method: ${GFS_CHAMPS_DEFAULT_METHOD:STORE_CREDIT}
+
   # Where customers are told to send money when they pay outside the gateway.
   #
   # Committed as defaults because they are published on the checkout page -- these

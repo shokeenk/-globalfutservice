@@ -62,6 +62,15 @@ export const METHOD_LABEL: Record<string, string> = {
   CRYPTO: 'USDT (TRON)',
 }
 
+/**
+ * How money went back to a customer: the three rails it arrives on, and Payop for an order
+ * paid by card (the reference is the Payop refund ID).
+ */
+export const REFUND_METHOD_LABEL: Record<string, string> = {
+  ...METHOD_LABEL,
+  PAYOP: 'Payop',
+}
+
 /** "SOMETHING_NEW" -> "Something new", for a value the tables above do not know yet. */
 function humanise(value: string): string {
   const words = value.toLowerCase().replace(/_/g, ' ')
