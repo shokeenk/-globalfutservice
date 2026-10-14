@@ -12,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Sends a paid coin order to FUT Transfer, exactly once.
@@ -63,10 +65,20 @@ public class SupplierFulfilmentService {
     private final NotificationService notifications;
     private final AppProperties props;
     private final ObjectMapper mapper;
+    /** The customer's tracking link, asked for once the order's id is committed. Null in some tests. */
+    private final PartnerTrackingLinks trackingLinks;
 
     public SupplierFulfilmentService(FutTransferClient client, VendorControl control, CredentialVaultService vault,
                                      VendorOrderLedger ledger, NotificationService notifications,
                                      AppProperties props, ObjectMapper mapper) {
+        this(client, control, vault, ledger, notifications, props, mapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SupplierFulfilmentService(FutTransferClient client, VendorControl control, CredentialVaultService vault,
+                                     VendorOrderLedger ledger, NotificationService notifications,
+                                     AppProperties props, ObjectMapper mapper, PartnerTrackingLinks trackingLinks) {
+        this.trackingLinks = trackingLinks;
         this.client = client;
         this.control = control;
         this.vault = vault;
@@ -317,6 +329,27 @@ public class SupplierFulfilmentService {
     private Release accepted(OrderEntity order, String vendorOrderId) {
         if (ledger.markSubmitted(order.getId(), vendorOrderId)) {
             log.info("FULFILMENT APPROVED: order {} is supplier order {}", order.getPublicRef(), vendorOrderId);
+            /*
+             * The id is committed (markSubmitted is its own transaction). The customer's
+             * tracking link is asked for once the caller's transaction has committed too --
+             * never inside it, and never holding it open across a call to the partner -- and
+             * while the order cannot yet be finished. Apart from the order: it never throws,
+             * and whatever it comes to, this is SUBMITTED. If the caller rolls back, the
+             * poller asks instead.
+             */
+            if (trackingLinks != null) {
+                long orderId = order.getId();
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            trackingLinks.afterAccepted(orderId);
+                        }
+                    });
+                } else {
+                    trackingLinks.afterAccepted(orderId);
+                }
+            }
             return new Release(Result.SUBMITTED, vendorOrderId,
                     "Sent to the fulfilment partner as " + vendorOrderId + ".");
         }

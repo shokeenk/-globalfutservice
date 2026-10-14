@@ -87,7 +87,7 @@ describe('the tracking page, for a coin order', () => {
 
     const box = await screen.findByTestId('transfer-progress')
     expect(within(box).getByTestId('transfer-stage')).toHaveTextContent('Your coins are being delivered')
-    expect(box).toHaveTextContent('200K of 500K coins delivered')
+    expect(box).toHaveTextContent('200K of 500K delivered')
     const bar = within(box).getByRole('progressbar')
     expect(bar).toHaveAttribute('aria-valuenow', '200')
     expect(bar).toHaveAttribute('aria-valuemax', '500')
@@ -98,7 +98,7 @@ describe('the tracking page, for a coin order', () => {
     openOrder(order({ transferStarted: true, deliveredCoins: null, orderedCoins: 500 }))
     const box = await screen.findByTestId('transfer-progress')
     expect(within(box).getByTestId('transfer-stage')).toHaveTextContent('Your coin transfer has started')
-    expect(box).toHaveTextContent('0K of 500K coins delivered')
+    expect(box).toHaveTextContent('0K of 500K delivered')
   })
 
   it('all of it delivered: says so, and stops saying it updates', async () => {
@@ -112,6 +112,67 @@ describe('the tracking page, for a coin order', () => {
     openOrder(order({ status: 'READY_FOR_DELIVERY', statusLabel: 'Queued', transferStarted: false }))
     expect(await screen.findAllByText('Queued')).not.toHaveLength(0)
     expect(screen.queryByTestId('transfer-progress')).toBeNull()
+  })
+})
+
+describe("the partner's live tracking page, on the owner's own coin order", () => {
+  const PARTNER = 'https://transferstatus.top/abc12345?shop=gfs&lang=de'
+
+  it('"Track order" opens the link exactly as stored, in a new tab, with the note under it', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250, partnerTrackingUrl: PARTNER }))
+
+    const box = await screen.findByTestId('partner-tracking')
+    const link = within(box).getByRole('link', { name: /Track order/ })
+    expect(link).toHaveAttribute('href', PARTNER)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(box).toHaveTextContent('Live delivery status from our transfer partner. If your EA login details need '
+      + 'fixing, you can update them here. Don\u2019t share this link.')
+  })
+
+  it('no link on the order -- not yet stored, or not the owner -- no button and no note', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250 }))
+    await screen.findByTestId('transfer-progress')
+    expect(screen.queryByTestId('partner-tracking')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Track order/ })).toBeNull()
+  })
+
+  it.each(['http://transferstatus.top/abc12345', 'javascript:alert(1)', 'not a url'])(
+    'anything but an https address is not shown: %s', async (bad) => {
+      openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250, partnerTrackingUrl: bad }))
+      await screen.findByTestId('transfer-progress')
+      expect(screen.queryByTestId('partner-tracking')).toBeNull()
+    })
+})
+
+describe('the simple status, and delivered of ordered in coins', () => {
+  it.each<[string, Record<string, unknown>, string]>([
+    ['nothing reported yet', { deliveredCoins: null }, 'Processing'],
+    ['coins arriving', { deliveredCoins: 120 }, 'Delivering'],
+    ['every coin reported, but the order is not finished', { deliveredCoins: 250 }, 'Delivering'],
+    ['the order delivered', { status: 'DELIVERED', deliveredCoins: 250 }, 'Delivered'],
+    ['the customer has something to fix', { status: 'ON_HOLD', customerAction: 'RESUBMIT_SIGN_IN', deliveredCoins: 40 },
+      'Needs attention'],
+  ])('%s: %s', async (_name, patch, label) => {
+    openOrder(order({ transferStarted: true, orderedCoins: 250, ...patch }))
+    expect(await screen.findByTestId('transfer-status')).toHaveTextContent(label)
+  })
+
+  it('amounts are in thousands: 120 of 250 is "120K of 250K delivered", 1500 is 1.5M', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250 }))
+    expect(await screen.findByTestId('transfer-progress')).toHaveTextContent('120K of 250K delivered')
+  })
+
+  it('a million and a half reads as 1.5M', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 1000, orderedCoins: 1500 }))
+    expect(await screen.findByTestId('transfer-progress')).toHaveTextContent('1M of 1.5M delivered')
+  })
+
+  it('no vendor wording reaches the customer: the partner is never named, nor its codes', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250,
+      partnerTrackingUrl: 'https://transferstatus.top/abc12345' }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(box).not.toHaveTextContent(/fut ?transfer|accountCheck|economyState|simplified/i)
   })
 })
 
@@ -175,7 +236,7 @@ describe("staff opening the customer's tracking link", () => {
   it.each(['ADMIN', 'OPERATOR'] as const)('%s: the order as its customer sees it, from the staff endpoint, read-only', async (role) => {
     openAsStaff(role, order({ transferStarted: true, deliveredCoins: 200, orderedCoins: 500 }))
 
-    expect(await screen.findByTestId('transfer-progress')).toHaveTextContent('200K of 500K coins delivered')
+    expect(await screen.findByTestId('transfer-progress')).toHaveTextContent('200K of 500K delivered')
     expect(screen.getByTestId('staff-view')).toHaveTextContent('Staff view')
     // Never the customer's own endpoints: looking does not stand in for the customer.
     expect(api.get.mock.calls.map(([url]) => url)).toEqual([STAFF_URL])

@@ -603,8 +603,20 @@ const en = {
     transferStarted: 'Your coin transfer has started',
     transferDelivering: 'Your coins are being delivered',
     transferDelivered: 'All your coins have been delivered',
-    progressCoins: (done: string, total: string) => `${done} of ${total} coins delivered`,
+    progressCoins: (done: string, total: string) => `${done} of ${total} delivered`,
     updatesAutomatically: 'This page updates by itself.',
+    // The partner's live tracking page, shown to the order's owner only.
+    partnerTrackOrder: 'Track order',
+    partnerTrackNote: 'Live delivery status from our transfer partner. If your EA login details need fixing, you can update them here. Don’t share this link.',
+    opensInNewTab: '(opens in a new tab)',
+    // Where a coin transfer is, in one word or two.
+    transferStatusLabel: 'Status',
+    transferStatus: {
+      PROCESSING: 'Processing',
+      DELIVERING: 'Delivering',
+      DELIVERED: 'Delivered',
+      NEEDS_ATTENTION: 'Needs attention',
+    },
     // Staff opening a customer's tracking link from the admin: the page as the customer sees it, read-only.
     staffViewTitle: 'Staff view',
     staffViewBody: 'This is the customer’s tracking page as they see it, read-only. Nothing you do here changes the order or acts for the customer.',

@@ -116,9 +116,10 @@ public class OrderController {
         // Ownership is in the query. There is no path here that loads an order and then
         // decides whether the caller was allowed to see it.
         OrderEntity order = orderService.requireOwned(publicRef, principal.id());
+        // The owner's own order: the only response that carries the partner's tracking link.
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(mapper.toResponse(order, orderService.timeline(order.getId()),
+                .body(mapper.toOwnerResponse(order, orderService.timeline(order.getId()),
                         vaultService.status(order.getId()).present()));
     }
 
@@ -157,7 +158,7 @@ public class OrderController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(mapper.toResponse(updated, orderService.timeline(updated.getId()), true));
+                .body(mapper.toOwnerResponse(updated, orderService.timeline(updated.getId()), true));
     }
 
     private static void requireSignedIn(AccountPrincipal principal) {

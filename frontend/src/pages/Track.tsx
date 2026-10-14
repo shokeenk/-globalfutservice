@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { CompletePayment, OrderExpired, PaymentSubmitted } from '../components/CompletePayment'
 import { CredentialForm } from '../components/CredentialForm'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Button, ButtonLink, Field, Input, Section, Skeleton, revealFirstError } from '../components/ui'
+import { Alert, Badge, Button, ButtonAnchor, ButtonLink, Field, Input, Section, Skeleton, revealFirstError } from '../components/ui'
 import type { BadgeTone } from '../components/ui'
 import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
@@ -1006,13 +1006,42 @@ export function statusTone(status: string): BadgeTone {
   return 'brand'
 }
 
+/** Where a coin transfer is, in the four words a customer is shown. */
+export type TransferStatus = 'PROCESSING' | 'DELIVERING' | 'DELIVERED' | 'NEEDS_ATTENTION'
+
+const TRANSFER_STATUS_TONE: Record<TransferStatus, BadgeTone> = {
+  PROCESSING: 'info', DELIVERING: 'info', DELIVERED: 'ok', NEEDS_ATTENTION: 'warn',
+}
+
+/**
+ * The customer's one-word status for a coin transfer the partner has. Delivered only once the
+ * order itself is -- never from the coins reported alone, which can reach the total before the
+ * partner has finished. Needs attention while the customer has something to fix.
+ */
+export function transferStatus(order: Pick<Order, 'status' | 'customerAction' | 'deliveredCoins'>): TransferStatus {
+  if (order.status === 'DELIVERED' || order.status === 'COMPLETED') return 'DELIVERED'
+  if (order.customerAction || order.status === 'ON_HOLD') return 'NEEDS_ATTENTION'
+  return (order.deliveredCoins ?? 0) > 0 ? 'DELIVERING' : 'PROCESSING'
+}
+
+/** The partner's link, only as an https address; anything else is not shown at all. */
+function partnerLink(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).protocol === 'https:' ? url : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * What the supplier is actually doing, while it is doing it.
  *
- * <p>Two things, and only when they are true. A progress bar once coins start landing —
+ * <p>Only what is true. A one-word status and a progress bar once coins start landing —
  * the supplier reports delivered and ordered on every poll, and a number that moves is the
- * whole reason to poll onto our own page instead of linking the customer out to theirs.
- * And, when an order is stuck, the one sentence that unsticks it.
+ * whole reason to poll onto our own page. The partner's own live page, for the order's owner
+ * (the server sends it to nobody else), where they can also correct their EA sign-in. And,
+ * when an order is stuck, the one sentence that unsticks it.
  */
 function SupplierProgress({ order }: { order: Order }) {
   const t = useT()
@@ -1023,20 +1052,28 @@ function SupplierProgress({ order }: { order: Order }) {
   const done = order.deliveredCoins ?? (started ? 0 : null)
   const total = order.orderedCoins
   const showBar = done != null && total != null && total > 0
+  // Delivered is the order's own status, never the coins reported reaching the total.
   const finished = order.status === 'DELIVERED' || order.status === 'COMPLETED'
-    || (showBar && done! >= total!)
   const stage = !started ? null
     : finished ? t.track.transferDelivered
       : done != null && done > 0 ? t.track.transferDelivering
         : t.track.transferStarted
+  const status = started ? transferStatus(order) : null
+  const link = partnerLink(order.partnerTrackingUrl)
 
-  if (!showBar && !action && !stage) return null
+  if (!showBar && !action && !stage && !link) return null
 
   return (
     <div className="space-y-4" data-testid="transfer-progress">
-      {(showBar || stage) && (
+      {(showBar || stage || link) && (
         <div className="surface p-5">
           {stage && <p className="display mb-3 text-[16px] text-chalk" data-testid="transfer-stage">{stage}</p>}
+          {status && (
+            <p className="mb-3 flex items-center gap-2 text-[12.5px] text-chalk-muted" data-testid="transfer-status">
+              {t.track.transferStatusLabel}
+              <Badge tone={TRANSFER_STATUS_TONE[status]}>{t.track.transferStatus[status]}</Badge>
+            </p>
+          )}
           {showBar && (
           <>
           <div className="flex items-baseline justify-between gap-3">
@@ -1067,6 +1104,15 @@ function SupplierProgress({ order }: { order: Order }) {
           )}
           {started && !finished && (
             <p className="mt-3 text-[12px] text-chalk-faint">{t.track.updatesAutomatically}</p>
+          )}
+          {link && (
+            <div className="mt-4 border-t border-ink-400 pt-4" data-testid="partner-tracking">
+              <ButtonAnchor href={link} size="sm">
+                {t.track.partnerTrackOrder}
+                <span className="sr-only"> {t.track.opensInNewTab}</span>
+              </ButtonAnchor>
+              <p className="mt-2 text-[12px] leading-relaxed text-chalk-muted">{t.track.partnerTrackNote}</p>
+            </div>
           )}
         </div>
       )}

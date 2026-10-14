@@ -333,6 +333,12 @@ export interface Order {
   deliveredCoins: number | null
   /** Coins the supplier was asked for. */
   orderedCoins: number | null
+  /**
+   * The transfer partner's live tracking page for this coin order, exactly as the partner gave
+   * it. Only on the signed-in owner's own order; absent everywhere else. Whoever holds it can
+   * change the customer's EA sign-in, so it is shown to them alone and never put anywhere else.
+   */
+  partnerTrackingUrl?: string | null
   /** What the customer must do to unstick a held order, or null if nothing. */
   customerAction: CustomerAction | null
   createdAt: string
@@ -1297,6 +1303,11 @@ export interface VendorOrderDetail {
   maxPriceSent?: number | null
   /** The balance the partner reported just before a public-pool send. Its currency is not confirmed. */
   balanceAtSend?: number | null
+  /** The partner's one-word summary: pending, completed or error. */
+  vendorSimplifiedStatus?: string | null
+  /** The partner's human-readable account check and economy state. Staff only. */
+  vendorAccountCheckLong?: string | null
+  vendorEconomyStateLong?: string | null
 }
 
 /** One HTTP call to the partner. Never a body. */
@@ -1339,7 +1350,24 @@ export interface VendorSection {
   /** What Approve would send for this order right now; null when FUT Transfer is off. */
   nextSend?: VendorNextSend | null
   /** What the customer can follow: when their transfer started, and their tracking page. */
-  tracking?: { transferStartedAt: string | null; customerUrl: string | null } | null
+  tracking?: VendorTracking | null
+}
+
+export interface VendorTracking {
+  transferStartedAt: string | null
+  /** Our own tracking page for the order. */
+  customerUrl: string | null
+  /** The partner's tracking page, as stored; the customer is sent it. A secret: never pasted anywhere public. */
+  partnerUrl?: string | null
+  partnerUrlStoredAt?: string | null
+  /** STORED, UNAVAILABLE (the partner will not make one: the order is finished), or null while still asked for. */
+  partnerLinkState?: 'STORED' | 'UNAVAILABLE' | null
+  partnerLinkAttempts?: number
+  /** Our own code for the last failed try. */
+  partnerLinkError?: string | null
+  partnerLinkNextAt?: string | null
+  /** "Generate link" applies: the partner has the order, it is not finished, and there is no link yet. */
+  canGenerate?: boolean
 }
 
 /** How Approve would place one coin order, from the same decision Approve itself takes. */

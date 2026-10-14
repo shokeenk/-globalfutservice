@@ -50,7 +50,7 @@ public class VendorCallLog {
                 ps.setString(2, backup ? "BACKUP" : "PRIMARY");
                 if (httpStatus == null) ps.setNull(3, java.sql.Types.INTEGER); else ps.setInt(3, httpStatus);
                 ps.setString(4, result);
-                ps.setString(5, errorCode);
+                ps.setString(5, masked(errorCode));
                 Array refs = con.createArrayOf("text", (orderRefs == null ? List.<String>of() : orderRefs).toArray());
                 ps.setArray(6, refs);
                 ps.setString(7, vendorOrderId);
@@ -60,6 +60,16 @@ public class VendorCallLog {
         } catch (RuntimeException e) {
             log.error("Could not record a FUT Transfer call to {}: {}", endpoint, e.getMessage());
         }
+    }
+
+    /**
+     * Nothing that looks like an address is stored: a customer's tracking link lets whoever
+     * holds it change their EA sign-in, and this table is read by every admin.
+     */
+    static String masked(String code) {
+        if (code == null) return null;
+        String lower = code.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("://") || lower.contains("transferstatus") || lower.contains("www.") ? "MASKED" : code;
     }
 
     /** Every call about one order, oldest first. */

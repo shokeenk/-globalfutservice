@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import java.util.List;
 
 import com.globalfutservice.config.SecurityConfig;
+import com.globalfutservice.fulfilment.PartnerTrackingLinks;
 import com.globalfutservice.fulfilment.VendorCallLog;
 import com.globalfutservice.fulfilment.VendorOrderActions;
 import com.globalfutservice.identity.AccountRole;
@@ -44,12 +45,13 @@ class AdminVendorOrderSecurityTest {
     private static final String BASE = "/api/v1/admin/orders/GFS-26-SECURE01/vendor/";
     /** Every action this controller has. */
     private static final List<String> ACTIONS = List.of("send-sign-in", "resume", "stop", "mark-finished", "retry",
-            "link", "resolve");
+            "link", "resolve", "tracking-link");
 
     @Autowired
     private MockMvc mvc;
 
     @MockBean private VendorOrderActions actions;
+    @MockBean private PartnerTrackingLinks trackingLinks;
     @MockBean private OrderService orderService;
     @MockBean private VendorCallLog calls;
     @MockBean private com.globalfutservice.identity.AccountRepository accounts;
@@ -77,6 +79,23 @@ class AdminVendorOrderSecurityTest {
         mvc.perform(get(BASE.substring(0, BASE.length() - 1)).with(authentication(as(AccountRole.OPERATOR))))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(actions);
+        verifyNoInteractions(trackingLinks);
+    }
+
+    @Test
+    @DisplayName("Generate link: asked for now, and the answer says what happened -- never the link itself")
+    void generateLink() throws Exception {
+        OrderEntity order = mock(OrderEntity.class);
+        when(order.getId()).thenReturn(42L);
+        when(orderService.requireAny("GFS-26-SECURE01")).thenReturn(order);
+        when(trackingLinks.generateNow(42L)).thenReturn(PartnerTrackingLinks.Outcome.STORED);
+
+        String body = mvc.perform(post(BASE + "tracking-link").with(authentication(as(AccountRole.ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("STORED"))
+                .andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat(body).doesNotContain("https://");
+        verify(trackingLinks).generateNow(42L);
     }
 
     @Test

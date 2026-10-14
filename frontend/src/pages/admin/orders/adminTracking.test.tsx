@@ -135,8 +135,7 @@ describe("the FUT Transfer section's Tracking summary", () => {
     expect(line(summary, 'Delivered of ordered')).toHaveTextContent('420 of 500 K')
     expect(line(summary, 'Last reported')).not.toHaveTextContent('None yet')
     expect(line(summary, 'Held up by')).toHaveTextContent('Nothing')
-    // The customer's page is the only link: FUT Transfer's own progress page is keyed by a code
-    // its API never returns, so it is not linked, and no address is made up for it.
+    // No partner link stored: the customer's page is the only link, and no address is made up.
     expect(within(summary).getAllByRole('link')).toHaveLength(1)
     expect(within(summary).queryByText(/progress page/i)).toBeNull()
   })
@@ -150,6 +149,60 @@ describe("the FUT Transfer section's Tracking summary", () => {
   ])('says what holds it up: %s', (_name, patch, text) => {
     const summary = panel(section({ vendorOrder: detail(patch) }))
     expect(line(summary, 'Held up by')).toHaveTextContent(text)
+  })
+
+  it("the partner's details, for staff: status, summary, delivered of ordered, and the human-readable states", () => {
+    panel(section({ vendorOrder: detail({ vendorSimplifiedStatus: 'pending',
+      vendorAccountCheckLong: 'Account check finished', vendorEconomyStateLong: 'Transfers in Progress' }) }))
+    const cell = (label: string) => screen.getByText(label).nextSibling as HTMLElement
+    expect(cell('Partner status')).toHaveTextContent('partlyDelivered')
+    expect(cell('Simplified status')).toHaveTextContent('pending')
+    expect(cell('Delivered / ordered')).toHaveTextContent('420 of 500 K')
+    expect(cell('Account check (details)')).toHaveTextContent('Account check finished')
+    expect(cell('Economy state (details)')).toHaveTextContent('Transfers in Progress')
+  })
+
+  it("the partner's tracking link, as stored: opened in a new tab, copied with one click, no Generate", async () => {
+    const PARTNER = 'https://transferstatus.top/abc12345?lang=de'
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
+      partnerUrl: PARTNER, partnerUrlStoredAt: '2026-10-07T10:00:05Z', partnerLinkState: 'STORED',
+      partnerLinkAttempts: 1, canGenerate: false } }))
+
+    const box = within(summary).getByTestId('partner-link')
+    const link = within(box).getByRole('link', { name: PARTNER })
+    expect(link).toHaveAttribute('href', PARTNER)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    fireEvent.click(within(box).getByRole('button', { name: 'Copy' }))
+    expect(writeText).toHaveBeenCalledWith(PARTNER)
+    expect(within(box).queryByRole('button', { name: 'Generate link' })).toBeNull()
+  })
+
+  it('no link yet and the order can have one: "Generate link" asks the server, says what happened, and reloads', async () => {
+    api.post.mockReset()
+    api.post.mockResolvedValue({ status: 'RETRY_LATER', message: 'FUT Transfer did not give a link this time.' })
+    const onChanged = vi.fn()
+    render(<VendorPanel publicRef={REF} onChanged={onChanged} section={section({ tracking: {
+      transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL, partnerUrl: null, partnerLinkState: null,
+      partnerLinkAttempts: 2, partnerLinkError: 'HTTP_500', partnerLinkNextAt: '2026-10-07T10:09:00Z',
+      canGenerate: true } })} />)
+
+    const box = screen.getByTestId('partner-link')
+    expect(box).toHaveTextContent('Not received yet (2 tries, last: HTTP_500')
+    fireEvent.click(within(box).getByRole('button', { name: 'Generate link' }))
+    expect(await within(box).findByText('FUT Transfer did not give a link this time.')).toBeInTheDocument()
+    expect(api.post).toHaveBeenCalledWith(`/api/v1/admin/orders/${REF}/vendor/tracking-link`)
+    expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('the partner will not make one (finished): "link unavailable", and nothing to press', () => {
+    const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
+      partnerUrl: null, partnerLinkState: 'UNAVAILABLE', partnerLinkAttempts: 1, canGenerate: false } }))
+    const box = within(summary).getByTestId('partner-link')
+    expect(box).toHaveTextContent('Link unavailable')
+    expect(within(box).queryByRole('button')).toBeNull()
   })
 
   it('calls to FUT Transfer paused: holds up an order in flight, not one already delivered', () => {

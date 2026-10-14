@@ -271,7 +271,15 @@ public final class OrderDtos {
               An Objectives or Tournaments order: the listing as it was sold, frozen when the
               order was placed -- title, terms, hours, price. Null on every other order.
             */
-            com.globalfutservice.catalog.listing.ListingSnapshot.View listing) {
+            com.globalfutservice.catalog.listing.ListingSnapshot.View listing,
+
+            /*
+              A coin order's live tracking page at the transfer partner, exactly as the partner
+              gave it -- for the signed-in owner of the order only, on their own order page.
+              Null for everyone else, on the guest lookup, and for staff. Whoever holds it can
+              change the customer's EA sign-in.
+            */
+            String partnerTrackingUrl) {
     }
 
     /**

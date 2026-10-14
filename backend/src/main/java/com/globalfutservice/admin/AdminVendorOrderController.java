@@ -38,9 +38,12 @@ public class AdminVendorOrderController {
     private final OrderService orderService;
     private final VendorCallLog calls;
     private final AccountRepository accounts;
+    private final com.globalfutservice.fulfilment.PartnerTrackingLinks trackingLinks;
 
     public AdminVendorOrderController(VendorOrderActions actions, OrderService orderService, VendorCallLog calls,
-                                      AccountRepository accounts) {
+                                      AccountRepository accounts,
+                                      com.globalfutservice.fulfilment.PartnerTrackingLinks trackingLinks) {
+        this.trackingLinks = trackingLinks;
         this.actions = actions;
         this.orderService = orderService;
         this.calls = calls;
@@ -70,6 +73,27 @@ public class AdminVendorOrderController {
 
     /** What an action came to, when the vendor did it. The page reloads the order to show the rest. */
     public record ActionResponse(String status, String message) {
+    }
+
+    /**
+     * Asks FUT Transfer for the customer's tracking link now, rather than at the next poll.
+     * Only for an order it has under its id, not finished, with no link yet. Nothing about the
+     * order changes, whatever the answer; the link itself is not in this response.
+     */
+    @PostMapping("/tracking-link")
+    @Operation(summary = "Generate the customer's tracking link at FUT Transfer now")
+    public ResponseEntity<ActionResponse> trackingLink(@PathVariable String publicRef) {
+        OrderEntity order = orderService.requireAny(publicRef);
+        var outcome = trackingLinks.generateNow(order.getId());
+        String message = switch (outcome) {
+            case STORED -> "The tracking link is stored, and the customer is emailed it once.";
+            case UNAVAILABLE -> "FUT Transfer will not make a link for this order: it is finished. None will be asked for again.";
+            case RETRY_LATER -> "FUT Transfer did not give a link this time. It is asked for again automatically.";
+            case NOT_LINKABLE -> "This order cannot have a link made now: it already has one, it is finished, or "
+                    + "FUT Transfer has not given its id for it.";
+        };
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(new ActionResponse(outcome.name(), message));
     }
 
     @PostMapping("/send-sign-in")

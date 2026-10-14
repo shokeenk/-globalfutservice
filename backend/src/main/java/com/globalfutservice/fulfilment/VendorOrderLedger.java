@@ -352,6 +352,8 @@ public class VendorOrderLedger {
                        vendor_economy_state = :economyState, vendor_was_aborted = :aborted,
                        vendor_amount_ordered_k = :ordered, amount_delivered_k = :delivered,
                        coins_used = :coinsUsed, to_pay = :toPay, missing_polls = 0,
+                       vendor_simplified_status = :simplified, vendor_account_check_long = :accountCheckLong,
+                       vendor_economy_state_long = :economyStateLong,
                        last_polled_at = now(),
                        last_progress_at = case when :progressed then now() else last_progress_at end,
                        updated_at = now()
@@ -365,7 +367,144 @@ public class VendorOrderLedger {
                 .addValue("delivered", s.amountDeliveredK())
                 .addValue("coinsUsed", s.coinsUsed())
                 .addValue("toPay", s.toPay())
+                .addValue("simplified", s.simplifiedStatus())
+                .addValue("accountCheckLong", s.accountCheckLong())
+                .addValue("economyStateLong", s.economyStateLong())
                 .addValue("progressed", progressed));
+    }
+
+    // --------------------------------------------------------- tracking link ---
+
+    /** A vendor order whose customer tracking link is still to be had. */
+    public record LinkRow(long orderId, String externalRef, String vendorOrderId, int attempts) {
+    }
+
+    /**
+     * The vendor states in which the partner may still make a link: it has the order and has
+     * not finished it. A finished order cannot have one generated.
+     */
+    private static final String LINKABLE_STATES = "('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER', 'NEEDS_REVIEW')";
+    private static final String FINISHED_ORDERS =
+            "('DELIVERED', 'COMPLETED', 'REFUNDED', 'CREDITED', 'ABANDONED', 'DISPUTED')";
+
+    /**
+     * Links still to be had and due to be asked for, the longest-waiting first: the partner
+     * has the order under its id, it is not finished, there is no link yet, nor a refusal.
+     * Includes orders sent before links existed, which is how they are backfilled.
+     */
+    public List<LinkRow> linksDue(int limit) {
+        return jdbc.query("""
+                select v.order_id, v.external_ref, v.vendor_order_id, v.tracking_link_attempts
+                  from vendor_order v join orders o on o.id = v.order_id
+                 where v.tracking_link_state is null and v.vendor_order_id is not null
+                   and v.state in %s
+                   and o.status not in %s
+                   and (v.tracking_link_next_at is null or v.tracking_link_next_at <= now())
+                 order by v.tracking_link_next_at nulls first, v.id
+                 limit :limit
+                """.formatted(LINKABLE_STATES, FINISHED_ORDERS), new MapSqlParameterSource("limit", limit), (rs, i) -> new LinkRow(rs.getLong("order_id"),
+                rs.getString("external_ref"), rs.getString("vendor_order_id"), rs.getInt("tracking_link_attempts")));
+    }
+
+    /** The same, for one order, due or not: what an admin's "Generate link" asks for. */
+    public Optional<LinkRow> linkable(long orderId) {
+        return jdbc.query("""
+                select v.order_id, v.external_ref, v.vendor_order_id, v.tracking_link_attempts
+                  from vendor_order v join orders o on o.id = v.order_id
+                 where v.order_id = :orderId and v.tracking_link_state is null and v.vendor_order_id is not null
+                   and v.state in %s
+                   and o.status not in %s
+                """.formatted(LINKABLE_STATES, FINISHED_ORDERS), new MapSqlParameterSource("orderId", orderId), (rs, i) -> new LinkRow(rs.getLong("order_id"),
+                rs.getString("external_ref"), rs.getString("vendor_order_id"), rs.getInt("tracking_link_attempts")))
+                .stream().findFirst();
+    }
+
+    /**
+     * The link, kept exactly as the partner returned it. Once: a link already stored, or a
+     * refusal already recorded, is never replaced.
+     *
+     * @return whether this call stored it
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean storeTrackingLink(long orderId, String fullUrl) {
+        return jdbc.update("""
+                update vendor_order
+                   set tracking_url = :url, tracking_url_at = now(), tracking_link_state = 'STORED',
+                       tracking_link_error = null, tracking_link_next_at = null,
+                       tracking_link_attempts = tracking_link_attempts + 1, updated_at = now()
+                 where order_id = :orderId and tracking_link_state is null
+                """, new MapSqlParameterSource("orderId", orderId).addValue("url", fullUrl)) == 1;
+    }
+
+    /** The partner will not make a link -- the order is finished. Nothing more is asked. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markTrackingUnavailable(long orderId, String code) {
+        return jdbc.update("""
+                update vendor_order
+                   set tracking_link_state = 'UNAVAILABLE', tracking_link_error = :code, tracking_link_next_at = null,
+                       tracking_link_attempts = tracking_link_attempts + 1, updated_at = now()
+                 where order_id = :orderId and tracking_link_state is null
+                """, new MapSqlParameterSource("orderId", orderId).addValue("code", code)) == 1;
+    }
+
+    /** No link this time: asked for again at {@code next}. The order itself is not touched. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void trackingRetryLater(long orderId, String code, Instant next) {
+        jdbc.update("""
+                update vendor_order
+                   set tracking_link_error = :code, tracking_link_next_at = :next,
+                       tracking_link_attempts = tracking_link_attempts + 1, updated_at = now()
+                 where order_id = :orderId and tracking_link_state is null
+                """, new MapSqlParameterSource("orderId", orderId).addValue("code", code)
+                .addValue("next", Timestamp.from(next)));
+    }
+
+    /**
+     * Claims "your coins are on the way" for sending, before anything is sent: at most once
+     * per order, whoever asks and however often.
+     *
+     * @return the link to put in it, when this caller claimed it
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<String> claimTrackingEmail(long orderId) {
+        return jdbc.query("""
+                update vendor_order set tracking_email_at = now()
+                 where order_id = :orderId and tracking_url is not null and tracking_email_at is null
+                returning tracking_url
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> rs.getString(1)).stream().findFirst();
+    }
+
+    /** Orders with a link whose email has not been claimed yet. */
+    public List<Long> trackingEmailsDue(int limit) {
+        return jdbc.queryForList("""
+                select order_id from vendor_order
+                 where tracking_url is not null and tracking_email_at is null
+                 order by tracking_url_at, id
+                 limit :limit
+                """, new MapSqlParameterSource("limit", limit), Long.class);
+    }
+
+    /** The order's tracking link, for its owner's order page; empty until it is stored. */
+    public Optional<String> trackingUrl(long orderId) {
+        return jdbc.queryForList("""
+                select tracking_url from vendor_order where order_id = :orderId and tracking_url is not null
+                """, new MapSqlParameterSource("orderId", orderId), String.class).stream().findFirst();
+    }
+
+    /** The link as staff see it: the link, when it was stored, and how asking for it is going. */
+    public record TrackingLinkStatus(String url, Instant storedAt, String state, int attempts, String lastError,
+                                     Instant nextAttemptAt) {
+    }
+
+    public Optional<TrackingLinkStatus> trackingStatus(long orderId) {
+        return jdbc.query("""
+                select tracking_url, tracking_url_at, tracking_link_state, tracking_link_attempts, tracking_link_error,
+                       tracking_link_next_at
+                  from vendor_order where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new TrackingLinkStatus(
+                rs.getString("tracking_url"), instant(rs, "tracking_url_at"), rs.getString("tracking_link_state"),
+                rs.getInt("tracking_link_attempts"), rs.getString("tracking_link_error"),
+                instant(rs, "tracking_link_next_at"))).stream().findFirst();
     }
 
     /** The vendor left this order out of its answer. @return the count of misses in a row */
@@ -537,7 +676,25 @@ public class VendorOrderLedger {
                          int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
                          Instant resubmittedAt, Instant updatedAt, String orderMode, String transferMethod,
                          java.math.BigDecimal buyNowThresholdSent, java.math.BigDecimal maxPriceSent,
-                         java.math.BigDecimal balanceAtSend) {
+                         java.math.BigDecimal balanceAtSend,
+                         /** The partner's pending / completed / error, and its two details: staff only. */
+                         String vendorSimplifiedStatus, String vendorAccountCheckLong,
+                         String vendorEconomyStateLong) {
+
+        public Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
+                      Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
+                      String vendorEconomyState, Boolean aborted, Long coinsUsed, java.math.BigDecimal toPay,
+                      int attempts, String lastErrorCode, String reviewReason, String customerAction,
+                      int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
+                      Instant resubmittedAt, Instant updatedAt, String orderMode, String transferMethod,
+                      java.math.BigDecimal buyNowThresholdSent, java.math.BigDecimal maxPriceSent,
+                      java.math.BigDecimal balanceAtSend) {
+            this(state, externalRef, vendorOrderId, amountOrderedK, vendorAmountOrderedK, deliveredK, vendorStatus,
+                    vendorAccountCheck, vendorEconomyState, aborted, coinsUsed, toPay, attempts, lastErrorCode,
+                    reviewReason, customerAction, missingPolls, submittedAt, lastPolledAt, lastProgressAt,
+                    resubmittedAt, updatedAt, orderMode, transferMethod, buyNowThresholdSent, maxPriceSent,
+                    balanceAtSend, null, null, null);
+        }
     }
 
     public Optional<Detail> detail(long orderId) {
@@ -554,7 +711,9 @@ public class VendorOrderLedger {
                 instant(rs, "submitted_at"), instant(rs, "last_polled_at"), instant(rs, "last_progress_at"),
                 instant(rs, "resubmitted_at"), instant(rs, "updated_at"), rs.getString("order_mode"),
                 rs.getString("transfer_method"), rs.getBigDecimal("buy_now_threshold_sent"),
-                rs.getBigDecimal("max_price_sent"), rs.getBigDecimal("balance_at_send"))).stream().findFirst();
+                rs.getBigDecimal("max_price_sent"), rs.getBigDecimal("balance_at_send"),
+                rs.getString("vendor_simplified_status"), rs.getString("vendor_account_check_long"),
+                rs.getString("vendor_economy_state_long"))).stream().findFirst();
     }
 
     /** An order waiting for an admin's decision, for the review list on the Orders page. */

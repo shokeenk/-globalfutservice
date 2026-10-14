@@ -92,6 +92,27 @@ class OrderTrackingResponseTest {
     }
 
     @Test
+    @DisplayName("the partner's tracking link: on the owner's own coin order only -- never the guest lookup or staff")
+    void partnerLinkOwnerOnly() {
+        String link = "https://transferstatus.top/abc12345?lang=de";
+        when(ledger.trackingUrl(7L)).thenReturn(Optional.of(link));
+
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl()).isEqualTo(link);
+        assertThat(mapper.toResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
+        assertThat(mapper.toAdminResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
+
+        ReflectionTestUtils.setField(order, "sku", Sku.BOOST_CHAMPS);
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("no link stored yet: the owner sees no Track order button")
+    void noPartnerLinkYet() {
+        when(ledger.trackingUrl(7L)).thenReturn(Optional.empty());
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
+    }
+
+    @Test
     @DisplayName("the coupon the order was placed with travels with it, so its price line can name it")
     void couponCode() {
         assertThat(mapper.toResponse(order, List.of(), true).couponCode()).isNull();

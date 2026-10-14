@@ -69,10 +69,20 @@ public class VendorPoller {
     private final CredentialVaultService vault;
     private final NotificationService notifications;
     private final AppProperties props;
+    /** Customer tracking links still to be had, asked for again on each poll. Null in some tests. */
+    private final PartnerTrackingLinks trackingLinks;
 
     public VendorPoller(FutTransferClient client, VendorControl control, VendorOrderLedger ledger, SchedulerLock lock,
                         OrderService orderService, OrderRepository orders, CredentialVaultService vault,
                         NotificationService notifications, AppProperties props) {
+        this(client, control, ledger, lock, orderService, orders, vault, notifications, props, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public VendorPoller(FutTransferClient client, VendorControl control, VendorOrderLedger ledger, SchedulerLock lock,
+                        OrderService orderService, OrderRepository orders, CredentialVaultService vault,
+                        NotificationService notifications, AppProperties props, PartnerTrackingLinks trackingLinks) {
+        this.trackingLinks = trackingLinks;
         this.client = client;
         this.control = control;
         this.ledger = ledger;
@@ -126,8 +136,14 @@ public class VendorPoller {
             FutTransferClient.Read<Map<String, FutTransferClient.SupplierStatus>> read = client.statusByVendorIds(ids);
             if (read instanceof FutTransferClient.ReadFailed<Map<String, FutTransferClient.SupplierStatus>> f) {
                 log.warn("FUT Transfer status for {} order(s) failed: {} ({})", batch.size(), f.error(), f.code());
-                troubled |= trouble(f.error());
-                if (f.error() == FutTransferClient.ReadError.AUTH) return troubled;
+                if (f.error() == FutTransferClient.ReadError.AUTH) return true;
+                if (f.error() == FutTransferClient.ReadError.RATE_LIMITED) {
+                    // One call per order would only add to it: wait for the next poll.
+                    troubled = true;
+                    continue;
+                }
+                // Any other failure: the same orders, one at a time.
+                troubled |= pollEach(batch);
                 continue;
             }
             Map<String, FutTransferClient.SupplierStatus> found =
@@ -163,6 +179,43 @@ public class VendorPoller {
         for (VendorOrderLedger.PollRow row : ledger.stalled(p.stallAfter())) {
             review(row, "STALLED", "The partner has shown no progress on this order for over "
                     + p.stallAfter().toHours() + " hours.", null);
+        }
+
+        // Customer tracking links still to be had: asked for again, with growing gaps. Apart
+        // from everything above -- nothing here moves an order.
+        if (trackingLinks != null) {
+            try {
+                trackingLinks.sweep();
+            } catch (RuntimeException e) {
+                log.warn("Tracking links not asked for this poll: {}", e.getClass().getSimpleName());
+            }
+        }
+        return troubled;
+    }
+
+    /**
+     * A batch whose bulk read failed, read one order at a time by the partner's id
+     * ({@code /orderStatusAPI}).
+     *
+     * @return whether it was troubled
+     */
+    private boolean pollEach(List<VendorOrderLedger.PollRow> batch) {
+        boolean troubled = false;
+        for (VendorOrderLedger.PollRow row : batch) {
+            FutTransferClient.Read<FutTransferClient.SupplierStatus> read =
+                    client.statusByVendorId(row.vendorOrderId(), row.externalRef());
+            if (read instanceof FutTransferClient.ReadOk<FutTransferClient.SupplierStatus> ok) {
+                apply(row, ok.value());
+                continue;
+            }
+            FutTransferClient.ReadFailed<FutTransferClient.SupplierStatus> f =
+                    (FutTransferClient.ReadFailed<FutTransferClient.SupplierStatus>) read;
+            if (f.error() == FutTransferClient.ReadError.AUTH) return true;
+            if (trouble(f.error())) {
+                // The partner is struggling: the rest wait for the next poll.
+                return true;
+            }
+            missing(row);
         }
         return troubled;
     }
@@ -207,7 +260,8 @@ public class VendorPoller {
         ledger.recordReport(row.orderId(), s, progressed);
 
         VendorStatusMap.Outcome o = VendorStatusMap.map(new VendorStatusMap.Report(s.status(), s.accountCheck(),
-                s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted(), s.motherOrder()), row.amountOrderedK());
+                s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted(), s.motherOrder(),
+                s.simplifiedStatus()), row.amountOrderedK());
         if (staleAfterRestart(row, s, o)) {
             log.info("FUT Transfer: {} still reports what it did before it was restarted; waiting",
                     row.externalRef());
@@ -336,6 +390,12 @@ public class VendorPoller {
     }
 
     private static String headline(VendorStatusMap.Outcome o, String orderMode) {
+        if (VendorStatusMap.PARTIAL_DELIVERY.equals(o.reason())) {
+            return "Partial delivery";
+        }
+        if (VendorStatusMap.OVER_DELIVERY.equals(o.reason())) {
+            return "Delivered more than ordered";
+        }
         if (VendorStatusMap.NO_SUITABLE_SENDER.equals(o.reason())) {
             return PUBLIC_POOL.equals(orderMode) ? "No seller available" : "No sender available";
         }
@@ -359,6 +419,12 @@ public class VendorPoller {
         long orderedK = row.amountOrderedK();
         String codes = "status " + s.status() + ", accountCheck " + s.accountCheck() + ", economyState "
                 + s.economyState() + (s.aborted() ? ", aborted" : "");
+        if (VendorStatusMap.PARTIAL_DELIVERY.equals(o.reason())) {
+            // In the partner's own unit, as it reported: thousands of coins.
+            return "Partial delivery: " + s.amountDeliveredK() + " of " + orderedK + " K. The partner reports the "
+                    + "order finished with less delivered than ordered; nothing more will arrive on its own. "
+                    + "The partner reports " + codes + ".";
+        }
         if (VendorStatusMap.NO_SUITABLE_SENDER.equals(o.reason())) {
             Long delivered = s.amountDeliveredK();
             String amounts = delivered == null

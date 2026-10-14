@@ -371,19 +371,29 @@ public class VendorOrderActions {
     }
 
     /**
-     * What the customer can follow: when their transfer started, and the tracking page they
-     * were sent, both null until it starts. FUT Transfer's own progress page is not linked:
-     * its address carries a code that none of its API's answers include, and the order's id
-     * does not lead to it.
+     * What the customer can follow: when their transfer started and our tracking page, both
+     * null until it starts; and the partner's live tracking link, as the partner gave it, with
+     * how asking for it is going. {@code canGenerate}: there is no link yet, the order is not
+     * finished, and the partner has it under its id -- so "Generate link" can be offered.
      */
-    public record Tracking(java.time.Instant transferStartedAt, String customerUrl) {
+    public record Tracking(java.time.Instant transferStartedAt, String customerUrl, String partnerUrl,
+                           java.time.Instant partnerUrlStoredAt, String partnerLinkState, int partnerLinkAttempts,
+                           String partnerLinkError, java.time.Instant partnerLinkNextAt, boolean canGenerate) {
+
+        public Tracking(java.time.Instant transferStartedAt, String customerUrl) {
+            this(transferStartedAt, customerUrl, null, null, null, 0, null, null, false);
+        }
     }
 
     public Section section(OrderEntity order, List<VendorCallLog.Call> calls) {
         VendorOrderLedger.Detail d = ledger.detail(order.getId()).orElse(null);
         java.time.Instant started = order.getTransferStartedAt();
-        Tracking tracking = new Tracking(started, started == null ? null
-                : com.globalfutservice.orders.TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef()));
+        String ours = started == null ? null
+                : com.globalfutservice.orders.TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef());
+        VendorOrderLedger.TrackingLinkStatus link = ledger.trackingStatus(order.getId()).orElse(null);
+        Tracking tracking = link == null ? new Tracking(started, ours)
+                : new Tracking(started, ours, link.url(), link.storedAt(), link.state(), link.attempts(),
+                        link.lastError(), link.nextAttemptAt(), ledger.linkable(order.getId()).isPresent());
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
                 actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order), tracking);
     }
