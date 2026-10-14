@@ -59,7 +59,9 @@ To read several orders at once: `POST /orderStatusBulkAPI` with `{ "apiUser": ".
 - **Keeping it secret.**
   - Only the signed-in owner of the order sees it, through their order page and one email.
   - It is never written to the call log or the application log, and never posted to Discord.
-- **The email.** "Your coins are on the way" is sent once per order, when the link is first stored. The send is claimed in the database first, so a retry or a second poller never sends it again.
+- **The emails.** Each is claimed in the database before it is sent, so each goes at most once per order, however often or from however many places the sweeps run.
+  - Link stored within 5 minutes of the transfer starting: only "Your coins are on the way". "Your coin transfer has started" is settled as not needed.
+  - Otherwise: "Your coin transfer has started" at 5 minutes, as before, then "Your coins are on the way" when the link arrives. "On the way" never goes before "started" has been settled.
 - **Status reads.** The poller reads open orders with `/orderStatusBulkAPI`, 20 at a time. If a bulk read fails (other than a rate limit or refused credentials), it reads the same orders one by one with `/orderStatusAPI` by `orderID`.
 - **Amounts.** They stay in thousands from the partner to the order page. The page turns them into coins in one place.
 - **Delivery.** An order is DELIVERED only when the partner reports it finished (`status` "finished" or `simplifiedStatus` "completed") with at least the ordered amount delivered. More than ordered is delivered too, with an admin alert. Finished with less delivered goes to Needs review, with the alert "Partial delivery: X of Y K".
