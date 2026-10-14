@@ -153,6 +153,27 @@ class CustomerVocabularyTest {
         }
     }
 
+    @Test
+    @DisplayName("Objectives and Tournaments -- the Boosting page, the checkout, the order's service, and what the "
+            + "server says about a listing -- use none of the partner's words")
+    void objectivesAndTournaments() throws Exception {
+        List<Path> files = List.of(
+                FRONTEND.resolve("pages").resolve("Boosting.tsx"),
+                FRONTEND.resolve("pages").resolve("BoostingCheckout.tsx"),
+                FRONTEND.resolve("components").resolve("ListingCard.tsx"),
+                FRONTEND.resolve("components").resolve("listing").resolve("ListingDetails.tsx"),
+                FRONTEND.resolve("components").resolve("listing").resolve("ListingSnapshotCard.tsx"),
+                BACKEND.resolve("catalog").resolve("listing").resolve("ServiceListingService.java"),
+                BACKEND.resolve("catalog").resolve("listing").resolve("ListingSnapshot.java"),
+                BACKEND.resolve("catalog").resolve("listing").resolve("ListingDrafts.java"),
+                BACKEND.resolve("catalog").resolve("listing").resolve("PngCheck.java"));
+        for (Path file : files) {
+            List<String> strings = literals(Files.readString(file));
+            assertThat(strings).as(file.getFileName().toString()).isNotEmpty();
+            assertClean(file.getFileName().toString(), strings);
+        }
+    }
+
     /**
      * Customers are never told to run /verify: Discord refuses to register the command.
      * Emails, the order ticket's texts, what the order page is sent, and the storefront's
@@ -167,6 +188,8 @@ class CustomerVocabularyTest {
         }
         files.add(FRONTEND.resolve("pages").resolve("BoostingCheckout.tsx"));
         files.add(FRONTEND.resolve("pages").resolve("Track.tsx"));
+        files.add(FRONTEND.resolve("components").resolve("listing").resolve("ListingDetails.tsx"));
+        files.add(FRONTEND.resolve("components").resolve("listing").resolve("ListingSnapshotCard.tsx"));
         files.add(FRONTEND.resolve("components").resolve("DiscordMessageUs.tsx"));
         Pattern verify = Pattern.compile("(?i)/verify\\b|run this command|ejecuta allí este comando"
                 + "|lance cette commande");

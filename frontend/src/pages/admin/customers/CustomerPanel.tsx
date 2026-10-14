@@ -18,6 +18,8 @@ const SKU_ICON: Record<string, [IconType, Tone]> = {
   TRADING_SERVICE: [LuCoins, 'amber'],
   BOOST_CHAMPS: [LuTrophy, 'red'],
   BOOST_RIVALS: [LuTrophy, 'violet'],
+  BOOST_OBJECTIVES: [LuTrophy, 'red'],
+  BOOST_TOURNAMENTS: [LuTrophy, 'violet'],
   COACHING: [LuGraduationCap, 'blue'],
 }
 

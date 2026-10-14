@@ -1,5 +1,6 @@
 package com.globalfutservice.catalog;
 
+import com.globalfutservice.catalog.listing.ServiceListingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.domain.money.Currency;
@@ -42,7 +43,8 @@ public class ListingService {
     private static final Logger log = LoggerFactory.getLogger(ListingService.class);
 
     /** The services the page covers, in the order it shows them. */
-    public static final List<Sku> SERVICES = List.of(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS, Sku.COACHING);
+    public static final List<Sku> SERVICES = List.of(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS, Sku.COACHING,
+            Sku.BOOST_OBJECTIVES, Sku.BOOST_TOURNAMENTS);
     static final Set<Sku> BOOSTING = EnumSet.of(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS);
 
     /** Enough for any real price in any currency; stops a slipped zero, not a business. */
@@ -52,8 +54,12 @@ public class ListingService {
     private final ListingSettings settings;
     private final AppProperties props;
     private final Clock clock;
+    /** Objectives and Tournaments, which are written here rather than only priced. */
+    private final ServiceListingService serviceListings;
 
-    public ListingService(RateCardRepository rates, ListingSettings settings, AppProperties props, Clock clock) {
+    public ListingService(RateCardRepository rates, ListingSettings settings, AppProperties props, Clock clock,
+                          ServiceListingService serviceListings) {
+        this.serviceListings = serviceListings;
         this.rates = rates;
         this.settings = settings;
         this.props = props;
@@ -70,7 +76,9 @@ public class ListingService {
                           Integer successRateBps,
                           /** Where the rate comes from: LISTING (set here), CONFIGURATION, or null. */
                           String successRateSource,
-                          boolean bestValue) {
+                          boolean bestValue,
+                          /** Objectives and Tournaments: everything the team wrote. Null for the rest. */
+                          ServiceListingService.AdminView detail) {
     }
 
     public record Category(String sku, String name, List<Listing> listings,
@@ -103,6 +111,16 @@ public class ListingService {
     }
 
     private Category category(Sku sku) {
+        if (sku.isListingService()) {
+            List<Listing> listings = new ArrayList<>();
+            for (ServiceListingService.AdminView view : serviceListings.forAdmin(sku)) {
+                Map<String, Price> prices = new TreeMap<>();
+                view.prices().forEach((c, p) -> prices.put(c, new Price(p.minor(), p.formatted())));
+                listings.add(new Listing(sku.name(), view.variant(), view.title(), view.displayOrder(), view.active(),
+                        prices, null, null, false, view));
+            }
+            return new Category(sku.name(), name(sku), listings, null);
+        }
         String season = props.season();
         Map<String, ListingSettings.Stored> stored = settings.forSku(sku);
 
@@ -158,7 +176,7 @@ public class ListingService {
             source = stored != null && stored.successRateSet() ? "LISTING" : rate != null ? "CONFIGURATION" : null;
         }
         return new Listing(sku.name(), variant, label, sort, active, prices, rate, source,
-                active && best.map(variant::equals).orElse(false));
+                active && best.map(variant::equals).orElse(false), null);
     }
 
     /** For a hidden listing, the newest price it had in each currency. */
@@ -356,6 +374,9 @@ public class ListingService {
         if (!SERVICES.contains(sku)) {
             throw new ApiExceptions.BadRequestException("Listings covers boosting and coaching. Coins are on Coin rates.");
         }
+        if (sku.isListingService()) {
+            throw new ApiExceptions.BadRequestException("Objectives and Tournaments listings are saved from their own form.");
+        }
     }
 
     static String name(Sku sku) {
@@ -363,6 +384,8 @@ public class ListingService {
             case BOOST_CHAMPS -> "Champs Wins";
             case BOOST_RIVALS -> "Rivals Divisions";
             case COACHING -> "Coaching";
+            case BOOST_OBJECTIVES -> "Objectives";
+            case BOOST_TOURNAMENTS -> "Tournaments";
             default -> sku.displayName();
         };
     }

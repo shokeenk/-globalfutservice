@@ -25,7 +25,7 @@ const CATEGORY_NAME: Record<string, string> = {
  * charged from the next order on. Orders already placed keep their price.
  */
 export function ListingEditor({
-  mode, category, listing, title, currencies, onClose, onSaved, onAdded,
+  mode, category, listing, title, currencies, onClose, onSaved, onAdded, onCategory,
 }: {
   mode: 'edit' | 'add'
   category: AdminListingCategory
@@ -35,6 +35,8 @@ export function ListingEditor({
   onClose: () => void
   onSaved: (overview: AdminListingsOverview, message: string) => void
   onAdded: (sku: string, variant: string) => void
+  /** Objectives or Tournaments picked: they have their own form. */
+  onCategory?: (sku: string) => void
 }) {
   const boosting = category.sku !== 'COACHING'
   const [addSku, setAddSku] = useState<string>(category.sku === 'COACHING' ? 'BOOST_CHAMPS' : category.sku)
@@ -173,9 +175,19 @@ export function ListingEditor({
             <>
               <label className="block text-[12.5px] font-medium text-admin-ink">
                 Category
-                <select value={addSku} onChange={(e) => setAddSku(e.target.value)} className={field}>
+                <select
+                  value={addSku}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    if (next === 'BOOST_OBJECTIVES' || next === 'BOOST_TOURNAMENTS') onCategory?.(next)
+                    else setAddSku(next)
+                  }}
+                  className={field}
+                >
                   <option value="BOOST_CHAMPS">Champs Wins</option>
                   <option value="BOOST_RIVALS">Rivals Divisions</option>
+                  {onCategory && <option value="BOOST_OBJECTIVES">Objectives</option>}
+                  {onCategory && <option value="BOOST_TOURNAMENTS">Tournaments</option>}
                 </select>
               </label>
               <label className="mt-3 block text-[12.5px] font-medium text-admin-ink">

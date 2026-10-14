@@ -35,7 +35,8 @@ public enum CampaignAudience {
         return switch (this) {
             case ALL_OPTED_IN -> java.util.List.of();
             case COINS_BUYERS -> java.util.List.of("TRADING_SERVICE");
-            case BOOSTING_BUYERS -> java.util.List.of("BOOST_CHAMPS", "BOOST_RIVALS");
+            case BOOSTING_BUYERS -> java.util.List.of("BOOST_CHAMPS", "BOOST_RIVALS", "BOOST_OBJECTIVES",
+                    "BOOST_TOURNAMENTS");
             case COACHING_BUYERS -> java.util.List.of("COACHING");
         };
     }

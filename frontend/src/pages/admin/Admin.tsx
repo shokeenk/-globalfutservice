@@ -188,7 +188,7 @@ export default function Admin() {
   const count = (skus: string[], statuses: string[]) => (overview ? countFor(overview, skus, statuses) : null)
   const inProgress = overview ? [
     ['Coins', count(['TRADING_SERVICE'], ['IN_PROGRESS'])],
-    ['Boosting', count(['BOOST_CHAMPS', 'BOOST_RIVALS'], ['IN_PROGRESS'])],
+    ['Boosting', count(['BOOST_CHAMPS', 'BOOST_RIVALS', 'BOOST_OBJECTIVES', 'BOOST_TOURNAMENTS'], ['IN_PROGRESS'])],
     ['Coaching', count(['COACHING'], ['IN_PROGRESS'])],
   ].filter(([, n]) => (n as number) > 0) : []
   const onHold = count([], ['ON_HOLD'])

@@ -21,13 +21,15 @@ import { Reveal } from '../motion/Reveal'
  * underneath, and it is the same rule the header uses on scroll.
  */
 export function PageHeader({
-  eyebrow, title, lead, aside, intensity = 0.45,
+  eyebrow, title, lead, aside, below, intensity = 0.45,
 }: {
   eyebrow?: string
   title: ReactNode
   lead?: ReactNode
   /** Optional trailing block — a status, a price, a count. */
   aside?: ReactNode
+  /** Optional row under the lead, left-aligned with it: a page's own navigation. */
+  below?: ReactNode
   intensity?: number
 }) {
   return (
@@ -48,6 +50,11 @@ export function PageHeader({
             </Reveal>
           )}
         </div>
+        {below && (
+          <Reveal delay={120} className="mt-7">
+            {below}
+          </Reveal>
+        )}
       </div>
     </section>
   )

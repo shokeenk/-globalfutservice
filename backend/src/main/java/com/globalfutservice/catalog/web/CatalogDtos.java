@@ -64,7 +64,19 @@ public final class CatalogDtos {
              */
             boolean bestValue,
             /** A coin option's structure: its slider and its rates. Null for every other service. */
-            CoinDetails coin) {
+            CoinDetails coin,
+            /**
+             * An Objectives or Tournaments listing: its card and its checkout, as the GFS team
+             * wrote them. Null for every other service.
+             */
+            com.globalfutservice.catalog.listing.ServiceListingService.PublicView listing) {
+
+        public CatalogOption(String platform, String variant, String label, long unitPriceMinor,
+                             String unitPriceFormatted, BigDecimal minQuantity, BigDecimal maxQuantity,
+                             BigDecimal stepQuantity, Integer successRateBps, boolean bestValue, CoinDetails coin) {
+            this(platform, variant, label, unitPriceMinor, unitPriceFormatted, minQuantity, maxQuantity,
+                    stepQuantity, successRateBps, bestValue, coin, null);
+        }
     }
 
     /**

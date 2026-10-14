@@ -97,7 +97,25 @@ public final class OrderDtos {
             String pcLauncher,
 
             @AssertTrue(message = "Please accept the terms to place your order")
-            boolean acceptedTerms) {
+            boolean acceptedTerms,
+
+            /*
+             * An Objectives or Tournaments listing sold by the hour: the customer ticked "I
+             * understand I'm paying for the manual service time, not for a guaranteed level or
+             * specific result." Refused without it on those listings, ignored on everything else.
+             */
+            Boolean hourlyAcknowledged) {
+
+        public CreateOrderRequest(QuoteDtos.SignedQuote quote, String email, String fullName, String phone,
+                                  String discordUsername, String deliveryMethod, String eaPlatformHandle,
+                                  String note, String coachingPlatform, String currentRank, String improvementFocus,
+                                  String coachingCoachId, java.time.Instant coachingStartsAt,
+                                  String coachingTimezone, String boostPlatform, String pcLauncher,
+                                  boolean acceptedTerms) {
+            this(quote, email, fullName, phone, discordUsername, deliveryMethod, eaPlatformHandle, note,
+                    coachingPlatform, currentRank, improvementFocus, coachingCoachId, coachingStartsAt,
+                    coachingTimezone, boostPlatform, pcLauncher, acceptedTerms, null);
+        }
     }
 
     /** Everything the browser needs to open the payment sheet. */
@@ -247,7 +265,13 @@ public final class OrderDtos {
               A Champions order's result once Wins Achieved is recorded: the wins, what is
               owed and how it is settled. Null on every other order and before delivery.
             */
-            com.globalfutservice.orders.result.ResultDtos.CustomerView result) {
+            com.globalfutservice.orders.result.ResultDtos.CustomerView result,
+
+            /*
+              An Objectives or Tournaments order: the listing as it was sold, frozen when the
+              order was placed -- title, terms, hours, price. Null on every other order.
+            */
+            com.globalfutservice.catalog.listing.ListingSnapshot.View listing) {
     }
 
     /**

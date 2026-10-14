@@ -35,3 +35,28 @@ export function useMoney() {
     [code],
   )
 }
+
+const SYMBOL: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' }
+
+/**
+ * An amount in minor units, written the way the server writes it: symbol, Indian grouping
+ * for rupees (₹3,42,850.00) and Western for the rest ($1,250.00), two decimals.
+ *
+ * <p>For amounts the page composes itself next to amounts the server formatted -- an
+ * hourly price times the hours chosen -- so the two read identically.
+ */
+export function formatMinor(minor: number, currency: string): string {
+  const negative = minor < 0
+  const abs = Math.abs(minor)
+  const whole = Math.floor(abs / 100).toString()
+  const fraction = (abs % 100).toString().padStart(2, '0')
+  let grouped: string
+  if (currency === 'INR' && whole.length > 3) {
+    const last3 = whole.slice(-3)
+    const rest = whole.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',')
+    grouped = `${rest},${last3}`
+  } else {
+    grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
+  return `${negative ? '-' : ''}${SYMBOL[currency] ?? `${currency} `}${grouped}.${fraction}`
+}

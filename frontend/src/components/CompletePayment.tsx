@@ -33,6 +33,8 @@ import { ScheduleStep, formatSlot, type ChosenSlot } from '../pages/coaching/Sch
 /** Where a new order of the same kind is placed. */
 export function newOrderPath(sku: string): string {
   if (sku === 'COACHING') return '/coaching/book'
+  if (sku === 'BOOST_OBJECTIVES') return '/boosting?category=objectives'
+  if (sku === 'BOOST_TOURNAMENTS') return '/boosting?category=tournaments'
   if (sku.startsWith('BOOST_')) return '/boosting'
   return '/order'
 }

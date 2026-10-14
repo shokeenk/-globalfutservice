@@ -1,29 +1,11 @@
 import type { AdminPayment, PaymentTotal } from '../../../lib/types'
-
-const SYMBOL: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' }
+import { formatMinor } from '../../../lib/money'
 
 /**
- * An amount in minor units, written the way the server writes it: symbol, Indian grouping
- * for rupees (₹3,42,850.00) and Western for the rest ($1,250.00), two decimals.
- *
- * <p>Needed on this side only for sums the page makes itself, adding statuses together
- * within one currency. Nothing here adds currencies together.
+ * Sums the page makes itself, adding statuses together within one currency, written the
+ * way the server writes amounts. Nothing here adds currencies together.
  */
-export function formatMinor(minor: number, currency: string): string {
-  const negative = minor < 0
-  const abs = Math.abs(minor)
-  const whole = Math.floor(abs / 100).toString()
-  const fraction = (abs % 100).toString().padStart(2, '0')
-  let grouped: string
-  if (currency === 'INR' && whole.length > 3) {
-    const last3 = whole.slice(-3)
-    const rest = whole.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',')
-    grouped = `${rest},${last3}`
-  } else {
-    grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  }
-  return `${negative ? '-' : ''}${SYMBOL[currency] ?? `${currency} `}${grouped}.${fraction}`
-}
+export { formatMinor }
 
 export interface Summed {
   count: number

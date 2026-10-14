@@ -21,7 +21,7 @@ describe('status names', () => {
       for (const status of tab.statuses) expect(ORDER_STATUS[status], status).toBeDefined()
     }
     expect(SERVICE_TABS.flatMap((t) => t.skus).sort())
-      .toEqual(['BOOST_CHAMPS', 'BOOST_RIVALS', 'COACHING', 'TRADING_SERVICE'])
+      .toEqual(['BOOST_CHAMPS', 'BOOST_OBJECTIVES', 'BOOST_RIVALS', 'BOOST_TOURNAMENTS', 'COACHING', 'TRADING_SERVICE'])
   })
 
   it('maps the reference’s sample words onto what they really mean', () => {

@@ -20,6 +20,9 @@ import { paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
 import { internationalCopy, useInternationalOffer } from '../components/internationalOffer'
 import { StoreCreditRow } from '../components/StoreCredit'
 import { ChampionsInfoCard } from '../components/champs/ChampionsInfoCard'
+import { ListingDetails } from '../components/listing/ListingDetails'
+import { isHourly, isListingSku, listingImageSrc, listingVariant } from '../lib/listings'
+import { formatMinor } from '../lib/money'
 import { SEASON, useSeo } from '../lib/seo'
 import type {
   CatalogOption, CreateOrderResponse, ManualPaymentOption, Order, SignedQuote,
@@ -73,22 +76,87 @@ export default function BoostingCheckout() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
-  const sku = BOOST_SKUS.includes((params.get('service') ?? '').toUpperCase())
-    ? (params.get('service') as string).toUpperCase()
-    : 'BOOST_CHAMPS'
-  const service = catalog?.services.find((s) => s.sku === sku)
-  const options = useMemo(() => service?.options ?? [], [service])
+  const [resumed, setResumed] = useState<Order | null>(null)
 
-  const [variant, setVariant] = useState(params.get('variant') ?? '')
+  /*
+   * An Objectives or Tournaments listing, by the id the Boosting page passed: `?listing=12`.
+   * Looked for in both services, because the id is the listing's whichever category it is
+   * in. Not in the catalogue -- switched off, deleted, or not priced in this currency -- and
+   * there is nothing to sell; an order already placed for one still resumes.
+   */
+  const listingParam = params.get('listing')
+  const listingId = listingParam && /^\d+$/.test(listingParam) ? Number(listingParam) : null
+  const listingMode = listingId != null || isListingSku(resumed?.sku)
+  const listingFound = useMemo(() => {
+    if (listingId == null || !catalog) return null
+    for (const group of catalog.services) {
+      if (!isListingSku(group.sku)) continue
+      const option = group.options.find((o) => o.variant === listingVariant(listingId))
+      if (option?.listing) return { sku: group.sku, option, listing: option.listing }
+    }
+    return null
+  }, [catalog, listingId])
+  const listing = listingFound?.listing ?? null
+  const hourly = isHourly(listing)
+
+  const sku = listingMode
+    ? (listingFound?.sku ?? (isListingSku(resumed?.sku) ? resumed.sku : 'BOOST_OBJECTIVES'))
+    : BOOST_SKUS.includes((params.get('service') ?? '').toUpperCase())
+      ? (params.get('service') as string).toUpperCase()
+      : 'BOOST_CHAMPS'
+  const service = catalog?.services.find((s) => s.sku === sku)
+  const options = useMemo(
+    () => (listingMode ? (listingFound ? [listingFound.option] : []) : service?.options ?? []),
+    [listingMode, listingFound, service],
+  )
+
+  const [variant, setVariant] = useState(listingId != null ? listingVariant(listingId) : params.get('variant') ?? '')
   const selected = options.find((o) => o.variant === variant) ?? options[0] ?? null
+
+  /*
+   * A listing's checkout survives a trip back to the services: "Edit" returns there, and
+   * choosing the same listing again brings back the hours and the code already entered.
+   * Per listing, for this tab only. Hours outside the listing's range are not restored.
+   */
+  const storageKey = listingId != null ? `gfs.listing-checkout.${listingId}` : null
+  const stored = useMemo(() => {
+    if (!storageKey) return null
+    try {
+      const raw = window.sessionStorage.getItem(storageKey)
+      return raw ? (JSON.parse(raw) as { hours?: number | null; coupon?: string }) : null
+    } catch {
+      return null
+    }
+  }, [storageKey])
+  const [hours, setHours] = useState<number | null>(null)
+  const [acknowledged, setAcknowledged] = useState(false)
+  // Brought back once the listing is known, and only when still in its range.
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current || !listing) return
+    restored.current = true
+    const h = stored?.hours
+    if (hourly && typeof h === 'number' && Number.isInteger(h)
+        && h >= (listing.minHours ?? 1) && h <= (listing.maxHours ?? 50)) {
+      setHours(h)
+    }
+  }, [listing, hourly, stored])
 
   const [step, setStep] = useState<Step>('details')
   const [platform, setPlatform] = useState<BoostPlatform | null>(null)
   const [launcher, setLauncher] = useState<Launcher | null>(null)
   const [touched, setTouched] = useState(false)
 
-  const [couponInput, setCouponInput] = useState(params.get('coupon') ?? '')
-  const [couponCode, setCouponCode] = useState(params.get('coupon') ?? '')
+  const [couponInput, setCouponInput] = useState(params.get('coupon') ?? stored?.coupon ?? '')
+  const [couponCode, setCouponCode] = useState(params.get('coupon') ?? stored?.coupon ?? '')
+  useEffect(() => {
+    if (!storageKey) return
+    try {
+      window.sessionStorage.setItem(storageKey, JSON.stringify({ hours, coupon: couponCode }))
+    } catch {
+      /* private mode: the checkout still works, it just will not remember */
+    }
+  }, [storageKey, hours, couponCode])
   // Spend the customer's GFS Store Credit on this order; offered only when they hold some.
   const [useStoreCredit, setUseStoreCredit] = useState(false)
   const [quote, setQuote] = useState<SignedQuote | null>(null)
@@ -103,7 +171,6 @@ export default function BoostingCheckout() {
   const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
 
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
-  const [resumed, setResumed] = useState<Order | null>(null)
   const orderRef = created?.publicRef ?? resumed?.publicRef ?? null
 
   /*
@@ -148,13 +215,18 @@ export default function BoostingCheckout() {
   useEffect(() => {
     // Nothing to price: a quote would only come back "not available" behind the notice.
     if (!variant || !catalog || options.length === 0 || step === 'done') return
+    // By the hour: no price until the hours are chosen. Never a duration assumed for them.
+    if (listingMode && hourly && hours == null) {
+      setQuote(null)
+      return
+    }
     let live = true
     setQuoting(true)
     api.post<SignedQuote>('/api/v1/quotes', {
       sku,
       platform: null,
       variant,
-      quantity: '1',
+      quantity: listingMode && hourly ? String(hours) : '1',
       currency: catalog.currency,
       couponCode: couponCode.trim() || null,
       pointsToRedeem: 0,
@@ -164,7 +236,8 @@ export default function BoostingCheckout() {
       .catch((e) => { if (live) setError(e instanceof ApiError ? e.message : b.placeFailed) })
       .finally(() => { if (live) setQuoting(false) })
     return () => { live = false }
-  }, [sku, variant, catalog, options.length, couponCode, useStoreCredit, step, b.placeFailed])
+  }, [sku, variant, catalog, options.length, couponCode, useStoreCredit, step, b.placeFailed, listingMode, hourly,
+    hours])
 
   /*
    * The ways to pay: the shared list every checkout uses (lib/paymentMethods). The order's
@@ -196,9 +269,13 @@ export default function BoostingCheckout() {
    * opened through Steam and through the EA app is two different sign-ins. The server
    * refuses both cases too -- this is so they are told at the step that asks.
    */
-  const blockedReason = !platform ? b.needPlatform
-    : platform === 'PC' && !launcher ? b.needLauncher
-      : null
+  const blockedReason = listingMode
+    ? (hourly && hours == null ? t.listingCheckout.needHours
+      : hourly && !acknowledged ? t.listingCheckout.needAck
+        : null)
+    : !platform ? b.needPlatform
+      : platform === 'PC' && !launcher ? b.needLauncher
+        : null
 
   async function proceedToPayment(order: CreateOrderResponse) {
     // Covered in full by store credit: already paid, so there is no payment step.
@@ -226,7 +303,9 @@ export default function BoostingCheckout() {
       revealFirstError()
       return
     }
-    if (!quote || !account || !platform || placing) return
+    if (!quote || !account || (!listingMode && !platform) || placing) return
+    // A price for other hours than the ones on screen is never the one placed.
+    if (listingMode && hourly && Number(quote.quantity) !== hours) return
 
     setPlacing(true)
     setError(null)
@@ -242,11 +321,14 @@ export default function BoostingCheckout() {
         email: account.email,
         fullName: account.displayName ?? null,
         acceptedTerms: true,
-        boostPlatform: platform,
-        pcLauncher: platform === 'PC' ? launcher : null,
+        // Objectives and Tournaments ask for no platform: the account is set up in Discord.
+        boostPlatform: listingMode ? null : platform,
+        pcLauncher: !listingMode && platform === 'PC' ? launcher : null,
+        hourlyAcknowledged: listingMode && hourly ? acknowledged : null,
       })
       setCreated(order)
-      navigate(`/boosting/checkout?order=${encodeURIComponent(order.publicRef)}`, { replace: true })
+      navigate(`/boosting/checkout?order=${encodeURIComponent(order.publicRef)}${
+        listingId != null ? `&listing=${listingId}` : ''}`, { replace: true })
       await proceedToPayment(order)
     } catch (e) {
       setPlacing(false)
@@ -255,6 +337,27 @@ export default function BoostingCheckout() {
   }
 
   const stepNumber = step === 'details' ? 1 : step === 'done' ? 3 : 2
+  // Back to this listing's category on the Boosting page.
+  const servicesLink = `/boosting?category=${sku === 'BOOST_TOURNAMENTS' ? 'tournaments' : 'objectives'}`
+
+  /*
+   * What the order panel says about a listing: the listing being bought, or for an order
+   * being resumed, the listing as that order froze it.
+   */
+  const snapshot = resumed?.listing ?? null
+  const panelListing: PanelListing | null = !listingMode ? null
+    : listing ? {
+      title: listing.title, subtitle: listing.subtitle, imageUrl: listing.imageUrl, hourly,
+      unitPriceMinor: selected?.unitPriceMinor ?? 0, unitPriceFormatted: selected?.unitPriceFormatted ?? '',
+      hours, currency: catalog?.currency ?? 'INR', editTo: servicesLink,
+    }
+      : snapshot ? {
+        title: snapshot.title, subtitle: snapshot.subtitle, imageUrl: snapshot.imageUrl,
+        hourly: snapshot.pricingType === 'PER_HOUR', unitPriceMinor: snapshot.unitPriceMinor,
+        unitPriceFormatted: snapshot.unitPriceFormatted, hours: snapshot.hours, currency: snapshot.currency,
+        editTo: servicesLink,
+      }
+        : null
 
   /*
    * Nothing to sell, said before anything is asked for.
@@ -265,6 +368,18 @@ export default function BoostingCheckout() {
    * resuming or paying one carries on regardless.
    */
   const resuming = Boolean(params.get('order')) || created !== null || resumed !== null
+  if (!resuming && listingMode && !catalogError && catalog && options.length === 0) {
+    return (
+      <Section className="rhythm-section">
+        <div className="mx-auto max-w-lg">
+          <Alert tone="warn" title={t.listingCheckout.notOnSaleTitle}>{t.listingCheckout.notOnSaleBody}</Alert>
+          <Link to={servicesLink} className="mt-4 inline-block text-[13px] font-semibold text-brand-400 hover:underline">
+            {t.listingCheckout.backToServices}
+          </Link>
+        </div>
+      </Section>
+    )
+  }
   if (!resuming && (catalogError || (catalog && options.length === 0))) {
     return (
       <Section className="rhythm-section">
@@ -286,7 +401,9 @@ export default function BoostingCheckout() {
               full
               size="lg"
               onClick={() => navigate('/login', {
-                state: { from: `/boosting/checkout?service=${sku}&variant=${variant}` },
+                state: { from: listingId != null
+                  ? `/boosting/checkout?listing=${listingId}`
+                  : `/boosting/checkout?service=${sku}&variant=${variant}` },
               })}
             >
               {b.signInCta}
@@ -309,7 +426,25 @@ export default function BoostingCheckout() {
         ) : (
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
             <div className="space-y-5">
-              {step === 'details' && (
+              {step === 'details' && listingMode && listing && isListingSku(sku) && (
+                <ListingDetails
+                  sku={sku}
+                  listing={listing}
+                  hours={hours}
+                  onHours={setHours}
+                  acknowledged={acknowledged}
+                  onAcknowledged={setAcknowledged}
+                  touched={touched}
+                  discord={<DiscordGuidance />}
+                  /*
+                    Pressable while the hours are still missing, so it can say so; not while
+                    a new price for changed hours is on its way.
+                  */
+                  cta={<ContinueBlock onContinue={() => void placeOrder()} placing={placing}
+                                      disabled={placing || quoting || (!quote && !(hourly && hours == null))} />}
+                />
+              )}
+              {step === 'details' && !listingMode && (
                 <DetailsStep
                   platform={platform}
                   onPlatform={(next) => {
@@ -354,7 +489,8 @@ export default function BoostingCheckout() {
 
             <OrderPanel
               option={selected}
-              serviceName={labels.service(service?.sku, service?.displayName)}
+              serviceName={labels.service(service?.sku ?? sku, service?.displayName)}
+              listing={panelListing}
               quote={quote}
               quoting={quoting}
               couponInput={couponInput}
@@ -531,6 +667,22 @@ function DetailsStep({
         </div>
       )}
 
+      <DiscordGuidance />
+
+      <ContinueBlock onContinue={onContinue} disabled={disabled} placing={placing} />
+    </div>
+  )
+}
+
+/**
+ * Where the account is asked for, said before the money: the same on every boosting
+ * checkout, Champs, Rivals, Objectives and Tournaments.
+ */
+function DiscordGuidance() {
+  const t = useT()
+  const b = t.boostingCheckout
+  return (
+    <>
       {/*
         Said before the money, not after it.
 
@@ -575,27 +727,34 @@ function DetailsStep({
           ))}
         </ul>
       </div>
+    </>
+  )
+}
 
-      <div className="mt-6">
-        {/*
-          Never greyed out for a missing answer. A disabled button explains nothing, and the
-          reason used to sit beneath it in grey where it read as a footnote; pressing it now
-          puts the red required-field error under the choice that is missing.
-        */}
-        <Button full size="lg" onClick={onContinue} disabled={disabled}>
-          {placing ? <Spinner size={18} /> : <>{b.continueToPayment} <span aria-hidden="true" className="ml-1.5">&rarr;</span></>}
-        </Button>
-        <div className="mt-3 rounded-edge border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">
-          <p className="text-center text-[12.5px] leading-relaxed text-chalk">{b.afterPaymentNote}</p>
-        </div>
-        <p className="mt-3 text-center text-[12px] leading-relaxed text-chalk-faint">
-          {b.termsLead}{' '}
-          <Link className="font-semibold text-brand-400 hover:underline" to="/terms">{b.termsTerms}</Link>,{' '}
-          <Link className="font-semibold text-brand-400 hover:underline" to="/privacy">{b.termsPrivacy}</Link>{' '}
-          {b.termsAnd}{' '}
-          <Link className="font-semibold text-brand-400 hover:underline" to="/aml-kyc">{b.termsAml}</Link>.
-        </p>
+/** Continue to Payment, the note under it and the terms: the same on every boosting checkout. */
+function ContinueBlock({ onContinue, disabled, placing }: { onContinue: () => void; disabled: boolean; placing: boolean }) {
+  const t = useT()
+  const b = t.boostingCheckout
+  return (
+    <div className="mt-6">
+      {/*
+        Never greyed out for a missing answer. A disabled button explains nothing, and the
+        reason used to sit beneath it in grey where it read as a footnote; pressing it now
+        puts the red required-field error under the choice that is missing.
+      */}
+      <Button full size="lg" onClick={onContinue} disabled={disabled}>
+        {placing ? <Spinner size={18} /> : <>{b.continueToPayment} <span aria-hidden="true" className="ml-1.5">&rarr;</span></>}
+      </Button>
+      <div className="mt-3 rounded-edge border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">
+        <p className="text-center text-[12.5px] leading-relaxed text-chalk">{b.afterPaymentNote}</p>
       </div>
+      <p className="mt-3 text-center text-[12px] leading-relaxed text-chalk-faint">
+        {b.termsLead}{' '}
+        <Link className="font-semibold text-brand-400 hover:underline" to="/terms">{b.termsTerms}</Link>,{' '}
+        <Link className="font-semibold text-brand-400 hover:underline" to="/privacy">{b.termsPrivacy}</Link>{' '}
+        {b.termsAnd}{' '}
+        <Link className="font-semibold text-brand-400 hover:underline" to="/aml-kyc">{b.termsAml}</Link>.
+      </p>
     </div>
   )
 }
@@ -842,10 +1001,15 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
         <SupportCard reference={order.publicRef} sku={order.sku} />
       </div>
 
-      <dl className="mt-7 grid grid-cols-1 gap-px overflow-hidden rounded-panel bg-ink-400 text-left sm:grid-cols-4">
+      {/* An Objectives or Tournaments order asked for no platform: its hours, if any, instead. */}
+      <dl className={`mt-7 grid grid-cols-1 gap-px overflow-hidden rounded-panel bg-ink-400 text-left ${
+        order.listing && order.listing.hours == null ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
         <SummaryCell label={b.orderId} value={`#${order.publicRef}`} />
         <SummaryCell label={b.service} value={order.serviceLabel} />
-        <SummaryCell label={b.platformLabel} value={platformLabel} />
+        {!order.listing && <SummaryCell label={b.platformLabel} value={platformLabel} />}
+        {order.listing?.hours != null && (
+          <SummaryCell label={t.listingCheckout.hoursBought} value={t.listingCheckout.hours(order.listing.hours)} />
+        )}
         <SummaryCell
           label={paid ? b.amountPaid : b.amount}
           value={order.totalFormatted}
@@ -875,12 +1039,28 @@ function SummaryCell({ label, value, badge }: { label: string; value: string; ba
 
 /* ---------------------------------------------------------------- order panel --- */
 
+/** An Objectives or Tournaments listing in the order panel. */
+interface PanelListing {
+  title: string
+  subtitle: string | null
+  imageUrl: string | null
+  hourly: boolean
+  unitPriceMinor: number
+  unitPriceFormatted: string
+  /** Chosen, or null while they have not been. */
+  hours: number | null
+  currency: string
+  /** Back to this category's services. */
+  editTo: string
+}
+
 function OrderPanel({
-  option, serviceName, quote, quoting, couponInput, onCouponInput, onApplyCoupon, editable, pay,
+  option, serviceName, listing = null, quote, quoting, couponInput, onCouponInput, onApplyCoupon, editable, pay,
   useStoreCredit = false, onStoreCredit,
 }: {
   option: CatalogOption | null
   serviceName: string
+  listing?: PanelListing | null
   quote: SignedQuote | null
   quoting: boolean
   couponInput: string
@@ -914,26 +1094,50 @@ function OrderPanel({
       <div className="flex items-center justify-between gap-3">
         <h2 className="display text-[16px] text-chalk">{b.orderTitle}</h2>
         {editable && (
-          <Link to="/boosting" className="text-[12.5px] font-semibold text-brand-400 hover:underline">
+          <Link to={listing?.editTo ?? '/boosting'} className="text-[12.5px] font-semibold text-brand-400 hover:underline">
             {b.edit}
           </Link>
         )}
       </div>
 
       <div className="mt-4 flex items-start gap-3 border-b border-ink-400 pb-4">
-        {option?.variant && hasBadge(option.variant)
-          ? <RankBadge variant={option.variant} size={36} />
-          : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-edge bg-ink-700 text-[11px] font-semibold text-chalk-muted">FC</span>}
+        {listing?.imageUrl
+          ? (
+            <span className="grid h-14 w-11 shrink-0 place-items-center">
+              <img src={listingImageSrc(listing.imageUrl) ?? undefined} alt="" aria-hidden="true"
+                   className="h-full w-full object-contain" />
+            </span>
+          )
+          : option?.variant && hasBadge(option.variant)
+            ? <RankBadge variant={option.variant} size={36} />
+            : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-edge bg-ink-700 text-[11px] font-semibold text-chalk-muted">FC</span>}
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-semibold leading-snug text-chalk">
             {SEASON} · {serviceName}
           </p>
-          <p className="mt-0.5 text-[12px] text-chalk-muted">{option ? labels.option(option) : ''}</p>
+          {listing ? (
+            <>
+              <p className="mt-0.5 text-[13px] font-semibold leading-snug text-chalk">{listing.title}</p>
+              {listing.subtitle && <p className="mt-0.5 text-[12px] text-chalk-muted">{listing.subtitle}</p>}
+            </>
+          ) : (
+            <p className="mt-0.5 text-[12px] text-chalk-muted">{option ? labels.option(option) : ''}</p>
+          )}
         </div>
         <p className="tnum shrink-0 text-[13.5px] font-semibold text-chalk">
-          {base?.amountFormatted ?? option?.unitPriceFormatted ?? ''}
+          {listing?.hourly && listing.hours == null
+            ? t.boosting.perHour(listing.unitPriceFormatted)
+            : base?.amountFormatted ?? option?.unitPriceFormatted ?? ''}
         </p>
       </div>
+
+      {/* By the hour: the sum, before anything is paid. */}
+      {listing?.hourly && listing.hours != null && (
+        <p className="tnum mt-3 text-[12.5px] font-semibold text-chalk" data-testid="hourly-calculation">
+          {t.listingCheckout.calculation(listing.unitPriceFormatted, t.listingCheckout.hours(listing.hours),
+            formatMinor(listing.unitPriceMinor * listing.hours, listing.currency))}
+        </p>
+      )}
 
       {/* The quote's own lines: the processing fee, a coupon, a tier discount. */}
       <dl className="mt-4 space-y-2">
@@ -988,7 +1192,9 @@ function OrderPanel({
       <div className="mt-4 flex items-baseline justify-between gap-3 rounded-edge bg-brand-500/[0.06] px-4 py-3">
         <p className="text-[13px] font-semibold text-chalk">{b.total}</p>
         <p className="tnum text-[18px] font-semibold text-chalk" data-testid="summary-total">
-          {quoting && !quote ? <Spinner size={16} /> : payop ? payopTotal(payop) : quote?.totalFormatted ?? ''}
+          {listing?.hourly && listing.hours == null && !payop
+            ? <span className="text-[12.5px] font-normal text-chalk-muted">{t.listingCheckout.hoursForTotal}</span>
+            : quoting && !quote ? <Spinner size={16} /> : payop ? payopTotal(payop) : quote?.totalFormatted ?? ''}
         </p>
       </div>
 

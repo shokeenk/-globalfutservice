@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { LuGamepad2, LuShieldCheck, LuTarget, LuTrophy } from 'react-icons/lu'
+import { ListingCard } from '../components/ListingCard'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Section, Skeleton } from '../components/ui'
+import { Alert, Section, Skeleton } from '../components/ui'
 import { Testimonials } from '../components/Testimonials'
 import { RankBadge, hasBadge, tierAccent } from '../components/RankBadge'
 import { BUSINESS } from '../content/business'
@@ -10,8 +12,19 @@ import { useT } from '../i18n'
 import { useCatalogLabels } from '../content/catalogLabels'
 import { SEASON, useSeo } from '../lib/seo'
 import type { CatalogOption } from '../lib/types'
+import { isHourly, isListingSku, listingImageSrc } from '../lib/listings'
 import { Reveal } from '../motion/Reveal'
 import { useCatalog } from '../state/CatalogContext'
+
+/** The four categories, in the order the row shows them, and how each is named in the address. */
+const CATEGORIES = [
+  { key: 'champs', sku: 'BOOST_CHAMPS', icon: LuTrophy },
+  { key: 'rivals', sku: 'BOOST_RIVALS', icon: LuShieldCheck },
+  { key: 'objectives', sku: 'BOOST_OBJECTIVES', icon: LuTarget },
+  { key: 'tournaments', sku: 'BOOST_TOURNAMENTS', icon: LuGamepad2 },
+] as const
+
+type CategoryKey = (typeof CATEGORIES)[number]['key']
 
 export default function Boosting() {
   const labels = useCatalogLabels()
@@ -22,13 +35,29 @@ export default function Boosting() {
   })
 
   const { catalog, policy, loading, error } = useCatalog()
-  const [tab, setTab] = useState<'BOOST_CHAMPS' | 'BOOST_RIVALS'>('BOOST_CHAMPS')
+  /*
+   * The category lives in the address, so a customer sent back from checkout -- or sharing
+   * the link -- lands on the tab they were looking at rather than on Champs.
+   */
+  const [params, setParams] = useSearchParams()
+  const category = CATEGORIES.find((c) => c.key === params.get('category')) ?? CATEGORIES[0]
+  const choose = (key: CategoryKey) => {
+    const next = new URLSearchParams(params)
+    if (key === 'champs') next.delete('category')
+    else next.set('category', key)
+    setParams(next, { replace: true })
+  }
 
-  const champs = catalog?.services.find((s) => s.sku === 'BOOST_CHAMPS')
-  const rivals = catalog?.services.find((s) => s.sku === 'BOOST_RIVALS')
-  const active = tab === 'BOOST_CHAMPS' ? champs : rivals
-
+  const active = catalog?.services.find((s) => s.sku === category.sku)
   const tiers: CatalogOption[] = useMemo(() => active?.options ?? [], [active])
+  const listings = isListingSku(category.sku)
+
+  const tabLabel: Record<CategoryKey, string> = {
+    champs: t.boosting.tabChamps,
+    rivals: t.boosting.tabRivals,
+    objectives: t.boosting.tabObjectives,
+    tournaments: t.boosting.tabTournaments,
+  }
 
   return (
     <>
@@ -36,15 +65,31 @@ export default function Boosting() {
         eyebrow={t.boosting.eyebrow(SEASON)}
         title={t.boosting.title}
         lead={t.boosting.lead}
-        aside={
-          <Segmented
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'BOOST_CHAMPS', label: t.boosting.tabChamps },
-              { value: 'BOOST_RIVALS', label: t.boosting.tabRivals },
-            ]}
-          />
+        below={
+          <div role="group" aria-label={t.boosting.categoriesLabel} className="flex flex-wrap gap-2.5 sm:gap-3">
+            {CATEGORIES.map((c) => {
+              const on = c.key === category.key
+              const Icon = c.icon
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => choose(c.key)}
+                  aria-pressed={on}
+                  className={[
+                    'inline-flex min-h-[48px] items-center gap-2.5 rounded-edge border px-4 text-[14px] font-semibold',
+                    'transition-colors duration-200 sm:px-5',
+                    on
+                      ? 'border-brand-500 bg-brand-500 text-paper shadow-glow'
+                      : 'border-ink-400 bg-paper text-chalk hover:border-ink-300',
+                  ].join(' ')}
+                >
+                  <Icon aria-hidden="true" size={20} className={on ? 'text-paper' : 'text-chalk'} />
+                  {tabLabel[c.key]}
+                </button>
+              )
+            })}
+          </div>
         }
       />
 
@@ -52,7 +97,8 @@ export default function Boosting() {
         {error && <Alert tone="warn">{error}</Alert>}
 
         {/*
-          Note 17. The headline statement about the top packages.
+          Note 17. The headline statement about the top packages -- on Champs only: it is a
+          claim about win packages, and the other categories sell none.
 
           Derived from the same per-package rates the cards use rather than stated
           separately, so the prominent claim and the small print cannot disagree —
@@ -66,58 +112,54 @@ export default function Boosting() {
           get at least what they were told; an average lets the strongest package carry
           a claim the weakest cannot meet.
         */}
-        <SuccessHeadline tiers={tiers} />
+        {category.sku === 'BOOST_CHAMPS' && <SuccessHeadline tiers={tiers} />}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="boosting-grid">
           {loading &&
             Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-44 w-full" />)}
 
-          {!loading &&
+          {!loading && listings &&
+            tiers.map((option, index) => {
+              const listing = option.listing
+              if (!listing) return null
+              const art = listing.showImage && listing.imageUrl
+                ? { src: listingImageSrc(listing.imageUrl) ?? '', width: listing.imageWidth, height: listing.imageHeight }
+                : null
+              return (
+                <Reveal key={option.variant} delay={(index % 4) * 70}>
+                  <ListingCard
+                    to={`/boosting/checkout?listing=${listing.id}`}
+                    title={listing.title}
+                    subtitle={listing.subtitle}
+                    price={isHourly(listing) ? t.boosting.perHour(option.unitPriceFormatted) : option.unitPriceFormatted}
+                    accent="bg-brand-500"
+                    artwork={art}
+                    chooseLabel={t.boosting.choose}
+                  />
+                </Reveal>
+              )
+            })}
+
+          {!loading && !listings &&
             tiers.map((tier, index) => {
               // The server says which tier carries the tag: an admin's choice on the
               // Listings page, else the last tier, as this page always drew it.
               const best = tier.bestValue ?? index === tiers.length - 1
               return (
                 <Reveal key={tier.variant} delay={(index % 4) * 70}>
-                  {/*
-                    The whole tier is one link.
-                    It was previously a card containing a small button, which meant
-                    the 44px target sat inside a 200px card the customer had already
-                    aimed at. Making the card itself the control removes the aiming
-                    problem entirely, and the arrow just indicates direction.
-                  */}
-                  <Link
-                    to={`/boosting/checkout?service=${tab}&variant=${tier.variant}`}
-                    className={[
-                      'group relative flex h-full flex-col overflow-hidden rounded-panel border p-6',
-                      'transition-[transform,border-color,background-color,box-shadow] duration-500',
-                      /*
-                        A shadow at rest, not only on hover. The card lifted when you
-                        pointed at it and lay perfectly flat otherwise, so the whole grid
-                        read as painted onto the page until you touched it — and on a
-                        phone, where there is no hover, it never lifted at all.
-                      */
-                      'ease-out-expo shadow-e2 hover:-translate-y-1.5 hover:shadow-e3',
-                      // Opaque grounds: the translucent ones composited to within a
-                      // percent of the page and left the border doing all the work.
-                      best
-                        ? 'border-brand-500/50 bg-[#FDF3F2] hover:border-brand-500'
-                        : 'border-ink-400 bg-paper hover:border-ink-300 hover:bg-gray-50',
-                    ].join(' ')}
-                  >
-                    {/*
+                  <ListingCard
+                    to={`/boosting/checkout?service=${category.sku}&variant=${tier.variant}`}
+                    title={labels.option(tier)}
+                    price={tier.unitPriceFormatted}
+                    best={best}
+                    bestLabel={t.boosting.bestValue}
+                    /*
                       A hairline in the crest's own colour along the top edge — gold for
                       Champion, maroon for Elite. Three pixels, and only on tiers that
                       actually have a crest to echo.
-                    */}
-                    {tierAccent(tier.variant) && (
-                      <span
-                        aria-hidden="true"
-                        className={`absolute inset-x-0 top-0 h-[3px] ${tierAccent(tier.variant)}`}
-                      />
-                    )}
-
-                    {/*
+                    */
+                    accent={tierAccent(tier.variant)}
+                    /*
                       The Elite shield where the tier has one, the numeral where it does
                       not. Both sit in the same corner slot, so a row mixing Champion and
                       Elite tiers still lines up.
@@ -125,8 +167,8 @@ export default function Boosting() {
                       The shield lifts and brightens on hover rather than sitting flat —
                       it is the thing being bought, so it should feel like an object
                       rather than a decal.
-                    */}
-                    {hasBadge(tier.variant) ? (
+                    */
+                    corner={hasBadge(tier.variant) ? (
                       <span
                         aria-hidden="true"
                         className="pointer-events-none absolute -right-3 -top-3 transition-transform
@@ -147,54 +189,40 @@ export default function Boosting() {
                         {String(index + 1).padStart(2, '0')}
                       </span>
                     )}
-
-                    {best && (
-                      <Badge tone="gold" className="relative mb-3 self-start">
-                        {t.boosting.bestValue}
-                      </Badge>
-                    )}
-
-                    <p className="display relative text-display-sm text-chalk">{labels.option(tier)}</p>
-
-                    {/*
+                    /*
                       Note 18. Absent, not zero, not "—", when nothing was measured.
 
-                      The whole block is behind a null check rather than rendering a
-                      placeholder, because there is no honest placeholder for this: a
-                      percentage next to a price is read as a measurement whatever
-                      caveat sits beside it, and a customer cannot tell an invented one
-                      from a counted one. Today the API sends null for every package,
-                      so nothing here renders anywhere.
+                      Behind a null check rather than rendering a placeholder, because
+                      there is no honest placeholder for this: a percentage next to a
+                      price is read as a measurement whatever caveat sits beside it, and
+                      a customer cannot tell an invented one from a counted one.
 
                       Visually secondary on purpose, as the brief asked — it sits under
                       the price in muted type rather than competing with it.
-                    */}
-                    <SuccessRate bps={tier.successRateBps} className="relative mt-auto pt-6" />
-
-                    <p className={`tnum display relative text-display-md text-brand-400 ${
-                      tier.successRateBps == null ? 'mt-auto pt-6' : 'mt-1'
-                    }`}>
-                      {tier.unitPriceFormatted}
-                    </p>
-
-                    <span className="relative mt-4 inline-flex items-center gap-2 border-t border-ink-400 pt-4 text-[13px] font-semibold text-chalk">
-                      {t.boosting.choose}
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                           stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
-                           strokeLinejoin="round" aria-hidden="true"
-                           className="text-brand-400 transition-transform duration-300 ease-out-expo group-hover:translate-x-1.5">
-                        <path d="M5 12h14" />
-                        <path d="m12 5 7 7-7 7" />
-                      </svg>
-                    </span>
-                  </Link>
+                    */
+                    footnote={tier.successRateBps != null
+                      ? <SuccessRate bps={tier.successRateBps} className="relative mt-auto pt-6" />
+                      : null}
+                    chooseLabel={t.boosting.choose}
+                  />
                 </Reveal>
               )
             })}
 
-          {!loading && tiers.length === 0 && (
+          {!loading && tiers.length === 0 && (listings ? (
+            <div className="col-span-full rounded-panel border border-ink-400 bg-paper px-6 py-12 text-center"
+                 data-testid="boosting-empty">
+              <p className="display text-[18px] text-chalk">
+                {category.sku === 'BOOST_TOURNAMENTS' ? t.boosting.emptyTournaments : t.boosting.emptyObjectives}
+              </p>
+              <p className="mx-auto mt-2 max-w-[52ch] text-body-sm text-chalk-muted">{t.boosting.emptyBody}</p>
+              <Link to="/support" className="mt-4 inline-block text-[13px] font-semibold text-brand-400 hover:underline">
+                {t.boosting.emptyCta}
+              </Link>
+            </div>
+          ) : (
             <p className="col-span-full text-sm text-chalk-faint">{t.boosting.tiersUpdating}</p>
-          )}
+          ))}
         </div>
       </Section>
 
@@ -255,19 +283,6 @@ export default function Boosting() {
   )
 }
 
-/**
- * A segmented control.
- *
- * <p>The selected pill slides between positions rather than switching. It is a
- * translate on a single absolutely-positioned element sized to one segment, which
- * means the movement is compositor-only and the label text never re-renders — the
- * naive version (background on the active button) cannot animate at all, because
- * there is nothing continuous between the two states to interpolate.
- *
- * <p>Fixed at two segments by the width maths. That is deliberate: this control is
- * for a binary choice, and a segmented control with five options is a tab bar
- * wearing the wrong clothes.
- */
 /**
  * The aggregate success-rate statement for the top win packages.
  *
@@ -358,45 +373,6 @@ function SuccessRate({ bps, className = '' }: { bps?: number | null; className?:
     <p className={`relative text-[12.5px] font-semibold text-ok ${className}`}>
       {t.boosting.successRateLabel(pct)}
     </p>
-  )
-}
-
-function Segmented<T extends string>({
-  value, onChange, options,
-}: {
-  value: T
-  onChange: (next: T) => void
-  options: { value: T; label: string }[]
-}) {
-  const index = Math.max(0, options.findIndex((option) => option.value === value))
-
-  return (
-    <div className="relative inline-flex rounded-press border border-ink-400 bg-paper p-1 backdrop-blur-sm">
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-1 left-1 rounded-edge bg-brand-500 shadow-glow
-                   transition-transform duration-400 ease-out-expo"
-        style={{
-          width: `calc((100% - 0.5rem) / ${options.length})`,
-          transform: `translateX(${index * 100}%)`,
-        }}
-      />
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={[
-            'relative z-10 flex-1 whitespace-nowrap rounded-edge px-5 py-2.5 text-[13.5px]',
-            'font-semibold transition-colors duration-200',
-            value === option.value ? 'text-paper' : 'text-chalk-muted hover:text-chalk',
-          ].join(' ')}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
   )
 }
 

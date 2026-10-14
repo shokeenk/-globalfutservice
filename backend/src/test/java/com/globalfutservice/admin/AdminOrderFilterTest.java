@@ -26,11 +26,13 @@ class AdminOrderFilterTest {
     }
 
     @Test
-    @DisplayName("the Boosting tab covers both boosting services; the dropdown can pick one")
+    @DisplayName("the Boosting tab covers the four boosting services; the dropdown can pick one")
     void serviceGroups() {
         assertThat(parse("BOOSTING", null, null, null, null, null).skus())
-                .containsExactlyInAnyOrder(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS);
+                .containsExactlyInAnyOrder(Sku.BOOST_CHAMPS, Sku.BOOST_RIVALS, Sku.BOOST_OBJECTIVES, Sku.BOOST_TOURNAMENTS);
         assertThat(parse("rivals", null, null, null, null, null).skus()).containsExactly(Sku.BOOST_RIVALS);
+        assertThat(parse("OBJECTIVES", null, null, null, null, null).skus()).containsExactly(Sku.BOOST_OBJECTIVES);
+        assertThat(parse("tournaments", null, null, null, null, null).skus()).containsExactly(Sku.BOOST_TOURNAMENTS);
         assertThat(parse("COINS", null, null, null, null, null).skus()).containsExactly(Sku.TRADING_SERVICE);
         assertThat(parse("COACHING", null, null, null, null, null).skus()).containsExactly(Sku.COACHING);
         assertThat(parse(null, null, null, null, null, null).skus()).isEmpty();

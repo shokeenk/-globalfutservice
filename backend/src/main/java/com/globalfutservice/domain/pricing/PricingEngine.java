@@ -59,9 +59,10 @@ public final class PricingEngine {
         if (!rateCard.sku().sellable()) {
             throw new PricingException(rateCard.sku().displayName() + " is not available yet.");
         }
-        BigDecimal qty = rateCard.sku().unit() == PriceUnit.FLAT ? BigDecimal.ONE : quantity;
+        BigDecimal qty = rateCard.unit() == PriceUnit.FLAT ? BigDecimal.ONE : quantity;
         if (qty == null) {
-            throw new PricingException("Please choose an amount.");
+            throw new PricingException(rateCard.unit() == PriceUnit.PER_HOUR
+                    ? "Choose how many hours." : "Please choose an amount.");
         }
         try {
             rateCard.validateQuantity(qty);
@@ -348,7 +349,11 @@ public final class PricingEngine {
     }
 
     private static String baseLabel(RateCard card, BigDecimal qty) {
-        if (card.sku().unit() == PriceUnit.PER_MILLION) {
+        if (card.unit() == PriceUnit.PER_HOUR) {
+            // "Objectives — Gallery Tokens (3 hours)": the hours bought are part of what was bought.
+            return card.sku().displayName() + " — " + card.describe() + " (" + RateCard.hours(qty) + ")";
+        }
+        if (card.unit() == PriceUnit.PER_MILLION) {
             return card.sku().displayName() + " — " + CoinAmount.describe(qty)
                     + " (" + card.platform().displayName() + ")";
         }

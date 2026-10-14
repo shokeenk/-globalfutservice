@@ -5,6 +5,9 @@ import com.globalfutservice.domain.coaching.SessionActor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.affiliate.AffiliateService;
 import com.globalfutservice.coaching.CoachingService;
+import com.globalfutservice.catalog.listing.ListingSnapshot;
+import com.globalfutservice.catalog.listing.ServiceListingEntity;
+import com.globalfutservice.catalog.listing.ServiceListingService;
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.SignInRules;
@@ -46,6 +49,7 @@ import com.globalfutservice.storecredit.StoreCreditService;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -95,6 +99,8 @@ public class OrderService {
     /** Champions results: the one a delivery needs, and the settlement a refund accounts for. */
     private final ResultRules resultRules;
     private final OrderResultRepository results;
+    /** Objectives and Tournaments: the listing an order freezes when it is placed. */
+    private final ServiceListingService serviceListings;
 
     public OrderService(OrderRepository orders, OrderEventRepository events,
                         PaymentRepository payments, PaymentGateway gateway,
@@ -106,6 +112,24 @@ public class OrderService {
                         ObjectMapper mapper, AppProperties props, Clock clock,
                         AfterCommit afterCommit, AutoDispatchQueue autoDispatch,
                         StoreCreditService storeCredit, ResultRules resultRules, OrderResultRepository results) {
+        this(orders, events, payments, gateway, quoteService, loyaltyService, affiliateService, vaultService,
+                notifications, accounts, coachingService, couponService, feed, mapper, props, clock, afterCommit,
+                autoDispatch, storeCredit, resultRules, results, null);
+    }
+
+    @Autowired
+    public OrderService(OrderRepository orders, OrderEventRepository events,
+                        PaymentRepository payments, PaymentGateway gateway,
+                        QuoteService quoteService, LoyaltyService loyaltyService,
+                        AffiliateService affiliateService, CredentialVaultService vaultService,
+                        NotificationService notifications, AccountRepository accounts,
+                        CoachingService coachingService, CouponService couponService,
+                        CustomerFeedService feed,
+                        ObjectMapper mapper, AppProperties props, Clock clock,
+                        AfterCommit afterCommit, AutoDispatchQueue autoDispatch,
+                        StoreCreditService storeCredit, ResultRules resultRules, OrderResultRepository results,
+                        ServiceListingService serviceListings) {
+        this.serviceListings = serviceListings;
         this.storeCredit = storeCredit;
         this.resultRules = resultRules;
         this.results = results;
@@ -202,8 +226,11 @@ public class OrderService {
         if (quote.sku() == Sku.COACHING) {
             applyCoachingDetails(order, request);
         }
-        if (quote.sku().isBoosting()) {
+        if (quote.sku().asksBoostPlatform()) {
             applyBoostingDetails(order, request);
+        }
+        if (quote.sku().isListingService()) {
+            order.setListingSnapshot(listingSnapshot(quote, request));
         }
         order.setPointsRedeemed(quote.pointsRedeemed());
         order.setPointsEarned(quote.pointsEarned());
@@ -326,6 +353,39 @@ public class OrderService {
                         gatewayOrder.currency(),
                         order.getGuestEmail(),
                         describe(order)));
+    }
+
+    /**
+     * What an Objectives or Tournaments order is sold as, frozen now: the listing as the
+     * customer read it, the hours and the price. Refused when the listing has gone off sale
+     * since the price was quoted, when a per-hour listing's acknowledgement was not ticked,
+     * and when the quote's price is not the listing's -- the total and the hours are signed,
+     * and this holds the rest of the price to the rate card too.
+     */
+    private String listingSnapshot(Quote quote, OrderDtos.CreateOrderRequest request) {
+        if (serviceListings == null) {
+            throw new ApiExceptions.NotFoundException("That option is not available right now.");
+        }
+        ServiceListingEntity listing = serviceListings.onSaleListing(quote.sku(), quote.variant());
+        boolean hourly = listing.getPricingType() == ServiceListingEntity.PricingType.PER_HOUR;
+        if (hourly && !Boolean.TRUE.equals(request.hourlyAcknowledged())) {
+            throw new ApiExceptions.BadRequestException("hourly_acknowledgement_required",
+                    "Tick the box to confirm you are paying for the service time, not a guaranteed result.");
+        }
+        long hours;
+        try {
+            hours = hourly ? quote.quantity().longValueExact() : 1L;
+        } catch (ArithmeticException e) {
+            throw new ApiExceptions.ConflictException("quote_expired",
+                    "That price has expired. Refresh to get the current one.");
+        }
+        Long unit = serviceListings.unitPriceAt(quote.sku(), quote.variant(), quote.currency(), quote.issuedAt())
+                .orElse(null);
+        if (hours < 1 || unit == null || Math.multiplyExact(unit, hours) != quote.subtotal().minor()) {
+            throw new ApiExceptions.ConflictException("quote_expired",
+                    "That price has expired. Refresh to get the current one.");
+        }
+        return ListingSnapshot.of(listing, quote, clock.instant()).toJson();
     }
 
     /**
@@ -1075,6 +1135,7 @@ public class OrderService {
             case BOOST_CHAMPS -> "Champs Boosting — " + order.getVariant();
             case BOOST_RIVALS -> "Rivals Boosting — " + order.getVariant();
             case COACHING -> "FUT Classes — " + order.getVariant();
+            case BOOST_OBJECTIVES, BOOST_TOURNAMENTS -> order.getSku().displayName() + " — " + order.getVariant();
             case CARDS -> "Player Cards — " + order.getVariant();
         };
     }

@@ -57,7 +57,7 @@ class CatalogCoinsTest {
     @Test
     @DisplayName("coin options come from the structures; a stray coin row on the rate card is not shown")
     void catalogue() {
-        when(repository.findLiveCurrencies("FC26")).thenReturn(List.of(Currency.INR));
+        when(repository.findLiveCurrenciesExcept(org.mockito.ArgumentMatchers.eq("FC26"), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(Currency.INR));
         when(repository.findLiveForSeason("FC26", Currency.INR)).thenReturn(List.of(
                 row(Sku.TRADING_SERVICE, Platform.PC, null, 999), row(Sku.BOOST_CHAMPS, null, "WINS_9", 120_000)));
         CatalogDtos.CatalogOption pc = new CatalogDtos.CatalogOption("PC", null, "PC", 1_300_000, "₹13,000.00",
@@ -73,7 +73,7 @@ class CatalogCoinsTest {
     @Test
     @DisplayName("a currency priced only for coins is still offered; one priced nowhere is not")
     void currencies() {
-        when(repository.findLiveCurrencies("FC26")).thenReturn(List.of(Currency.INR));
+        when(repository.findLiveCurrenciesExcept(org.mockito.ArgumentMatchers.eq("FC26"), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(Currency.INR));
         when(coins.pricedCurrencies("FC26")).thenReturn(Set.of(Currency.USD, Currency.GBP));
         assertThat(catalog.availableCurrencies()).containsExactly(Currency.INR, Currency.USD);
     }

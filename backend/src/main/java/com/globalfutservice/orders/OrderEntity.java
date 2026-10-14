@@ -125,6 +125,14 @@ public class OrderEntity {
     @Column(name = "points_redeemed", nullable = false)
     private long pointsRedeemed;
 
+    /**
+     * An Objectives or Tournaments order: the listing as it was sold, frozen when the order
+     * was placed (V49). Null on every other order. See ListingSnapshot.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "listing_snapshot", columnDefinition = "jsonb")
+    private String listingSnapshot;
+
     /** GFS Store Credit this order spent, from its signed quote (V48). Zero for none. */
     @Column(name = "store_credit_minor", nullable = false)
     private long storeCreditMinor;
@@ -458,6 +466,14 @@ public class OrderEntity {
 
     public void setPointsRedeemed(long pointsRedeemed) {
         this.pointsRedeemed = pointsRedeemed;
+    }
+
+    public String getListingSnapshot() {
+        return listingSnapshot;
+    }
+
+    void setListingSnapshot(String listingSnapshot) {
+        this.listingSnapshot = listingSnapshot;
     }
 
     public long getStoreCreditMinor() {

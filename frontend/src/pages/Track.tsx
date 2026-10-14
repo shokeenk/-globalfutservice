@@ -19,6 +19,7 @@ import { Reveal } from '../motion/Reveal'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 import { ChampionsResultCard } from '../components/champs/ChampionsResultCard'
+import { ListingSnapshotCard } from '../components/listing/ListingSnapshotCard'
 import { resultEventText } from '../components/champs/resultEvents'
 
 /**
@@ -783,6 +784,9 @@ export function OrderView({
           particulars and its breakdown. Staff's read-only view shows it without the
           customer's buttons.
         */}
+        {/* An Objectives or Tournaments order: the service as it was sold, frozen with the order. */}
+        {order.listing && <ListingSnapshotCard snapshot={order.listing} />}
+
         {order.result && (
           <ChampionsResultCard
             order={{ ...order, result: order.result }}

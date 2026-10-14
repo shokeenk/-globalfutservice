@@ -33,6 +33,16 @@ public enum Sku {
     BOOST_RIVALS("Rivals Boosting", PriceUnit.FLAT, true, false),
 
     /**
+     * In-game objectives completed on the customer's account. Each one is a listing the
+     * GFS team writes in Service Listings -- its own title, artwork, tasks and price, fixed
+     * or per hour -- so the variant is the listing ({@code LISTING_<id>}), not a tier.
+     */
+    BOOST_OBJECTIVES("Objectives", PriceUnit.FLAT, true, false),
+
+    /** Tournament services, written and sold exactly as Objectives are. */
+    BOOST_TOURNAMENTS("Tournaments", PriceUnit.FLAT, true, false),
+
+    /**
      * 1-to-1 coaching, sold as a single session or a six-session pack — the variant on the
      * rate card decides which, and how many session credits the order grants.
      *
@@ -108,7 +118,7 @@ public enum Sku {
      * a gap here.
      */
     public boolean mayRequireCredentials() {
-        return this == TRADING_SERVICE || this == BOOST_CHAMPS || this == BOOST_RIVALS;
+        return this == TRADING_SERVICE || isBoosting();
     }
 
     /**
@@ -130,12 +140,27 @@ public enum Sku {
     }
 
     /**
-     * True for the win-count services, which a person plays on the customer's account.
-     *
-     * <p>They are the two SKUs that need a platform without being priced by one: the
-     * rate card is flat, but the booster still has to sign in somewhere.
+     * True for the services a person plays on the customer's account: Champs, Rivals,
+     * Objectives and Tournaments. The account is asked for in the customer's Discord
+     * ticket, never on the website.
      */
     public boolean isBoosting() {
+        return this == BOOST_CHAMPS || this == BOOST_RIVALS || isListingService();
+    }
+
+    /**
+     * True for the win-count services, the two that ask for a platform at checkout: the
+     * rate card is flat, but the booster still has to sign in somewhere.
+     */
+    public boolean asksBoostPlatform() {
         return this == BOOST_CHAMPS || this == BOOST_RIVALS;
+    }
+
+    /**
+     * True for Objectives and Tournaments: services written in Service Listings, each with
+     * its own content, and priced by listing ({@code LISTING_<id>}) rather than by tier.
+     */
+    public boolean isListingService() {
+        return this == BOOST_OBJECTIVES || this == BOOST_TOURNAMENTS;
     }
 }
