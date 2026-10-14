@@ -150,8 +150,13 @@ class AutoDispatchPostgresTest {
         final VendorOrderLedger ledger;
 
         App(AppProperties.FutTransferAutoDispatch auto, boolean signIn) {
+            this(auto, signIn, AppProperties.FutTransferOrderMode.OWN_SENDERS);
+        }
+
+        App(AppProperties.FutTransferAutoDispatch auto, boolean signIn, AppProperties.FutTransferOrderMode mode) {
             signInOnFile = new java.util.concurrent.atomic.AtomicBoolean(signIn);
-            props = VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(1500), auto);
+            props = VendorTestSupport.props(vendor.baseUrl(), VendorTestSupport.NO_BACKUP, Duration.ofMillis(1500), mode,
+                    VendorTestSupport.ORDER_AMOUNT_POOL, auto);
             NamedParameterJdbcTemplate named = new NamedParameterJdbcTemplate(ds);
             CredentialVaultService vault = mock(CredentialVaultService.class);
             when(vault.status(anyLong())).thenAnswer(inv -> new CredentialDtos.VaultStatus(signInOnFile.get(), false,
@@ -400,6 +405,154 @@ class AutoDispatchPostgresTest {
         assertThat(vendor.calls("/orderAPI")).isZero();
         assertThat(status(id)).isEqualTo("READY_FOR_DELIVERY");
         assertThat(app.alertCodes()).contains("NOT_SENT");
+    }
+
+    // ------------------------------------------------------------ the public pool --
+
+    private App pool() {
+        App app = new App(ON, true, AppProperties.FutTransferOrderMode.PUBLIC_POOL);
+        vendor.on("/buyConditionAPI", Reply.ok("{\"balance\":155.5821}"));
+        // What FUT Transfer answers for every public-pool order; never asked any more.
+        vendor.on("/getCooldownStatus", Reply.of(400, "{\"error\":\"apiOrderOnly\"}"));
+        return app;
+    }
+
+    private void dueNow(long orderId) {
+        jdbc.update("update auto_dispatch set next_attempt_at = now() where order_id = ?", orderId);
+    }
+
+    @Test
+    @DisplayName("public pool: sent automatically without the cooldown check FUT Transfer refuses with apiOrderOnly")
+    void poolSendsWithoutCooldownCheck() {
+        App app = pool();
+        long id = paidOrder("GFS-26-POOLAUTO1", "0.05");
+        app.paid("GFS-26-POOLAUTO1");
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.SENT);
+        assertThat(vendor.calls("/getCooldownStatus")).isZero();
+        assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+        assertThat(status(id)).isEqualTo("IN_PROGRESS");
+        assertThat(queued(id).get("state")).isEqualTo("SENT");
+    }
+
+    @Test
+    @DisplayName("public pool, 429: refused with nothing created, tried again automatically once the limit passes, sent once")
+    void poolRateLimitRetried() {
+        App app = pool();
+        long id = paidOrder("GFS-26-POOL429B1", "0.5");
+        app.paid("GFS-26-POOL429B1");
+        vendor.on("/buyCoinsAPI", Reply.of(429, "{\"error\":\"rateLimitExceeded\"}"));
+
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.RETRY);
+        assertThat(queued(id).get("state")).isEqualTo("QUEUED");
+        assertThat(queued(id).get("reason_code")).isEqualTo(SupplierFulfilmentService.RATE_LIMITED);
+        assertThat(jdbc.queryForObject("select next_attempt_at > now() + interval '50 seconds' from auto_dispatch "
+                + "where order_id = ?", Boolean.class, id)).isTrue();
+        assertThat(jdbc.queryForObject("select state from vendor_order where order_id = ?", String.class, id))
+                .isEqualTo("FAILED");
+        assertThat(status(id)).isEqualTo("READY_FOR_DELIVERY");
+        app.worker.runDue(); // not due yet: nothing more is sent
+        assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+
+        // Still limited at the next try: waited out again, never left for Approve.
+        dueNow(id);
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.RETRY);
+        assertThat(queued(id).get("state")).isEqualTo("QUEUED");
+
+        // The limit has passed.
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+        dueNow(id);
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.SENT);
+        assertThat(vendor.calls("/buyCoinsAPI")).isEqualTo(3);
+        assertThat(vendor.calls("/orderStatusAPI")).as("a refusal is never looked up").isZero();
+        assertThat(jdbc.queryForObject("select state from vendor_order where order_id = ?", String.class, id))
+                .isEqualTo("SUBMITTED");
+        assertThat(jdbc.queryForObject("select attempts from vendor_order where order_id = ?", Integer.class, id))
+                .as("every call counted, one order").isEqualTo(3);
+        assertThat(status(id)).isEqualTo("IN_PROGRESS");
+        assertThat(queued(id).get("state")).isEqualTo("SENT");
+        verify(app.notifications, never()).fulfilmentAlert(any());
+    }
+
+    @Test
+    @DisplayName("public pool, still limited after an hour of tries: then Needs review, with an alert, nothing created")
+    void poolRateLimitGivesUp() {
+        App app = pool();
+        long id = paidOrder("GFS-26-POOL429C1", "0.5");
+        app.paid("GFS-26-POOL429C1");
+        vendor.on("/buyCoinsAPI", Reply.of(429, "{}"));
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.RETRY);
+
+        jdbc.update("update auto_dispatch set attempts = ?, next_attempt_at = now() where order_id = ?",
+                AutoDispatchWorker.RATE_LIMIT_WAITS.size(), id);
+        assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.NEEDS_REVIEW);
+        assertThat(queued(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(jdbc.queryForObject("select state from vendor_order where order_id = ?", String.class, id))
+                .isEqualTo("NEEDS_REVIEW");
+        assertThat(app.alertCodes()).contains(SupplierFulfilmentService.RATE_LIMITED);
+        assertThat(status(id)).isEqualTo("READY_FOR_DELIVERY");
+    }
+
+    @Test
+    @DisplayName("public pool: two admins approving while the automatic sender runs make exactly one /buyCoinsAPI call")
+    void poolApproveDuringAutoDispatch() throws Exception {
+        App auto = pool();
+        App first = new App(ON, true, AppProperties.FutTransferOrderMode.PUBLIC_POOL);
+        App second = new App(ON, true, AppProperties.FutTransferOrderMode.PUBLIC_POOL);
+        long id = paidOrder("GFS-26-POOLRACE2", "0.5");
+        auto.paid("GFS-26-POOLRACE2");
+        vendor.on("/buyCoinsAPI", new Reply(200, FakeFutTransfer.accepted(acceptAs()), 500));
+
+        ExecutorService threads = Executors.newFixedThreadPool(3);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<?>> all = new ArrayList<>();
+        all.add(threads.submit(() -> { go.await(); return auto.worker.process(id); }));
+        for (App clicking : List.of(first, second)) {
+            all.add(threads.submit(() -> {
+                go.await();
+                return clicking.release.release("GFS-26-POOLRACE2", FulfilmentRelease.Releaser.admin(admin)).release();
+            }));
+        }
+        go.countDown();
+        for (Future<?> f : all) {
+            f.get(20, TimeUnit.SECONDS);
+        }
+        threads.shutdown();
+        dueNow(id);
+        auto.worker.runDue();
+
+        assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+        assertThat(vendor.calls("/getCooldownStatus")).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Long.class, id))
+                .isEqualTo(1L);
+        assertThat(jdbc.queryForObject("select state from vendor_order where order_id = ?", String.class, id))
+                .isEqualTo("SUBMITTED");
+        assertThat(status(id)).isEqualTo("IN_PROGRESS");
+    }
+
+    @Test
+    @DisplayName("own senders: the cooldown is still asked first, and an account cooling down is not sent")
+    void ownSendersKeepTheCooldownCheck() {
+        App app = new App(ON, true);
+        long id = paidOrder("GFS-26-OWNCOOL01", "0.5");
+        app.paid("GFS-26-OWNCOOL01");
+        vendor.on("/getCooldownStatus", Reply.ok(FakeFutTransfer.COOLDOWN_2H));
+
+        app.worker.process(id);
+
+        assertThat(vendor.calls("/getCooldownStatus")).isOne();
+        assertThat(vendor.calls("/orderAPI")).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Long.class, id))
+                .isZero();
+
+        // Where the check does apply but answers apiOrderOnly, that never holds an order back.
+        long other = paidOrder("GFS-26-OWNCOOL02", "0.5");
+        app.paid("GFS-26-OWNCOOL02");
+        vendor.on("/getCooldownStatus", Reply.of(400, "{\"error\":\"apiOrderOnly\"}"));
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
+        assertThat(app.worker.process(other)).isEqualTo(AutoDispatchWorker.Outcome.SENT);
+        assertThat(vendor.calls("/orderAPI")).isOne();
     }
 
     // ------------------------------------------- "your coin transfer has started" --

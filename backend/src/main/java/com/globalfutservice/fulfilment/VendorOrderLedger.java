@@ -117,7 +117,8 @@ public class VendorOrderLedger {
                        last_error_code = null, review_reason = null, order_mode = :mode,
                        transfer_method = :method, buy_now_threshold_sent = :threshold,
                        max_price_sent = :maxPrice, balance_at_send = null, updated_at = now()
-                 where order_id = :orderId and state = 'FAILED' and attempts < :max
+                 where order_id = :orderId and state = 'FAILED'
+                   and (attempts < :max or last_error_code = 'RATE_LIMITED')
                 returning attempts
                 """, p, Integer.class);
         if (!reclaimed.isEmpty()) {
@@ -252,6 +253,28 @@ public class VendorOrderLedger {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean markFailed(long orderId, String code, String reason) {
         return finish(orderId, FAILED, code, reason);
+    }
+
+    /**
+     * The partner refused because the customer's EA account has had too many orders recently
+     * (HTTP 429). Nothing was created, and the cause passes by itself. The row is FAILED, as for
+     * any definite refusal, and the next send claims it again -- once; {@code attempts} still
+     * counts the call, but a rate-limited row is claimable past the attempt limit, so the limit
+     * never runs out on a refusal that was only "not yet".
+     *
+     * @param vendorCode the partner's own code, kept in the review reason; the row's code is
+     *                   {@code RATE_LIMITED}, which is what the automatic queue looks for
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markRateLimited(long orderId, String vendorCode) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'FAILED', last_error_code = 'RATE_LIMITED', review_reason = :reason,
+                       updated_at = now()
+                 where order_id = :orderId and state = 'SUBMITTING'
+                """, new MapSqlParameterSource("orderId", orderId).addValue("reason",
+                "HTTP 429 (" + vendorCode + "): too many orders for this EA account recently. Nothing was created."))
+                == 1;
     }
 
     /** We cannot prove what happened. Nothing is sent again until an admin decides. */
