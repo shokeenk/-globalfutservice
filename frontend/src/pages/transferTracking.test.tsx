@@ -226,10 +226,15 @@ describe('"Track your order", only once the partner has the order', () => {
 describe("staff opening the customer's tracking link", () => {
   const staff = (role: 'ADMIN' | 'OPERATOR'): Account => ({ ...OWNER, publicId: 'acc_staff', email: 'ops@example.test', role })
   const STAFF_URL = `/api/v1/admin/orders/${REF}/customer-view`
+  const OWN_URL = `/api/v1/orders/${REF}`
 
+  /** Someone else's order: the owner endpoint answers this account with a not-found. */
   function openAsStaff(role: 'ADMIN' | 'OPERATOR', o: Record<string, unknown>) {
     auth.account = staff(role)
-    api.get.mockImplementation(async (url: string) => (url === STAFF_URL ? o : new Promise(() => {})))
+    api.get.mockImplementation(async (url: string) => {
+      if (url === OWN_URL) throw new mocks.ApiError(404, 'No such order.')
+      return url === STAFF_URL ? o : new Promise(() => {})
+    })
     render(<MemoryRouter initialEntries={[`/track?ref=${REF}`]}><Track /></MemoryRouter>)
   }
 
@@ -238,10 +243,42 @@ describe("staff opening the customer's tracking link", () => {
 
     expect(await screen.findByTestId('transfer-progress')).toHaveTextContent('200K of 500K delivered')
     expect(screen.getByTestId('staff-view')).toHaveTextContent('Staff view')
-    // Never the customer's own endpoints: looking does not stand in for the customer.
-    expect(api.get.mock.calls.map(([url]) => url)).toEqual([STAFF_URL])
+    // Asked once, as itself, whether the order is its own (it is not); then only the staff
+    // endpoint. Looking does not stand in for the customer.
+    expect(api.get.mock.calls.map(([url]) => url)).toEqual([OWN_URL, STAFF_URL])
     expect(api.post).not.toHaveBeenCalled()
     expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Track order/ })).toBeNull()
+  })
+
+  it.each(['ADMIN', 'OPERATOR'] as const)("%s opening its OWN order: the owner's page, with the Track order button", async (role) => {
+    const PARTNER = 'https://transferstatus.top/abc12345'
+    auth.account = staff(role)
+    const own = order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250, partnerTrackingUrl: PARTNER })
+    api.get.mockImplementation(async (url: string) => {
+      if (url === OWN_URL) return own
+      if (url === '/api/v1/orders') return []
+      return new Promise(() => {})
+    })
+    render(<MemoryRouter initialEntries={[`/track?ref=${REF}`]}><Track /></MemoryRouter>)
+
+    const link = await screen.findByRole('link', { name: /Track order/ })
+    expect(link).toHaveAttribute('href', PARTNER)
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.queryByTestId('staff-view')).toBeNull()
+    expect(api.get).not.toHaveBeenCalledWith(STAFF_URL)
+  })
+
+  it("the owner check failing for any other reason: the staff view, never the owner's page", async () => {
+    auth.account = staff('ADMIN')
+    api.get.mockImplementation(async (url: string) => {
+      if (url === OWN_URL) throw new Error('network')
+      return url === STAFF_URL ? order({ transferStarted: true, deliveredCoins: 200, orderedCoins: 500 })
+        : new Promise(() => {})
+    })
+    render(<MemoryRouter initialEntries={[`/track?ref=${REF}`]}><Track /></MemoryRouter>)
+    expect(await screen.findByTestId('staff-view')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Track order/ })).toBeNull()
   })
 
   it.each([

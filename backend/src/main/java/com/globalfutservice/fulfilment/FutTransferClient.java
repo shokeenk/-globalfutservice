@@ -514,6 +514,7 @@ public class FutTransferClient {
             for (String id : ids) {
                 JsonNode n = res.get(id);
                 if (n != null && n.isObject()) {
+                    noteUnreadableAmount(n, vendorIdToRef.get(id));
                     found.put(id, parseStatus(n));
                 }
             }
@@ -543,6 +544,7 @@ public class FutTransferClient {
         if (echoed != null && !echoed.isBlank() && !publicRef.equals(echoed)) {
             return new ReadFailed<>(ReadError.NEEDS_REVIEW, "OTHER_REFERENCE");
         }
+        noteUnreadableAmount(json, publicRef);
         return new ReadOk<>(parseStatus(json));
     }
 
@@ -667,7 +669,36 @@ public class FutTransferClient {
         if (!publicRef.equals(text(json, "externalOrderID"))) {
             return new ReadFailed<>(ReadError.NEEDS_REVIEW, "REFERENCE_NOT_ECHOED");
         }
+        noteUnreadableAmount(json, publicRef);
         return new ReadOk<>(parseStatus(json));
+    }
+
+    /**
+     * Diagnostic. A report whose {@code amount} is missing or not a whole number is kept as
+     * "delivered unknown" (see {@link #asLong}), and the order page then shows nothing
+     * delivered. When that happens, the log says what the partner actually sent for the
+     * progress fields -- those numbers only, never the body, which carries the customer's
+     * backup codes.
+     */
+    private static void noteUnreadableAmount(JsonNode n, String ref) {
+        JsonNode amount = n.get("amount");
+        if (amount != null && amount.isIntegralNumber()) return;
+        log.info("FUT Transfer status for {}: amount {} (not stored); amountOrdered {}, coinsUsed {}, cached {}, "
+                        + "status {}, simplifiedStatus {}", ref, describe(amount), describe(n.get("amountOrdered")),
+                describe(n.get("coinsUsed")), describe(n.get("cached")), describe(n.get("status")),
+                describe(n.get("simplifiedStatus")));
+    }
+
+    /** A JSON value's kind and value, short, for the diagnostic above. */
+    static String describe(JsonNode v) {
+        if (v == null) return "absent";
+        if (v.isNull()) return "null";
+        if (v.isNumber()) return v.numberValue() + (v.isIntegralNumber() ? "" : " (not a whole number)");
+        if (v.isTextual()) {
+            String t = v.asText().replaceAll("\\p{Cntrl}", " ");
+            return "\"" + (t.length() > 24 ? t.substring(0, 24) + "..." : t) + "\" (text)";
+        }
+        return v.getNodeType().name().toLowerCase(java.util.Locale.ROOT);
     }
 
     // ------------------------------------------------------------------ reads ---
