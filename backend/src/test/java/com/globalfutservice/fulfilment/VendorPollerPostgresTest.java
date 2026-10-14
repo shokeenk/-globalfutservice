@@ -384,6 +384,40 @@ class VendorPollerPostgresTest {
     }
 
     @Test
+    @DisplayName("diagnostic: an amount that is not a whole number, or missing, is logged with the progress fields only")
+    void unreadableAmountLogged() {
+        long frac = sent("GFS-26-DIAG0001", "vid-diag-frac", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        long none = sent("GFS-26-DIAG0002", "vid-diag-none", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        long whole = sent("GFS-26-DIAG0003", "vid-diag-whole", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of(
+                "vid-diag-frac", """
+                        {"status":"partlyDelivered","accountCheck":"finished","economyState":"transfersInProgress",
+                         "amountOrdered":500,"amount":11.5,"coinsUsed":12100,"cached":0,"wasAborted":0,"ba1":"99887766"}
+                        """,
+                "vid-diag-none", """
+                        {"status":"partlyDelivered","accountCheck":"finished","economyState":"transfersInProgress",
+                         "amountOrdered":500,"coinsUsed":0,"cached":1,"wasAborted":0,"ba1":"99887766"}
+                        """,
+                "vid-diag-whole", report("partlyDelivered", "finished", "transfersInProgress", 500, 11, 0)));
+
+        String logged;
+        try (VendorTestSupport.LogCapture logs = new VendorTestSupport.LogCapture()) {
+            poller.pollOnce();
+            logged = logs.all();
+        }
+
+        assertThat(logged).contains("FUT Transfer status for GFS-26-DIAG0001: amount 11.5 (not a whole number) "
+                + "(not stored); amountOrdered 500, coinsUsed 12100, cached 0, status \"partlyDelivered\" (text)");
+        assertThat(logged).contains("FUT Transfer status for GFS-26-DIAG0002: amount absent (not stored); "
+                + "amountOrdered 500, coinsUsed 0, cached 1");
+        assertThat(logged).doesNotContain("GFS-26-DIAG0003: amount").doesNotContain("99887766");
+        // Behaviour unchanged by the diagnostic: unknown stays unknown, a whole number is kept.
+        assertThat(row(frac).get("amount_delivered_k")).isNull();
+        assertThat(row(none).get("amount_delivered_k")).isNull();
+        assertThat(row(whole).get("amount_delivered_k")).isEqualTo(11L);
+    }
+
+    @Test
     @DisplayName("a failed bulk read falls back to /orderStatusAPI one order at a time, by the partner's id")
     void bulkFallsBackToSingle() {
         long a = sent("GFS-26-FALLBK01", "vid-fallback-a", "IN_DELIVERY", OrderStatus.IN_PROGRESS);

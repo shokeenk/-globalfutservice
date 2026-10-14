@@ -25,16 +25,45 @@ import { resultEventText } from '../components/champs/resultEvents'
 /**
  * The tracking page. Staff who open a customer's tracking link -- from the admin's Orders
  * table or the order's FUT Transfer section -- get that order as the customer sees it,
- * read-only. Everybody else gets the customer's page.
+ * read-only. A staff account's own order is its own, and gets the owner's page like any
+ * customer's. Everybody else gets the customer's page.
  */
 export default function Track() {
   const [params] = useSearchParams()
   const { account } = useAuth()
   const ref = params.get('ref')
   if (ref && (account?.role === 'ADMIN' || account?.role === 'OPERATOR')) {
-    return <StaffCustomerView reference={ref.toUpperCase()} />
+    return <StaffTrack key={ref.toUpperCase()} reference={ref.toUpperCase()} />
   }
   return <CustomerTrack />
+}
+
+/**
+ * Whose order a staff account is opening. The owner endpoint answers only for the account
+ * that placed the order -- ownership is in the server's query -- so an answer means it is
+ * this account's own, and it gets the owner's page with everything an owner has. Anything
+ * else, a not-found included, is someone else's order: the read-only staff view.
+ */
+function StaffTrack({ reference }: { reference: string }) {
+  const t = useT()
+  const [owned, setOwned] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let live = true
+    api.get<Order>(`/api/v1/orders/${encodeURIComponent(reference)}`)
+      .then(() => { if (live) setOwned(true) })
+      .catch(() => { if (live) setOwned(false) })
+    return () => { live = false }
+  }, [reference])
+
+  if (owned === true) return <CustomerTrack />
+  if (owned === false) return <StaffCustomerView reference={reference} />
+  return (
+    <>
+      <PageHeader eyebrow={t.track.eyebrow} title={t.track.title} lead={t.track.lead} />
+      <Section className="rhythm-section"><Skeleton className="h-40 w-full" /></Section>
+    </>
+  )
 }
 
 /**
