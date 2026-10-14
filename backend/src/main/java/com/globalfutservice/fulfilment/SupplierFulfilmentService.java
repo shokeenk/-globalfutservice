@@ -43,6 +43,19 @@ public class SupplierFulfilmentService {
 
     private static final Logger log = LoggerFactory.getLogger(SupplierFulfilmentService.class);
 
+    /**
+     * /buyCoinsAPI's 429: this EA account has been sent too many orders recently (the partner
+     * allows 3 a minute, 10 in 5 minutes, 30 in 30 minutes). Nothing was created.
+     */
+    public static final String RATE_LIMITED = "RATE_LIMITED";
+
+    /**
+     * What FUT Transfer answers /getCooldownStatus with when the check does not apply to the
+     * order -- it is for orders sent from our own senders (/orderAPI). Not in its collection;
+     * seen in production. Never a reason to hold an order back.
+     */
+    static final String COOLDOWN_NOT_APPLICABLE = "apiOrderOnly";
+
     private final FutTransferClient client;
     private final VendorControl control;
     private final CredentialVaultService vault;
@@ -88,15 +101,23 @@ public class SupplierFulfilmentService {
     /**
      * @param vendorOrderId the vendor's id, when known; a lookup confirms an order without one
      * @param message       for the admin who clicked; never contains a credential
-     * @param retryable     nothing was created and the cause is passing -- the cooldown could not
-     *                      be read, the account was submitted too recently, another request is
-     *                      sending it -- so the automatic queue may try again later. An admin
-     *                      clicking Approve simply reads the message.
+     * @param retryable     nothing was created and the cause is passing -- the partner could not
+     *                      be reached for the cooldown, the account has had too many orders
+     *                      recently, another request is sending it -- so the automatic queue may
+     *                      try again later. An admin clicking Approve simply reads the message.
+     * @param reasonCode    what stopped it, when the automatic queue treats it differently:
+     *                      {@link #RATE_LIMITED} waits out the partner's per-account limits.
+     *                      Null otherwise.
      */
-    public record Release(Result result, String vendorOrderId, String message, boolean retryable) {
+    public record Release(Result result, String vendorOrderId, String message, boolean retryable,
+                          String reasonCode) {
+
+        public Release(Result result, String vendorOrderId, String message, boolean retryable) {
+            this(result, vendorOrderId, message, retryable, null);
+        }
 
         public Release(Result result, String vendorOrderId, String message) {
-            this(result, vendorOrderId, message, false);
+            this(result, vendorOrderId, message, false, null);
         }
     }
 
@@ -150,8 +171,9 @@ public class SupplierFulfilmentService {
          */
         int maxAttempts = props.futTransfer().maxDispatchAttempts();
         var existing = ledger.find(order.getId());
+        // A refusal for the partner's per-account rate limit never uses up the attempts.
         if (existing.isPresent() && (!VendorOrderLedger.FAILED.equals(existing.get().state())
-                || existing.get().attempts() >= maxAttempts)) {
+                || (existing.get().attempts() >= maxAttempts && !RATE_LIMITED.equals(existing.get().lastErrorCode())))) {
             return notClaimed(ref, existing.get());
         }
 
@@ -184,7 +206,13 @@ public class SupplierFulfilmentService {
                     + problem.get() + " Ask the customer for a new one. Nothing was sent.");
         }
 
-        if (props.futTransfer().cooldownCheck()) {
+        /*
+         * The per-account cooldown is asked about only for orders sent from our own senders
+         * (/orderAPI), where FUT Transfer answers it. For the public pool it answers 400
+         * apiOrderOnly, every time, and the pool's own limit on an EA account is /buyCoinsAPI's
+         * 429: a definite refusal, with nothing created, that is simply tried again later.
+         */
+        if (props.futTransfer().cooldownCheck() && !terms.publicPool()) {
             Release cooling = cooldownRefusal(ref, creds);
             if (cooling != null) {
                 return cooling;
@@ -255,8 +283,35 @@ public class SupplierFulfilmentService {
         }
         FutTransferClient.ReadFailed<FutTransferClient.Cooldown> failed =
                 (FutTransferClient.ReadFailed<FutTransferClient.Cooldown>) read;
-        return new Release(Result.NOT_SENT, null, "Could not check whether the customer's EA account is in the "
-                + "partner's transfer cooldown (" + failed.code() + "). Nothing was sent; try again shortly.", true);
+        String code = failed.code();
+        if (COOLDOWN_NOT_APPLICABLE.equalsIgnoreCase(code)) {
+            // The check does not apply to this order: the send goes ahead, and the call log has the 400.
+            log.info("FUT Transfer cooldown check not applicable to {} ({}); sending without it", ref, code);
+            return null;
+        }
+        /*
+         * Only an answer that may change by itself is "try again shortly". A refusal that will
+         * be the same next time says what it is, and is not tried again automatically.
+         */
+        return switch (failed.error()) {
+            case TRANSIENT -> new Release(Result.NOT_SENT, null, "Could not reach FUT Transfer to check whether "
+                    + "the customer's EA account is in its transfer cooldown (" + code + "). Nothing was sent; try "
+                    + "again shortly.", true);
+            case RATE_LIMITED -> new Release(Result.NOT_SENT, null, "FUT Transfer asked us to slow down while "
+                    + "checking the customer's transfer cooldown (HTTP 429). Nothing was sent; try again in a few "
+                    + "minutes.", true);
+            case AUTH -> new Release(Result.NOT_SENT, null, "FUT Transfer refused the transfer cooldown check ("
+                    + code + "): our API credentials, or access to this account, were refused. Nothing was sent. "
+                    + "Check GFS_FUTTRANSFER_API_USER and GFS_FUTTRANSFER_API_KEY; if they are right, the check can "
+                    + "be switched off with GFS_FUTTRANSFER_COOLDOWN_CHECK=false.");
+            case NEEDS_REVIEW -> new Release(Result.NOT_SENT, null, "FUT Transfer answered the transfer cooldown "
+                    + "check with " + code + ", which its documentation does not explain, and will answer the same "
+                    + "again. Nothing was sent. The check can be switched off with "
+                    + "GFS_FUTTRANSFER_COOLDOWN_CHECK=false; then approve the order.");
+            case UNKNOWN -> new Release(Result.NOT_SENT, null, "FUT Transfer's answer to the transfer cooldown "
+                    + "check could not be read (" + code + "). Nothing was sent. If it keeps happening, the check "
+                    + "can be switched off with GFS_FUTTRANSFER_COOLDOWN_CHECK=false; then approve the order.");
+        };
     }
 
     private Release accepted(OrderEntity order, String vendorOrderId) {
@@ -308,10 +363,19 @@ public class SupplierFulfilmentService {
                 return new Release(Result.FAILED, null, "The partner refused our API credentials (HTTP 403). "
                         + "Nothing was created. Check the API user and key before trying again.");
             }
+            /*
+             * The partner's limit on one EA account: 3 orders a minute, 10 in 5 minutes, 30 in
+             * 30 minutes. A definite refusal -- nothing was created -- that passes by itself, so
+             * it does not use up one of the order's attempts, and the automatic queue sends it
+             * again once the limit has passed. Still once: the next send claims the row again.
+             */
             case RATE_LIMITED -> {
-                ledger.markFailed(order.getId(), r.code(), "The same EA account was submitted too recently.");
-                return new Release(Result.FAILED, null, "The partner says this EA account was submitted too "
-                        + "recently (HTTP 429). Nothing was created. Try again later.", true);
+                ledger.markRateLimited(order.getId(), r.code());
+                log.info("FUT Transfer rate-limited the EA account of {} ({}); nothing was created", ref, r.code());
+                return new Release(Result.FAILED, null, "FUT Transfer refused the order because this EA account "
+                        + "has been sent too many orders recently (HTTP 429; it allows 3 a minute, 10 in 5 minutes "
+                        + "and 30 in 30 minutes). Nothing was created and the sign-in is kept. It can be sent again "
+                        + "once the limit has passed.", true, RATE_LIMITED);
             }
             /*
              * The public pool's own refusals. Nothing was created and the sign-in is kept:

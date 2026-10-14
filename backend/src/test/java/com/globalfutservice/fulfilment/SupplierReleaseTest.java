@@ -269,15 +269,46 @@ class SupplierReleaseTest {
     }
 
     @Test
-    @DisplayName("a cooldown answer we cannot trust also sends nothing")
+    @DisplayName("a cooldown answer we cannot trust also sends nothing, and says what it was -- not \"try again shortly\"")
     void cooldownUnreadable() {
         vendor.on("/getCooldownStatus", Reply.ok(FakeFutTransfer.COOLDOWN_DENIED));
-        assertThat(release().message()).contains("Could not check").contains("UNPARSEABLE_RESPONSE");
+        SupplierFulfilmentService.Release unreadable = release();
+        assertThat(unreadable.message()).contains("could not be read").contains("UNPARSEABLE_RESPONSE")
+                .doesNotContain("shortly");
+        assertThat(unreadable.retryable()).isFalse();
 
-        vendor.on("/getCooldownStatus", Reply.of(404, "notFound"));
-        assertThat(release().message()).contains("Could not check");
+        vendor.on("/getCooldownStatus", Reply.of(404, "{\"error\":\"notFound\"}"));
+        SupplierFulfilmentService.Release undocumented = release();
+        assertThat(undocumented.message()).contains("notFound").contains("does not explain")
+                .contains("GFS_FUTTRANSFER_COOLDOWN_CHECK=false").doesNotContain("shortly");
+        assertThat(undocumented.retryable()).isFalse();
         verify(ledger, never()).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
         assertThat(vendor.calls("/orderAPI")).isZero();
+    }
+
+    @Test
+    @DisplayName("only a passing failure of the cooldown check is \"try again\", and the queue may retry it")
+    void cooldownPassingFailure() {
+        vendor.on("/getCooldownStatus", Reply.of(429, "{}"));
+        SupplierFulfilmentService.Release r = release();
+        assertThat(r.result()).isEqualTo(Result.NOT_SENT);
+        assertThat(r.message()).contains("slow down").contains("try again in a few minutes");
+        assertThat(r.retryable()).isTrue();
+        assertThat(vendor.calls("/orderAPI")).isZero();
+    }
+
+    @Test
+    @DisplayName("400 apiOrderOnly from the cooldown check means it does not apply: the order is sent, once")
+    void cooldownNotApplicable() {
+        vendor.on("/getCooldownStatus", Reply.of(400, "{\"error\":\"apiOrderOnly\"}"));
+        vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted("cccccccc-0000-0000-0000-000000000077")));
+
+        SupplierFulfilmentService.Release r = release();
+
+        assertThat(r.result()).isEqualTo(Result.SUBMITTED);
+        assertThat(vendor.calls("/getCooldownStatus")).isOne();
+        assertThat(vendor.calls("/orderAPI")).isOne();
+        verify(ledger).claim(anyLong(), anyString(), anyLong(), anyInt(), any());
     }
 
     @Test
