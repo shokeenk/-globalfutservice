@@ -1,5 +1,6 @@
 package com.globalfutservice.fulfilment;
 
+import java.time.Duration;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -18,7 +19,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * "Your coin transfer has started": emailed once, when FUT Transfer first accepts a coin order.
+ * "Your coin transfer has started": emailed once, {@link #LINK_GRACE} after FUT Transfer first
+ * accepts a coin order -- unless the customer's tracking link was stored within that time, when
+ * "your coins are on the way" says it instead and this one is never sent.
+ *
+ * <p>The link and this email are settled on the order's own row: storing a link in time sets
+ * {@code transfer_notice_at} (not needed), and this sweep claims the same column (to send).
+ * Whichever commits first wins; the other finds it set. "On the way" waits until it is set, so
+ * when both go, "started" goes first.
  *
  * <p>Every way the partner can come to have an order -- an admin's Approve, automatic sending,
  * a lookup confirming it after a lost answer, an admin linking it -- sets
@@ -35,6 +43,9 @@ public class TransferStartedNotices {
 
     private static final Logger log = LoggerFactory.getLogger(TransferStartedNotices.class);
     private static final int BATCH = 50;
+
+    /** How long a started transfer waits for its tracking link before "started" is sent. */
+    public static final Duration LINK_GRACE = Duration.ofMinutes(5);
 
     /** Past the point where "your transfer has started" is news. */
     private static final Set<OrderStatus> FINISHED = EnumSet.of(OrderStatus.DELIVERED, OrderStatus.COMPLETED,
@@ -66,12 +77,15 @@ public class TransferStartedNotices {
 
     /** @return how many emails were handed to the notifiers */
     public int sendDue() {
+        // Only once the link has had its time: a link stored within it settles this as not needed.
         List<Long> due = jdbc.queryForList("""
                 select id from orders
                  where transfer_started_at is not null and transfer_notice_at is null
+                   and transfer_started_at <= now() - :graceSeconds * interval '1 second'
                  order by transfer_started_at, id
                  limit :limit
-                """, new MapSqlParameterSource("limit", BATCH), Long.class);
+                """, new MapSqlParameterSource("limit", BATCH).addValue("graceSeconds", LINK_GRACE.toSeconds()),
+                Long.class);
         int sent = 0;
         for (Long orderId : due) {
             // Claimed first, so it is sent at most once whatever happens after this line.

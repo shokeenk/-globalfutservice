@@ -112,8 +112,11 @@ public class PartnerTrackingLinks {
     private Outcome ask(VendorOrderLedger.LinkRow row) {
         return switch (client.trackingLink(row.vendorOrderId(), row.externalRef())) {
             case FutTransferClient.LinkReady r -> {
-                ledger.storeTrackingLink(row.orderId(), r.fullUrl());
-                log.info("Tracking link stored for {}", row.externalRef());
+                VendorOrderLedger.LinkStored stored = ledger.storeTrackingLink(row.orderId(), r.fullUrl());
+                log.info("Tracking link stored for {}{}", row.externalRef(), stored.startedEmailNotNeeded()
+                        ? "; within " + TransferStartedNotices.LINK_GRACE.toMinutes()
+                                + " min of the transfer starting, so only \"your coins are on the way\" is sent"
+                        : "");
                 yield Outcome.STORED;
             }
             case FutTransferClient.LinkUnavailable u -> {
@@ -140,8 +143,9 @@ public class PartnerTrackingLinks {
 
     /**
      * "Your coins are on the way", with the link: claimed before it is sent, so at most once
-     * per order whoever gets here first and however often. Not sent for an order already
-     * finished; a failure to send is logged and left.
+     * per order whoever gets here first and however often. Not before the "transfer started"
+     * email is settled: a link that comes after that window waits for it, and goes on a later
+     * sweep. Not sent for an order already finished; a failure to send is logged and left.
      */
     private void sendEmail(long orderId) {
         Optional<String> link = ledger.claimTrackingEmail(orderId);

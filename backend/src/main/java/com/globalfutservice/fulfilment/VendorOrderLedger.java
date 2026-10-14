@@ -419,21 +419,41 @@ public class VendorOrderLedger {
                 .stream().findFirst();
     }
 
+    /** What storing a link came to. */
+    public record LinkStored(boolean stored, boolean startedEmailNotNeeded) {
+    }
+
     /**
      * The link, kept exactly as the partner returned it. Once: a link already stored, or a
      * refusal already recorded, is never replaced.
      *
-     * @return whether this call stored it
+     * <p>In the same statement: a link stored within {@link TransferStartedNotices#LINK_GRACE}
+     * of the transfer starting settles the "transfer started" email as not needed -- "your
+     * coins are on the way" says it, with the link -- unless that email is already settled.
+     * Both decisions are conditional updates of the order's own row, so whichever commits
+     * first wins and the other finds it settled.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean storeTrackingLink(long orderId, String fullUrl) {
-        return jdbc.update("""
-                update vendor_order
-                   set tracking_url = :url, tracking_url_at = now(), tracking_link_state = 'STORED',
-                       tracking_link_error = null, tracking_link_next_at = null,
-                       tracking_link_attempts = tracking_link_attempts + 1, updated_at = now()
-                 where order_id = :orderId and tracking_link_state is null
-                """, new MapSqlParameterSource("orderId", orderId).addValue("url", fullUrl)) == 1;
+    public LinkStored storeTrackingLink(long orderId, String fullUrl) {
+        return jdbc.queryForObject("""
+                with stored as (
+                    update vendor_order
+                       set tracking_url = :url, tracking_url_at = now(), tracking_link_state = 'STORED',
+                           tracking_link_error = null, tracking_link_next_at = null,
+                           tracking_link_attempts = tracking_link_attempts + 1, updated_at = now()
+                     where order_id = :orderId and tracking_link_state is null
+                    returning order_id, tracking_url_at
+                ), quiet as (
+                    update orders o set transfer_notice_at = s.tracking_url_at
+                      from stored s
+                     where o.id = s.order_id and o.transfer_notice_at is null and o.transfer_started_at is not null
+                       and s.tracking_url_at <= o.transfer_started_at + :graceSeconds * interval '1 second'
+                    returning o.id
+                )
+                select (select count(*) from stored) as stored, (select count(*) from quiet) as quiet
+                """, new MapSqlParameterSource("orderId", orderId).addValue("url", fullUrl)
+                        .addValue("graceSeconds", TransferStartedNotices.LINK_GRACE.toSeconds()),
+                (rs, i) -> new LinkStored(rs.getLong("stored") == 1, rs.getLong("quiet") == 1));
     }
 
     /** The partner will not make a link -- the order is finished. Nothing more is asked. */
@@ -460,28 +480,41 @@ public class VendorOrderLedger {
     }
 
     /**
+     * When "your coins are on the way" may go: once the "transfer started" email is settled --
+     * not needed because the link came in time, or sent -- so it never arrives first. An order
+     * the partner took before transfers were timed has nothing to wait for.
+     */
+    private static final String ON_THE_WAY_DUE = """
+            v.tracking_url is not null and v.tracking_email_at is null
+            and (o.transfer_notice_at is not null or o.transfer_started_at is null)
+            """;
+
+    /**
      * Claims "your coins are on the way" for sending, before anything is sent: at most once
-     * per order, whoever asks and however often.
+     * per order, whoever asks and however often, and only once the "transfer started" email
+     * is settled.
      *
      * @return the link to put in it, when this caller claimed it
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<String> claimTrackingEmail(long orderId) {
         return jdbc.query("""
-                update vendor_order set tracking_email_at = now()
-                 where order_id = :orderId and tracking_url is not null and tracking_email_at is null
-                returning tracking_url
-                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> rs.getString(1)).stream().findFirst();
+                update vendor_order v set tracking_email_at = now()
+                  from orders o
+                 where v.order_id = :orderId and o.id = v.order_id and %s
+                returning v.tracking_url
+                """.formatted(ON_THE_WAY_DUE), new MapSqlParameterSource("orderId", orderId),
+                (rs, i) -> rs.getString(1)).stream().findFirst();
     }
 
-    /** Orders with a link whose email has not been claimed yet. */
+    /** Orders whose "on the way" email may be claimed now. */
     public List<Long> trackingEmailsDue(int limit) {
         return jdbc.queryForList("""
-                select order_id from vendor_order
-                 where tracking_url is not null and tracking_email_at is null
-                 order by tracking_url_at, id
+                select v.order_id from vendor_order v join orders o on o.id = v.order_id
+                 where %s
+                 order by v.tracking_url_at, v.id
                  limit :limit
-                """, new MapSqlParameterSource("limit", limit), Long.class);
+                """.formatted(ON_THE_WAY_DUE), new MapSqlParameterSource("limit", limit), Long.class);
     }
 
     /** The order's tracking link, for its owner's order page; empty until it is stored. */

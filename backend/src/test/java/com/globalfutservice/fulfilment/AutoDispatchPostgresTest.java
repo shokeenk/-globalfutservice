@@ -562,6 +562,15 @@ class AutoDispatchPostgresTest {
         jdbc.update("update orders set transfer_notice_at = now() where transfer_notice_at is null");
     }
 
+    /**
+     * As if the transfer started over five minutes ago: "started" waits that long for the
+     * tracking link, and these orders get none (no link is asked for here).
+     */
+    private void graceOver(long orderId) {
+        jdbc.update("update orders set transfer_started_at = transfer_started_at - interval '6 minutes' where id = ?",
+                orderId);
+    }
+
     private Map<String, Object> started(long orderId) {
         return jdbc.queryForMap("select transfer_started_at, transfer_notice_at from orders where id = ?", orderId);
     }
@@ -579,6 +588,8 @@ class AutoDispatchPostgresTest {
         app.worker.process(id);
 
         assertThat(started(id).get("transfer_started_at")).isNotNull();
+        assertThat(app.notices.sendDue()).as("not before the link has had its five minutes").isZero();
+        graceOver(id);
         assertThat(app.notices.sendDue()).isEqualTo(1);
         assertThat(app.notices.sendDue()).isZero();
         verify(app.notifications, org.mockito.Mockito.times(1)).transferStarted(any());
@@ -599,6 +610,7 @@ class AutoDispatchPostgresTest {
         long id = paidOrder("GFS-26-MAIL0002", "0.5");
         vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
         app.release.release("GFS-26-MAIL0002", FulfilmentRelease.Releaser.admin(admin));
+        graceOver(id);
 
         assertThat(app.notices.sendDue()).isEqualTo(1);
         assertThat(app.notices.sendDue()).isZero();
@@ -616,6 +628,7 @@ class AutoDispatchPostgresTest {
         vendor.on("/orderAPI", Reply.of(500, "{}"));
         vendor.on("/orderStatusAPI", Reply.ok(FakeFutTransfer.status("GFS-26-MAIL0003", 500)));
         assertThat(app.worker.process(id)).isEqualTo(AutoDispatchWorker.Outcome.SENT);
+        graceOver(id);
 
         assertThat(app.notices.sendDue()).isEqualTo(1);
         verify(app.notifications).transferStarted(any());
@@ -647,6 +660,7 @@ class AutoDispatchPostgresTest {
         app.paid("GFS-26-MAIL0006");
         vendor.on("/orderAPI", Reply.ok(FakeFutTransfer.accepted(acceptAs())));
         app.worker.process(id);
+        graceOver(id);
         org.mockito.Mockito.doThrow(new IllegalStateException("smtp down")).when(app.notifications)
                 .transferStarted(any());
 
