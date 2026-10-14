@@ -380,8 +380,9 @@ gfs:
     review-credential-retention: ${GFS_FUTTRANSFER_REVIEW_CREDENTIAL_RETENTION:72h}
     timeout: 15s
     max-dispatch-attempts: 3
-    # Ask the vendor whether the customer's EA account is in its transfer cooldown before
-    # sending. Nothing is sent while it is, or if the answer cannot be trusted.
+    # Own senders only: ask the vendor whether the customer's EA account is in its transfer
+    # cooldown before sending. Nothing is sent while it is. The public pool never asks (the
+    # vendor answers 400 apiOrderOnly); its account limit is /buyCoinsAPI's 429, retried.
     cooldown-check: ${GFS_FUTTRANSFER_COOLDOWN_CHECK:true}
     # /orderAPI 400 codes that prove nothing was created (the vendor's documented list).
     # Anything else goes to an admin. Comma-separated.

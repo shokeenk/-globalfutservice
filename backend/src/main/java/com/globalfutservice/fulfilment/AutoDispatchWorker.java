@@ -30,10 +30,11 @@ import org.springframework.stereotype.Component;
  * reason on the order's vendor history and, where someone has to act, an alert.
  *
  * <p>What the release answers decides the rest. Sent: the order moves to IN_PROGRESS, "Sent
- * automatically". A passing cause -- the cooldown could not be read, the account was submitted
- * too recently, another request is sending it, an error of ours -- is tried again a few times
- * with growing gaps. A refusal or an answer we cannot read goes to Needs review with an alert;
- * the order stays paid where it is.
+ * automatically". A passing cause -- the partner could not be reached for the cooldown, another
+ * request is sending it, an error of ours -- is tried again a few times with growing gaps. The
+ * partner's limit on one EA account (/buyCoinsAPI's 429) is waited out on its own, longer
+ * schedule, covering its 30-minute window. A refusal or an answer we cannot read goes to Needs
+ * review with an alert; the order stays paid where it is.
  */
 @Component
 public class AutoDispatchWorker {
@@ -43,6 +44,14 @@ public class AutoDispatchWorker {
     /** Tries, including the first, before a passing cause becomes a person's to look at. */
     static final int MAX_TRIES = 5;
     private static final Duration FIRST_RETRY = Duration.ofMinutes(1);
+
+    /**
+     * After a 429 on /buyCoinsAPI: the gaps before each next try. The partner allows 3 orders a
+     * minute, 10 in 5 minutes and 30 in 30 minutes for one EA account, so this reaches past the
+     * longest window (an hour in all) before a person is asked to look.
+     */
+    static final List<Duration> RATE_LIMIT_WAITS = List.of(Duration.ofMinutes(1), Duration.ofMinutes(2),
+            Duration.ofMinutes(5), Duration.ofMinutes(10), Duration.ofMinutes(15), Duration.ofMinutes(30));
     private static final int BATCH = 20;
 
     /** What became of one queued order. */
@@ -134,7 +143,7 @@ public class AutoDispatchWorker {
                     + "automatically. Once calls are resumed, approve it.", true);
         }
         var existing = ledger.find(orderId);
-        if (existing.isPresent()) {
+        if (existing.isPresent() && !rateLimited(existing.get())) {
             // An admin has sent it, or tried to: the vendor order is theirs to follow.
             queue.settle(orderId, VendorOrderLedger.FAILED.equals(existing.get().state())
                             || VendorOrderLedger.NEEDS_REVIEW.equals(existing.get().state())
@@ -194,7 +203,8 @@ public class AutoDispatchWorker {
                 yield Outcome.LEFT_FOR_APPROVE;
             }
             case IN_FLIGHT -> retry(order, row, r.result().name(), r.message());
-            case FAILED -> r.retryable() ? retry(order, row, r.result().name(), r.message())
+            case FAILED -> r.retryable()
+                    ? retry(order, row, r.reasonCode() == null ? r.result().name() : r.reasonCode(), r.message())
                     : review(order, r.result().name(), r.message());
             case NOT_SENT -> r.retryable() ? retry(order, row, r.result().name(), r.message())
                     : leave(order, r.result().name(), r.message(), true);
@@ -228,13 +238,27 @@ public class AutoDispatchWorker {
 
     private Outcome retry(OrderEntity order, AutoDispatchQueue.Row row, String code, String reason) {
         int tries = row.attempts() + 1;
-        if (tries >= MAX_TRIES) {
+        boolean rateLimited = SupplierFulfilmentService.RATE_LIMITED.equals(code);
+        int last = rateLimited ? RATE_LIMIT_WAITS.size() + 1 : MAX_TRIES;
+        if (tries >= last) {
             return review(order, code, reason + " Tried " + tries + " times.");
         }
-        // 1, 2, 4, 8 minutes.
-        queue.retryAt(order.getId(), clock.instant().plus(FIRST_RETRY.multipliedBy(1L << (tries - 1))), code, reason);
+        // 1, 2, 4, 8 minutes; after a 429, 1, 2, 5, 10, 15 and 30.
+        Duration wait = rateLimited ? RATE_LIMIT_WAITS.get(Math.min(tries, RATE_LIMIT_WAITS.size()) - 1)
+                : FIRST_RETRY.multipliedBy(1L << (tries - 1));
+        queue.retryAt(order.getId(), clock.instant().plus(wait), code,
+                rateLimited ? reason + " Sending it again automatically." : reason);
         log.info("Order {} will be sent automatically again later: {}", order.getPublicRef(), code);
         return Outcome.RETRY;
+    }
+
+    /**
+     * The vendor order was refused only by the partner's per-account limit: nothing was
+     * created, and the queue sends it again. Any other vendor order is an admin's to follow.
+     */
+    private static boolean rateLimited(VendorOrderLedger.Row existing) {
+        return VendorOrderLedger.FAILED.equals(existing.state())
+                && SupplierFulfilmentService.RATE_LIMITED.equals(existing.lastErrorCode());
     }
 
     private void alert(OrderEntity order, String headline, String detail, String code) {

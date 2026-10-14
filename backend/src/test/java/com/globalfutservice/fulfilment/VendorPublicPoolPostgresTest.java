@@ -339,6 +339,53 @@ class VendorPublicPoolPostgresTest {
     }
 
     @Test
+    @DisplayName("public pool: sent without asking /getCooldownStatus, which FUT Transfer only answers for /orderAPI")
+    void noCooldownCheckInThePool() {
+        long id = insertOrder("GFS-26-POOLCOOL1", "0.05");
+        // What production saw for every public-pool order: 400 apiOrderOnly.
+        vendor.on("/getCooldownStatus", Reply.of(400, "{\"error\":\"apiOrderOnly\"}"));
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vendorId())));
+
+        SupplierFulfilmentService.Release r = pool().approve(order(id, "GFS-26-POOLCOOL1", "0.05")).r();
+
+        assertThat(r.result()).isEqualTo(Result.SUBMITTED);
+        assertThat(vendor.calls("/getCooldownStatus")).isZero();
+        assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+        assertThat(row(id).get("state")).isEqualTo("SUBMITTED");
+    }
+
+    @Test
+    @DisplayName("429 on /buyCoinsAPI: a definite refusal, never looked up, no attempt used, and sent once the limit passes")
+    void rateLimitedIsARefusal() {
+        long id = insertOrder("GFS-26-POOL429A1", "0.5");
+        vendor.on("/buyCoinsAPI", Reply.of(429, "{\"error\":\"rateLimitExceeded\"}"));
+        long lookupsBefore = vendor.calls("/orderStatusAPI");
+
+        // More 429s than the order has attempts: none of them uses one up.
+        for (int i = 0; i < 4; i++) {
+            SupplierFulfilmentService.Release r = pool().approve(order(id, "GFS-26-POOL429A1", "0.5")).r();
+            assertThat(r.result()).isEqualTo(Result.FAILED);
+            assertThat(r.retryable()).isTrue();
+            assertThat(r.reasonCode()).isEqualTo(SupplierFulfilmentService.RATE_LIMITED);
+            assertThat(r.message()).contains("HTTP 429").contains("Nothing was created").doesNotContain("shortly");
+        }
+        assertThat(row(id).get("state")).isEqualTo("FAILED");
+        assertThat(row(id).get("last_error_code")).isEqualTo("RATE_LIMITED");
+        // Every call is counted, and still more than the 3 attempts an order has: 429s never use them up.
+        assertThat(row(id).get("attempts")).isEqualTo(4);
+        assertThat((String) row(id).get("review_reason")).contains("rateLimitExceeded");
+        // A refusal, not an "uncertain" answer: nothing is looked up.
+        assertThat(vendor.calls("/orderStatusAPI")).isEqualTo(lookupsBefore);
+
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vendorId())));
+        assertThat(pool().approve(order(id, "GFS-26-POOL429A1", "0.5")).r().result()).isEqualTo(Result.SUBMITTED);
+        assertThat(vendor.calls("/buyCoinsAPI")).isEqualTo(5);
+        assertThat(row(id).get("attempts")).isEqualTo(5);
+        assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Long.class, id))
+                .isEqualTo(1L);
+    }
+
+    @Test
     @DisplayName("double clicks, concurrent admins and two instances: exactly one /buyCoinsAPI call")
     void concurrentApprovals() throws Exception {
         long id = insertOrder("GFS-26-POOLRACE1", "2.0");
