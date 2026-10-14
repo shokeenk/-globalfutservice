@@ -255,6 +255,38 @@ export function ButtonLink({
 }
 
 /**
+ * A button to another site, always in a new tab, and never handing that site this page:
+ * `noopener` keeps it from reaching back through window.opener, `noreferrer` from learning
+ * the address it was opened from.
+ */
+export function ButtonAnchor({
+  href, variant = 'primary', size = 'md', full = false, className = '', children,
+}: {
+  href: string
+  variant?: ButtonVariant
+  size?: ButtonSize
+  full?: boolean
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={[
+        BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size],
+        full ? 'w-full' : '', className,
+      ].join(' ')}
+    >
+      {variant === 'primary' && <Sheen />}
+      {variant === 'primary' && <Sweep />}
+      <span className="relative inline-flex items-center gap-2">{children}</span>
+    </a>
+  )
+}
+
+/**
  * Waiting, in the brand's own shape.
  *
  * <p>The generic arc-on-a-circle spinner is the single most anonymous element in any

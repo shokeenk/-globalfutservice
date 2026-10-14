@@ -143,7 +143,22 @@ public class OrderMapper {
     public OrderDtos.OrderResponse toResponse(OrderEntity order,
                                               List<OrderEventEntity> timeline,
                                               boolean credentialsSubmitted) {
-        return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto);
+        return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto,
+                null);
+    }
+
+    /**
+     * The signed-in owner's own order: what {@link #toResponse} gives, and the coin order's
+     * tracking link from the partner. Only for the owner, after ownership was proven by the
+     * query that loaded the order -- never for the guest lookup, staff, or anyone else.
+     */
+    public OrderDtos.OrderResponse toOwnerResponse(OrderEntity order,
+                                                   List<OrderEventEntity> timeline,
+                                                   boolean credentialsSubmitted) {
+        String link = order.getId() == null || !order.getSku().isCoinTransfer() || vendorOrders == null ? null
+                : vendorOrders.trackingUrl(order.getId()).orElse(null);
+        return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto,
+                link);
     }
 
     /**
@@ -159,13 +174,14 @@ public class OrderMapper {
     public OrderDtos.OrderResponse toAdminResponse(OrderEntity order,
                                                    List<OrderEventEntity> timeline,
                                                    boolean credentialsSubmitted) {
-        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toEventDto);
+        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toEventDto, null);
     }
 
     private OrderDtos.OrderResponse toResponse(OrderEntity order,
                                                List<OrderEventEntity> timeline,
                                                boolean credentialsSubmitted,
-                                               java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events) {
+                                               java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events,
+                                               String partnerTrackingUrl) {
         boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
         OrderPaymentState.View payment = paymentState.of(order);
         /*
@@ -214,7 +230,8 @@ public class OrderMapper {
                 payment.state(),
                 payment.payBy(),
                 results == null ? null : results.customer(order),
-                listingView(order));
+                listingView(order),
+                partnerTrackingUrl);
     }
 
     /** The frozen listing of an Objectives or Tournaments order, never the listing as it is now. */

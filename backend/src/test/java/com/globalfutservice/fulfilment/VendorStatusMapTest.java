@@ -72,16 +72,52 @@ class VendorStatusMapTest {
     }
 
     @Test
-    @DisplayName("finished short is partly delivered; finished with nothing, too much or no amounts is for an admin")
+    @DisplayName("finished short is for an admin, with an alert; finished with nothing or no amounts, too")
     void finishedWrong() {
         Outcome shortOne = map("finished", "finished", "finished", 500L, 420L, false);
-        assertThat(shortOne.state()).isEqualTo(State.PARTIALLY_DELIVERED);
-        assertThat(shortOne.reason()).isEqualTo("SHORT_DELIVERY");
+        assertThat(shortOne.state()).isEqualTo(State.NEEDS_REVIEW);
+        assertThat(shortOne.reason()).isEqualTo(VendorStatusMap.PARTIAL_DELIVERY);
         assertThat(shortOne.alert()).isTrue();
 
         assertThat(map("finished", "finished", "finished", 500L, 0L, false).reason()).isEqualTo("FINISHED_NOTHING_DELIVERED");
-        assertThat(map("finished", "finished", "finished", 500L, 600L, false).reason()).isEqualTo("OVER_DELIVERY");
         assertThat(map("finished", "finished", "finished", null, null, false).reason()).isEqualTo("FINISHED_WITHOUT_AMOUNTS");
+    }
+
+    @Test
+    @DisplayName("finished with more than ordered is delivered -- amount >= amountOrdered -- and an admin is told")
+    void overDelivered() {
+        Outcome over = map("finished", "finished", "finished", 500L, 600L, false);
+        assertThat(over.state()).isEqualTo(State.DELIVERED);
+        assertThat(over.reason()).isEqualTo(VendorStatusMap.OVER_DELIVERY);
+        assertThat(over.alert()).isTrue();
+    }
+
+    @Test
+    @DisplayName("accountCheck \"finished\" is the account check finishing, never the delivery")
+    void accountCheckFinishedIsNotDelivered() {
+        for (String status : List.of("waitingForAssignment", "partlyDelivered", "interrupted")) {
+            for (Long delivered : new Long[]{0L, 250L, 500L}) {
+                Outcome o = map(status, "finished", "transfersInProgress", 500L, delivered, false);
+                assertThat(o.state()).as(status + " " + delivered).isNotEqualTo(State.DELIVERED);
+            }
+        }
+        // Nor with a summary that is not "completed".
+        for (String simplified : new String[]{null, "pending", "error"}) {
+            Outcome o = VendorStatusMap.map(new Report("partlyDelivered", "finished", "transfersInProgress",
+                    500L, 500L, false, false, simplified), OURS);
+            assertThat(o.state()).as(String.valueOf(simplified)).isNotEqualTo(State.DELIVERED);
+        }
+    }
+
+    @Test
+    @DisplayName("simplifiedStatus \"completed\" counts as finished: delivered in full, or for an admin when short")
+    void simplifiedCompleted() {
+        assertThat(VendorStatusMap.map(new Report("partlyDelivered", "finished", "finished", 500L, 500L, false, false,
+                "completed"), OURS).state()).isEqualTo(State.DELIVERED);
+        Outcome shortOne = VendorStatusMap.map(new Report("partlyDelivered", "finished", "finished", 500L, 250L,
+                false, false, "Completed"), OURS);
+        assertThat(shortOne.state()).isEqualTo(State.NEEDS_REVIEW);
+        assertThat(shortOne.reason()).isEqualTo(VendorStatusMap.PARTIAL_DELIVERY);
     }
 
     @Test

@@ -21,9 +21,11 @@ import com.globalfutservice.domain.orders.CustomerAction;
  *   <li>Any value not in the documentation: NEEDS_REVIEW.</li>
  *   <li>The vendor's ordered amount differs from ours: NEEDS_REVIEW.</li>
  *   <li>Aborted: PARTIALLY_DELIVERED if anything arrived, NEEDS_REVIEW if not.</li>
- *   <li>{@code finished}: DELIVERED only when nothing was aborted and delivered equals
- *       ordered equals what the customer paid for. Less arrived: PARTIALLY_DELIVERED (or
- *       NEEDS_REVIEW if none). More, or anything else: NEEDS_REVIEW.</li>
+ *   <li>Finished -- {@code status} "finished", or {@code simplifiedStatus} "completed" --
+ *       is DELIVERED only when nothing was aborted and at least what the customer paid for
+ *       arrived (more is delivered, with an alert). Less arrived: NEEDS_REVIEW, as a partial
+ *       delivery, with an alert. {@code accountCheck} "finished" means only that the account
+ *       check finished, and never makes an order delivered.</li>
  *   <li>A code the customer can fix (a wrong password, a full transfer list...):
  *       AWAITING_CUSTOMER, with the action to ask of them.</li>
  *   <li>Any other failure code (no transfer market, a ban, the vendor's side):
@@ -40,6 +42,12 @@ public final class VendorStatusMap {
 
     /** The reason for a report of {@code noSuitableSender}: no sender, or seller, can deliver the rest. */
     public static final String NO_SUITABLE_SENDER = "NO_SUITABLE_SENDER";
+
+    /** Finished with less delivered than ordered. */
+    public static final String PARTIAL_DELIVERY = "PARTIAL_DELIVERY";
+
+    /** Finished with more delivered than ordered: delivered, and an admin is told. */
+    public static final String OVER_DELIVERY = "OVER_DELIVERY";
 
     /** Our states for a vendor order, as vendor_order stores them. */
     public enum State { SUBMITTED, IN_DELIVERY, AWAITING_CUSTOMER, DELIVERED, PARTIALLY_DELIVERED, NEEDS_REVIEW }
@@ -131,12 +139,19 @@ public final class VendorStatusMap {
 
     /** One status report, in our units: thousands of coins throughout. */
     public record Report(String status, String accountCheck, String economyState,
-                         Long vendorOrderedK, Long deliveredK, boolean aborted, boolean motherOrder) {
+                         Long vendorOrderedK, Long deliveredK, boolean aborted, boolean motherOrder,
+                         /** pending, completed or error; null when the partner does not say. */
+                         String simplifiedStatus) {
 
         /** A report about one order. */
         public Report(String status, String accountCheck, String economyState,
                       Long vendorOrderedK, Long deliveredK, boolean aborted) {
-            this(status, accountCheck, economyState, vendorOrderedK, deliveredK, aborted, false);
+            this(status, accountCheck, economyState, vendorOrderedK, deliveredK, aborted, false, null);
+        }
+
+        public Report(String status, String accountCheck, String economyState,
+                      Long vendorOrderedK, Long deliveredK, boolean aborted, boolean motherOrder) {
+            this(status, accountCheck, economyState, vendorOrderedK, deliveredK, aborted, motherOrder, null);
         }
     }
 
@@ -165,19 +180,20 @@ public final class VendorStatusMap {
                     ? new Outcome(State.PARTIALLY_DELIVERED, CustomerAction.NONE, "ABORTED", true)
                     : Outcome.review("ABORTED", CustomerAction.NONE);
         }
-        if (status.equals("finished")) {
+        // Finished is the order's status, or its one-word summary -- never accountCheck.
+        if (status.equals("finished") || norm(r.simplifiedStatus()).equals("completed")) {
             if (r.deliveredK() == null || r.vendorOrderedK() == null) {
                 return Outcome.review("FINISHED_WITHOUT_AMOUNTS", CustomerAction.NONE);
             }
             if (delivered == ourOrderedK) {
                 return Outcome.working(State.DELIVERED);
             }
-            if (delivered < ourOrderedK) {
-                return delivered > 0
-                        ? new Outcome(State.PARTIALLY_DELIVERED, CustomerAction.NONE, "SHORT_DELIVERY", true)
-                        : Outcome.review("FINISHED_NOTHING_DELIVERED", CustomerAction.NONE);
+            if (delivered > ourOrderedK) {
+                return new Outcome(State.DELIVERED, CustomerAction.NONE, OVER_DELIVERY, true);
             }
-            return Outcome.review("OVER_DELIVERY", CustomerAction.NONE);
+            return delivered > 0
+                    ? Outcome.review(PARTIAL_DELIVERY, CustomerAction.NONE)
+                    : Outcome.review("FINISHED_NOTHING_DELIVERED", CustomerAction.NONE);
         }
 
         Known ac = ACCOUNT_CHECK.get(accountCheck);

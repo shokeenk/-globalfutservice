@@ -21,6 +21,14 @@ public interface Notifier {
     default void transferStarted(OrderNotification notification) {
     }
 
+    /**
+     * The customer's tracking link has been stored: "your coins are on the way", with the
+     * link. Sent once per order. Only the customer's email carries it -- the link lets whoever
+     * holds it change the customer's sign-in, so no other channel ever receives it.
+     */
+    default void coinsOnTheWay(OrderNotification notification, String trackingUrl) {
+    }
+
     void credentialsNeeded(OrderNotification notification);
 
     /**

@@ -135,7 +135,7 @@ export function VendorPanel({
       {v && whoSent(section) && (
         <p className="mt-3 text-[13px] font-semibold text-chalk" data-testid="who-sent">{whoSent(section)}</p>
       )}
-      <TrackingSummary section={section} />
+      <TrackingSummary publicRef={publicRef} section={section} onChanged={onChanged} />
 
       {!v ? (
         <p className="mt-3 text-[13px] text-chalk-muted">Not sent to the partner.</p>
@@ -146,8 +146,12 @@ export function VendorPanel({
             <Cell label="Ordered" value={`${v.amountOrderedK.toLocaleString('en-IN')}K`} />
             <Cell label="Delivered" value={v.deliveredK == null ? '—' : `${v.deliveredK.toLocaleString('en-IN')}K`} />
             <Cell label="Partner status" value={v.vendorStatus ?? '—'} mono />
+            <Cell label="Simplified status" value={v.vendorSimplifiedStatus ?? '—'} mono />
+            <Cell label="Delivered / ordered" value={deliveredOfOrdered(v.deliveredK, v.vendorAmountOrderedK ?? v.amountOrderedK)} />
             <Cell label="Account check" value={v.vendorAccountCheck ?? '—'} mono />
+            <Cell label="Account check (details)" value={v.vendorAccountCheckLong ?? '—'} />
             <Cell label="Economy state" value={v.vendorEconomyState ?? '—'} mono />
+            <Cell label="Economy state (details)" value={v.vendorEconomyStateLong ?? '—'} />
             <Cell label="Coins used" value={v.coinsUsed == null ? '—' : v.coinsUsed.toLocaleString('en-IN')} />
             <Cell label="To pay (currency unconfirmed)" value={v.toPay == null ? '—' : String(v.toPay)} />
             <Cell label="Sends" value={String(v.attempts)} />
@@ -317,22 +321,29 @@ function NextSend({ next }: { next: VendorNextSend }) {
 
 /**
  * Where the order stands for the customer, at a glance: the tracking page they were sent (open
- * it, or copy it into a reply), whether and when FUT Transfer took the order, how far it has
- * got, when it last reported, and what is holding it up. The details are below.
+ * it, or copy it into a reply), the partner's own tracking page, whether and when FUT Transfer
+ * took the order, how far it has got, when it last reported, and what is holding it up. The
+ * details are below.
  */
-function TrackingSummary({ section }: { section: VendorSection }) {
+function TrackingSummary({
+  publicRef, section, onChanged,
+}: {
+  publicRef: string
+  section: VendorSection
+  onChanged: () => Promise<void> | void
+}) {
   const v = section.vendorOrder
   const url = section.tracking?.customerUrl ?? null
   const startedAt = section.tracking?.transferStartedAt ?? null
   const blocked = blockage(section)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'ours' | 'partner' | null>(null)
 
-  async function copy() {
-    if (!url) return
+  async function copy(text: string | null, which: 'ours' | 'partner') {
+    if (!text) return
     try {
-      await navigator.clipboard?.writeText(url)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard?.writeText(text)
+      setCopied(which)
+      window.setTimeout(() => setCopied(null), 2000)
     } catch {
       // Nothing to undo: the link is on screen to copy by hand.
     }
@@ -349,11 +360,15 @@ function TrackingSummary({ section }: { section: VendorSection }) {
                  className="break-all font-semibold text-brand-400 hover:underline">
                 {url}
               </a>
-              <Button size="sm" variant="secondary" onClick={() => void copy()}>
-                {copied ? 'Copied' : 'Copy link'}
+              <Button size="sm" variant="secondary" onClick={() => void copy(url, 'ours')}>
+                {copied === 'ours' ? 'Copied' : 'Copy link'}
               </Button>
             </span>
           ) : 'Not yet: it is offered to the customer once FUT Transfer has the order.'}
+        </Line>
+        <Line label="Partner tracking link" wide>
+          <PartnerLink publicRef={publicRef} section={section} onChanged={onChanged}
+                       copied={copied === 'partner'} onCopy={(text) => void copy(text, 'partner')} />
         </Line>
         <Line label="Onboarded">{v?.submittedAt ? `Yes, ${dateTime(v.submittedAt)}` : 'No'}</Line>
         <Line label="Transfer started">{startedAt ? `Yes, ${dateTime(startedAt)}` : 'Not yet'}</Line>
@@ -366,6 +381,81 @@ function TrackingSummary({ section }: { section: VendorSection }) {
         </Line>
       </dl>
     </div>
+  )
+}
+
+/**
+ * The partner's tracking page for this order: open it or copy it; or why there is none yet, and
+ * "Generate link" when one can be asked for now. It lets whoever holds it change the customer's
+ * sign-in: it goes to the customer only, never into Discord or a public reply.
+ */
+function PartnerLink({
+  publicRef, section, onChanged, copied, onCopy,
+}: {
+  publicRef: string
+  section: VendorSection
+  onChanged: () => Promise<void> | void
+  copied: boolean
+  onCopy: (text: string) => void
+}) {
+  const t = section.tracking
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function generate() {
+    setBusy(true)
+    setSaid(null)
+    try {
+      const res = await api.post<{ status: string; message: string }>(
+        `/api/v1/admin/orders/${publicRef}/vendor/tracking-link`)
+      setSaid({ ok: res.status === 'STORED', text: res.message })
+    } catch (e) {
+      setSaid({ ok: false, text: e instanceof ApiError ? e.message : 'That did not go through. Reload and try again.' })
+    } finally {
+      setBusy(false)
+      await onChanged()
+    }
+  }
+
+  const partnerUrl = t?.partnerUrl ?? null
+  return (
+    <span className="block space-y-2" data-testid="partner-link">
+      {partnerUrl ? (
+        <span className="flex flex-wrap items-center gap-2">
+          <a href={partnerUrl} target="_blank" rel="noopener noreferrer"
+             className="break-all font-semibold text-brand-400 hover:underline">
+            {partnerUrl}
+          </a>
+          <Button size="sm" variant="secondary" onClick={() => onCopy(partnerUrl)}>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        </span>
+      ) : t?.partnerLinkState === 'UNAVAILABLE' ? (
+        <span className="block text-chalk-muted">
+          Link unavailable: FUT Transfer will not make one for this order (it is finished). It is not asked for again.
+        </span>
+      ) : (
+        <span className="block text-chalk-muted">
+          {(t?.partnerLinkAttempts ?? 0) > 0
+            ? `Not received yet (${t?.partnerLinkAttempts} ${t?.partnerLinkAttempts === 1 ? 'try' : 'tries'}`
+              + `${t?.partnerLinkError ? `, last: ${t.partnerLinkError}` : ''}`
+              + `${t?.partnerLinkNextAt ? `; asked again ${dateTime(t.partnerLinkNextAt)}` : ''}).`
+            : 'None yet: it is asked for once FUT Transfer has the order.'}
+        </span>
+      )}
+      {partnerUrl && t?.partnerUrlStoredAt && (
+        <span className="block text-[12px] text-chalk-faint">
+          Stored {dateTime(t.partnerUrlStoredAt)}. The customer was emailed it. Only send it to them: it lets
+          whoever holds it change their EA sign-in.
+        </span>
+      )}
+      {!partnerUrl && t?.canGenerate && (
+        <Button size="sm" variant="secondary" loading={busy} onClick={() => void generate()}>
+          Generate link
+        </Button>
+      )}
+      {said && <span className={`block text-[12.5px] ${said.ok ? 'text-ok' : 'text-warn'}`}>{said.text}</span>}
+    </span>
   )
 }
 

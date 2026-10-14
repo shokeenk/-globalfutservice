@@ -469,13 +469,25 @@ public class FutTransferClient {
                                  Long coinsUsed,
                                  BigDecimal toPay,
                                  boolean aborted,
-                                 boolean motherOrder) {
+                                 boolean motherOrder,
+                                 /** pending, completed or error: the partner's one-word summary. */
+                                 String simplifiedStatus,
+                                 /** Human-readable detail, for staff only. Never shown to a customer. */
+                                 String accountCheckLong,
+                                 String economyStateLong) {
 
         /** A report about one order, as every report so far has been. */
         public SupplierStatus(String status, String accountCheck, String economyState, Long amountOrderedK,
                               Long amountDeliveredK, Long coinsUsed, BigDecimal toPay, boolean aborted) {
             this(status, accountCheck, economyState, amountOrderedK, amountDeliveredK, coinsUsed, toPay, aborted,
                     false);
+        }
+
+        public SupplierStatus(String status, String accountCheck, String economyState, Long amountOrderedK,
+                              Long amountDeliveredK, Long coinsUsed, BigDecimal toPay, boolean aborted,
+                              boolean motherOrder) {
+            this(status, accountCheck, economyState, amountOrderedK, amountDeliveredK, coinsUsed, toPay, aborted,
+                    motherOrder, null, null, null);
         }
     }
 
@@ -507,6 +519,132 @@ public class FutTransferClient {
             }
             return found;
         });
+    }
+
+    /**
+     * One order by the vendor's own id ({@code /orderStatusAPI}): what the poll falls back to,
+     * order by order, when a bulk read fails. The id is the one the partner gave for our order,
+     * so it is enough on its own; an answer naming a different {@code externalOrderID} than our
+     * reference is not about ours, and goes to an admin.
+     */
+    public Read<SupplierStatus> statusByVendorId(String vendorOrderId, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        body.put("externalID", 0);
+        body.put("isMotherID", 0);
+
+        Exchange ex = readExchange("/orderStatusAPI", body, List.of(publicRef));
+        Read<JsonNode> read = classifyRead(ex, json -> json);
+        if (read instanceof ReadFailed<JsonNode> f) {
+            return new ReadFailed<>(f.error(), f.code());
+        }
+        JsonNode json = ((ReadOk<JsonNode>) read).value();
+        String echoed = text(json, "externalOrderID");
+        if (echoed != null && !echoed.isBlank() && !publicRef.equals(echoed)) {
+            return new ReadFailed<>(ReadError.NEEDS_REVIEW, "OTHER_REFERENCE");
+        }
+        return new ReadOk<>(parseStatus(json));
+    }
+
+    // ----------------------------------------------------------- tracking link ---
+
+    /** What asking for an order's customer tracking link came to. */
+    public sealed interface TrackingLink permits LinkReady, LinkUnavailable, LinkFailed {
+    }
+
+    /**
+     * The link, exactly as the partner returned it. It lets whoever holds it change the
+     * customer's EA sign-in, so it is a secret: never logged, and masked even in this
+     * record's own text.
+     */
+    public record LinkReady(String fullUrl) implements TrackingLink {
+        @Override
+        public String toString() {
+            return "LinkReady[fullUrl=***]";
+        }
+    }
+
+    /** The partner will not make one: the order is finished. Not worth asking again. */
+    public record LinkUnavailable(String code) implements TrackingLink {
+    }
+
+    /** No link this time -- the partner unreachable, an error, an address we will not keep. Ask again later. */
+    public record LinkFailed(String code) implements TrackingLink {
+    }
+
+    /**
+     * Asks the partner for the customer's tracking link ({@code /generateOrderStatusLink}),
+     * from FUT Transfer's own notes rather than the collection.
+     *
+     * <p>Once, on the primary domain, where every order is created. Nothing about the order
+     * depends on the answer: a failure is simply asked about again later. A 403 here does not
+     * pause the partner's calls, as it would elsewhere, because the partner answers a link for a
+     * finished order with a refusal, and that says nothing about our credentials.
+     *
+     * <p>Only an {@code https://} address is accepted, and it is returned exactly as sent.
+     * Neither the link nor its short code is ever written to a log or the call log.
+     */
+    public TrackingLink trackingLink(String vendorOrderId, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        Exchange ex = exchange(Kind.LINK, props.futTransfer().baseUrl(), "/generateOrderStatusLink", body,
+                List.of(publicRef));
+        TrackingLink outcome = classifyLink(ex, vendorOrderId);
+        log.info("FUT Transfer tracking link for {}: {}", publicRef, switch (outcome) {
+            case LinkReady r -> "received";
+            case LinkUnavailable u -> "unavailable (" + u.code() + ")";
+            case LinkFailed f -> "not received (" + f.code() + ")";
+        });
+        return outcome;
+    }
+
+    /** The code for a link refused because the order is finished. */
+    static final String LINK_ORDER_FINISHED = "ORDER_FINISHED";
+
+    private TrackingLink classifyLink(Exchange ex, String vendorOrderId) {
+        if (ex.failure() != null) return new LinkFailed(ex.failure());
+        int status = ex.status();
+        JsonNode json = ex.json(mapper);
+        boolean success = json != null && json.isObject() && json.path("success").asBoolean(false);
+        if (status / 100 == 2 && success) {
+            String echoed = text(json, "orderID");
+            if (vendorOrderId != null && echoed != null && !echoed.equals(vendorOrderId)) {
+                return new LinkFailed("ORDER_NOT_ECHOED");
+            }
+            String url = text(json, "fullUrl");
+            if (url == null || url.isBlank()) return new LinkFailed("NO_URL");
+            if (!isHttpsUrl(url)) return new LinkFailed("NOT_HTTPS");
+            return new LinkReady(url);
+        }
+        // Not documented: a refusal that says the order is finished is taken at its word.
+        if (mentionsFinished(json, ex.body())) return new LinkUnavailable(LINK_ORDER_FINISHED);
+        if (status / 100 == 2) return new LinkFailed("REFUSED");
+        return new LinkFailed("HTTP_" + status);
+    }
+
+    /** An absolute https:// address with a host, as a browser would open it, and nothing around it. */
+    static boolean isHttpsUrl(String url) {
+        if (url.length() > 2048 || !url.equals(url.strip())) return false;
+        try {
+            URI uri = new URI(url);
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && !uri.getHost().isBlank();
+        } catch (java.net.URISyntaxException e) {
+            return false;
+        }
+    }
+
+    /** Whether a refusal says the order is finished. Its words are read, never kept. */
+    private static boolean mentionsFinished(JsonNode json, String body) {
+        if (json != null && json.isObject()) {
+            for (String field : List.of("error", "message", "msg", "status", "reason")) {
+                JsonNode v = json.get(field);
+                if (v != null && v.isTextual() && v.asText().toLowerCase(Locale.ROOT).contains("finish")) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return body != null && body.length() < 500 && body.toLowerCase(Locale.ROOT).contains("finish");
     }
 
     /**
@@ -763,7 +901,19 @@ public class FutTransferClient {
                 n.path("wasAborted").asInt(0) == 1,
                 // The collection's example carries "isMotherID": 0. A 1 would mean the
                 // amounts are a total over child orders, which nothing here expects.
-                n.path("isMotherID").asInt(0) == 1);
+                n.path("isMotherID").asInt(0) == 1,
+                shortText(n, "simplifiedStatus", 32),
+                shortText(n, "accountCheckLong", 200),
+                shortText(n, "economyStateLong", 200));
+    }
+
+    /** A text field, at most {@code max} characters, with control characters removed. */
+    private static String shortText(JsonNode n, String field, int max) {
+        String v = text(n, field);
+        if (v == null) return null;
+        String clean = v.replaceAll("\\p{Cntrl}", " ").strip();
+        if (clean.isEmpty()) return null;
+        return clean.length() > max ? clean.substring(0, max) : clean;
     }
 
     /** The two fields every request carries. A fresh map each time; never cached. */
@@ -780,7 +930,7 @@ public class FutTransferClient {
      * lets a body reach a log line or an exception message.
      */
     /** What a call is, for the audit trail: placing an order either way, reading, or writing. */
-    private enum Kind { PLACEMENT, BUY, READ, WRITE }
+    private enum Kind { PLACEMENT, BUY, READ, WRITE, LINK }
 
     private Exchange exchange(Kind kind, String domain, String path, Map<String, Object> body, List<String> refs) {
         String context = String.join(",", refs);
@@ -819,8 +969,9 @@ public class FutTransferClient {
         }
         long ms = (System.nanoTime() - started) / 1_000_000;
         record(kind, !domain.equals(cfg.baseUrl()), path, result, refs, ms);
-        if (result.status() == 403) {
+        if (result.status() == 403 && kind != Kind.LINK) {
             // Our credentials were refused. Everything stops until an admin resumes it.
+            // (Not for a tracking link: the partner refuses one for a finished order.)
             control.pause("HTTP_403 " + path, refs.size() == 1 ? refs.get(0) : null);
         }
         log.info("FUT Transfer {}{} for {}: {} in {} ms", domain.equals(cfg.baseUrl()) ? "" : "(backup) ", path,
@@ -856,6 +1007,24 @@ public class FutTransferClient {
                 case Uncertain u -> {
                     result = "UNCERTAIN";
                     code = u.code();
+                }
+            }
+        } else if (kind == Kind.LINK) {
+            // Our own codes only: never the link, its short code, or anything the partner wrote.
+            // The results are the table's own: no answer or a 5xx is TRANSIENT, the rest REFUSED.
+            switch (classifyLink(ex, null)) {
+                case LinkReady r -> {
+                    result = "OK";
+                    code = null;
+                }
+                case LinkUnavailable u -> {
+                    result = "REFUSED";
+                    code = u.code();
+                }
+                case LinkFailed f -> {
+                    result = ex.failure() != null || ex.status() >= 500 ? "TRANSIENT"
+                            : ex.status() == 429 ? "RATE_LIMITED" : "REFUSED";
+                    code = f.code();
                 }
             }
         } else if (kind == Kind.WRITE) {

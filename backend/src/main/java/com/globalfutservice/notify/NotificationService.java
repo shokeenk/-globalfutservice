@@ -128,6 +128,12 @@ public class NotificationService {
         each(notifier -> notifier.transferStarted(n));
     }
 
+    /** Off any request or poll thread. The link is passed apart from the order, never put on it. */
+    @Async
+    public void coinsOnTheWay(OrderNotification n, String trackingUrl) {
+        each(notifier -> notifier.coinsOnTheWay(n, trackingUrl));
+    }
+
     public void orderDelivered(OrderNotification n) {
         each(notifier -> notifier.orderDelivered(n));
     }

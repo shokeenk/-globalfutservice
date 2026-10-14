@@ -60,6 +60,7 @@ class VendorPollerPostgresTest {
     private VendorPoller poller;
     private VendorOrderLedger ledger;
     private VendorControl control;
+    private FutTransferClient client;
     /** Every order's status as the stand-in order service has moved it. */
     private final Map<Long, OrderStatus> statuses = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -86,7 +87,7 @@ class VendorPollerPostgresTest {
         notifications = mock(NotificationService.class);
         ledger = new VendorOrderLedger(db.named);
         control = new VendorControl(db.named, notifications, props);
-        FutTransferClient client = new FutTransferClient(props, new ObjectMapper(), control, new VendorCallLog(db.named))
+        client = new FutTransferClient(props, new ObjectMapper(), control, new VendorCallLog(db.named))
                 .withoutRetryPauses();
         poller = new VendorPoller(client, control, ledger, new SchedulerLock(db.ds), orderService, orders, vault,
                 notifications, props);
@@ -121,6 +122,7 @@ class VendorPollerPostgresTest {
         OrderEntity o = mock(OrderEntity.class);
         when(o.getId()).thenReturn(id);
         when(o.getPublicRef()).thenReturn("ref-" + id);
+        when(o.getSku()).thenReturn(com.globalfutservice.domain.catalog.Sku.TRADING_SERVICE);
         when(o.getStatus()).thenAnswer(inv -> statuses.getOrDefault(id, OrderStatus.IN_PROGRESS));
         return o;
     }
@@ -318,19 +320,132 @@ class VendorPollerPostgresTest {
     }
 
     @Test
-    @DisplayName("finished short: partly delivered, the amount kept, the order left alone, an admin told")
+    @DisplayName("finished short: NEEDS_REVIEW, the amount kept, never delivered, an admin told \"partial delivery: X of Y K\"")
     void shortDelivery() {
         long id = sent("GFS-26-SHORT001", "vid-short", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
         bulk(Map.of("vid-short", report("finished", "finished", "finished", 500, 420, 0)));
 
         poller.pollOnce();
 
-        assertThat(row(id).get("state")).isEqualTo("PARTIALLY_DELIVERED");
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
         assertThat(row(id).get("amount_delivered_k")).isEqualTo(420L);
-        assertThat(row(id).get("last_error_code")).isEqualTo("SHORT_DELIVERY");
-        verify(orderService, never()).transition(any(), any(), any(), any(), anyString(), anyString());
+        assertThat(row(id).get("last_error_code")).isEqualTo(VendorStatusMap.PARTIAL_DELIVERY);
+        verify(orderService, never()).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
         verify(vault, never()).purge(anyLong(), anyString());
-        assertThat(alerts()).anyMatch(a -> a.headline().equals("Partly delivered") && a.detail().contains("420K of 500K"));
+        assertThat(alerts()).anyMatch(a -> a.headline().equals("Partial delivery")
+                && a.detail().startsWith("Partial delivery: 420 of 500 K."));
+    }
+
+    @Test
+    @DisplayName("finished with more than ordered: delivered (amount >= amountOrdered), and an admin is told")
+    void overDelivery() {
+        long id = sent("GFS-26-OVER0001", "vid-over", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-over", report("finished", "finished", "finished", 500, 512, 0)));
+
+        poller.pollOnce();
+
+        assertThat(row(id).get("state")).isEqualTo("DELIVERED");
+        verify(orderService).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+        assertThat(alerts()).anyMatch(a -> a.headline().equals("Delivered more than ordered"));
+    }
+
+    @Test
+    @DisplayName("accountCheck \"finished\" with every coin reported is still not delivered while the order runs")
+    void accountCheckFinishedNotDelivered() {
+        long id = sent("GFS-26-ACFIN001", "vid-acfin", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-acfin", report("partlyDelivered", "finished", "transfersInProgress", 500, 500, 0)));
+
+        poller.pollOnce();
+
+        assertThat(row(id).get("state")).isNotEqualTo("DELIVERED");
+        verify(orderService, never()).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+        verify(vault, never()).purge(anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("the summary and the human-readable details are kept, amounts stay in thousands as reported")
+    void keepsDetails() {
+        long id = sent("GFS-26-DETAIL01", "vid-detail", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-detail", """
+                {"status":"partlyDelivered","simplifiedStatus":"pending","accountCheck":"finished",
+                 "accountCheckLong":"Account check finished","economyState":"transfersInProgress",
+                 "economyStateLong":"Transfers in Progress","amountOrdered":500,"amount":120,"wasAborted":0}
+                """));
+
+        poller.pollOnce();
+
+        Map<String, Object> r = row(id);
+        assertThat(r.get("vendor_simplified_status")).isEqualTo("pending");
+        assertThat(r.get("vendor_account_check_long")).isEqualTo("Account check finished");
+        assertThat(r.get("vendor_economy_state_long")).isEqualTo("Transfers in Progress");
+        // amount 120 is 120,000 coins: kept as 120 K, converted only where it is shown.
+        assertThat(r.get("amount_delivered_k")).isEqualTo(120L);
+        assertThat(r.get("state")).isEqualTo("IN_DELIVERY");
+    }
+
+    @Test
+    @DisplayName("a failed bulk read falls back to /orderStatusAPI one order at a time, by the partner's id")
+    void bulkFallsBackToSingle() {
+        long a = sent("GFS-26-FALLBK01", "vid-fallback-a", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        long b = sent("GFS-26-FALLBK02", "vid-fallback-b", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        vendor.on("/orderStatusBulkAPI", Reply.of(500, "{\"error\":\"Database operation failed\"}"));
+        Map<String, String> refs = Map.of("vid-fallback-a", "GFS-26-FALLBK01", "vid-fallback-b", "GFS-26-FALLBK02");
+        vendor.on("/orderStatusAPI", body -> Reply.ok(FakeFutTransfer.status(refs.get(body.get("orderID").asText()), 500)));
+
+        poller.pollOnce();
+
+        List<JsonNode> singles = vendor.requests().stream().filter(r -> r.path().equals("/orderStatusAPI"))
+                .map(FakeFutTransfer.Request::body).toList();
+        assertThat(singles).extracting(n -> n.get("orderID").asText())
+                .containsExactlyInAnyOrder("vid-fallback-a", "vid-fallback-b");
+        assertThat(singles).allMatch(n -> n.get("externalID").asInt() == 0);
+        assertThat(row(a).get("amount_delivered_k")).isEqualTo(107L);
+        assertThat(row(b).get("amount_delivered_k")).isEqualTo(107L);
+    }
+
+    @Test
+    @DisplayName("a single answer about another reference is not applied to ours")
+    void singleOtherReference() {
+        long a = sent("GFS-26-FALLBK03", "vid-fallback-c", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        vendor.on("/orderStatusBulkAPI", Reply.of(500, "{}"));
+        vendor.on("/orderStatusAPI", Reply.ok(FakeFutTransfer.status("GFS-26-SOMEONEELSE", 500)));
+
+        poller.pollOnce();
+
+        assertThat(row(a).get("amount_delivered_k")).isNull();
+    }
+
+    @Test
+    @DisplayName("rate limited on the bulk read: no single calls on top, the orders wait for the next poll")
+    void noFallbackWhenRateLimited() {
+        sent("GFS-26-FALLBK04", "vid-fallback-d", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        vendor.on("/orderStatusBulkAPI", Reply.of(429, "{\"error\":\"Too many requests\"}"));
+
+        poller.pollOnce();
+
+        assertThat(vendor.calls("/orderStatusAPI")).isZero();
+    }
+
+    @Test
+    @DisplayName("each poll also asks for the tracking links that are due -- the backfill -- and never moves the order")
+    void pollAsksForLinks() {
+        long id = sent("GFS-26-POLLINK1", "vid-pollink", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-pollink", report("partlyDelivered", "finished", "transfersInProgress", 500, 100, 0)));
+        vendor.on("/generateOrderStatusLink", Reply.ok("""
+                {"success":true,"shortCode":"abc12345","shop":"","specialParams":"",
+                 "fullUrl":"https://transferstatus.top/abc12345","orderID":"vid-pollink"}
+                """));
+        VendorPoller withLinks = new VendorPoller(client, control, ledger, new SchedulerLock(db.ds), orderService,
+                orders, vault, notifications, VendorTestSupport.props(vendor.baseUrl(), Duration.ofMillis(800)),
+                new PartnerTrackingLinks(client, ledger, orders, orderService, notifications,
+                        java.time.Clock.systemUTC()));
+
+        withLinks.pollOnce();
+
+        assertThat(row(id).get("tracking_url")).isEqualTo("https://transferstatus.top/abc12345");
+        assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+        verify(notifications).coinsOnTheWay(any(), eq("https://transferstatus.top/abc12345"));
+        verify(notifications, never()).fulfilmentAlert(any());
     }
 
     @Test

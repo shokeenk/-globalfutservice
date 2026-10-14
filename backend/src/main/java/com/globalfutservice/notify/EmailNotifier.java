@@ -195,6 +195,15 @@ public class EmailNotifier implements Notifier {
         sendHtml(n, TransactionalEmails.transferStarted(n, brand(), trackUrl(n), supportUrl(n), discordDmUrl()));
     }
 
+    /** "Your coins are on the way", with the customer's own tracking link. */
+    @Override
+    public void coinsOnTheWay(OrderNotification n, String trackingUrl) {
+        if (!TransactionalEmails.isCoins(n) || trackingUrl == null || trackingUrl.isBlank()) {
+            return;
+        }
+        sendHtml(n, TransactionalEmails.coinsOnTheWay(n, brand(), trackingUrl, supportUrl(n)));
+    }
+
     @Override
     public void orderDelivered(OrderNotification n) {
         if (n.settlement() != null) {

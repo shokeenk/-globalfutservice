@@ -474,6 +474,71 @@ public final class TransactionalEmails {
         return new Rendered(transferStartedSubject(n), EmailTemplate.render(content, brand), text);
     }
 
+    public static String coinsOnTheWaySubject(OrderNotification n) {
+        return "Your coins are on the way — order " + n.publicRef();
+    }
+
+    /** Said under the Track order button wherever the customer meets the link. */
+    public static final String TRACKING_LINK_NOTE = "Live delivery status from our transfer partner. If your EA "
+            + "login details need fixing, you can update them here. Don't share this link.";
+
+    /**
+     * Sent once, when the customer's tracking link has been stored: the order number, the coins
+     * and the amount, and the Track order button -- the link exactly as it was stored -- with
+     * the note that it is theirs alone. The partner is not named.
+     */
+    public static Rendered coinsOnTheWay(OrderNotification n, EmailTemplate.Brand brand, String trackingUrl,
+                                         String supportUrl) {
+        List<EmailTemplate.InfoCard> cards = new ArrayList<>();
+        cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
+        cards.add(EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()));
+        cards.add(EmailTemplate.InfoCard.of("▪", "Amount", n.amountFormatted()));
+        cards.add(EmailTemplate.InfoCard.accented("➤", "Order Status", "Your coins are on the way"));
+
+        String link = "color:#C1281B;font-weight:700;text-decoration:underline;";
+        String body = EmailTemplate.paragraphs(
+                "Your coins are on their way to your club. Use the Track order button to follow the delivery live.",
+                TRACKING_LINK_NOTE)
+                + "\n<p style=\"margin:0 0 12px 0;\">Need help? <a href=\"" + EmailTemplate.esc(supportUrl)
+                + "\" style=\"" + link + "\">Chat with us on your order's support page</a>.</p>";
+
+        EmailTemplate.Content content = new EmailTemplate.Content(
+                "Your coins are on the way. Track the delivery live.",
+                "➤",
+                null,
+                "YOUR COINS ARE ON THE WAY",
+                "Order " + n.publicRef() + " is being delivered.",
+                cards,
+                body,
+                null,
+                List.of(),
+                null,
+                "TRACK ORDER",
+                trackingUrl,
+                orderFooterNote());
+
+        String text = """
+                YOUR COINS ARE ON THE WAY
+
+                Order #%s
+                %s
+                Amount: %s
+
+                Your coins are on their way to your club. Follow the delivery live:
+
+                Track order: %s
+
+                %s
+
+                Need help? Chat with us on your order's support page: %s
+
+                — Global FUT Services
+                """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted(), trackingUrl,
+                TRACKING_LINK_NOTE, supportUrl);
+
+        return new Rendered(coinsOnTheWaySubject(n), EmailTemplate.render(content, brand), text);
+    }
+
     /** The delivery email for a coin order: branded, with the button to the order's tracking page. */
     public static Rendered orderDelivered(OrderNotification n, EmailTemplate.Brand brand, String trackUrl) {
         List<EmailTemplate.InfoCard> cards = List.of(
