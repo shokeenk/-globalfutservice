@@ -1273,7 +1273,7 @@ export interface SupportContext {
 
 /** What an admin can do to an order the partner has. The server decides which apply. */
 export type VendorActionName =
-  | 'SEND_SIGN_IN' | 'RESUME' | 'STOP' | 'MARK_FINISHED' | 'RETRY' | 'LINK' | 'RESOLVE'
+  | 'SEND_SIGN_IN' | 'RESUME' | 'STOP' | 'MARK_FINISHED' | 'RETRY' | 'LINK' | 'RESOLVE' | 'UPDATE_SETTINGS'
 
 /** Everything we hold about one order at FUT Transfer. Amounts are in K, the partner's unit. */
 export interface VendorOrderDetail {

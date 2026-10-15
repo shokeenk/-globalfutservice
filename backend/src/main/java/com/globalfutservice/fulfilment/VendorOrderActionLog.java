@@ -29,7 +29,9 @@ public class VendorOrderActionLog {
      * APPROVE is an admin sending the order; AUTO_DISPATCH the automatic queue sending it, or
      * leaving it for Approve. Both go through the same release.
      */
-    public enum Action { SEND_SIGN_IN, RESUME, STOP, MARK_FINISHED, RETRY, LINK, RESOLVE, APPROVE, AUTO_DISPATCH }
+    public enum Action {
+        SEND_SIGN_IN, RESUME, STOP, MARK_FINISHED, RETRY, LINK, RESOLVE, APPROVE, AUTO_DISPATCH, UPDATE_SETTINGS
+    }
 
     public enum Outcome { DONE, REFUSED, UNCERTAIN }
 

@@ -143,6 +143,49 @@ class FutTransferWriteTest {
     }
 
     @Test
+    @DisplayName("minTransferAmount: /editOrderAPI with the order's id and minTransferAmount 0 -- nothing else -- "
+            + "and what the partner said it applied")
+    void editMinTransferAmount() {
+        vendor.on("/editOrderAPI", Reply.ok("{\"outcome\":\"success\",\"updatedFields\":[\"minTransferAmount\"]}"));
+
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isEqualTo(new Changed(FutTransferClient.UPDATED));
+
+        assertThat(vendor.requests()).hasSize(1);
+        JsonNode body = vendor.requests().get(0).body();
+        List<String> fields = new java.util.ArrayList<>();
+        body.fieldNames().forEachRemaining(fields::add);
+        // A partial update: amount, limit, cyclePrice, riskLevel and the rest are never sent.
+        assertThat(fields).containsExactly("apiUser", "apiKey", "orderID", "minTransferAmount");
+        assertThat(body.path("orderID").asText()).isEqualTo(VID);
+        assertThat(body.get("minTransferAmount").isInt()).isTrue();
+        assertThat(body.get("minTransferAmount").asInt()).isZero();
+        verify(calls).record(eq("/editOrderAPI"), eq(false), eq(200), eq("OK"), isNull(), eq(List.of(REF)),
+                isNull(), anyLong());
+
+        // Success without the field among those updated: not applied (not a cycle order).
+        vendor.on("/editOrderAPI", Reply.ok("{\"outcome\":\"success\",\"updatedFields\":[]}"));
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isEqualTo(new Changed(FutTransferClient.IGNORED));
+        vendor.on("/editOrderAPI", Reply.ok("{\"outcome\":\"success\"}"));
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isEqualTo(new Changed(FutTransferClient.SUCCESS));
+
+        // The documented refusals, and an answer we cannot read.
+        vendor.on("/editOrderAPI", Reply.of(404, "{\"error\":\"orderNotFound\"}"));
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isEqualTo(new NotChanged(Refusal.REFUSED, "orderNotFound"));
+        vendor.on("/editOrderAPI", Reply.of(429, "Too Many Requests"));
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isInstanceOf(NotChanged.class)
+                .extracting(c -> ((NotChanged) c).refusal()).isEqualTo(Refusal.RATE_LIMITED);
+        vendor.on("/editOrderAPI", Reply.of(500, "x"));
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isEqualTo(new ChangeUncertain("HTTP_500"));
+        vendor.on("/editOrderAPI", Reply.ok("{\"outcome\":\"nope\"}"));
+        assertThat(client.editMinTransferAmount(VID, REF, 0)).isEqualTo(new ChangeUncertain("UNEXPECTED_ANSWER"));
+
+        // Never to the backup domain, never without the partner's id.
+        assertThat(backup.requests()).isEmpty();
+        assertThat(client.editMinTransferAmount(null, REF, 0)).isEqualTo(new NotChanged(Refusal.REFUSED,
+                "NO_VENDOR_ORDER_ID"));
+    }
+
+    @Test
     @DisplayName("without the vendor's id nothing is sent: these never address an order by our reference")
     void noVendorId() {
         assertThat(client.correctSignIn(null, REF, VendorTestSupport.signIn()))

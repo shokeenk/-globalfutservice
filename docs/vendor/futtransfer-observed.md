@@ -97,3 +97,17 @@ DELIVERED comes only from the finished rules: `status` `finished` or `simplified
   - Estimated cost = amount / 100K × (rate + `transferFee`), with the fee counted once.
   - **Unconfirmed assumption**: that `transferFee` is per 100K. `toolFee` is documented as applying to private suppliers only, so it is not added.
 - **Still exactly one `/buyCoinsAPI` call per order.**
+
+### Orders sent before the change: minTransferAmount at the partner (2026-10-15)
+
+Orders sent before #124 went with `minTransferAmount` 50 (50K per transfer), and at least one was held up by it. `/editOrderAPI` is a partial update, so it can change that one field on an order FUT Transfer already has.
+
+- **On deploy:** `V55__partner_settings_update.sql` marks every open public-pool order that FUT Transfer has. That means state `SUBMITTED`, `IN_DELIVERY`, `AWAITING_CUSTOMER` or `NEEDS_REVIEW`, with a partner id, and not reported `finished`, `cancelled`/`canceled` or `archived`.
+  - About a minute after startup, each marked order is sent `/editOrderAPI` with `{"orderID": ..., "minTransferAmount": 0}`. Nothing else is sent.
+  - Each order is claimed before its call, so it gets at most one call.
+  - Each call is recorded in the order's call log and on its admin timeline as "Update settings at partner", by "automatic: settings update on deploy".
+  - The orders it touched are logged on one line starting `FUT TRANSFER SETTINGS UPDATE:` and listed to staff.
+  - If FUT Transfer asks us to wait (429), that order goes back in the queue and the run stops. It is tried on the next run, 10 minutes later. While calls are paused or FUT Transfer is off, nothing is claimed.
+  - Orders sent from then on are never marked.
+- **Admin button "Update settings at partner":** sends the same call for one order while the partner has it. Pressing it again is safe.
+- **What FUT Transfer answers:** `{"outcome":"success","updatedFields":[...]}`. If `minTransferAmount` isn't among the `updatedFields`, the partner didn't apply it. Their docs say it only applies to `cycle` and `targetedSnipe` orders. We record that as `IGNORED`.

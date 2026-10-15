@@ -125,6 +125,13 @@ public class AdminVendorOrderController {
         return answer(actions.markFinished(orderService.requireAny(publicRef), as(admin)));
     }
 
+    @PostMapping("/update-settings")
+    @Operation(summary = "Send the current minTransferAmount to the order FUT Transfer has; nothing else changes")
+    public ResponseEntity<ActionResponse> updateSettings(@PathVariable String publicRef,
+                                                         @CurrentAccount AccountPrincipal admin) {
+        return answer(actions.updateSettings(orderService.requireAny(publicRef), as(admin)));
+    }
+
     @PostMapping("/retry")
     @Operation(summary = "Clear an order under review to be approved again, once it is confirmed nothing was created")
     public ResponseEntity<ActionResponse> retry(@PathVariable String publicRef,

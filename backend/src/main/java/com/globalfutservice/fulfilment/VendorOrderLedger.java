@@ -963,6 +963,44 @@ public class VendorOrderLedger {
                 .stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
+    // ------------------------------------------- settings update (V55, 2026-10-15) ---
+
+    /** Marked by V55 and not yet sent: the order ids, in order. */
+    public List<Long> settingsUpdatesDue() {
+        return jdbc.query("select order_id from vendor_order where settings_update = 'PENDING' order by order_id",
+                new MapSqlParameterSource(), (rs, i) -> rs.getLong(1));
+    }
+
+    /**
+     * PENDING to SENDING, for one caller only. Once claimed, the order is never sent the update
+     * automatically again, whatever happens next: at most once per order.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean claimSettingsUpdate(long orderId) {
+        return jdbc.update("""
+                update vendor_order set settings_update = 'SENDING', settings_update_at = now()
+                 where order_id = :orderId and settings_update = 'PENDING'
+                """, new MapSqlParameterSource("orderId", orderId)) == 1;
+    }
+
+    /** How the update went (DONE, IGNORED, REFUSED, UNCERTAIN, SKIPPED), or PENDING to try again. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void settleSettingsUpdate(long orderId, String outcome) {
+        jdbc.update("""
+                update vendor_order set settings_update = :outcome, settings_update_at = now()
+                 where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId).addValue("outcome", outcome));
+    }
+
+    /** An admin's update went through: an order still due is not sent it again by the deploy. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void settingsUpdatedByAdmin(long orderId, String outcome) {
+        jdbc.update("""
+                update vendor_order set settings_update = :outcome, settings_update_at = now()
+                 where order_id = :orderId and settings_update = 'PENDING'
+                """, new MapSqlParameterSource("orderId", orderId).addValue("outcome", outcome));
+    }
+
     /** How this order was last sent, or tried: PUBLIC_POOL or OWN_SENDERS. Empty if never. */
     public Optional<String> orderMode(long orderId) {
         return jdbc.query("select order_mode from vendor_order where order_id = :orderId",

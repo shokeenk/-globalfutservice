@@ -91,6 +91,9 @@ public class VendorOrderActions {
     /** Nobody at GFS: the customer's own re-entered details, sent by the system (SignInResends). */
     public static final Admin AUTOMATIC = new Admin(null, "automatic: the customer re-entered their details", "GFS");
 
+    /** Nobody at GFS: the one settings update the deploy of 2026-10-15 sends (PartnerSettingsUpdate). */
+    public static final Admin DEPLOY = new Admin(null, "automatic: settings update on deploy", "GFS");
+
     /** The code a refusal carries when the partner only asked us to wait. */
     public static final String RATE_LIMITED = "RATE_LIMITED";
 
@@ -254,6 +257,50 @@ public class VendorOrderActions {
             case FutTransferClient.ChangeUncertain u -> uncertain(order, VendorOrderActionLog.Action.MARK_FINISHED,
                     admin, u.code(), "Could not confirm the partner marked " + ref + " finished (" + u.code()
                             + "). Check the FUT Transfer dashboard.");
+        };
+    }
+
+    /**
+     * Sends the current minTransferAmount (0, off, unless GFS_FUTTRANSFER_MIN_TRANSFER says
+     * otherwise) to an order the vendor already has, through /editOrderAPI -- and nothing else
+     * about the order changes, here or there. Orders sent before 2026-10-15 went with 50 (50K
+     * per transfer), which can hold them up.
+     *
+     * <p>Safe to repeat: it sets a value, it does not add one.
+     */
+    public Result updateSettings(OrderEntity order, Admin admin) {
+        String ref = order.getPublicRef();
+        Result blocked = blocked();
+        if (blocked != null) return blocked;
+        VendorOrderLedger.Row row = ledger.find(order.getId()).orElse(null);
+        Result unusable = needsVendorOrder(ref, row, STOPPABLE);
+        if (unusable != null) return unusable;
+        int min = props.futTransfer().order().minTransferAmount();
+
+        log.info("FULFILMENT ACTION: {} is updating minTransferAmount to {} on order {} (partner order {})",
+                admin == DEPLOY ? "the deploy" : "operator " + admin.id(), min, ref, row.vendorOrderId());
+        return switch (client.editMinTransferAmount(row.vendorOrderId(), ref, min)) {
+            case FutTransferClient.Changed c -> {
+                String applied = switch (c.outcome()) {
+                    case FutTransferClient.UPDATED -> "and it applied it";
+                    case FutTransferClient.IGNORED -> "and it answered success without applying it (FUT Transfer "
+                            + "applies minTransferAmount only to cycle and targetedSnipe orders)";
+                    default -> "and it answered success";
+                };
+                if (admin != DEPLOY) {
+                    ledger.settingsUpdatedByAdmin(order.getId(),
+                            FutTransferClient.IGNORED.equals(c.outcome()) ? "IGNORED" : "DONE");
+                }
+                Result sent = done(order, VendorOrderActionLog.Action.UPDATE_SETTINGS, admin, "minTransferAmount "
+                        + min + " sent to the partner, " + applied + ". Nothing else about the order was changed.");
+                // updated, ignored or success: what the partner said it did with it.
+                yield new Result(sent.status(), sent.message(), c.outcome());
+            }
+            case FutTransferClient.NotChanged n -> refused(order, VendorOrderActionLog.Action.UPDATE_SETTINGS, admin, n,
+                    "The partner would not update minTransferAmount");
+            case FutTransferClient.ChangeUncertain u -> uncertain(order, VendorOrderActionLog.Action.UPDATE_SETTINGS,
+                    admin, u.code(), "Could not confirm the partner updated minTransferAmount on " + ref + " ("
+                            + u.code() + "). Pressing it again is safe: it sets the same value.");
         };
     }
 
@@ -515,6 +562,7 @@ public class VendorOrderActions {
         if (hasId && RESUMABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.RESUME.name());
         if (hasId && STOPPABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.STOP.name());
         if (hasId && FINISHABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.MARK_FINISHED.name());
+        if (hasId && STOPPABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.UPDATE_SETTINGS.name());
         if (VendorOrderLedger.NEEDS_REVIEW.equals(d.state())) {
             if (!hasId) out.add(VendorOrderActionLog.Action.RETRY.name());
             out.add(VendorOrderActionLog.Action.LINK.name());
