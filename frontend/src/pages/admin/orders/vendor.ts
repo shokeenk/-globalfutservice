@@ -10,7 +10,7 @@ import type { VendorActionName, VendorSection } from '../../../lib/types'
  */
 
 export const VENDOR_ACTIONS: VendorActionName[] = [
-  'SEND_SIGN_IN', 'RESUME', 'LINK', 'RETRY', 'STOP', 'MARK_FINISHED', 'RESOLVE',
+  'SEND_SIGN_IN', 'RESUME', 'UPDATE_SETTINGS', 'LINK', 'RETRY', 'STOP', 'MARK_FINISHED', 'RESOLVE',
 ]
 
 export const VENDOR_ACTION_LABEL: Record<VendorActionName, string> = {
@@ -21,6 +21,7 @@ export const VENDOR_ACTION_LABEL: Record<VendorActionName, string> = {
   RETRY: 'Allow sending again',
   LINK: 'Link partner order',
   RESOLVE: 'Resolve',
+  UPDATE_SETTINGS: 'Update settings at partner',
 }
 
 export const VENDOR_ACTION_PATH: Record<VendorActionName, string> = {
@@ -31,6 +32,7 @@ export const VENDOR_ACTION_PATH: Record<VendorActionName, string> = {
   RETRY: 'retry',
   LINK: 'link',
   RESOLVE: 'resolve',
+  UPDATE_SETTINGS: 'update-settings',
 }
 
 /** History-only entries: sending the order, by Approve or automatically. */
@@ -193,6 +195,13 @@ export function vendorQuestion(action: VendorActionName, ref: string, section: V
     case 'LINK':
       return `Link ${ref} to ${input.vendorOrderId ? `partner order ${input.vendorOrderId}` : 'the partner order under this reference'}?\n\n`
         + `It is checked with the partner first, for ${ordered}, and then watched again.`
+    case 'UPDATE_SETTINGS':
+      return `Update ${ref}'s settings at FUT Transfer?
+
+`
+        + `Sends minTransferAmount ${section.nextSend?.minTransferAmount ?? 0} (0 means no minimum per transfer) to the `
+        + `order the partner already has (${v?.vendorOrderId ?? '—'}). Nothing else about the order changes, `
+        + 'and sending it again is safe.'
     case 'RESOLVE':
       return `Close ${ref} at FUT Transfer with this note?\n\n“${input.note ?? ''}”\n\n`
         + 'Nothing is sent to the partner and the order itself does not move — refund or deliver it as usual.'

@@ -971,6 +971,32 @@ public class FutTransferClient {
         return write("/markFinishedAPI", body, publicRef, vendorOrderId, json -> outcome(json, "marked"));
     }
 
+    /** {@code updatedFields} names minTransferAmount: the partner applied it. */
+    public static final String UPDATED = "updated";
+    /** {@code success}, but minTransferAmount not among {@code updatedFields}: not applied. */
+    public static final String IGNORED = "ignored";
+    /** {@code success}, with no {@code updatedFields} to say what was applied. */
+    public static final String SUCCESS = "success";
+
+    /**
+     * Sets minTransferAmount on an order the vendor already has, through /editOrderAPI, and
+     * nothing else: a partial update, so every other field of the order stays as it is.
+     */
+    public Change editMinTransferAmount(String vendorOrderId, String publicRef, int minTransferAmount) {
+        Map<String, Object> body = auth();
+        body.put("orderID", vendorOrderId);
+        body.put("minTransferAmount", minTransferAmount);
+        return write("/editOrderAPI", body, publicRef, vendorOrderId, json -> {
+            if (!"success".equalsIgnoreCase(json.path("outcome").asText(""))) return null;
+            JsonNode fields = json.get("updatedFields");
+            if (fields == null || !fields.isArray()) return SUCCESS;
+            for (JsonNode f : fields) {
+                if ("minTransferAmount".equals(f.asText())) return UPDATED;
+            }
+            return IGNORED;
+        });
+    }
+
     private static String outcome(JsonNode json, String expected) {
         return expected.equalsIgnoreCase(json.path("outcome").asText("")) ? expected : null;
     }

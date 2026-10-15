@@ -128,6 +128,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                     // --- public storefront -------------------------------------------
                     .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
+                    // Which commit is running: the short id only, so a deploy can be seen from outside.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/build").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/quotes").permitAll()
                     /*
                       Placing an order needs an account. Browsing and pricing do not --

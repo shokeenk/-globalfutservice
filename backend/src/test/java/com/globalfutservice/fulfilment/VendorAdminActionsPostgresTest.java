@@ -332,7 +332,7 @@ class VendorAdminActionsPostgresTest {
         assertThat(s.calls()).extracting(VendorCallLog.Call::endpoint).containsExactly("/resumeOrderAPI");
         assertThat(s.actions()).extracting(VendorOrderActionLog.Entry::outcome).containsExactly("REFUSED");
         // On hold: the customer has not re-entered details, so no corrected sign-in to send yet.
-        assertThat(s.available()).containsExactly("RESUME", "STOP", "MARK_FINISHED", "RESOLVE");
+        assertThat(s.available()).containsExactly("RESUME", "STOP", "MARK_FINISHED", "UPDATE_SETTINGS", "RESOLVE");
         // How it was sent, and how a send now would go.
         assertThat(s.vendorOrder().orderMode()).isEqualTo("OWN_SENDERS");
         assertThat(s.currentOrderMode()).isEqualTo("OWN_SENDERS");
@@ -419,13 +419,13 @@ class VendorAdminActionsPostgresTest {
     void available() {
         assertThat(VendorOrderActions.available(null, OrderStatus.READY_FOR_DELIVERY)).isEmpty();
         assertThat(VendorOrderActions.available(detail("AWAITING_CUSTOMER", "v"), OrderStatus.READY_FOR_DELIVERY))
-                .containsExactly("SEND_SIGN_IN", "RESUME", "STOP", "MARK_FINISHED", "RESOLVE");
+                .containsExactly("SEND_SIGN_IN", "RESUME", "STOP", "MARK_FINISHED", "UPDATE_SETTINGS", "RESOLVE");
         assertThat(VendorOrderActions.available(detail("NEEDS_REVIEW", null), OrderStatus.READY_FOR_DELIVERY))
                 .containsExactly("RETRY", "LINK", "RESOLVE");
         assertThat(VendorOrderActions.available(detail("NEEDS_REVIEW", "v"), OrderStatus.IN_PROGRESS))
-                .containsExactly("RESUME", "STOP", "MARK_FINISHED", "LINK", "RESOLVE");
+                .containsExactly("RESUME", "STOP", "MARK_FINISHED", "UPDATE_SETTINGS", "LINK", "RESOLVE");
         assertThat(VendorOrderActions.available(detail("IN_DELIVERY", "v"), OrderStatus.IN_PROGRESS))
-                .containsExactly("STOP", "MARK_FINISHED");
+                .containsExactly("STOP", "MARK_FINISHED", "UPDATE_SETTINGS");
         assertThat(VendorOrderActions.available(detail("DELIVERED", "v"), OrderStatus.DELIVERED)).isEmpty();
         assertThat(VendorOrderActions.available(detail("FAILED", null), OrderStatus.READY_FOR_DELIVERY))
                 .containsExactly("RESOLVE");

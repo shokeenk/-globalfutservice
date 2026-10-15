@@ -14,7 +14,7 @@ vi.mock('../../../lib/api', () => ({
 }))
 
 const { ApiError } = await import('../../../lib/api')
-const { approveReplacedBy, vendorQuestion, vendorTimeline } = await import('./vendor')
+const { approveReplacedBy, historyLabel, vendorQuestion, vendorTimeline } = await import('./vendor')
 const { VendorPanel } = await import('./VendorPanel')
 const { VendorReview, resumeCallsQuestion } = await import('./VendorReview')
 const { releaseQuestion } = await import('./confirmations')
@@ -222,6 +222,23 @@ describe('VendorPanel', () => {
     expect(confirm).toHaveBeenCalledWith(vendorQuestion('STOP', REF, section()))
     expect(api.post).toHaveBeenCalledWith(`/api/v1/admin/orders/${REF}/vendor/stop`, undefined)
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('updates the settings at the partner: says it sends minTransferAmount 0 and nothing else, then posts', async () => {
+    api.post.mockResolvedValue({ status: 'DONE', message: 'minTransferAmount 0 sent to the partner, and it applied it.' })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const s = section({ available: ['UPDATE_SETTINGS', 'STOP'] })
+    renderPanel(s)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update settings at partner' }))
+
+    await screen.findByText(/minTransferAmount 0 sent to the partner/)
+    const question = vendorQuestion('UPDATE_SETTINGS', REF, s)
+    expect(confirm).toHaveBeenCalledWith(question)
+    expect(question).toContain('minTransferAmount 0')
+    expect(question).toContain('Nothing else about the order changes')
+    expect(api.post).toHaveBeenCalledWith(`/api/v1/admin/orders/${REF}/vendor/update-settings`, undefined)
+    expect(historyLabel('UPDATE_SETTINGS')).toBe('Update settings at partner')
   })
 
   it('sends nothing when the question is declined', () => {
