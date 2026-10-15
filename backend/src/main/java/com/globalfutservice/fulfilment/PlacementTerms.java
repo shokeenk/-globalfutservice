@@ -44,15 +44,9 @@ final class PlacementTerms {
         }
 
         AppProperties.FutTransferPublicPool pool = cfg.publicPool();
-        BigDecimal threshold = switch (pool.buyNowThresholdMode()) {
-            // The client's decision: the order's coins in K, the same number as `amount`.
-            case ORDER_AMOUNT -> BigDecimal.valueOf(amountK);
-            case FIXED -> pool.buyNowThreshold();
-        };
-        if (threshold == null) {
-            return new Refuse("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE is FIXED, but GFS_FUTTRANSFER_BUY_NOW_THRESHOLD "
-                    + "is not set. Set it, or switch the mode back to ORDER_AMOUNT. Nothing was sent.");
-        }
+        // A price threshold per 100K, the same on every order: never the order's amount, whatever
+        // GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE still says. 0 unless configured.
+        BigDecimal threshold = pool.threshold();
 
         BigDecimal maxPrice = null;
         if (pool.sendMaxPrice()) {

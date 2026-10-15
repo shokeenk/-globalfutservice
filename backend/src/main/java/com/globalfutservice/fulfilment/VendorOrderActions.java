@@ -442,7 +442,8 @@ public class VendorOrderActions {
             OrderModeReport.NextSend shape = OrderModeReport.nextSend(props.futTransfer(), 1);
             return new OrderModeReport.NextSend(shape.orderMode(), shape.endpoint(), shape.transferMethod(), null,
                     null, null, shape.topUpEnabled(), shape.autoFinishCycle(), shape.senderGroup(),
-                    e.getMessage() + " Nothing would be sent.");
+                    e.getMessage() + " Nothing would be sent.", shape.minTransferAmount(),
+                    shape.pauseIfBelowMinTransfer(), shape.riskLevel());
         }
         return OrderModeReport.nextSend(props.futTransfer(), amountK);
     }

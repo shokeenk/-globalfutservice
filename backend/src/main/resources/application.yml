@@ -396,10 +396,12 @@ gfs:
     order-mode: ${GFS_FUTTRANSFER_ORDER_MODE:PUBLIC_POOL}
     # Only public-pool orders use these.
     public-pool:
-      # ORDER_AMOUNT: the order's coins in K. FIXED: buy-now-threshold below.
-      buy-now-threshold-mode: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE:ORDER_AMOUNT}
-      buy-now-threshold: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD:}
-      # maxPrice is not sent unless this is true; then max-price must be set.
+      # Retired and ignored: the threshold never comes from the order's amount.
+      buy-now-threshold-mode: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE:FIXED}
+      # FUT Transfer's "price threshold per 100K", sent on every order. 0: the client's instruction.
+      buy-now-threshold: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD:0}
+      # maxPrice is not sent unless this is true; then max-price must be set, in FUT Transfer's
+      # currency per 100K -- never our own price.
       send-max-price: ${GFS_FUTTRANSFER_SEND_MAX_PRICE:false}
       max-price: ${GFS_FUTTRANSFER_MAX_PRICE:}
 

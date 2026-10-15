@@ -38,20 +38,39 @@ class PlacementTermsTest {
     }
 
     @Test
-    @DisplayName("the client's defaults: public pool, targetedSnipe, threshold = the amount in K, no maxPrice")
+    @DisplayName("the client's defaults: public pool, targetedSnipe, threshold 0 on every order, no maxPrice")
     void defaults() {
         var terms = send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
-                VendorTestSupport.ORDER_AMOUNT_POOL), 100));
+                VendorTestSupport.DEFAULT_POOL), 100));
         assertThat(terms).isEqualTo(new VendorOrderLedger.SendTerms("PUBLIC_POOL", "targetedSnipe",
-                BigDecimal.valueOf(100), null));
+                BigDecimal.ZERO, null));
         assertThat(terms.publicPool()).isTrue();
-
+        // Unset or empty is 0 too.
         assertThat(send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
-                VendorTestSupport.ORDER_AMOUNT_POOL), 1500)).buyNowThreshold()).isEqualByComparingTo("1500");
+                pool(BuyNowThresholdMode.FIXED, null, false, null)), 100)).buyNowThreshold()).isEqualByComparingTo("0");
     }
 
     @Test
-    @DisplayName("FIXED sends the configured threshold whatever the amount; maxPrice only when switched on")
+    @DisplayName("the order's amount is never the threshold -- whatever the amount, and even with the retired "
+            + "ORDER_AMOUNT mode still set")
+    void neverTheOrderAmount() {
+        for (long amountK : new long[]{50, 100, 1500}) {
+            for (FutTransferPublicPool p : new FutTransferPublicPool[]{VendorTestSupport.DEFAULT_POOL,
+                    VendorTestSupport.ORDER_AMOUNT_POOL, pool(BuyNowThresholdMode.ORDER_AMOUNT, null, false, null)}) {
+                BigDecimal sent = send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe", p),
+                        amountK)).buyNowThreshold();
+                assertThat(sent).as(amountK + "K, " + p).isEqualByComparingTo("0");
+            }
+        }
+        // A configured value is sent as configured, also under the retired mode.
+        assertThat(send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
+                pool(BuyNowThresholdMode.ORDER_AMOUNT, "12", false, null)), 500)).buyNowThreshold())
+                .isEqualByComparingTo("12");
+    }
+
+    @Test
+    @DisplayName("a configured threshold is sent whatever the amount; maxPrice only when switched on, as configured "
+            + "-- never the order's own price")
     void fixedAndMaxPrice() {
         var terms = send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
                 pool(BuyNowThresholdMode.FIXED, "8.63", true, "9.25")), 100));
@@ -66,9 +85,6 @@ class PlacementTermsTest {
     @Test
     @DisplayName("needed and missing: a reason naming the variable, not a send")
     void missingRefused() {
-        assertThat(refusal(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
-                pool(BuyNowThresholdMode.FIXED, null, false, null)), 100)))
-                .contains("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD is not set").contains("Nothing was sent");
         assertThat(refusal(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
                 pool(BuyNowThresholdMode.ORDER_AMOUNT, null, true, null)), 100)))
                 .contains("GFS_FUTTRANSFER_MAX_PRICE is not set").contains("Nothing was sent");

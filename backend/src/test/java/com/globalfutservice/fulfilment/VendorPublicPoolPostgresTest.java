@@ -223,7 +223,10 @@ class VendorPublicPoolPostgresTest {
         assertThat(sent.get("topUpEnabled").asInt()).isEqualTo(300);
         assertThat(sent.get("autoFinishCycle").asInt()).isEqualTo(1);
         assertThat(sent.get("amount").asLong()).isEqualTo(500);
-        assertThat(sent.get("buyNowThreshold").decimalValue()).isEqualByComparingTo("500");
+        // 0 on every order, sent as a number: never the order's amount.
+        assertThat(sent.get("buyNowThreshold").isNumber()).isTrue();
+        assertThat(sent.get("buyNowThreshold").decimalValue()).isEqualByComparingTo("0");
+        assertThat(sent.get("minTransferAmount").asInt()).isEqualTo(50);
         assertThat(fields(sent)).doesNotContain("supplierID", "privateSupplier", "playerToBuy", "maxPrice", "senderGroup");
 
         Map<String, Object> r = row(id);
@@ -231,9 +234,10 @@ class VendorPublicPoolPostgresTest {
         assertThat(r.get("vendor_order_id")).isEqualTo(vid);
         assertThat(r.get("order_mode")).isEqualTo("PUBLIC_POOL");
         assertThat(r.get("transfer_method")).isEqualTo("targetedSnipe");
-        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("500");
+        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("0");
         assertThat(r.get("max_price_sent")).isNull();
         assertThat((BigDecimal) r.get("balance_at_send")).isEqualByComparingTo("5000");
+        assertThat(vendor.calls("/buyCoinsAPI")).as("exactly one /buyCoinsAPI call").isOne();
     }
 
     @Test
@@ -271,17 +275,13 @@ class VendorPublicPoolPostgresTest {
     @DisplayName("a needed setting that is missing: Approve refuses and says which, before the vault or the vendor")
     void missingSettingRefused() {
         long id = insertOrder("GFS-26-POOLMISS1", "0.5");
-        var noThreshold = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null);
-        App a = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, noThreshold);
+        // A missing threshold is not missing any more: it is 0. maxPrice switched on with no value still is.
+        var noPrice = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, true, null);
+        App a = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, noPrice);
         SupplierFulfilmentService.Release r = a.approve(order(id, "GFS-26-POOLMISS1", "0.5")).r();
         assertThat(r.result()).isEqualTo(Result.NOT_SENT);
-        assertThat(r.message()).contains("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD").contains("Nothing was sent");
+        assertThat(r.message()).contains("GFS_FUTTRANSFER_MAX_PRICE").contains("Nothing was sent");
         verify(a.vault(), never()).reveal(anyLong(), any());
-
-        var noPrice = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, true, null);
-        r = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, noPrice).approve(order(id, "GFS-26-POOLMISS1", "0.5")).r();
-        assertThat(r.result()).isEqualTo(Result.NOT_SENT);
-        assertThat(r.message()).contains("GFS_FUTTRANSFER_MAX_PRICE");
 
         assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Integer.class, id)).isZero();
         assertThat(vendor.requests()).isEmpty();
@@ -474,7 +474,7 @@ class VendorPublicPoolPostgresTest {
         Map<String, Object> r = row(id);
         assertThat(r.get("order_mode")).isEqualTo("PUBLIC_POOL");
         assertThat(r.get("attempts")).isEqualTo(2);
-        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("1000");
+        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("0");
         assertThat(vendor.calls("/orderAPI")).isOne();
         assertThat(vendor.calls("/buyCoinsAPI")).isOne();
     }

@@ -20,7 +20,7 @@ class OrderModeReportTest {
     }
 
     private static final AppProperties.FutTransfer POOL = cfg(true, "targetedSnipe",
-            AppProperties.FutTransferOrderMode.PUBLIC_POOL, VendorTestSupport.ORDER_AMOUNT_POOL);
+            AppProperties.FutTransferOrderMode.PUBLIC_POOL, VendorTestSupport.DEFAULT_POOL);
     private static final AppProperties.FutTransfer OWN = cfg(true, "targetedSnipe",
             AppProperties.FutTransferOrderMode.OWN_SENDERS, VendorTestSupport.ORDER_AMOUNT_POOL);
 
@@ -28,9 +28,20 @@ class OrderModeReportTest {
     @DisplayName("public pool at startup: the endpoint and every setting it sends, as information")
     void publicPoolLine() {
         assertThat(OrderModeReport.startupLine(POOL)).isEqualTo("FUT TRANSFER ORDER MODE: PUBLIC_POOL -- Approve "
-                + "sends /buyCoinsAPI (transferMethod=targetedSnipe, buyNowThreshold=the order's amount in K, "
-                + "topUpEnabled=300, autoFinishCycle=1, maxPrice not sent; no senderGroup, no supplierID).");
+                + "sends /buyCoinsAPI (transferMethod=targetedSnipe, buyNowThreshold (price threshold per 100K)=0 on "
+                + "every order, minTransferAmount=50, topUpEnabled=300, autoFinishCycle=1, maxPrice not sent; no "
+                + "senderGroup, no supplierID).");
         assertThat(OrderModeReport.isWarning(POOL)).isFalse();
+    }
+
+    @Test
+    @DisplayName("the retired ORDER_AMOUNT mode still set on Render: a warning that it is ignored")
+    void retiredModeWarned() {
+        AppProperties.FutTransfer retired = cfg(true, "targetedSnipe", AppProperties.FutTransferOrderMode.PUBLIC_POOL,
+                VendorTestSupport.ORDER_AMOUNT_POOL);
+        assertThat(OrderModeReport.startupLine(retired)).contains("(price threshold per 100K)=0 on every order")
+                .contains("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE=ORDER_AMOUNT is set but ignored");
+        assertThat(OrderModeReport.isWarning(retired)).isTrue();
     }
 
     @Test
@@ -71,14 +82,17 @@ class OrderModeReportTest {
     }
 
     @Test
-    @DisplayName("for one order: public pool sends the amount in K as buyNowThreshold, and no senderGroup")
+    @DisplayName("for one order: public pool sends threshold 0, never the amount, no senderGroup, and the rest as set")
     void nextSendPool() {
         OrderModeReport.NextSend next = OrderModeReport.nextSend(POOL, 500);
         assertThat(next.orderMode()).isEqualTo("PUBLIC_POOL");
         assertThat(next.endpoint()).isEqualTo("/buyCoinsAPI");
         assertThat(next.transferMethod()).isEqualTo("targetedSnipe");
-        assertThat(next.buyNowThreshold()).isEqualByComparingTo(BigDecimal.valueOf(500));
-        assertThat(next.buyNowThresholdSource()).isEqualTo("the order's amount in K");
+        assertThat(next.buyNowThreshold()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(next.buyNowThresholdSource()).isEqualTo("the same on every order (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)");
+        assertThat(next.minTransferAmount()).isEqualTo(50);
+        assertThat(next.pauseIfBelowMinTransfer()).isZero();
+        assertThat(next.riskLevel()).isEqualTo(1);
         assertThat(next.maxPrice()).isNull();
         assertThat(next.topUpEnabled()).isEqualTo(300);
         assertThat(next.autoFinishCycle()).isEqualTo(1);
@@ -98,11 +112,12 @@ class OrderModeReportTest {
     @Test
     @DisplayName("for one order: a refusal is reported as the reason, with nothing to send")
     void nextSendRefused() {
-        AppProperties.FutTransfer fixedWithoutValue = cfg(true, "targetedSnipe",
+        AppProperties.FutTransfer maxPriceWithoutValue = cfg(true, "targetedSnipe",
                 AppProperties.FutTransferOrderMode.PUBLIC_POOL,
-                new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null));
-        OrderModeReport.NextSend next = OrderModeReport.nextSend(fixedWithoutValue, 500);
-        assertThat(next.refusal()).contains("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD");
+                new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, true, null));
+        OrderModeReport.NextSend next = OrderModeReport.nextSend(maxPriceWithoutValue, 500);
+        assertThat(next.refusal()).contains("GFS_FUTTRANSFER_MAX_PRICE");
         assertThat(next.buyNowThreshold()).isNull();
+        assertThat(next.minTransferAmount()).isEqualTo(50);
     }
 }

@@ -99,13 +99,14 @@ describe('VendorPanel', () => {
     api.get.mockResolvedValue({ balance: 4321.5, available: true, currency: 'unconfirmed' })
     renderPanel(section({
       currentOrderMode: 'PUBLIC_POOL',
-      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', buyNowThresholdSent: 500,
+      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', buyNowThresholdSent: 0,
         balanceAtSend: 5000 }),
     }))
 
     expect(screen.getByText('Order mode').nextSibling).toHaveTextContent('Public pool')
     expect(screen.getByText('Transfer method').nextSibling).toHaveTextContent('targetedSnipe')
-    expect(screen.getByText('buyNowThreshold sent').nextSibling).toHaveTextContent('500')
+    // 0 is a value sent, not "Not sent".
+    expect(screen.getByText('Price threshold per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent(/^0$/)
     expect(screen.getByText('maxPrice sent').nextSibling).toHaveTextContent('Not sent')
     expect(screen.getByText('To pay (currency unconfirmed)').nextSibling).toHaveTextContent('12.5')
     expect(screen.getByText('Balance at send (currency unconfirmed)').nextSibling).toHaveTextContent('5,000')
@@ -116,9 +117,10 @@ describe('VendorPanel', () => {
   })
 
   const POOL_SEND = {
-    orderMode: 'PUBLIC_POOL', endpoint: '/buyCoinsAPI', transferMethod: 'targetedSnipe', buyNowThreshold: 500,
-    buyNowThresholdSource: "the order's amount in K", maxPrice: null, topUpEnabled: 300, autoFinishCycle: 1,
-    senderGroup: null, refusal: null,
+    orderMode: 'PUBLIC_POOL', endpoint: '/buyCoinsAPI', transferMethod: 'targetedSnipe', buyNowThreshold: 0,
+    buyNowThresholdSource: 'the same on every order (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)', maxPrice: null,
+    topUpEnabled: 300, autoFinishCycle: 1, senderGroup: null, refusal: null, minTransferAmount: 50,
+    pauseIfBelowMinTransfer: 0, riskLevel: 1,
   }
 
   it('before anything is sent, says what Approve will send, field by field', () => {
@@ -126,8 +128,10 @@ describe('VendorPanel', () => {
     const note = screen.getByRole('note', { name: 'What Approve sends' })
     expect(note).toHaveTextContent('Approve sends this order to')
     expect(note).toHaveTextContent('Public pool · /buyCoinsAPI')
-    expect(note).toHaveTextContent("transferMethod targetedSnipe · buyNowThreshold 500 (the order's amount in K) · "
-      + 'topUpEnabled 300 · autoFinishCycle 1 · no senderGroup, no supplierID · maxPrice not sent')
+    expect(note).toHaveTextContent('transferMethod targetedSnipe · price threshold per 100K (buyNowThreshold) 0 · '
+      + 'minTransferAmount 50 · pauseIfBelowMinTransfer 0 · topUpEnabled 300 · autoFinishCycle 1 · riskLevel 1 · '
+      + 'no senderGroup, no supplierID · maxPrice not sent')
+    expect(note).not.toHaveTextContent("order's amount")
     expect(note).not.toHaveTextContent('own sender accounts')
   })
 
@@ -170,7 +174,7 @@ describe('VendorPanel', () => {
     // The API omits the fields it has no value for.
     renderPanel(section({ currentOrderMode: 'PUBLIC_POOL', vendorOrder: detail({ orderMode: 'OWN_SENDERS' }) }))
     expect(screen.getByText('Transfer method').nextSibling).toHaveTextContent('Not recorded')
-    expect(screen.getByText('buyNowThreshold sent').nextSibling).toHaveTextContent('Not sent')
+    expect(screen.getByText('Price threshold per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent('Not sent')
     expect(screen.getByText(/Sent as Own senders\. Configured now: Public pool/)).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('undefined')
   })

@@ -41,30 +41,44 @@ class FutTransferConfigTest {
     }
 
     @Test
-    @DisplayName("public-pool numbers must be above zero when given; missing is allowed and refused at Approve")
+    @DisplayName("the threshold may be 0 -- the client's instruction -- never negative; maxPrice above zero when given")
     void publicPoolRanges() {
         assertThat(validator.validate(pool("8.5", true, "9.25"))).isEmpty();
         assertThat(validator.validate(pool(null, true, null))).isEmpty();
-        assertThat(validator.validate(pool("0", false, null))).hasSize(1);
+        assertThat(validator.validate(pool("0", false, null))).isEmpty();
         assertThat(validator.validate(pool("-1", false, null))).hasSize(1);
         assertThat(validator.validate(pool(null, true, "0"))).hasSize(1);
     }
 
     @Test
-    @DisplayName("the defaults bind as documented: public pool, order amount, no maxPrice, and empty means unset")
+    @DisplayName("the defaults bind as documented: threshold 0, no maxPrice; empty is 0; the retired mode still binds")
     void publicPoolBinding() {
-        // What application.yml hands over when none of the new variables is set.
+        // What application.yml hands over when none of the variables is set.
         var source = new MapConfigurationPropertySource(Map.of(
-                "p.buy-now-threshold-mode", "ORDER_AMOUNT",
-                "p.buy-now-threshold", "",
+                "p.buy-now-threshold-mode", "FIXED",
+                "p.buy-now-threshold", "0",
                 "p.send-max-price", "false",
                 "p.max-price", ""));
         AppProperties.FutTransferPublicPool bound = new Binder(source)
                 .bind("p", AppProperties.FutTransferPublicPool.class).get();
-        assertThat(bound.buyNowThresholdMode()).isEqualTo(AppProperties.BuyNowThresholdMode.ORDER_AMOUNT);
-        assertThat(bound.buyNowThreshold()).isNull();
+        assertThat(bound.threshold()).isEqualByComparingTo("0");
         assertThat(bound.sendMaxPrice()).isFalse();
         assertThat(bound.maxPrice()).isNull();
+
+        // Nothing at all: the code's own default, 0.
+        AppProperties.FutTransferPublicPool none = new Binder(new MapConfigurationPropertySource(Map.of("p.send-max-price",
+                "false"))).bindOrCreate("p", AppProperties.FutTransferPublicPool.class);
+        assertThat(none.threshold()).isEqualByComparingTo("0");
+
+        // GFS_FUTTRANSFER_BUY_NOW_THRESHOLD= on Render: still 0, never the order's amount.
+        var empty = new MapConfigurationPropertySource(Map.of("p.buy-now-threshold", ""));
+        assertThat(new Binder(empty).bindOrCreate("p", AppProperties.FutTransferPublicPool.class).threshold())
+                .isEqualByComparingTo("0");
+
+        // A variable still saying ORDER_AMOUNT on Render binds, and does not stop startup.
+        var retired = new MapConfigurationPropertySource(Map.of("p.buy-now-threshold-mode", "ORDER_AMOUNT"));
+        assertThat(new Binder(retired).bindOrCreate("p", AppProperties.FutTransferPublicPool.class).threshold())
+                .isEqualByComparingTo("0");
 
         var fixed = new MapConfigurationPropertySource(Map.of(
                 "p.buy-now-threshold-mode", "FIXED", "p.buy-now-threshold", "8.63"));

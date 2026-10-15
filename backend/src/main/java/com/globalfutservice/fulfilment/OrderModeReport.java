@@ -30,8 +30,12 @@ public final class OrderModeReport {
      */
     public record NextSend(String orderMode, String endpoint, String transferMethod, BigDecimal buyNowThreshold,
                            String buyNowThresholdSource, BigDecimal maxPrice, int topUpEnabled, int autoFinishCycle,
-                           String senderGroup, String refusal) {
+                           String senderGroup, String refusal, int minTransferAmount, int pauseIfBelowMinTransfer,
+                           int riskLevel) {
     }
+
+    /** What the admin page and the startup line call {@code buyNowThreshold}. */
+    public static final String THRESHOLD_LABEL = "price threshold per 100K";
 
     public static NextSend nextSend(AppProperties.FutTransfer cfg, long amountK) {
         boolean ownSenders = cfg.orderMode() == AppProperties.FutTransferOrderMode.OWN_SENDERS;
@@ -41,20 +45,25 @@ public final class OrderModeReport {
         PlacementTerms.Decision decision = PlacementTerms.decide(cfg, amountK);
         if (decision instanceof PlacementTerms.Refuse refuse) {
             return new NextSend(cfg.orderMode().name(), endpoint, cfg.transferMethod(), null, null, null,
-                    order.topUpEnabled(), order.autoFinishCycle(), senderGroup, refuse.reason());
+                    order.topUpEnabled(), order.autoFinishCycle(), senderGroup, refuse.reason(),
+                    order.minTransferAmount(), order.pauseIfBelowMinTransfer(), cfg.riskLevel());
         }
         VendorOrderLedger.SendTerms terms = ((PlacementTerms.Send) decision).terms();
-        String source = ownSenders ? null
-                : cfg.publicPool().buyNowThresholdMode() == AppProperties.BuyNowThresholdMode.ORDER_AMOUNT
-                        ? "the order's amount in K" : "fixed (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)";
+        String source = ownSenders ? null : "the same on every order (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)";
         return new NextSend(terms.orderMode(), endpoint, terms.transferMethod(), terms.buyNowThreshold(), source,
-                terms.maxPrice(), order.topUpEnabled(), order.autoFinishCycle(), senderGroup, null);
+                terms.maxPrice(), order.topUpEnabled(), order.autoFinishCycle(), senderGroup, null,
+                order.minTransferAmount(), order.pauseIfBelowMinTransfer(), cfg.riskLevel());
+    }
+
+    /** A retired setting still saying the order's amount: ignored, and worth a warning. */
+    private static boolean retiredModeSet(AppProperties.FutTransfer cfg) {
+        return cfg.publicPool().buyNowThresholdMode() == AppProperties.BuyNowThresholdMode.ORDER_AMOUNT;
     }
 
     /** True when the line should be a warning: anything but a working public-pool setup. */
     public static boolean isWarning(AppProperties.FutTransfer cfg) {
         return cfg.isConfigured() && (cfg.orderMode() != AppProperties.FutTransferOrderMode.PUBLIC_POOL
-                || PlacementTerms.decide(cfg, 1) instanceof PlacementTerms.Refuse);
+                || PlacementTerms.decide(cfg, 1) instanceof PlacementTerms.Refuse || retiredModeSet(cfg));
     }
 
     /** The line logged at every startup. */
@@ -74,11 +83,12 @@ public final class OrderModeReport {
             return LOG_PREFIX + " PUBLIC_POOL, but every Approve will be refused: " + refuse.reason();
         }
         AppProperties.FutTransferPublicPool pool = cfg.publicPool();
-        String threshold = pool.buyNowThresholdMode() == AppProperties.BuyNowThresholdMode.ORDER_AMOUNT
-                ? "the order's amount in K" : pool.buyNowThreshold().toPlainString() + " on every order";
         return LOG_PREFIX + " PUBLIC_POOL -- Approve sends /buyCoinsAPI (transferMethod=" + cfg.transferMethod()
-                + ", buyNowThreshold=" + threshold + ", topUpEnabled=" + order.topUpEnabled() + ", autoFinishCycle="
-                + order.autoFinishCycle() + ", maxPrice " + (pool.sendMaxPrice() ? pool.maxPrice().toPlainString()
-                : "not sent") + "; no senderGroup, no supplierID).";
+                + ", buyNowThreshold (" + THRESHOLD_LABEL + ")=" + pool.threshold().toPlainString() + " on every order"
+                + ", minTransferAmount=" + order.minTransferAmount() + ", topUpEnabled=" + order.topUpEnabled()
+                + ", autoFinishCycle=" + order.autoFinishCycle() + ", maxPrice "
+                + (pool.sendMaxPrice() ? pool.maxPrice().toPlainString() : "not sent") + "; no senderGroup, no supplierID)."
+                + (retiredModeSet(cfg) ? " GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE=ORDER_AMOUNT is set but ignored: the "
+                + "threshold never comes from the order's amount. Remove the variable." : "");
     }
 }

@@ -60,6 +60,10 @@ final class VendorTestSupport {
     static final AppProperties.FutTransferPublicPool ORDER_AMOUNT_POOL = new AppProperties.FutTransferPublicPool(
             AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, false, null);
 
+    /** The public pool as configured by default now: threshold 0 on every order, no maxPrice. */
+    static final AppProperties.FutTransferPublicPool DEFAULT_POOL = new AppProperties.FutTransferPublicPool(
+            AppProperties.BuyNowThresholdMode.FIXED, java.math.BigDecimal.ZERO, false, null);
+
     static AppProperties publicPool(String baseUrl, Duration timeout, AppProperties.FutTransferPublicPool pool) {
         return props(baseUrl, NO_BACKUP, timeout, AppProperties.FutTransferOrderMode.PUBLIC_POOL, pool);
     }

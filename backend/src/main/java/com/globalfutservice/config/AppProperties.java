@@ -732,11 +732,14 @@ public record AppProperties(
         OWN_SENDERS
     }
 
-    /** Where a public-pool order's {@code buyNowThreshold} comes from. */
+    /**
+     * Retired: where a public-pool order's {@code buyNowThreshold} came from. It is always the
+     * configured number now, never the order's amount. Still bound, so a variable left set on
+     * Render does not stop startup; ORDER_AMOUNT is ignored, and the startup line says so.
+     */
     public enum BuyNowThresholdMode {
-        /** The order's coins in K, the same number as {@code amount}: the client's decision. */
+        /** Ignored: the threshold never comes from the order's amount. */
         ORDER_AMOUNT,
-        /** {@code gfs.fut-transfer.public-pool.buy-now-threshold}, the same on every order. */
         FIXED
     }
 
@@ -748,21 +751,27 @@ public record AppProperties(
      * needed and missing does not: FIXED without a threshold, or {@code sendMaxPrice}
      * without a price, makes Approve refuse with the reason instead.
      *
-     * @param buyNowThresholdMode ORDER_AMOUNT or FIXED. The vendor documents
-     *                            {@code buyNowThreshold} as a price threshold per 100K; the
-     *                            client has decided to send the order's amount in K, and the
-     *                            first supervised order confirms what the vendor makes of it
-     * @param buyNowThreshold     the value FIXED sends, in the vendor's unit (per 100K)
+     * @param buyNowThresholdMode retired, see {@link BuyNowThresholdMode}; ignored
+     * @param buyNowThreshold     sent on every public-pool order: the vendor's "price threshold
+     *                            per 100K", in its own currency. Never the order's amount. 0 is
+     *                            the client's instruction (2026-10-15) and the default; set
+     *                            GFS_FUTTRANSFER_BUY_NOW_THRESHOLD to change it. Unset or empty
+     *                            means 0
      * @param sendMaxPrice        whether {@code maxPrice} is sent at all. Off until FUT
      *                            Transfer confirms its currency and unit
-     * @param maxPrice            the vendor's "maximum price per 100K"; it states no currency.
-     *                            No default
+     * @param maxPrice            the vendor's "maximum price per 100K", in FUT Transfer's
+     *                            currency -- never our own (rupee) price. No default
      */
     public record FutTransferPublicPool(
-            @DefaultValue("ORDER_AMOUNT") BuyNowThresholdMode buyNowThresholdMode,
-            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal buyNowThreshold,
+            @DefaultValue("FIXED") BuyNowThresholdMode buyNowThresholdMode,
+            @DefaultValue("0") @DecimalMin(value = "0") java.math.BigDecimal buyNowThreshold,
             @DefaultValue("false") boolean sendMaxPrice,
             @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxPrice) {
+
+        /** What is sent: the configured threshold, 0 when unset. */
+        public java.math.BigDecimal threshold() {
+            return buyNowThreshold == null ? java.math.BigDecimal.ZERO : buyNowThreshold;
+        }
     }
 
     /**

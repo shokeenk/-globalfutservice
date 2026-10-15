@@ -376,7 +376,8 @@ class VendorAdminActionsPostgresTest {
         assertThat(s.nextSend().orderMode()).isEqualTo("PUBLIC_POOL");
         assertThat(s.nextSend().endpoint()).isEqualTo("/buyCoinsAPI");
         assertThat(s.nextSend().transferMethod()).isEqualTo("targetedSnipe");
-        assertThat(s.nextSend().buyNowThreshold()).isEqualByComparingTo("500");
+        assertThat(s.nextSend().buyNowThreshold()).isEqualByComparingTo("0");
+        assertThat(s.nextSend().minTransferAmount()).isEqualTo(50);
         assertThat(s.nextSend().senderGroup()).isNull();
         assertThat(s.nextSend().topUpEnabled()).isEqualTo(300);
         assertThat(s.nextSend().autoFinishCycle()).isEqualTo(1);

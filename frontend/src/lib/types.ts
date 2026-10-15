@@ -1394,6 +1394,10 @@ export interface VendorNextSend {
   senderGroup: string | null
   /** Why Approve would send nothing at all, or null. */
   refusal: string | null
+  /** The rest of what Approve sends, as configured: smallest single transfer in K, and so on. */
+  minTransferAmount?: number
+  pauseIfBelowMinTransfer?: number
+  riskLevel?: number
 }
 
 /** The balance FUT Transfer reports, read live. Its currency is not confirmed. */

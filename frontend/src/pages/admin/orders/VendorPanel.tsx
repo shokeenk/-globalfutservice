@@ -164,7 +164,7 @@ export function VendorPanel({
           <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
             <Cell label="Order mode" value={orderModeLabel(v.orderMode)} />
             <Cell label="Transfer method" value={v.transferMethod ?? 'Not recorded'} mono />
-            <Cell label="buyNowThreshold sent" value={v.buyNowThresholdSent == null ? 'Not sent' : asReported(v.buyNowThresholdSent)} />
+            <Cell label="Price threshold per 100K (buyNowThreshold) sent" value={v.buyNowThresholdSent == null ? 'Not sent' : asReported(v.buyNowThresholdSent)} />
             <Cell label="maxPrice sent" value={v.maxPriceSent == null ? 'Not sent' : asReported(v.maxPriceSent)} />
             <Cell label="Balance at send (currency unconfirmed)" value={asReported(v.balanceAtSend)} />
           </dl>
@@ -287,10 +287,12 @@ function NextSend({ next }: { next: VendorNextSend }) {
   const warn = own || next.refusal != null
   const fields = [
     `transferMethod ${next.transferMethod}`,
-    ...(own ? [] : [`buyNowThreshold ${asReported(next.buyNowThreshold)}${next.buyNowThresholdSource
-      ? ` (${next.buyNowThresholdSource})` : ''}`]),
+    ...(own ? [] : [`price threshold per 100K (buyNowThreshold) ${asReported(next.buyNowThreshold)}`]),
+    `minTransferAmount ${next.minTransferAmount}`,
+    `pauseIfBelowMinTransfer ${next.pauseIfBelowMinTransfer}`,
     `topUpEnabled ${next.topUpEnabled}`,
     `autoFinishCycle ${next.autoFinishCycle}`,
+    `riskLevel ${next.riskLevel}`,
     own ? `senderGroup ${next.senderGroup}` : 'no senderGroup, no supplierID',
     ...(own ? [] : [next.maxPrice == null ? 'maxPrice not sent' : `maxPrice ${asReported(next.maxPrice)}`]),
   ]
