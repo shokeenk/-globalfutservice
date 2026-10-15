@@ -80,3 +80,20 @@ DELIVERED comes only from the finished rules: `status` `finished` or `simplified
 - **Rate**: `/buyConditionAPI` with the platform (`PS`, which covers Xbox, or `PC`), then the supplier's `priceConsole` or `pricePC`. Re-check it just before sending. Never send the slider quantity or the order total as `buyNowThreshold`, and count tool and transfer fees only once.
 - **`minTransferAmount`**: the API default is 0 (off); 50 means 50K per transfer. To turn it off, send `"minTransferAmount": 0` explicitly. `targetedSnipe` needs at least 6K in total.
 
+### What we send (PR #124, 2026-10-15)
+
+- **`buyNowThreshold`**, worked out on every send, first send or retry:
+  1. Read `/buyConditionAPI` for the order's platform (`PS` for PlayStation and Xbox, `PC` for PC). This is the same call that reads our balance.
+  2. Take the public `suppliers` with a price and stock on that side (`priceConsole`/`stockConsole`, or `pricePC`/`stockPC`, stock in K). Private suppliers are ignored.
+  3. Sort them cheapest first. The **clearing rate** is the price of the supplier at which their combined stock first covers the order.
+  4. Add `GFS_FUTTRANSFER_THRESHOLD_MARGIN_PCT` (default 10%) and round to 2 decimals.
+  - With `GFS_FUTTRANSFER_MAX_EUR_PER_100K_CONSOLE` / `_PC` set: if the clearing rate is above the limit, nothing is sent and the order waits for Approve ("FUT Transfer price €X/100K is above your limit €Y"). If only the margin goes above it, the limit is sent.
+  - A failed read, or not enough priced stock, sends nothing. Automatic sending tries again shortly.
+  - The result is never 0, never negative, never missing, never the order's quantity and never our rupee price.
+  - `GFS_FUTTRANSFER_BUY_NOW_THRESHOLD` is an emergency fixed value only. It must be positive and within the limit.
+- **`minTransferAmount`**: 0 by default, always sent.
+- **`maxPrice`**: not sent (`GFS_FUTTRANSFER_SEND_MAX_PRICE=false`).
+- **Recorded per order** (V54): the supplier rate, the margin, the threshold sent and `transferFee`. Admin shows these with an estimated cost and what the customer paid.
+  - Estimated cost = amount / 100K × (rate + `transferFee`), with the fee counted once.
+  - **Unconfirmed assumption**: that `transferFee` is per 100K. `toolFee` is documented as applying to private suppliers only, so it is not added.
+- **Still exactly one `/buyCoinsAPI` call per order.**
