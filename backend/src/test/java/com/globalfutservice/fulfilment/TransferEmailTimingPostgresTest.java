@@ -87,7 +87,7 @@ class TransferEmailTimingPostgresTest {
         db.jdbc.update("update vendor_order set tracking_email_at = now() where tracking_email_at is null");
         db.jdbc.update("update vendor_control set next_poll_at = null, backoff_level = 0, paused = false");
         vendor = new FakeFutTransfer();
-        vendor.on("/buyConditionAPI", Reply.ok("{\"balance\":155.5821}"));
+        vendor.on("/buyConditionAPI", Reply.ok(FakeFutTransfer.POOL_CONDITIONS));
         AppProperties props = VendorTestSupport.publicPool(vendor.baseUrl(), Duration.ofMillis(800),
                 VendorTestSupport.ORDER_AMOUNT_POOL);
         notifications = mock(NotificationService.class);

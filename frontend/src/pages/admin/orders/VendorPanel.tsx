@@ -164,7 +164,11 @@ export function VendorPanel({
           <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
             <Cell label="Order mode" value={orderModeLabel(v.orderMode)} />
             <Cell label="Transfer method" value={v.transferMethod ?? 'Not recorded'} mono />
-            <Cell label="buyNowThreshold sent" value={v.buyNowThresholdSent == null ? 'Not sent' : asReported(v.buyNowThresholdSent)} />
+            <Cell label="Supplier rate (€ per 100K)" value={v.supplierRateSent == null ? 'Not recorded' : euro(v.supplierRateSent)} />
+            <Cell label="Margin" value={v.thresholdMarginPct == null ? (v.buyNowThresholdSent == null ? '—' : 'Fixed') : `${asReported(v.thresholdMarginPct)}%`} />
+            <Cell label="Price ceiling per 100K (buyNowThreshold) sent" value={v.buyNowThresholdSent == null ? 'Not sent' : euro(v.buyNowThresholdSent)} />
+            <Cell label="Estimated cost (FUT Transfer)" value={v.estimatedCostEur == null ? '—' : euro(v.estimatedCostEur)} />
+            <Cell label="Customer paid" value={section.customerPaid ?? '—'} />
             <Cell label="maxPrice sent" value={v.maxPriceSent == null ? 'Not sent' : asReported(v.maxPriceSent)} />
             <Cell label="Balance at send (currency unconfirmed)" value={asReported(v.balanceAtSend)} />
           </dl>
@@ -287,10 +291,12 @@ function NextSend({ next }: { next: VendorNextSend }) {
   const warn = own || next.refusal != null
   const fields = [
     `transferMethod ${next.transferMethod}`,
-    ...(own ? [] : [`buyNowThreshold ${asReported(next.buyNowThreshold)}${next.buyNowThresholdSource
-      ? ` (${next.buyNowThresholdSource})` : ''}`]),
+    ...(own ? [] : [`price ceiling per 100K (buyNowThreshold) ${next.buyNowThreshold == null ? '—' : euro(next.buyNowThreshold)}`]),
+    `minTransferAmount ${next.minTransferAmount}`,
+    `pauseIfBelowMinTransfer ${next.pauseIfBelowMinTransfer}`,
     `topUpEnabled ${next.topUpEnabled}`,
     `autoFinishCycle ${next.autoFinishCycle}`,
+    `riskLevel ${next.riskLevel}`,
     own ? `senderGroup ${next.senderGroup}` : 'no senderGroup, no supplierID',
     ...(own ? [] : [next.maxPrice == null ? 'maxPrice not sent' : `maxPrice ${asReported(next.maxPrice)}`]),
   ]
@@ -308,6 +314,15 @@ function NextSend({ next }: { next: VendorNextSend }) {
         <p className="mt-1.5 text-[13px] text-warn">Approve would send nothing: {next.refusal}</p>
       ) : (
         <p className="mt-1.5 font-mono text-[12px] leading-relaxed text-chalk-muted">{fields.join(' · ')}</p>
+      )}
+      {!own && (next.supplierRate != null || next.limit != null) && (
+        <p className="mt-1.5 text-[12.5px] text-chalk-muted" data-testid="live-price">
+          FUT Transfer now: supplier rate {next.supplierRate == null ? '—' : `${euro(next.supplierRate)}/100K`}
+          {next.marginPct != null ? ` · margin ${asReported(next.marginPct)}%` : ''}
+          {` · limit ${next.limit == null ? 'none' : `${euro(next.limit)}/100K`}`}
+          {next.estimatedCostEur != null ? ` · estimated cost ${euro(next.estimatedCostEur)}` : ''}
+          {next.priceNote ? ` (${next.priceNote})` : ''}
+        </p>
       )}
       {own && !next.refusal && (
         <p className="mt-1.5 text-[12.5px] text-warn">
@@ -477,6 +492,11 @@ function PartnerLink({
       {said && <span className={`block text-[12.5px] ${said.ok ? 'text-ok' : 'text-warn'}`}>{said.text}</span>}
     </span>
   )
+}
+
+/** A figure in euros, as FUT Transfer prices and charges. */
+function euro(value: number): string {
+  return `€${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
 
 function Line({ label, wide = false, children }: { label: string; wide?: boolean; children: ReactNode }) {

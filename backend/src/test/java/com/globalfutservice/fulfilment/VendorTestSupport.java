@@ -33,7 +33,7 @@ final class VendorTestSupport {
 
     /** GFS Transfer Method 3.0, exactly as the client's brief gives it. */
     static final AppProperties.FutTransferOrder METHOD_3_0 = new AppProperties.FutTransferOrder(
-            300, 1, 50, 0, "1", 0, "0", "0", 0, "-1", "-1");
+            300, 1, 0, 0, "1", 0, "0", "0", 0, "-1", "-1");
 
     private VendorTestSupport() {
     }
@@ -59,6 +59,13 @@ final class VendorTestSupport {
     /** The client's public-pool decisions: buyNowThreshold is the amount in K; no maxPrice. */
     static final AppProperties.FutTransferPublicPool ORDER_AMOUNT_POOL = new AppProperties.FutTransferPublicPool(
             AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, false, null);
+
+    /**
+     * The public pool as configured by default now: no fixed threshold -- it is worked out from
+     * FUT Transfer's prices at each send, + 10% -- no limits, no maxPrice.
+     */
+    static final AppProperties.FutTransferPublicPool DEFAULT_POOL = new AppProperties.FutTransferPublicPool(
+            AppProperties.BuyNowThresholdMode.FIXED, null, false, null);
 
     static AppProperties publicPool(String baseUrl, Duration timeout, AppProperties.FutTransferPublicPool pool) {
         return props(baseUrl, NO_BACKUP, timeout, AppProperties.FutTransferOrderMode.PUBLIC_POOL, pool);

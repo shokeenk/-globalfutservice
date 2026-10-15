@@ -447,6 +447,55 @@ public class FutTransferClient {
      *
      * @param publicRef the order it is read for, or null when an admin is only looking
      */
+    /**
+     * One public supplier in /buyConditionAPI's answer: price per 100K (EUR) and stock (in K),
+     * for consoles and for PC. Its id and email hash are never kept.
+     */
+    public record PoolSupplier(BigDecimal priceConsole, BigDecimal stockConsoleK, BigDecimal pricePc,
+                               BigDecimal stockPcK) {
+    }
+
+    /**
+     * /buyConditionAPI, read for one platform: the public suppliers, the fees and the balance,
+     * as reported. Private suppliers are not ours to buy from in the public pool, so are left out.
+     */
+    public record BuyConditions(List<PoolSupplier> suppliers, BigDecimal transferFee, BigDecimal toolFee,
+                                BigDecimal balance) {
+    }
+
+    /** "PS" covers Xbox too; "PC" is PC (FUT Transfer, 2026-10-15). */
+    public static String poolPlatform(Platform platform) {
+        return platform == Platform.PC ? "PC" : "PS";
+    }
+
+    /**
+     * The public pool's prices for one platform, just before a send ({@code /buyConditionAPI}).
+     * A read: it may fall back to the backup domain. Prices only -- never logged beyond whether
+     * it was read.
+     */
+    public Read<BuyConditions> buyConditions(Platform platform, String publicRef) {
+        Map<String, Object> body = auth();
+        body.put("platform", poolPlatform(platform));
+        Exchange ex = readExchange("/buyConditionAPI", body, publicRef == null ? List.of() : List.of(publicRef));
+        Read<BuyConditions> read = classifyRead(ex, json -> {
+            List<PoolSupplier> suppliers = new java.util.ArrayList<>();
+            JsonNode list = json.get("suppliers");
+            if (list != null && list.isArray()) {
+                for (JsonNode s : list) {
+                    if (!s.isObject()) continue;
+                    suppliers.add(new PoolSupplier(asDecimal(s, "priceConsole"), asDecimal(s, "stockConsole"),
+                            asDecimal(s, "pricePC"), asDecimal(s, "stockPC")));
+                }
+            }
+            return new BuyConditions(List.copyOf(suppliers), asDecimal(json, "transferFee"),
+                    asDecimal(json, "toolFee"), asDecimal(json, "balance"));
+        });
+        log.info("FUT Transfer buy conditions{} ({}): {}", publicRef == null ? "" : " for " + publicRef,
+                poolPlatform(platform), read instanceof ReadFailed<BuyConditions> f ? f.error() + " (" + f.code() + ")"
+                        : ((ReadOk<BuyConditions>) read).value().suppliers().size() + " public supplier(s)");
+        return read;
+    }
+
     public Read<BigDecimal> balance(String publicRef) {
         Exchange ex = readExchange("/buyConditionAPI", auth(), publicRef == null ? List.of() : List.of(publicRef));
         Read<BigDecimal> read = classifyRead(ex, json -> {

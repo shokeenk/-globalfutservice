@@ -411,7 +411,7 @@ class AutoDispatchPostgresTest {
 
     private App pool() {
         App app = new App(ON, true, AppProperties.FutTransferOrderMode.PUBLIC_POOL);
-        vendor.on("/buyConditionAPI", Reply.ok("{\"balance\":155.5821}"));
+        vendor.on("/buyConditionAPI", Reply.ok(FakeFutTransfer.POOL_CONDITIONS));
         // What FUT Transfer answers for every public-pool order; never asked any more.
         vendor.on("/getCooldownStatus", Reply.of(400, "{\"error\":\"apiOrderOnly\"}"));
         return app;

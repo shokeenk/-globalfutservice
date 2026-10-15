@@ -63,9 +63,8 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class VendorPublicPoolPostgresTest {
 
-    /** The collection's "Get Buy Conditions" example, trimmed. */
-    private static final String CONDITIONS =
-            "{\"transferFee\":0,\"suppliers\":[],\"privateSuppliers\":[],\"toolFee\":0.25,\"balance\":5000}";
+    /** The collection's "Get Buy Conditions" shape, with public stock at 4.00 (console) and 6.00 (PC). */
+    private static final String CONDITIONS = FakeFutTransfer.POOL_CONDITIONS;
 
     private static final AppProperties.FutTransferPublicPool ORDER_AMOUNT = VendorTestSupport.ORDER_AMOUNT_POOL;
 
@@ -223,7 +222,16 @@ class VendorPublicPoolPostgresTest {
         assertThat(sent.get("topUpEnabled").asInt()).isEqualTo(300);
         assertThat(sent.get("autoFinishCycle").asInt()).isEqualTo(1);
         assertThat(sent.get("amount").asLong()).isEqualTo(500);
-        assertThat(sent.get("buyNowThreshold").decimalValue()).isEqualByComparingTo("500");
+        // FUT Transfer's console price (4.00) + 10%, as a number: never 0, never the order's 500K.
+        assertThat(sent.get("buyNowThreshold").isNumber()).isTrue();
+        assertThat(sent.get("buyNowThreshold").decimalValue()).isEqualByComparingTo("4.40");
+        // 0 = off, sent explicitly.
+        assertThat(sent.has("minTransferAmount")).isTrue();
+        assertThat(sent.get("minTransferAmount").asInt()).isZero();
+        // The same read the threshold came from, once, for the order's platform.
+        assertThat(vendor.calls("/buyConditionAPI")).isOne();
+        assertThat(vendor.requests().stream().filter(q -> q.path().equals("/buyConditionAPI")).findFirst().orElseThrow()
+                .body().get("platform").asText()).isEqualTo("PS");
         assertThat(fields(sent)).doesNotContain("supplierID", "privateSupplier", "playerToBuy", "maxPrice", "senderGroup");
 
         Map<String, Object> r = row(id);
@@ -231,22 +239,76 @@ class VendorPublicPoolPostgresTest {
         assertThat(r.get("vendor_order_id")).isEqualTo(vid);
         assertThat(r.get("order_mode")).isEqualTo("PUBLIC_POOL");
         assertThat(r.get("transfer_method")).isEqualTo("targetedSnipe");
-        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("500");
+        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("4.40");
+        assertThat((BigDecimal) r.get("supplier_rate_sent")).isEqualByComparingTo("4");
+        assertThat((BigDecimal) r.get("threshold_margin_pct")).isEqualByComparingTo("10");
+        assertThat((BigDecimal) r.get("transfer_fee_at_send")).isEqualByComparingTo("0");
         assertThat(r.get("max_price_sent")).isNull();
         assertThat((BigDecimal) r.get("balance_at_send")).isEqualByComparingTo("5000");
+        assertThat(vendor.calls("/buyCoinsAPI")).as("exactly one /buyCoinsAPI call").isOne();
     }
 
     @Test
-    @DisplayName("a balance that cannot be read is left blank, and the order is sent all the same")
-    void balanceReadFails() {
+    @DisplayName("FUT Transfer's prices cannot be read: nothing claimed or sent, and it is tried again later")
+    void priceReadFails() {
         long id = insertOrder("GFS-26-POOLBAL01", "0.5");
         vendor.on("/buyConditionAPI", Reply.of(503, "down"));
         backup.on("/buyConditionAPI", Reply.of(503, "down"));
         vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vendorId())));
+        App a = pool();
 
+        SupplierFulfilmentService.Release r = a.approve(order(id, "GFS-26-POOLBAL01", "0.5")).r();
+
+        assertThat(r.result()).isEqualTo(Result.NOT_SENT);
+        assertThat(r.retryable()).as("temporary: the queue tries again").isTrue();
+        assertThat(r.message()).contains("could not be read");
+        assertThat(vendor.calls("/buyCoinsAPI")).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Integer.class, id)).isZero();
+        verify(a.vault(), never()).reveal(anyLong(), any());
+
+        // Prices back: sent, once.
+        vendor.on("/buyConditionAPI", Reply.ok(CONDITIONS));
         assertThat(pool().approve(order(id, "GFS-26-POOLBAL01", "0.5")).r().result()).isEqualTo(Result.SUBMITTED);
-        assertThat(row(id).get("balance_at_send")).isNull();
-        assertThat(vendor.calls("/buyCoinsAPI")).isEqualTo(1);
+        assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+    }
+
+    @Test
+    @DisplayName("FUT Transfer's price above the limit: nothing sent, left for Approve with the price and the limit")
+    void aboveLimit() {
+        long id = insertOrder("GFS-26-POOLLIM01", "0.5");
+        var limited = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null,
+                BigDecimal.TEN, new BigDecimal("3.50"), null);
+        SupplierFulfilmentService.Release r = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, limited)
+                .approve(order(id, "GFS-26-POOLLIM01", "0.5")).r();
+
+        assertThat(r.result()).isEqualTo(Result.NOT_SENT);
+        assertThat(r.retryable()).as("waits for an admin").isFalse();
+        assertThat(r.message()).startsWith("FUT Transfer price €4/100K is above your limit €3.5.");
+        assertThat(vendor.calls("/buyCoinsAPI")).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Integer.class, id)).isZero();
+
+        // Only the margin over the limit: sent at the limit.
+        var capped = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null,
+                BigDecimal.TEN, new BigDecimal("4.20"), null);
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vendorId())));
+        assertThat(app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, capped)
+                .approve(order(id, "GFS-26-POOLLIM01", "0.5")).r().result()).isEqualTo(Result.SUBMITTED);
+        assertThat(lastBuy().get("buyNowThreshold").decimalValue()).isEqualByComparingTo("4.20");
+        assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+    }
+
+    @Test
+    @DisplayName("PC orders use FUT Transfer's PC prices: 6.00 + 10%")
+    void pcPrices() {
+        long id = insertOrder("GFS-26-POOLPC001", "0.5");
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vendorId())));
+        OrderEntity o = order(id, "GFS-26-POOLPC001", "0.5");
+        when(o.getPlatform()).thenReturn(Platform.PC);
+
+        assertThat(pool().approve(o).r().result()).isEqualTo(Result.SUBMITTED);
+        assertThat(lastBuy().get("buyNowThreshold").decimalValue()).isEqualByComparingTo("6.60");
+        assertThat(vendor.requests().stream().filter(q -> q.path().equals("/buyConditionAPI")).findFirst().orElseThrow()
+                .body().get("platform").asText()).isEqualTo("PC");
     }
 
     @Test
@@ -271,17 +333,13 @@ class VendorPublicPoolPostgresTest {
     @DisplayName("a needed setting that is missing: Approve refuses and says which, before the vault or the vendor")
     void missingSettingRefused() {
         long id = insertOrder("GFS-26-POOLMISS1", "0.5");
-        var noThreshold = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null);
-        App a = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, noThreshold);
+        // No threshold set is not missing: it is worked out from FUT Transfer's prices. maxPrice on with no value is.
+        var noPrice = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, true, null);
+        App a = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, noPrice);
         SupplierFulfilmentService.Release r = a.approve(order(id, "GFS-26-POOLMISS1", "0.5")).r();
         assertThat(r.result()).isEqualTo(Result.NOT_SENT);
-        assertThat(r.message()).contains("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD").contains("Nothing was sent");
+        assertThat(r.message()).contains("GFS_FUTTRANSFER_MAX_PRICE").contains("Nothing was sent");
         verify(a.vault(), never()).reveal(anyLong(), any());
-
-        var noPrice = new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.ORDER_AMOUNT, null, true, null);
-        r = app(AppProperties.FutTransferOrderMode.PUBLIC_POOL, noPrice).approve(order(id, "GFS-26-POOLMISS1", "0.5")).r();
-        assertThat(r.result()).isEqualTo(Result.NOT_SENT);
-        assertThat(r.message()).contains("GFS_FUTTRANSFER_MAX_PRICE");
 
         assertThat(jdbc.queryForObject("select count(*) from vendor_order where order_id = ?", Integer.class, id)).isZero();
         assertThat(vendor.requests()).isEmpty();
@@ -474,7 +532,7 @@ class VendorPublicPoolPostgresTest {
         Map<String, Object> r = row(id);
         assertThat(r.get("order_mode")).isEqualTo("PUBLIC_POOL");
         assertThat(r.get("attempts")).isEqualTo(2);
-        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("1000");
+        assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("4.40");
         assertThat(vendor.calls("/orderAPI")).isOne();
         assertThat(vendor.calls("/buyCoinsAPI")).isOne();
     }

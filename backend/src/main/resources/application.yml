@@ -364,7 +364,8 @@ gfs:
     order:
       top-up-enabled: ${GFS_FUTTRANSFER_TOP_UP:300}
       auto-finish-cycle: ${GFS_FUTTRANSFER_AUTO_FINISH_CYCLE:1}
-      min-transfer-amount: ${GFS_FUTTRANSFER_MIN_TRANSFER:50}
+      # 0 = off, sent explicitly on every order (FUT Transfer: 50 would mean 50K per transfer).
+      min-transfer-amount: ${GFS_FUTTRANSFER_MIN_TRANSFER:0}
       pause-if-below-min-transfer: ${GFS_FUTTRANSFER_PAUSE_IF_BELOW_MIN:0}
       update-customer: "${GFS_FUTTRANSFER_UPDATE_CUSTOMER:1}"
       stop-order-after-onboarding: ${GFS_FUTTRANSFER_STOP_AFTER_ONBOARDING:0}
@@ -398,10 +399,18 @@ gfs:
     order-mode: ${GFS_FUTTRANSFER_ORDER_MODE:PUBLIC_POOL}
     # Only public-pool orders use these.
     public-pool:
-      # ORDER_AMOUNT: the order's coins in K. FIXED: buy-now-threshold below.
-      buy-now-threshold-mode: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE:ORDER_AMOUNT}
+      # Retired and ignored: the threshold never comes from the order's amount.
+      buy-now-threshold-mode: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE:FIXED}
+      # buyNowThreshold is a price ceiling in EUR per 100K, worked out on every send from
+      # /buyConditionAPI: the clearing supplier price for the order's platform + the margin.
+      # Set this only as an emergency fixed value (positive, within the limit).
       buy-now-threshold: ${GFS_FUTTRANSFER_BUY_NOW_THRESHOLD:}
-      # maxPrice is not sent unless this is true; then max-price must be set.
+      threshold-margin-pct: ${GFS_FUTTRANSFER_THRESHOLD_MARGIN_PCT:10}
+      # Optional ceilings, EUR per 100K. A supplier price above one: not sent, left for Approve.
+      max-eur-per100k-console: ${GFS_FUTTRANSFER_MAX_EUR_PER_100K_CONSOLE:}
+      max-eur-per100k-pc: ${GFS_FUTTRANSFER_MAX_EUR_PER_100K_PC:}
+      # maxPrice is not sent unless this is true; then max-price must be set, in FUT Transfer's
+      # currency per 100K -- never our own price.
       send-max-price: ${GFS_FUTTRANSFER_SEND_MAX_PRICE:false}
       max-price: ${GFS_FUTTRANSFER_MAX_PRICE:}
 

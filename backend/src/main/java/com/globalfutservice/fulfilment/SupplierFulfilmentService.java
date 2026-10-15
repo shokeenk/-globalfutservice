@@ -57,6 +57,10 @@ public class SupplierFulfilmentService {
      * order -- it is for orders sent from our own senders (/orderAPI). Not in its collection;
      * seen in production. Never a reason to hold an order back.
      */
+    /** Not sent because FUT Transfer's price could not be read or used just now: tried again shortly. */
+    static final String PRICE_UNAVAILABLE = "PRICE_UNAVAILABLE";
+    /** Not sent because FUT Transfer's price is above the configured limit: waits for an admin. */
+    static final String ABOVE_LIMIT = "PRICE_ABOVE_LIMIT";
     static final String COOLDOWN_NOT_APPLICABLE = "apiOrderOnly";
 
     private final FutTransferClient client;
@@ -198,6 +202,33 @@ public class SupplierFulfilmentService {
         }
         VendorOrderLedger.SendTerms terms = ((PlacementTerms.Send) decision).terms();
 
+        /*
+         * Public pool: buyNowThreshold is a price ceiling in EUR per 100K (FUT Transfer,
+         * 2026-10-15), worked out from FUT Transfer's own prices, read just now for the order's
+         * platform. No usable price: nothing is claimed or sent, and it is tried again shortly.
+         * The price above the limit: nothing is sent, and it waits for an admin.
+         */
+        FutTransferClient.BuyConditions market = null;
+        if (terms.publicPool()) {
+            if (client.buyConditions(order.getPlatform(), ref)
+                    instanceof FutTransferClient.ReadOk<FutTransferClient.BuyConditions> ok) {
+                market = ok.value();
+            }
+            switch (PoolThreshold.decide(market, order.getPlatform(), amountK, props.futTransfer().publicPool())) {
+                case PoolThreshold.Unavailable u -> {
+                    log.info("FUT Transfer price for {} not usable now: {}", ref, u.reason());
+                    return new Release(Result.NOT_SENT, null, u.reason() + " Nothing was sent; it is tried again "
+                            + "shortly.", true, PRICE_UNAVAILABLE);
+                }
+                case PoolThreshold.AboveLimit a -> {
+                    log.info("FUT Transfer price for {} above the limit: {}", ref, a.message());
+                    return new Release(Result.NOT_SENT, null, a.message() + " Nothing was sent. Approve it once the "
+                            + "price is acceptable, or raise the limit.", false, ABOVE_LIMIT);
+                }
+                case PoolThreshold.Price price -> terms = terms.priced(price);
+            }
+        }
+
         CredentialDtos.RevealedCredentials creds;
         try {
             // As the system, not the operator: the vault attributes every read.
@@ -259,7 +290,10 @@ public class SupplierFulfilmentService {
 
         FutTransferClient.Placement placement;
         if (terms.publicPool()) {
-            recordBalance(order.getId(), ref);
+            // The balance from the same read the threshold came from: no second call.
+            if (market != null && market.balance() != null) {
+                ledger.recordBalanceAtSend(order.getId(), market.balance());
+            }
             placement = client.buyCoins(ref, customerNameFor(order), order.getPlatform(), amountK, creds,
                     terms.buyNowThreshold(), terms.maxPrice());
         } else {
@@ -275,17 +309,6 @@ public class SupplierFulfilmentService {
                             + "documentation does not explain, so we cannot tell whether the order was "
                             + "created. Check the FUT Transfer dashboard for " + ref + ".");
         };
-    }
-
-    /**
-     * The balance FUT Transfer reports, kept on the vendor order for margin tracking. Read
-     * just before the purchase; a failed read is noted in the call log and nothing else --
-     * it never stops or delays the send beyond the read itself.
-     */
-    private void recordBalance(long orderId, String ref) {
-        if (client.balance(ref) instanceof FutTransferClient.ReadOk<java.math.BigDecimal> ok) {
-            ledger.recordBalanceAtSend(orderId, ok.value());
-        }
     }
 
     /**

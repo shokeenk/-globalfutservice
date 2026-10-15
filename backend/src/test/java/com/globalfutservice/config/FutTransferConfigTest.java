@@ -41,30 +41,80 @@ class FutTransferConfigTest {
     }
 
     @Test
-    @DisplayName("public-pool numbers must be above zero when given; missing is allowed and refused at Approve")
+    @DisplayName("a fixed threshold must be above 0 (FUT Transfer: 0 is not unlimited); maxPrice and the limits "
+            + "above 0 when given; the margin 0-100%")
     void publicPoolRanges() {
         assertThat(validator.validate(pool("8.5", true, "9.25"))).isEmpty();
         assertThat(validator.validate(pool(null, true, null))).isEmpty();
         assertThat(validator.validate(pool("0", false, null))).hasSize(1);
         assertThat(validator.validate(pool("-1", false, null))).hasSize(1);
         assertThat(validator.validate(pool(null, true, "0"))).hasSize(1);
+
+        assertThat(validator.validate(pricing("10", "4.50", "6"))).isEmpty();
+        assertThat(validator.validate(pricing("0", null, null))).isEmpty();
+        assertThat(validator.validate(pricing("-1", null, null))).hasSize(1);
+        assertThat(validator.validate(pricing("101", null, null))).hasSize(1);
+        assertThat(validator.validate(pricing("10", "0", "-2"))).hasSize(2);
+    }
+
+    private static AppProperties.FutTransferPublicPool pricing(String margin, String console, String pc) {
+        return new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null,
+                new BigDecimal(margin), console == null ? null : new BigDecimal(console),
+                pc == null ? null : new BigDecimal(pc));
     }
 
     @Test
-    @DisplayName("the defaults bind as documented: public pool, order amount, no maxPrice, and empty means unset")
+    @DisplayName("the defaults bind as documented: no fixed threshold, 10% margin, no limits, no maxPrice; empty "
+            + "is unset; the retired mode still binds")
     void publicPoolBinding() {
-        // What application.yml hands over when none of the new variables is set.
+        // What application.yml hands over when none of the variables is set.
         var source = new MapConfigurationPropertySource(Map.of(
-                "p.buy-now-threshold-mode", "ORDER_AMOUNT",
+                "p.buy-now-threshold-mode", "FIXED",
                 "p.buy-now-threshold", "",
                 "p.send-max-price", "false",
-                "p.max-price", ""));
+                "p.max-price", "",
+                "p.threshold-margin-pct", "10",
+                "p.max-eur-per100k-console", "",
+                "p.max-eur-per100k-pc", ""));
         AppProperties.FutTransferPublicPool bound = new Binder(source)
                 .bind("p", AppProperties.FutTransferPublicPool.class).get();
-        assertThat(bound.buyNowThresholdMode()).isEqualTo(AppProperties.BuyNowThresholdMode.ORDER_AMOUNT);
         assertThat(bound.buyNowThreshold()).isNull();
+        assertThat(bound.marginPct()).isEqualByComparingTo("10");
+        assertThat(bound.maxEurPer100kConsole()).isNull();
+        assertThat(bound.maxEurPer100kPc()).isNull();
         assertThat(bound.sendMaxPrice()).isFalse();
         assertThat(bound.maxPrice()).isNull();
+        assertThat(validator.validate(bound)).isEmpty();
+
+        // Nothing at all: the code's own defaults, the same.
+        AppProperties.FutTransferPublicPool none = new Binder(new MapConfigurationPropertySource(Map.of("p.send-max-price",
+                "false"))).bindOrCreate("p", AppProperties.FutTransferPublicPool.class);
+        assertThat(none.buyNowThreshold()).isNull();
+        assertThat(none.marginPct()).isEqualByComparingTo("10");
+
+        // GFS_FUTTRANSFER_BUY_NOW_THRESHOLD= on Render: unset -- worked out at each send, never 0, never the amount.
+        var empty = new MapConfigurationPropertySource(Map.of("p.buy-now-threshold", ""));
+        assertThat(new Binder(empty).bindOrCreate("p", AppProperties.FutTransferPublicPool.class).buyNowThreshold())
+                .isNull();
+
+        // GFS_FUTTRANSFER_BUY_NOW_THRESHOLD=0 binds, but fails the check: the application does not start.
+        var zero = new MapConfigurationPropertySource(Map.of("p.buy-now-threshold", "0"));
+        assertThat(validator.validate(new Binder(zero).bindOrCreate("p", AppProperties.FutTransferPublicPool.class)))
+                .hasSize(1);
+
+        // The margin and the limits, as set.
+        var limits = new MapConfigurationPropertySource(Map.of("p.threshold-margin-pct", "7.5",
+                "p.max-eur-per100k-console", "4.80", "p.max-eur-per100k-pc", "7"));
+        AppProperties.FutTransferPublicPool limited = new Binder(limits)
+                .bindOrCreate("p", AppProperties.FutTransferPublicPool.class);
+        assertThat(limited.marginPct()).isEqualByComparingTo("7.5");
+        assertThat(limited.maxEurPer100kConsole()).isEqualByComparingTo("4.80");
+        assertThat(limited.maxEurPer100kPc()).isEqualByComparingTo("7");
+
+        // A variable still saying ORDER_AMOUNT on Render binds, and does not stop startup.
+        var retired = new MapConfigurationPropertySource(Map.of("p.buy-now-threshold-mode", "ORDER_AMOUNT"));
+        assertThat(new Binder(retired).bindOrCreate("p", AppProperties.FutTransferPublicPool.class).buyNowThreshold())
+                .isNull();
 
         var fixed = new MapConfigurationPropertySource(Map.of(
                 "p.buy-now-threshold-mode", "FIXED", "p.buy-now-threshold", "8.63"));
@@ -74,6 +124,17 @@ class FutTransferConfigTest {
         var mode = new MapConfigurationPropertySource(Map.of("m", "OWN_SENDERS"));
         assertThat(new Binder(mode).bind("m", AppProperties.FutTransferOrderMode.class).get())
                 .isEqualTo(AppProperties.FutTransferOrderMode.OWN_SENDERS);
+    }
+
+    @Test
+    @DisplayName("minTransferAmount is 0 (off) unless set -- FUT Transfer: 50 would mean 50K per transfer")
+    void minTransferDefault() {
+        AppProperties.FutTransferOrder none = new Binder(new MapConfigurationPropertySource(Map.of("o.top-up-enabled",
+                "300"))).bindOrCreate("o", AppProperties.FutTransferOrder.class);
+        assertThat(none.minTransferAmount()).isZero();
+        var set = new MapConfigurationPropertySource(Map.of("o.min-transfer-amount", "50"));
+        assertThat(new Binder(set).bindOrCreate("o", AppProperties.FutTransferOrder.class).minTransferAmount())
+                .isEqualTo(50);
     }
 
     @Test

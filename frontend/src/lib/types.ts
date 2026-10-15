@@ -1310,6 +1310,12 @@ export interface VendorOrderDetail {
   maxPriceSent?: number | null
   /** The balance the partner reported just before a public-pool send. Its currency is not confirmed. */
   balanceAtSend?: number | null
+  /** What the threshold was worked out from: the supplier rate (EUR per 100K) and the margin (%). */
+  supplierRateSent?: number | null
+  thresholdMarginPct?: number | null
+  transferFeeAtSend?: number | null
+  /** The order at the supplier rate, fees once, in EUR. */
+  estimatedCostEur?: number | null
   /** The partner's one-word summary: pending, completed or error. */
   vendorSimplifiedStatus?: string | null
   /** The partner's human-readable account check and economy state. Staff only. */
@@ -1358,6 +1364,8 @@ export interface VendorSection {
   nextSend?: VendorNextSend | null
   /** What the customer can follow: when their transfer started, and their tracking page. */
   tracking?: VendorTracking | null
+  /** What the customer paid, in their currency: beside FUT Transfer's estimated cost. */
+  customerPaid?: string | null
 }
 
 export interface VendorTracking {
@@ -1399,6 +1407,16 @@ export interface VendorNextSend {
   senderGroup: string | null
   /** Why Approve would send nothing at all, or null. */
   refusal: string | null
+  /** The rest of what Approve sends, as configured: smallest single transfer in K, and so on. */
+  minTransferAmount?: number
+  pauseIfBelowMinTransfer?: number
+  riskLevel?: number
+  /** FUT Transfer's prices now: the clearing supplier rate and the margin on it, EUR per 100K / %. */
+  supplierRate?: number | null
+  marginPct?: number | null
+  limit?: number | null
+  estimatedCostEur?: number | null
+  priceNote?: string | null
 }
 
 /** The balance FUT Transfer reports, read live. Its currency is not confirmed. */

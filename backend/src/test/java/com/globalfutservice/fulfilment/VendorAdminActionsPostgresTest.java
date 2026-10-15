@@ -358,7 +358,8 @@ class VendorAdminActionsPostgresTest {
     }
 
     @Test
-    @DisplayName("before an order is ever sent, the section already says what Approve would send, for its amount")
+    @DisplayName("before an order is ever sent, the section already says what Approve would send, for its amount, "
+            + "from FUT Transfer's prices now")
     void nextSendBeforeApprove() {
         long id = db.order("GFS-26-NEXTSND1", "READY_FOR_DELIVERY", "0.5");
         ids.put("GFS-26-NEXTSND1", id);
@@ -370,13 +371,30 @@ class VendorAdminActionsPostgresTest {
                 ledger, new VendorOrderActionLog(db.named), mock(CredentialVaultService.class), orderService, pool,
                 new com.fasterxml.jackson.databind.ObjectMapper());
 
-        VendorOrderActions.Section s = poolActions.section(order("GFS-26-NEXTSND1"), List.of());
+        OrderEntity o = order("GFS-26-NEXTSND1");
+        when(o.getPlatform()).thenReturn(com.globalfutservice.domain.catalog.Platform.PLAYSTATION);
+        when(o.getTotalMinor()).thenReturn(450_000L);
+        when(o.getCurrency()).thenReturn(com.globalfutservice.domain.money.Currency.INR);
+
+        VendorOrderActions.Section s = poolActions.section(o, List.of());
 
         assertThat(s.vendorOrder()).isNull();
         assertThat(s.nextSend().orderMode()).isEqualTo("PUBLIC_POOL");
         assertThat(s.nextSend().endpoint()).isEqualTo("/buyCoinsAPI");
         assertThat(s.nextSend().transferMethod()).isEqualTo("targetedSnipe");
-        assertThat(s.nextSend().buyNowThreshold()).isEqualByComparingTo("500");
+        // FakeFutTransfer's console price 4.00 + 10%: never 0, never the order's amount.
+        assertThat(s.nextSend().supplierRate()).isEqualByComparingTo("4");
+        assertThat(s.nextSend().marginPct()).isEqualByComparingTo("10");
+        assertThat(s.nextSend().buyNowThreshold()).isEqualByComparingTo("4.40");
+        assertThat(s.nextSend().estimatedCostEur()).isNotNull();
+        assertThat(s.nextSend().minTransferAmount()).isZero();
+        // A price read, never an order: viewing the page buys nothing.
+        assertThat(vendor.calls("/buyConditionAPI")).isOne();
+        assertThat(vendor.calls("/buyCoinsAPI")).isZero();
+        // Read again within the minute: from the cache.
+        poolActions.section(o, List.of());
+        assertThat(vendor.calls("/buyConditionAPI")).isOne();
+        assertThat(s.customerPaid()).isNotBlank();
         assertThat(s.nextSend().senderGroup()).isNull();
         assertThat(s.nextSend().topUpEnabled()).isEqualTo(300);
         assertThat(s.nextSend().autoFinishCycle()).isEqualTo(1);
