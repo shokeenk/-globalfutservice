@@ -273,7 +273,7 @@ public class VendorPoller {
      * What the vendor reported, recorded and acted on.
      *
      * <p>An order waiting for an admin is read too, so its numbers stay current. Only a review
-     * over a word we did not know is undone here: once the partner's report is understood
+     * over a word we did not know, or a pause at the partner, is undone here: once the partner's report is understood
      * again, the order moves where that report puts it, as a fresh report would, and its
      * history says so. Any other review stays an admin's to decide. A word we do not know
      * alerts an admin once per order, however often it comes back.
@@ -290,7 +290,7 @@ public class VendorPoller {
         String unknownWord = VendorStatusMap.unknownWord(o, report);
         boolean fromReview = inReview(row);
         if (fromReview) {
-            if (!VendorStatusMap.UNKNOWN_WORD_REASONS.contains(row.lastErrorCode())) return;
+            if (!VendorStatusMap.RECOVERABLE_REASONS.contains(row.lastErrorCode())) return;
             if (unknownWord != null) {
                 if (ledger.claimUnknownWordAlert(row.orderId(), unknownWord)) {
                     alert(row.externalRef(), headline(o, row.orderMode()), staffText(o, s, row), o.reason());

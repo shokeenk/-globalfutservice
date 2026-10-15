@@ -197,6 +197,32 @@ describe("the FUT Transfer section's Tracking summary", () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
+  it('the address customers get, in the configured style, with the link as FUT Transfer returned it beside it', () => {
+    const SHORT = 'https://transferstatus.top/abc12345'
+    const PAGE = 'https://futtransfer.top/orderStatus?code=abc12345&shop=gfs'
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
+      partnerUrl: SHORT, partnerCustomerUrl: PAGE, partnerLinkStyle: 'STATUS_PAGE', partnerUrlStoredAt:
+      '2026-10-07T10:00:05Z', partnerLinkState: 'STORED', partnerLinkAttempts: 1, canGenerate: false,
+      partnerLinkShown: true } }))
+    const box = within(summary).getByTestId('partner-link')
+    expect(within(box).getByRole('link', { name: PAGE })).toHaveAttribute('href', PAGE)
+    fireEvent.click(within(box).getByRole('button', { name: 'Copy' }))
+    expect(writeText).toHaveBeenCalledWith(PAGE)
+    expect(within(box).getByTestId('partner-link-as-returned')).toHaveTextContent(SHORT)
+  })
+
+  it('an order given the short link despite STATUS_PAGE says why', () => {
+    const SHORT = 'https://transferstatus.top/abc12345'
+    const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
+      partnerUrl: SHORT, partnerCustomerUrl: SHORT, partnerLinkStyle: 'STATUS_PAGE', partnerLinkState: 'STORED',
+      partnerLinkAttempts: 1, canGenerate: false, partnerLinkShown: true,
+      partnerShortLinkBecause: 'it came with specialParams, which the status page has no documented way to carry' } }))
+    expect(within(summary).getByTestId('partner-link-short-because')).toHaveTextContent('specialParams')
+    expect(within(summary).queryByTestId('partner-link-as-returned')).toBeNull()
+  })
+
   it('hidden from customers: still shown here, marked so, and the setting named', () => {
     const PARTNER = 'https://transferstatus.top/abc12345'
     const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
