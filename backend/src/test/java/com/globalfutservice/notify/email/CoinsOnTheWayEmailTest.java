@@ -62,6 +62,18 @@ class CoinsOnTheWayEmailTest {
     }
 
     @Test
+    @DisplayName("partner link hidden: TRACK ORDER opens our own tracking page, without the partner's note")
+    void ownPage() {
+        String ours = "https://globalfutservices.com/track?ref=" + REF;
+        TransactionalEmails.Rendered r = TransactionalEmails.coinsOnTheWay(ORDER, TransferStartedEmailTest.BRAND, ours,
+                SUPPORT, false);
+        assertThat(r.subject()).isEqualTo("Your coins are on the way — order " + REF);
+        assertThat(r.html()).contains("href=\"" + ours + "\"").doesNotContain("transferstatus")
+                .doesNotContain("Don&#39;t share this link");
+        assertThat(r.text()).contains("Track order: " + ours).doesNotContain(TransactionalEmails.TRACKING_LINK_NOTE);
+    }
+
+    @Test
     @DisplayName("renders the email to the scratchpad for review (GFS_RENDER_DIR)")
     void renderForReview() throws Exception {
         String dir = System.getenv("GFS_RENDER_DIR");

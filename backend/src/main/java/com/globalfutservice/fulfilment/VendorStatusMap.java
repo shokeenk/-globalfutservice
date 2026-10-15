@@ -93,7 +93,22 @@ public final class VendorStatusMap {
             Map.entry("finished", "finished"), Map.entry("interrupted", "interrupted"),
             // Observed, public pool: economyState's progress words.
             Map.entry("started", "onboarding"), Map.entry("transfersinprogress", "delivering"),
-            Map.entry("transfercyclecomplete", "delivering"));
+            Map.entry("transfercyclecomplete", "delivering"),
+            // The sign-in refusals, wherever they appear: the customer is asked to fix it.
+            Map.entry("wronguserpass", "stopped"), Map.entry("wrongba", "stopped"),
+            Map.entry("failedwrongcredentialsto", "stopped"), Map.entry("failedwrongbacodeto", "stopped"));
+
+    /**
+     * What a send refused for the customer's sign-in asks them to fix, from the partner's
+     * documented code: their EA email or password, or their backup codes. Null for any other
+     * code -- including ours for a missing backup code, which the form never lets through.
+     */
+    public static CustomerAction signInAction(String code) {
+        String c = norm(code);
+        if (c.equals("invalidpassword")) return CustomerAction.RESUBMIT_SIGN_IN;
+        if (c.matches("invalidba[1-5]") || c.equals("nobackupcode")) return CustomerAction.NEW_BACKUP_CODES;
+        return null;
+    }
 
     /** The review reasons that are a word we did not know: read again, and recovered once understood. */
     public static final java.util.Set<String> UNKNOWN_WORD_REASONS = java.util.Set.of(
@@ -225,7 +240,9 @@ public final class VendorStatusMap {
 
         Known ac = ACCOUNT_CHECK.get(accountCheck);
         Known es = ECONOMY_STATE.get(economyState);
-        for (Known known : new Known[]{ac, es}) {
+        // A sign-in refusal reported in status itself, as public pool orders mirror economyState there.
+        Known st = ECONOMY_STATE.containsKey(status) ? ECONOMY_STATE.get(status) : ACCOUNT_CHECK.get(status);
+        for (Known known : new Known[]{ac, es, st}) {
             if (known != null && known.meaning() == Meaning.FIXABLE) {
                 return new Outcome(State.AWAITING_CUSTOMER, known.action(), "CUSTOMER_ACTION", true);
             }

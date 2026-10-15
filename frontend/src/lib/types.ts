@@ -341,6 +341,11 @@ export interface Order {
   partnerTrackingUrl?: string | null
   /** The coin transfer is waiting for our staff to look at it; the customer has nothing to do. */
   transferUnderReview?: boolean
+  /**
+   * No partner link to give yet: PENDING while one is coming, UNAVAILABLE when there will be
+   * none. Absent while customers are not given the partner's link at all.
+   */
+  partnerLinkState?: 'PENDING' | 'UNAVAILABLE' | null
   /** What the customer must do to unstick a held order, or null if nothing. */
   customerAction: CustomerAction | null
   createdAt: string
@@ -1370,6 +1375,8 @@ export interface VendorTracking {
   partnerLinkNextAt?: string | null
   /** "Generate link" applies: the partner has the order, it is not finished, and there is no link yet. */
   canGenerate?: boolean
+  /** Whether customers are given the partner's link (GFS_FUTTRANSFER_SHOW_PARTNER_LINK). */
+  partnerLinkShown?: boolean
 }
 
 /** How Approve would place one coin order, from the same decision Approve itself takes. */

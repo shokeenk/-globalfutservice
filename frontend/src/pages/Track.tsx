@@ -931,7 +931,7 @@ function NextAction({
   if (order.paymentState === 'EXPIRED') return <OrderExpired sku={order.sku} />
   if (order.paymentState === 'SUBMITTED') return <PaymentSubmitted />
   // Staff: where the customer has a form to fill, say so instead of showing it.
-  if (readOnly && (order.nextAction === 'PAY'
+  if (readOnly && (order.nextAction === 'PAY' || order.nextAction === 'RESUBMIT_CREDENTIALS'
     || (order.nextAction === 'SUBMIT_CREDENTIALS' && !order.credentialsSubmitted))) {
     return <Alert tone="neutral">{t.track.staffHiddenStep}</Alert>
   }
@@ -961,6 +961,23 @@ function NextAction({
         return <Alert tone="ok" title={t.track.credDone}>{t.track.credDoneBody}</Alert>
       }
       return <CredentialForm publicRef={order.publicRef} onSubmitted={onSubmitted ?? (() => {})} />
+    case 'RESUBMIT_CREDENTIALS': {
+      /*
+        Their EA sign-in was refused -- by FUT Transfer's check, or when it was sent. Which
+        part is wrong, and the form to enter it again right here: what they enter goes to the
+        partner by itself and the order picks back up.
+      */
+      const what = order.customerAction === 'NEW_BACKUP_CODES' ? t.track.signInWrongCodes : t.track.signInWrongPassword
+      if (!signedIn) {
+        return <Alert tone="warn" title={t.track.signInWrongTitle}>{what} {t.track.signInToFix}</Alert>
+      }
+      return (
+        <div className="space-y-4" data-testid="signin-retry">
+          <Alert tone="warn" title={t.track.signInWrongTitle}>{what}</Alert>
+          <CredentialForm publicRef={order.publicRef} onSubmitted={onSubmitted ?? (() => {})} />
+        </div>
+      )
+    }
     case 'CONTACT_SUPPORT':
       /*
         Suppressed when the supplier told us exactly what is wrong.
@@ -1089,12 +1106,15 @@ function SupplierProgress({ order }: { order: Order }) {
         : t.track.transferStarted
   const status = started ? transferStatus(order) : null
   const link = partnerLink(order.partnerTrackingUrl)
+  // Said once, with the form, by the next step below.
+  const signInAsk = action === 'RESUBMIT_SIGN_IN' || action === 'NEW_BACKUP_CODES'
+  const linkState = link ? null : order.partnerLinkState ?? null
 
-  if (!showBar && !action && !stage && !link) return null
+  if (!showBar && !(action && !signInAsk) && !stage && !link && !linkState) return null
 
   return (
     <div className="space-y-4" data-testid="transfer-progress">
-      {(showBar || stage || link) && (
+      {(showBar || stage || link || linkState) && (
         <div className="surface p-5">
           {stage && <p className="display mb-3 text-[16px] text-chalk" data-testid="transfer-stage">{stage}</p>}
           {status && (
@@ -1138,6 +1158,17 @@ function SupplierProgress({ order }: { order: Order }) {
           {started && !finished && (
             <p className="mt-3 text-[12px] text-chalk-faint">{t.track.updatesAutomatically}</p>
           )}
+          {linkState === 'PENDING' && (
+            <p className="mt-4 border-t border-ink-400 pt-4 text-[12.5px] text-chalk-muted" data-testid="partner-link-pending">
+              {t.track.partnerLinkComing}
+            </p>
+          )}
+          {linkState === 'UNAVAILABLE' && (
+            <p className="mt-4 border-t border-ink-400 pt-4 text-[12.5px] text-chalk-muted"
+               data-testid="partner-link-unavailable">
+              {t.track.partnerLinkUnavailable}
+            </p>
+          )}
           {link && (
             <div className="mt-4 border-t border-ink-400 pt-4" data-testid="partner-tracking">
               <ButtonAnchor href={link} size="sm">
@@ -1150,7 +1181,7 @@ function SupplierProgress({ order }: { order: Order }) {
         </div>
       )}
 
-      {action && (
+      {action && !signInAsk && (
         /*
           Tone follows who can fix it. The three that the customer cannot act on are the
           ones where a cheerful "here is what to do" would be a lie.

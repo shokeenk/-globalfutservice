@@ -286,7 +286,14 @@ public final class OrderDtos {
               told only that we are checking and that there is nothing for them to do -- never
               why. False otherwise.
             */
-            boolean transferUnderReview) {
+            boolean transferUnderReview,
+
+            /*
+              The partner's tracking link, when there is none to give the owner: PENDING while
+              one is still to come, UNAVAILABLE when the partner will not make one. Null
+              otherwise, and always while customers are not given the partner's link.
+            */
+            String partnerLinkState) {
     }
 
     /**

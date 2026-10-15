@@ -519,6 +519,13 @@ const es: Dictionary = {
     partnerTrackNote: 'Estado de la entrega en directo de nuestro socio de transferencias. Si tus datos de acceso de EA necesitan corregirse, puedes actualizarlos aquí. No compartas este enlace.',
     opensInNewTab: '(se abre en una pestaña nueva)',
     transferChecking: 'Estamos revisando tu pedido, no tienes que hacer nada.',
+    signInWrongTitle: 'Tus datos de EA necesitan una corrección',
+    signInWrongPassword: 'Tu email o contraseña de EA no se aceptaron. Vuelve a introducirlos abajo y seguimos enseguida.',
+    signInWrongCodes: 'Tus códigos de respaldo de EA no se aceptaron. Crea unos nuevos en tu cuenta de EA e introdúcelos abajo.',
+    signInToFix: 'Inicia sesión en tu cuenta para volver a introducirlos.',
+    credCheckNote: 'Comprobamos tus datos de EA unos minutos después de que empiece tu pedido. Si algo está mal, lo verás aquí y por email.',
+    partnerLinkComing: 'El enlace de seguimiento en directo llegará en breve.',
+    partnerLinkUnavailable: 'No hay enlace de seguimiento en directo para este pedido. Puedes seguir tu entrega aquí mismo.',
     transferStatusLabel: 'Estado',
     transferStatus: {
       PROCESSING: 'En proceso',

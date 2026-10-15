@@ -522,6 +522,13 @@ const fr: Dictionary = {
     partnerTrackNote: 'Statut de livraison en direct de notre partenaire de transfert. Si tes identifiants EA doivent être corrigés, tu peux les mettre à jour ici. Ne partage pas ce lien.',
     opensInNewTab: '(s’ouvre dans un nouvel onglet)',
     transferChecking: 'Nous vérifions ta commande, tu n’as rien à faire.',
+    signInWrongTitle: 'Tes identifiants EA sont à corriger',
+    signInWrongPassword: 'Ton email ou ton mot de passe EA n’a pas été accepté. Saisis-les à nouveau ci-dessous et nous reprenons tout de suite.',
+    signInWrongCodes: 'Tes codes de secours EA n’ont pas été acceptés. Crée-en de nouveaux dans ton compte EA, puis saisis-les ci-dessous.',
+    signInToFix: 'Connecte-toi à ton compte pour les saisir à nouveau.',
+    credCheckNote: 'Nous vérifions tes identifiants EA quelques minutes après le début de ta commande. Si quelque chose ne va pas, tu le verras ici et par email.',
+    partnerLinkComing: 'Le lien de suivi en direct arrive bientôt.',
+    partnerLinkUnavailable: 'Aucun lien de suivi en direct n’est disponible pour cette commande. Tu peux suivre ta livraison ici même.',
     transferStatusLabel: 'Statut',
     transferStatus: {
       PROCESSING: 'En traitement',

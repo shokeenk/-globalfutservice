@@ -119,6 +119,56 @@ class OrderTrackingResponseTest {
     }
 
     @Test
+    @DisplayName("held for a refused sign-in: the form to enter it again, and which part is wrong")
+    void signInAsk() {
+        ReflectionTestUtils.setField(order, "status", OrderStatus.ON_HOLD);
+        when(ledger.customerAction(7L)).thenReturn(Optional.of("RESUBMIT_SIGN_IN"));
+        OrderDtos.OrderResponse r = mapper.toOwnerResponse(order, List.of(), true);
+        assertThat(r.nextAction()).isEqualTo("RESUBMIT_CREDENTIALS");
+        assertThat(r.customerAction()).isEqualTo("RESUBMIT_SIGN_IN");
+
+        // What we asked after a refused send comes first: here, the backup codes.
+        when(ledger.signInProblem(7L)).thenReturn(Optional.of("NEW_BACKUP_CODES"));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).customerAction()).isEqualTo("NEW_BACKUP_CODES");
+
+        // Any other hold still says to get in touch.
+        when(ledger.signInProblem(7L)).thenReturn(Optional.empty());
+        when(ledger.customerAction(7L)).thenReturn(Optional.of("SIGN_OUT_CONSOLE"));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).nextAction()).isEqualTo("CONTACT_SUPPORT");
+    }
+
+    @Test
+    @DisplayName("partner link hidden from customers: no button, no link state -- whatever is stored")
+    void partnerLinkHidden() {
+        mapper.setPartnerLinks(com.globalfutservice.fulfilment.PartnerLinkVisibility.HIDDEN);
+        ReflectionTestUtils.setField(order, "transferStartedAt", Instant.parse("2026-10-07T10:00:00Z"));
+        when(ledger.trackingUrl(7L)).thenReturn(Optional.of("https://transferstatus.top/abc12345"));
+        OrderDtos.OrderResponse r = mapper.toOwnerResponse(order, List.of(), true);
+        assertThat(r.partnerTrackingUrl()).isNull();
+        assertThat(r.partnerLinkState()).isNull();
+    }
+
+    @Test
+    @DisplayName("partner link shown, none yet: PENDING while one is coming, UNAVAILABLE when there will be none")
+    void partnerLinkStates() {
+        ReflectionTestUtils.setField(order, "transferStartedAt", Instant.parse("2026-10-07T10:00:00Z"));
+        when(ledger.trackingUrl(7L)).thenReturn(Optional.empty());
+        when(ledger.trackingStatus(7L)).thenReturn(Optional.of(
+                new VendorOrderLedger.TrackingLinkStatus(null, null, null, 1, "HTTP_500", null)));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerLinkState()).isEqualTo("PENDING");
+
+        when(ledger.trackingStatus(7L)).thenReturn(Optional.of(
+                new VendorOrderLedger.TrackingLinkStatus(null, null, "UNAVAILABLE", 1, "ORDER_FINISHED", null)));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerLinkState()).isEqualTo("UNAVAILABLE");
+
+        // Delivered: nothing more is coming, so nothing is promised.
+        ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
+        when(ledger.trackingStatus(7L)).thenReturn(Optional.of(
+                new VendorOrderLedger.TrackingLinkStatus(null, null, null, 1, "HTTP_500", null)));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerLinkState()).isNull();
+    }
+
+    @Test
     @DisplayName("no link stored yet: the owner sees no Track order button")
     void noPartnerLinkYet() {
         when(ledger.trackingUrl(7L)).thenReturn(Optional.empty());

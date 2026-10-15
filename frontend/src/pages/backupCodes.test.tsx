@@ -193,6 +193,12 @@ describe('how many codes', () => {
     expect(codeBoxes()).toHaveLength(3)
   })
 
+  it('both sign-in forms say when the details are checked, and where a problem would show', async () => {
+    await toSignIn()
+    expect(screen.getByTestId('cred-check-note')).toHaveTextContent(
+      'We check your EA details a few minutes after your order starts. If anything is wrong, you\u2019ll see it here and by email.')
+  })
+
   it('the sign-in form on the order page follows the same setting', async () => {
     CATALOG.policy.backupCodesRequired = 2
     render(<MemoryRouter><CredentialForm publicRef="GFS-26-CODES001" onSubmitted={vi.fn()} /></MemoryRouter>)

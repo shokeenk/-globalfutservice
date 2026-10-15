@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -324,18 +325,40 @@ class VendorPublicPoolPostgresTest {
     @DisplayName("a 400 the collection does not document for /buyCoinsAPI goes to review, sign-in kept")
     void undocumentedRefusalToReview() {
         long id = insertOrder("GFS-26-POOLUNK01", "0.5");
-        vendor.on("/buyCoinsAPI", Reply.of(400, "{\"error\":\"InvalidPassword\"}"));
+        vendor.on("/buyCoinsAPI", Reply.of(400, "{\"error\":\"SomethingNew\"}"));
         App a = pool();
 
         assertThat(a.approve(order(id, "GFS-26-POOLUNK01", "0.5")).r().result()).isEqualTo(Result.NEEDS_REVIEW);
 
         assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
-        assertThat(row(id).get("last_error_code")).isEqualTo("InvalidPassword");
+        assertThat(row(id).get("last_error_code")).isEqualTo("SomethingNew");
         verify(a.vault(), never()).purge(anyLong(), anyString());
         verify(a.notifications(), times(1)).fulfilmentAlert(any());
         // And nothing more is sent until an admin decides.
         assertThat(pool().approve(order(id, "GFS-26-POOLUNK01", "0.5")).r().result()).isEqualTo(Result.NOT_SENT);
         assertThat(vendor.calls("/buyCoinsAPI")).isOne();
+    }
+
+    @Test
+    @DisplayName("public pool, refused for the sign-in (InvalidPassword, InvalidBA1-5): deleted, and the customer "
+            + "asked for the part that is wrong -- never a silent NOT_SENT")
+    void signInRefusalReachesTheCustomer() {
+        for (String[] c : new String[][]{{"InvalidPassword", "RESUBMIT_SIGN_IN"}, {"InvalidBA2", "NEW_BACKUP_CODES"}}) {
+            String ref = "GFS-26-POOLPW" + c[0].length() + c[1].charAt(0);
+            long id = insertOrder(ref, "0.5");
+            vendor.on("/buyCoinsAPI", Reply.of(400, "{\"error\":\"" + c[0] + "\"}"));
+            App a = pool();
+
+            SupplierFulfilmentService.Release r = a.approve(order(id, ref, "0.5")).r();
+
+            assertThat(r.result()).isEqualTo(Result.FAILED_SIGN_IN);
+            assertThat(r.reasonCode()).isEqualTo(c[1]);
+            assertThat(row(id).get("state")).isEqualTo("FAILED");
+            assertThat(row(id).get("last_error_code")).isEqualTo(c[0]);
+            assertThat(jdbc.queryForObject("select signin_problem from orders where id = ?", String.class, id))
+                    .isEqualTo(c[1]);
+            verify(a.vault()).purge(eq(id), anyString());
+        }
     }
 
     @Test

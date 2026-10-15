@@ -5,6 +5,7 @@ import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.credentials.CredentialVaultService;
 import com.globalfutservice.credentials.SignInRules;
 import com.globalfutservice.credentials.web.CredentialDtos;
+import com.globalfutservice.domain.orders.CustomerAction;
 import com.globalfutservice.notify.FulfilmentAlert;
 import com.globalfutservice.notify.NotificationService;
 import com.globalfutservice.orders.OrderEntity;
@@ -214,8 +215,18 @@ public class SupplierFulfilmentService {
         var problem = SignInRules.problem(creds.eaEmail(), creds.eaPassword(), creds.backupCodes(),
                 props.fulfilment().backupCodesRequired());
         if (problem.isPresent()) {
-            return new Release(Result.NOT_SENT, null, "The sign-in on file does not meet the partner's rules: "
-                    + problem.get() + " Ask the customer for a new one. Nothing was sent.");
+            // The partner would refuse it as InvalidPassword or InvalidBA: the customer is asked for
+            // the part that is wrong, as for a refusal, instead of the order sitting unsent.
+            boolean signInItself = creds.eaEmail() == null || !creds.eaEmail().trim().matches(SignInRules.EMAIL_REGEX)
+                    || creds.eaPassword() == null || creds.eaPassword().length() < SignInRules.PASSWORD_MIN;
+            CustomerAction action = signInItself ? CustomerAction.RESUBMIT_SIGN_IN : CustomerAction.NEW_BACKUP_CODES;
+            ledger.setSignInProblem(order.getId(), action);
+            vault.purge(order.getId(), "sign-in on file does not meet the partner's rules");
+            alert(ref, "Sign-in not usable", "The sign-in on file does not meet FUT Transfer's rules: "
+                    + problem.get() + " It has been deleted and the customer asked to enter it again.", "SIGN_IN_RULES");
+            return new Release(Result.FAILED_SIGN_IN, null, "The sign-in on file does not meet the partner's rules: "
+                    + problem.get() + " It has been deleted and the customer asked for a new one. Nothing was sent.",
+                    false, action.name());
         }
 
         /*
@@ -382,12 +393,17 @@ public class SupplierFulfilmentService {
         switch (r.reason()) {
             case SIGN_IN_REJECTED -> {
                 ledger.markFailed(order.getId(), r.code(), "The partner refused the customer's sign-in.");
+                // What their order page shows them to fix: the password, or the backup codes.
+                CustomerAction ask = VendorStatusMap.signInAction(r.code());
+                ask = ask == null ? CustomerAction.RESUBMIT_SIGN_IN : ask;
+                ledger.setSignInProblem(order.getId(), ask);
                 // Useless to anyone now, and the customer is asked for a new one.
                 vault.purge(order.getId(), "sign-in refused by supplier (" + r.code() + ")");
                 alert(ref, "Sign-in refused", "The partner refused the customer's sign-in (" + r.code()
                         + "). It has been deleted and the customer has been asked to enter it again.", r.code());
                 return new Release(Result.FAILED_SIGN_IN, null, "The partner refused the customer's sign-in ("
-                        + r.code() + "). Nothing was created. The order is on hold until they enter it again.");
+                        + r.code() + "). Nothing was created. The order is on hold until they enter it again.",
+                        false, ask.name());
             }
             case AUTH_FAILED -> {
                 ledger.markFailed(order.getId(), r.code(), "Our API credentials were refused.");

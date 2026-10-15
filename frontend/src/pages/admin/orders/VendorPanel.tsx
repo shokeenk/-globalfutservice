@@ -443,10 +443,17 @@ function PartnerLink({
             : 'None yet: it is asked for once FUT Transfer has the order.'}
         </span>
       )}
-      {partnerUrl && t?.partnerUrlStoredAt && (
+      {partnerUrl && t?.partnerUrlStoredAt && t.partnerLinkShown !== false && (
         <span className="block text-[12px] text-chalk-faint">
           Stored {dateTime(t.partnerUrlStoredAt)}. The customer was emailed it. Only send it to them: it lets
           whoever holds it change their EA sign-in.
+        </span>
+      )}
+      {t?.partnerLinkShown === false && (
+        <span className="block text-[12px] font-semibold text-warn" data-testid="partner-link-hidden">
+          Hidden from customers (GFS_FUTTRANSFER_SHOW_PARTNER_LINK is off): their order page and the &ldquo;on the
+          way&rdquo; email use our own tracking page.{partnerUrl && t.partnerUrlStoredAt
+            ? ` Stored ${dateTime(t.partnerUrlStoredAt)}.` : ''}
         </span>
       )}
       {!partnerUrl && t?.canGenerate && (

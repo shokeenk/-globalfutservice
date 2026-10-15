@@ -489,6 +489,15 @@ public final class TransactionalEmails {
      */
     public static Rendered coinsOnTheWay(OrderNotification n, EmailTemplate.Brand brand, String trackingUrl,
                                          String supportUrl) {
+        return coinsOnTheWay(n, brand, trackingUrl, supportUrl, true);
+    }
+
+    /**
+     * @param partnerLink whether {@code trackingUrl} is the partner's page, which carries the
+     *                    note that it is the customer's alone; false for our own tracking page
+     */
+    public static Rendered coinsOnTheWay(OrderNotification n, EmailTemplate.Brand brand, String trackingUrl,
+                                         String supportUrl, boolean partnerLink) {
         List<EmailTemplate.InfoCard> cards = new ArrayList<>();
         cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
         cards.add(EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()));
@@ -498,7 +507,7 @@ public final class TransactionalEmails {
         String link = "color:#C1281B;font-weight:700;text-decoration:underline;";
         String body = EmailTemplate.paragraphs(
                 "Your coins are on their way to your club. Use the Track order button to follow the delivery live.",
-                TRACKING_LINK_NOTE)
+                partnerLink ? TRACKING_LINK_NOTE : null)
                 + "\n<p style=\"margin:0 0 12px 0;\">Need help? <a href=\"" + EmailTemplate.esc(supportUrl)
                 + "\" style=\"" + link + "\">Chat with us on your order's support page</a>.</p>";
 
@@ -534,7 +543,8 @@ public final class TransactionalEmails {
 
                 — Global FUT Services
                 """.formatted(n.publicRef(), n.serviceLabel(), n.amountFormatted(), trackingUrl,
-                TRACKING_LINK_NOTE, supportUrl);
+                partnerLink ? TRACKING_LINK_NOTE : "Your order page updates by itself as your coins arrive.",
+                supportUrl);
 
         return new Rendered(coinsOnTheWaySubject(n), EmailTemplate.render(content, brand), text);
     }

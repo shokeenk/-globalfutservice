@@ -97,12 +97,39 @@ class VendorStatusMapTest {
                 .isEqualTo(State.IN_DELIVERY);
         assertThat(map("started", "started", "started", 500L, 0L, false).state()).isEqualTo(State.SUBMITTED);
         assertThat(map("entered", "entered", "entered", 500L, 0L, false).state()).isEqualTo(State.SUBMITTED);
-        // A failure word in status keeps its meaning: not a status we know.
-        assertThat(map("FailedWrongCredentialsTo", "finished", "FailedWrongCredentialsTo", 500L, 0L, false).reason())
+        // Any other failure word in status keeps its meaning: not a status we know.
+        assertThat(map("insufficientFunds", "finished", "insufficientFunds", 500L, 0L, false).reason())
                 .isEqualTo("UNKNOWN_STATUS");
         // And none of it delivers: finished is still the only way.
         assertThat(map("transfersInProgress", "finished", "transfersInProgress", 500L, 500L, false).state())
                 .isEqualTo(State.IN_DELIVERY);
+    }
+
+    @Test
+    @DisplayName("a refused sign-in, wherever FUT Transfer reports it -- status included -- asks the customer to fix it")
+    void signInRefusalsInStatus() {
+        Outcome pw = map("FailedWrongCredentialsTo", "finished", "FailedWrongCredentialsTo", 500L, 0L, false);
+        assertThat(pw.state()).isEqualTo(State.AWAITING_CUSTOMER);
+        assertThat(pw.action()).isEqualTo(CustomerAction.RESUBMIT_SIGN_IN);
+        Outcome ba = map("FailedWrongBACodeTo", "started", "transfersInProgress", 500L, 0L, false);
+        assertThat(ba.state()).isEqualTo(State.AWAITING_CUSTOMER);
+        assertThat(ba.action()).isEqualTo(CustomerAction.NEW_BACKUP_CODES);
+        assertThat(map("wrongUserPass", "started", "transfersInProgress", 500L, 0L, false).action())
+                .isEqualTo(CustomerAction.RESUBMIT_SIGN_IN);
+        assertThat(map("transfersInProgress", "wrongBA", "transfersInProgress", 500L, 30L, false).action())
+                .isEqualTo(CustomerAction.NEW_BACKUP_CODES);
+    }
+
+    @Test
+    @DisplayName("a send refused for the sign-in names the part to fix: the password, or the backup codes")
+    void signInActionFromCode() {
+        assertThat(VendorStatusMap.signInAction("InvalidPassword")).isEqualTo(CustomerAction.RESUBMIT_SIGN_IN);
+        for (int i = 1; i <= 5; i++) {
+            assertThat(VendorStatusMap.signInAction("InvalidBA" + i)).isEqualTo(CustomerAction.NEW_BACKUP_CODES);
+        }
+        assertThat(VendorStatusMap.signInAction("NoBackupCode")).isEqualTo(CustomerAction.NEW_BACKUP_CODES);
+        assertThat(VendorStatusMap.signInAction("MissingData")).isNull();
+        assertThat(VendorStatusMap.signInAction(null)).isNull();
     }
 
     @Test
