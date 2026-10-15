@@ -360,7 +360,7 @@ public class VendorOrderLedger {
                   from vendor_order
                  where state in ('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER')
                     or (state = 'NEEDS_REVIEW' and vendor_order_id is not null
-                        and lower(coalesce(vendor_status, '')) <> 'finished'
+                        and lower(coalesce(vendor_status, '')) not in ('finished', 'cancelled', 'canceled', 'archived')
                         and not coalesce(vendor_was_aborted, false)
                         and (last_polled_at is null
                              or last_polled_at <= now() - :rereadSeconds * interval '1 second'))
@@ -499,10 +499,17 @@ public class VendorOrderLedger {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public LinkStored storeTrackingLink(long orderId, String fullUrl) {
+        return storeTrackingLink(orderId, new FutTransferClient.LinkReady(fullUrl));
+    }
+
+    /** As {@link #storeTrackingLink(long, String)}, with the code, shop and specialParams kept beside the link. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public LinkStored storeTrackingLink(long orderId, FutTransferClient.LinkReady link) {
         return jdbc.queryForObject("""
                 with stored as (
                     update vendor_order
                        set tracking_url = :url, tracking_url_at = now(), tracking_link_state = 'STORED',
+                           tracking_short_code = :code, tracking_shop = :shop, tracking_special_params = :special,
                            tracking_link_error = null, tracking_link_next_at = null,
                            tracking_link_attempts = tracking_link_attempts + 1, updated_at = now()
                      where order_id = :orderId and tracking_link_state is null
@@ -515,9 +522,33 @@ public class VendorOrderLedger {
                     returning o.id
                 )
                 select (select count(*) from stored) as stored, (select count(*) from quiet) as quiet
-                """, new MapSqlParameterSource("orderId", orderId).addValue("url", fullUrl)
+                """, new MapSqlParameterSource("orderId", orderId).addValue("url", link.fullUrl())
+                        .addValue("code", link.shortCode())
+                        .addValue("shop", blankToNull(link.shop()))
+                        .addValue("special", blankToNull(link.specialParams()))
                         .addValue("graceSeconds", TransferStartedNotices.LINK_GRACE.toSeconds()),
                 (rs, i) -> new LinkStored(rs.getLong("stored") == 1, rs.getLong("quiet") == 1));
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
+    }
+
+    /** A stored tracking link and its parts, as FUT Transfer returned them. */
+    public record PartnerLink(String fullUrl, String shortCode, String shop, String specialParams) {
+        @Override
+        public String toString() {
+            return "PartnerLink[***]";
+        }
+    }
+
+    /** The order's stored tracking link, with its parts; empty until one is stored. */
+    public Optional<PartnerLink> partnerLink(long orderId) {
+        return jdbc.query("""
+                select tracking_url, tracking_short_code, tracking_shop, tracking_special_params
+                  from vendor_order where order_id = :orderId and tracking_link_state = 'STORED'
+                """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new PartnerLink(
+                rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4))).stream().findFirst();
     }
 
     /** The partner will not make a link -- the order is finished. Nothing more is asked. */

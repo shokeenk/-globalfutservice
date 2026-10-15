@@ -613,10 +613,42 @@ public class FutTransferClient {
      * customer's EA sign-in, so it is a secret: never logged, and masked even in this
      * record's own text.
      */
-    public record LinkReady(String fullUrl) implements TrackingLink {
+    public record LinkReady(String fullUrl, String shortCode, String shop, String specialParams)
+            implements TrackingLink {
+
+        /** A link whose code is read off its own address. */
+        public LinkReady(String fullUrl) {
+            this(fullUrl, shortCodeOf(fullUrl), null, null);
+        }
+
         @Override
         public String toString() {
-            return "LinkReady[fullUrl=***]";
+            return "LinkReady[fullUrl=***, shortCode=***, shop=" + shop + ", specialParams=" + specialParams + "]";
+        }
+    }
+
+    private static final java.util.regex.Pattern SHORT_CODE = java.util.regex.Pattern.compile("[A-Za-z0-9]{4,32}");
+
+    /**
+     * The code in a link FUT Transfer gave: its {@code code} parameter, or the last part of its
+     * path (transferstatus.top/abc12345). Null when neither looks like one.
+     */
+    static String shortCodeOf(String url) {
+        if (url == null) return null;
+        try {
+            URI uri = new URI(url);
+            if (uri.getRawQuery() != null) {
+                for (String pair : uri.getRawQuery().split("&")) {
+                    if (pair.startsWith("code=") && SHORT_CODE.matcher(pair.substring(5)).matches()) {
+                        return pair.substring(5);
+                    }
+                }
+            }
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            String last = path.substring(path.lastIndexOf('/') + 1);
+            return SHORT_CODE.matcher(last).matches() ? last : null;
+        } catch (java.net.URISyntaxException e) {
+            return null;
         }
     }
 
@@ -670,7 +702,10 @@ public class FutTransferClient {
             String url = text(json, "fullUrl");
             if (url == null || url.isBlank()) return new LinkFailed("NO_URL");
             if (!isHttpsUrl(url)) return new LinkFailed("NOT_HTTPS");
-            return new LinkReady(url);
+            // The parts, as returned, to build the status page FUT Transfer says to use for now.
+            String code = text(json, "shortCode");
+            if (code == null || !SHORT_CODE.matcher(code).matches()) code = shortCodeOf(url);
+            return new LinkReady(url, code, shortText(json, "shop", 64), shortText(json, "specialParams", 256));
         }
         // Not documented: a refusal that says the order is finished is taken at its word.
         if (mentionsFinished(json, ex.body())) return new LinkUnavailable(LINK_ORDER_FINISHED);

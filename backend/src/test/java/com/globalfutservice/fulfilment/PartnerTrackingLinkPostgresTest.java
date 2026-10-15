@@ -199,6 +199,10 @@ class PartnerTrackingLinkPostgresTest {
         assertThat(row(id).get("tracking_url")).isEqualTo(LINK);
         assertThat(row(id).get("tracking_link_state")).isEqualTo("STORED");
         assertThat(row(id).get("tracking_url_at")).isNotNull();
+        // Its parts, as returned, beside it.
+        assertThat(row(id).get("tracking_short_code")).isEqualTo(SHORT_CODE);
+        assertThat(row(id).get("tracking_shop")).isEqualTo("gfs");
+        assertThat(row(id).get("tracking_special_params")).isEqualTo("lang=de");
         assertThat(emailedLinks()).containsExactly(LINK);
 
         // Asked for once: later polls do not ask again, or email again.
@@ -271,6 +275,25 @@ class PartnerTrackingLinkPostgresTest {
         assertThat(row(id).get("tracking_url")).isEqualTo(LINK);
         verify(notifications, times(1)).coinsOnTheWay(any(), org.mockito.ArgumentMatchers.isNull());
         verify(notifications, never()).coinsOnTheWay(any(), eq(LINK));
+    }
+
+    @Test
+    @DisplayName("STATUS_PAGE style: the email carries futtransfer.top/orderStatus with the code and the shop")
+    void emailStatusPage() {
+        links.setPartnerLinks(new PartnerLinkVisibility(true, PartnerLinkVisibility.Style.STATUS_PAGE));
+        long id = paid("GFS-26-LINK0011");
+        String vid = vendorId();
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vid)));
+        vendor.on("/generateOrderStatusLink", Reply.ok("""
+                {"success":true,"shortCode":"%s","shop":"gfs","specialParams":"","fullUrl":"https://transferstatus.top/%s",
+                 "orderID":"%s"}
+                """.formatted(SHORT_CODE, SHORT_CODE, vid)));
+
+        supplier.approveAndDispatch(entity(id), 1L);
+
+        assertThat(row(id).get("tracking_url")).isEqualTo("https://transferstatus.top/" + SHORT_CODE);
+        verify(notifications).coinsOnTheWay(any(),
+                eq("https://futtransfer.top/orderStatus?code=" + SHORT_CODE + "&shop=gfs"));
     }
 
     @Test

@@ -432,7 +432,9 @@ function PartnerLink({
     }
   }
 
-  const partnerUrl = t?.partnerUrl ?? null
+  // What customers are given (the configured style), and the link as FUT Transfer returned it.
+  const partnerUrl = t?.partnerCustomerUrl ?? t?.partnerUrl ?? null
+  const asReturned = t?.partnerUrl && t.partnerUrl !== partnerUrl ? t.partnerUrl : null
   return (
     <span className="block space-y-2" data-testid="partner-link">
       {partnerUrl ? (
@@ -445,7 +447,18 @@ function PartnerLink({
             {copied ? 'Copied' : 'Copy'}
           </Button>
         </span>
-      ) : t?.partnerLinkState === 'UNAVAILABLE' ? (
+      ) : null}
+      {asReturned && (
+        <span className="block break-all text-[12px] text-chalk-faint" data-testid="partner-link-as-returned">
+          As FUT Transfer returned it: {asReturned}
+        </span>
+      )}
+      {t?.partnerShortLinkBecause && (
+        <span className="block text-[12px] text-chalk-muted" data-testid="partner-link-short-because">
+          Customers get the short link for this order: {t.partnerShortLinkBecause}.
+        </span>
+      )}
+      {partnerUrl ? null : t?.partnerLinkState === 'UNAVAILABLE' ? (
         <span className="block text-chalk-muted">
           Link unavailable: FUT Transfer will not make one for this order (it is finished). It is not asked for again.
         </span>

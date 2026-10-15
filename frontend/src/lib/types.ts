@@ -1385,6 +1385,11 @@ export interface VendorTracking {
   canGenerate?: boolean
   /** Whether customers are given the partner's link (GFS_FUTTRANSFER_SHOW_PARTNER_LINK). */
   partnerLinkShown?: boolean
+  /** The address customers are given, in the configured style (GFS_FUTTRANSFER_PARTNER_LINK_STYLE). */
+  partnerCustomerUrl?: string | null
+  partnerLinkStyle?: 'STATUS_PAGE' | 'SHORT_LINK' | null
+  /** Why this order gets the short link although the style is STATUS_PAGE. */
+  partnerShortLinkBecause?: string | null
 }
 
 /** How Approve would place one coin order, from the same decision Approve itself takes. */

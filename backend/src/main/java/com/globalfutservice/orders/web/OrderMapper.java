@@ -157,7 +157,7 @@ public class OrderMapper {
                                                    boolean credentialsSubmitted) {
         boolean ours = order.getId() != null && order.getSku().isCoinTransfer() && vendorOrders != null
                 && partnerLinks.shown();
-        String link = ours ? vendorOrders.trackingUrl(order.getId()).orElse(null) : null;
+        String link = ours ? vendorOrders.partnerLink(order.getId()).map(partnerLinks::customerUrl).orElse(null) : null;
         return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto,
                 link, ours && link == null ? partnerLinkState(order) : null);
     }

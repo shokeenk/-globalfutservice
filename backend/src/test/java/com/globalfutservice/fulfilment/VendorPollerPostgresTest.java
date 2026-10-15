@@ -544,6 +544,56 @@ class VendorPollerPostgresTest {
     }
 
     @Test
+    @DisplayName("paused at FUT Transfer: review and one alert, still read every five minutes, picks up when resumed")
+    void pausedKeepsBeingRead() {
+        long id = sent("GFS-26-PAUSE001", "vid-pause-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-pause-01", report("paused", "finished", "transfersInProgress", 500, 120, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(id).get("last_error_code")).isEqualTo("PAUSED");
+        verify(notifications, times(1)).fulfilmentAlert(any());
+
+        lastReadAgo(id, Duration.ofMinutes(6));
+        bulk(Map.of("vid-pause-01", report("paused", "finished", "transfersInProgress", 500, 130, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(130L);
+        verify(notifications, times(1)).fulfilmentAlert(any());
+
+        lastReadAgo(id, Duration.ofMinutes(6));
+        bulk(Map.of("vid-pause-01", report("transfersInProgress", "finished", "transfersInProgress", 500, 180, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(180L);
+        neverSent();
+    }
+
+    @Test
+    @DisplayName("cancelled or archived at FUT Transfer: review with what was delivered, and no longer read")
+    void cancelledAndArchived() {
+        long part = sent("GFS-26-CANC0001", "vid-canc-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        long none = sent("GFS-26-CANC0002", "vid-canc-02", "SUBMITTED", OrderStatus.IN_PROGRESS);
+        long arch = sent("GFS-26-ARCH0001", "vid-arch-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of(
+                "vid-canc-01", report("cancelled", "finished", "transfersInProgress", 500, 120, 0),
+                "vid-canc-02", report("canceled", "started", "entered", 500, 0, 0),
+                "vid-arch-01", report("archived", "finished", "finished", 500, 500, 0)));
+        poller.pollOnce();
+
+        assertThat(row(part).get("last_error_code")).isEqualTo(VendorStatusMap.CANCELLED_PARTIAL);
+        assertThat(row(part).get("amount_delivered_k")).isEqualTo(120L);
+        assertThat(row(none).get("last_error_code")).isEqualTo(VendorStatusMap.CANCELLED_NOTHING);
+        assertThat(row(arch).get("last_error_code")).isEqualTo("ARCHIVED");
+        verify(orderService, never()).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+
+        for (long id : List.of(part, none, arch)) lastReadAgo(id, Duration.ofMinutes(30));
+        long asked = timesAsked("vid-canc-01") + timesAsked("vid-canc-02") + timesAsked("vid-arch-01");
+        poller.pollOnce();
+        assertThat(timesAsked("vid-canc-01") + timesAsked("vid-canc-02") + timesAsked("vid-arch-01"))
+                .as("closed at FUT Transfer: not read again").isEqualTo(asked);
+        neverSent();
+    }
+
+    @Test
     @DisplayName("recovery: every order waiting for review over UNKNOWN_STATUS is read again at once, and listed")
     void recoveryAfterDeploy() {
         // As production had them: under review since the first read, with the word alerted.
