@@ -383,6 +383,179 @@ class VendorPollerPostgresTest {
         assertThat(r.get("state")).isEqualTo("IN_DELIVERY");
     }
 
+    // ------------------------------------------- partner words we did not know ---
+
+    /** What FUT Transfer sent for a public pool order on 2026-10-14, 40 seconds after accepting it. */
+    private static String observedPublicPool(long delivered) {
+        return """
+                {"status":"transfersInProgress","simplifiedStatus":"pending","accountCheck":"started",
+                 "accountCheckLong":"Awaiting account-check result","economyState":"transfersInProgress",
+                 "economyStateLong":"Transfers In Progress","amountOrdered":500,"amount":%d,"coinsUsed":0,
+                 "toPay":0,"wasAborted":0}
+                """.formatted(delivered);
+    }
+
+    /** As if the order was last read this long ago. */
+    private void lastReadAgo(long orderId, Duration ago) {
+        db.jdbc.update("update vendor_order set last_polled_at = now() - (? * interval '1 second') where order_id = ?",
+                ago.toSeconds(), orderId);
+    }
+
+    /** How many bulk reads have asked the partner about this partner order id. */
+    private long timesAsked(String vid) {
+        return vendor.requests().stream().filter(r -> r.path().equals("/orderStatusBulkAPI"))
+                .filter(r -> r.body().get("orderIDs").toString().contains("\"" + vid + "\"")).count();
+    }
+
+    private void neverSent() {
+        assertThat(vendor.calls("/buyCoinsAPI")).as("the poller never sends an order").isZero();
+        assertThat(vendor.calls("/orderAPI")).as("the poller never sends an order").isZero();
+    }
+
+    @Test
+    @DisplayName("public pool: status transfersInProgress is delivering, with the amount stored -- no review, no alert")
+    void transfersInProgressDelivers() {
+        long id = sent("GFS-26-POOLSTA1", "vid-poolsta1", "SUBMITTED", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-poolsta1", observedPublicPool(0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(0L);
+        assertThat(row(id).get("vendor_simplified_status")).isEqualTo("pending");
+
+        bulk(Map.of("vid-poolsta1", observedPublicPool(110)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(110L);
+        verify(notifications, never()).fulfilmentAlert(any());
+        verify(orderService, never()).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+        neverSent();
+    }
+
+    @Test
+    @DisplayName("an unknown word: review and one alert, still read every five minutes, recovers once understood")
+    void unknownWordNeverFreezes() {
+        long id = sent("GFS-26-UNKWORD1", "vid-unkword1", "SUBMITTED", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-unkword1", report("brandNewWord", "finished", "transfersInProgress", 500, 0, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(id).get("last_error_code")).isEqualTo("UNKNOWN_STATUS");
+        verify(notifications, times(1)).fulfilmentAlert(any());
+
+        // Not again within five minutes.
+        long asked = timesAsked("vid-unkword1");
+        poller.pollOnce();
+        assertThat(timesAsked("vid-unkword1")).isEqualTo(asked);
+
+        // Five minutes on: read, numbers kept, the same word alerts nobody.
+        lastReadAgo(id, Duration.ofMinutes(6));
+        bulk(Map.of("vid-unkword1", report("brandNewWord", "finished", "transfersInProgress", 500, 120, 0)));
+        poller.pollOnce();
+        assertThat(timesAsked("vid-unkword1")).isEqualTo(asked + 1);
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(120L);
+        verify(notifications, times(1)).fulfilmentAlert(any());
+
+        // A different word: one more alert, once.
+        for (int i = 0; i < 2; i++) {
+            lastReadAgo(id, Duration.ofMinutes(6));
+            bulk(Map.of("vid-unkword1", report("anotherNewWord", "finished", "transfersInProgress", 500, 150, 0)));
+            poller.pollOnce();
+        }
+        verify(notifications, times(2)).fulfilmentAlert(any());
+
+        // Understood again: back where the report puts it, and the history says so.
+        lastReadAgo(id, Duration.ofMinutes(6));
+        bulk(Map.of("vid-unkword1", report("partlyDelivered", "finished", "transfersInProgress", 500, 200, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(200L);
+        verify(orderService).note(any(), eq(Actor.SYSTEM), org.mockito.ArgumentMatchers.isNull(), eq("GFS"),
+                org.mockito.ArgumentMatchers.contains("no longer waiting for review over UNKNOWN_STATUS; now IN_DELIVERY"),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(), eq(true));
+        verify(notifications, times(2)).fulfilmentAlert(any());
+        neverSent();
+    }
+
+    @Test
+    @DisplayName("a review for another reason: read for its numbers, but left for the admin -- no move, no alert")
+    void otherReviewOnlyNumbers() {
+        long id = sent("GFS-26-REVSTAL1", "vid-revstal1", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        db.jdbc.update("update vendor_order set last_error_code = 'STALLED', vendor_status = 'partlyDelivered' "
+                + "where order_id = ?", id);
+        lastReadAgo(id, Duration.ofMinutes(6));
+        bulk(Map.of("vid-revstal1", report("partlyDelivered", "finished", "transfersInProgress", 500, 300, 0)));
+
+        poller.pollOnce();
+
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(id).get("last_error_code")).isEqualTo("STALLED");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(300L);
+        verify(notifications, never()).fulfilmentAlert(any());
+        verify(orderService, never()).note(any(), any(), any(), any(), anyString(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    @DisplayName("a review the partner reports finished, or left out of a read: not read again, never counted missing")
+    void finishedReviewNotRead() {
+        long done = sent("GFS-26-REVFIN01", "vid-revfin01", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        db.jdbc.update("update vendor_order set last_error_code = 'PARTIAL_DELIVERY', vendor_status = 'finished' "
+                + "where order_id = ?", done);
+        lastReadAgo(done, Duration.ofMinutes(30));
+        long quiet = sent("GFS-26-REVMISS1", "vid-revmiss1", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        db.jdbc.update("update vendor_order set last_error_code = 'UNKNOWN_STATUS', vendor_status = 'brandNewWord' "
+                + "where order_id = ?", quiet);
+        lastReadAgo(quiet, Duration.ofMinutes(30));
+        bulk(Map.of());
+
+        poller.pollOnce();
+
+        assertThat(timesAsked("vid-revfin01")).isZero();
+        assertThat(timesAsked("vid-revmiss1")).isOne();
+        assertThat(row(quiet).get("missing_polls")).isEqualTo(0);
+        assertThat(row(quiet).get("state")).isEqualTo("NEEDS_REVIEW");
+        verify(notifications, never()).fulfilmentAlert(any());
+    }
+
+    @Test
+    @DisplayName("recovery: every order waiting for review over UNKNOWN_STATUS is read again at once, and listed")
+    void recoveryAfterDeploy() {
+        // As production had them: under review since the first read, with the word alerted.
+        long a = sent("GFS-26-0V88YSRB", "vid-recov-a", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        long b = sent("GFS-26-MQRB4EBP", "vid-recov-b", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        long other = sent("GFS-26-RECOV003", "vid-recov-c", "NEEDS_REVIEW", OrderStatus.IN_PROGRESS);
+        for (long id : List.of(a, b)) {
+            db.jdbc.update("update vendor_order set last_error_code = 'UNKNOWN_STATUS', vendor_status = "
+                    + "'transfersInProgress', unknown_words_alerted = '{status:transfersinprogress}', "
+                    + "last_polled_at = now() - interval '6 hours' where order_id = ?", id);
+        }
+        db.jdbc.update("update vendor_order set last_error_code = 'NO_SUITABLE_SENDER', vendor_status = "
+                + "'partlyDelivered', last_polled_at = now() - interval '6 hours' where order_id = ?", other);
+        bulk(Map.of(
+                "vid-recov-a", observedPublicPool(110),
+                "vid-recov-b", report("finished", "finished", "finished", 500, 500, 0),
+                "vid-recov-c", report("partlyDelivered", "finished", "noSuitableSender", 500, 40, 0)));
+
+        String logged;
+        try (VendorTestSupport.LogCapture logs = new VendorTestSupport.LogCapture()) {
+            poller.pollOnce();
+            logged = logs.all();
+        }
+
+        assertThat(logged).contains("FUT Transfer: 2 order(s) waiting for review over a partner word we did not know, "
+                + "read again from now: GFS-26-0V88YSRB, GFS-26-MQRB4EBP");
+        assertThat(row(a).get("state")).isEqualTo("IN_DELIVERY");
+        assertThat(row(a).get("amount_delivered_k")).isEqualTo(110L);
+        // Finished in full: delivered through the usual finished rule, the order moved, the sign-in deleted.
+        assertThat(row(b).get("state")).isEqualTo("DELIVERED");
+        verify(orderService).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+        verify(vault).purge(eq(b), anyString());
+        // A review for another reason stays the admin's, with its numbers current.
+        assertThat(row(other).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat(row(other).get("amount_delivered_k")).isEqualTo(40L);
+        verify(notifications, never()).fulfilmentAlert(any());
+        neverSent();
+    }
+
     @Test
     @DisplayName("diagnostic: an amount that is not a whole number, or missing, is logged with the progress fields only")
     void unreadableAmountLogged() {

@@ -1103,6 +1103,10 @@ function SupplierProgress({ order }: { order: Order }) {
               <Badge tone={TRANSFER_STATUS_TONE[status]}>{t.track.transferStatus[status]}</Badge>
             </p>
           )}
+          {/* Waiting for our staff: the progress still moves, and the customer is told only this. */}
+          {started && !finished && order.transferUnderReview && (
+            <p className="mb-3 text-[13px] text-chalk-muted" data-testid="transfer-checking">{t.track.transferChecking}</p>
+          )}
           {showBar && (
           <>
           <div className="flex items-baseline justify-between gap-3">

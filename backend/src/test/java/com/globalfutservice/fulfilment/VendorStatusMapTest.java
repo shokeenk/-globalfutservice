@@ -84,6 +84,43 @@ class VendorStatusMapTest {
     }
 
     @Test
+    @DisplayName("observed 2026-10-14, public pool: economyState's words in status -- transfersInProgress is delivering")
+    void publicPoolStatusWords() {
+        // The reply FUT Transfer gave for a public pool order, 40 seconds after it was accepted.
+        Outcome observed = VendorStatusMap.map(new Report("transfersInProgress", "started", "transfersInProgress",
+                OURS, 0L, false, false, "pending"), OURS);
+        assertThat(observed).isEqualTo(new Outcome(State.IN_DELIVERY, CustomerAction.NONE, null, false));
+
+        assertThat(map("TransfersInProgress", "finished", "transfersInProgress", 500L, 110L, false).state())
+                .isEqualTo(State.IN_DELIVERY);
+        assertThat(map("transferCycleComplete", "finished", "transferCycleComplete", 500L, 0L, false).state())
+                .isEqualTo(State.IN_DELIVERY);
+        assertThat(map("started", "started", "started", 500L, 0L, false).state()).isEqualTo(State.SUBMITTED);
+        assertThat(map("entered", "entered", "entered", 500L, 0L, false).state()).isEqualTo(State.SUBMITTED);
+        // A failure word in status keeps its meaning: not a status we know.
+        assertThat(map("FailedWrongCredentialsTo", "finished", "FailedWrongCredentialsTo", 500L, 0L, false).reason())
+                .isEqualTo("UNKNOWN_STATUS");
+        // And none of it delivers: finished is still the only way.
+        assertThat(map("transfersInProgress", "finished", "transfersInProgress", 500L, 500L, false).state())
+                .isEqualTo(State.IN_DELIVERY);
+    }
+
+    @Test
+    @DisplayName("the word behind an unknown-word review, as field:word; null for any other outcome")
+    void unknownWord() {
+        Report r = new Report("SomethingNew", "finished", "transfersInProgress", 500L, 0L, false);
+        assertThat(VendorStatusMap.unknownWord(VendorStatusMap.map(r, OURS), r)).isEqualTo("status:somethingnew");
+        Report ac = new Report("partlyDelivered", "brandNewCheck", "transfersInProgress", 500L, 0L, false);
+        assertThat(VendorStatusMap.unknownWord(VendorStatusMap.map(ac, OURS), ac)).isEqualTo("accountCheck:brandnewcheck");
+        Report es = new Report("partlyDelivered", "finished", "newEconomy", 500L, 0L, false);
+        assertThat(VendorStatusMap.unknownWord(VendorStatusMap.map(es, OURS), es)).isEqualTo("economyState:neweconomy");
+        Report fine = new Report("partlyDelivered", "finished", "transfersInProgress", 500L, 10L, false);
+        assertThat(VendorStatusMap.unknownWord(VendorStatusMap.map(fine, OURS), fine)).isNull();
+        Report interrupted = new Report("interrupted", "finished", "entered", 500L, 0L, false);
+        assertThat(VendorStatusMap.unknownWord(VendorStatusMap.map(interrupted, OURS), interrupted)).isNull();
+    }
+
+    @Test
     @DisplayName("finished with more than ordered is delivered -- amount >= amountOrdered -- and an admin is told")
     void overDelivered() {
         Outcome over = map("finished", "finished", "finished", 500L, 600L, false);

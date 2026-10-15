@@ -231,7 +231,8 @@ public class OrderMapper {
                 payment.payBy(),
                 results == null ? null : results.customer(order),
                 listingView(order),
-                partnerTrackingUrl);
+                partnerTrackingUrl,
+                progress != null && progress.underReview());
     }
 
     /** The frozen listing of an Objectives or Tournaments order, never the listing as it is now. */

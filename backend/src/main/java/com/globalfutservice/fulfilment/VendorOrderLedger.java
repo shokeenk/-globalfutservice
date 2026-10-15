@@ -210,17 +210,25 @@ public class VendorOrderLedger {
                 """, new MapSqlParameterSource("orderId", orderId));
     }
 
-    /** How far the partner has got, in thousands: what we asked for, and delivered so far. */
-    public record Progress(long orderedK, Long deliveredK) {
+    /**
+     * How far the partner has got, in thousands: what we asked for, and delivered so far; and
+     * whether an admin is looking at the order (the customer is told only that we are checking).
+     */
+    public record Progress(long orderedK, Long deliveredK, boolean underReview) {
+        public Progress(long orderedK, Long deliveredK) {
+            this(orderedK, deliveredK, false);
+        }
     }
 
     /** The customer's progress bar: the partner's own count of ordered, ours if it has not said. */
     public Optional<Progress> progress(long orderId) {
         return jdbc.query("""
-                select coalesce(vendor_amount_ordered_k, amount_ordered_k) as ordered_k, amount_delivered_k
+                select coalesce(vendor_amount_ordered_k, amount_ordered_k) as ordered_k, amount_delivered_k,
+                       state = 'NEEDS_REVIEW' as under_review
                   from vendor_order where order_id = :orderId and submitted_at is not null
                 """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new Progress(
-                rs.getLong("ordered_k"), rs.getObject("amount_delivered_k", Long.class))).stream().findFirst();
+                rs.getLong("ordered_k"), rs.getObject("amount_delivered_k", Long.class),
+                rs.getBoolean("under_review"))).stream().findFirst();
     }
 
     /** {@link #progress} for a page of orders at once: the admin's Orders table, in one query. */
@@ -298,13 +306,13 @@ public class VendorOrderLedger {
     public record PollRow(long orderId, String externalRef, String vendorOrderId, String state,
                           long amountOrderedK, Long deliveredK, String vendorStatus, int missingPolls,
                           String customerAction, String vendorAccountCheck, String vendorEconomyState,
-                          Instant resubmittedAt, String orderMode) {
+                          Instant resubmittedAt, String orderMode, String lastErrorCode) {
     }
 
     private static final String POLL_COLUMNS = """
             order_id, external_ref, vendor_order_id, state, amount_ordered_k, amount_delivered_k,
             vendor_status, missing_polls, customer_action, vendor_account_check, vendor_economy_state,
-            resubmitted_at, order_mode
+            resubmitted_at, order_mode, last_error_code
             """;
 
     private static PollRow pollRow(ResultSet rs, int i) throws SQLException {
@@ -313,15 +321,49 @@ public class VendorOrderLedger {
                 rs.getString("vendor_status"), rs.getInt("missing_polls"), rs.getString("customer_action"),
                 rs.getString("vendor_account_check"), rs.getString("vendor_economy_state"),
                 rs.getTimestamp("resubmitted_at") == null ? null : rs.getTimestamp("resubmitted_at").toInstant(),
-                rs.getString("order_mode"));
+                rs.getString("order_mode"), rs.getString("last_error_code"));
     }
 
-    /** Orders the vendor is working on or waiting for the customer on, least recently asked about first. */
+    /** How often an order waiting for an admin is read again, while the partner still has it open. */
+    public static final java.time.Duration REVIEW_REREAD = java.time.Duration.ofMinutes(5);
+
+    /**
+     * Orders the vendor is working on or waiting for the customer on; and, every
+     * {@link #REVIEW_REREAD}, orders waiting for an admin that the partner still has open --
+     * under its id, not reported finished or aborted -- so their numbers stay current and a
+     * word we did not know can be understood later. Least recently asked about first.
+     */
     public List<PollRow> openForPolling() {
         return jdbc.query("select " + POLL_COLUMNS + """
-                  from vendor_order where state in ('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER')
+                  from vendor_order
+                 where state in ('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER')
+                    or (state = 'NEEDS_REVIEW' and vendor_order_id is not null
+                        and lower(coalesce(vendor_status, '')) <> 'finished'
+                        and not coalesce(vendor_was_aborted, false)
+                        and (last_polled_at is null
+                             or last_polled_at <= now() - :rereadSeconds * interval '1 second'))
                  order by last_polled_at asc nulls first, id
-                """, new MapSqlParameterSource(), VendorOrderLedger::pollRow);
+                """, new MapSqlParameterSource("rereadSeconds", REVIEW_REREAD.toSeconds()), VendorOrderLedger::pollRow);
+    }
+
+    /**
+     * Claims the admin alert about one word we did not know, for one order: true once per
+     * word per order, however often the partner sends it.
+     */
+    public boolean claimUnknownWordAlert(long orderId, String word) {
+        return jdbc.update("""
+                update vendor_order set unknown_words_alerted = array_append(unknown_words_alerted, :word)
+                 where order_id = :orderId and not (:word = any(unknown_words_alerted))
+                """, new MapSqlParameterSource("orderId", orderId).addValue("word", word)) == 1;
+    }
+
+    /** Orders waiting for an admin because of a word we did not know: what a re-read can recover. */
+    public List<String> unknownWordReviews() {
+        return jdbc.queryForList("""
+                select external_ref from vendor_order
+                 where state = 'NEEDS_REVIEW' and last_error_code in (:codes)
+                 order by id
+                """, new MapSqlParameterSource("codes", VendorStatusMap.UNKNOWN_WORD_REASONS), String.class);
     }
 
     /** Sends still SUBMITTING after the grace period: the process that sent them is gone. */
