@@ -94,6 +94,9 @@ public final class VendorStatusMap {
             // Observed, public pool: economyState's progress words.
             Map.entry("started", "onboarding"), Map.entry("transfersinprogress", "delivering"),
             Map.entry("transfercyclecomplete", "delivering"),
+            // FUT Transfer's answer of 2026-10-15: the other overall status values (the list is not closed).
+            Map.entry("paused", "paused"), Map.entry("cancelled", "cancelled"), Map.entry("canceled", "cancelled"),
+            Map.entry("archived", "archived"),
             // The sign-in refusals, wherever they appear: the customer is asked to fix it.
             Map.entry("wronguserpass", "stopped"), Map.entry("wrongba", "stopped"),
             Map.entry("failedwrongcredentialsto", "stopped"), Map.entry("failedwrongbacodeto", "stopped"));
@@ -113,6 +116,16 @@ public final class VendorStatusMap {
     /** The review reasons that are a word we did not know: read again, and recovered once understood. */
     public static final java.util.Set<String> UNKNOWN_WORD_REASONS = java.util.Set.of(
             "UNKNOWN_STATUS", "UNKNOWN_ACCOUNT_CHECK", "UNKNOWN_ECONOMY_STATE", "NO_STATUS");
+
+    /** Paused at FUT Transfer: an admin looks, the order keeps being read, and it picks up by itself when resumed. */
+    public static final String PAUSED = "PAUSED";
+    /** Cancelled at FUT Transfer, with some coins delivered, or none. */
+    public static final String CANCELLED_PARTIAL = "CANCELLED_PARTIAL";
+    public static final String CANCELLED_NOTHING = "CANCELLED_NOTHING_DELIVERED";
+
+    /** Reviews undone by themselves once a later report is understood and says otherwise. */
+    public static final java.util.Set<String> RECOVERABLE_REASONS = java.util.Set.of(
+            "UNKNOWN_STATUS", "UNKNOWN_ACCOUNT_CHECK", "UNKNOWN_ECONOMY_STATE", "NO_STATUS", PAUSED);
 
     /**
      * The word behind an unknown-word outcome, as {@code field:word} -- what an admin is
@@ -238,6 +251,16 @@ public final class VendorStatusMap {
                     : Outcome.review("FINISHED_NOTHING_DELIVERED", CustomerAction.NONE);
         }
 
+        String meaning = STATUS.get(status);
+        String simplified = norm(r.simplifiedStatus());
+        // Closed at FUT Transfer without finishing: an admin decides, knowing what was delivered.
+        if ("cancelled".equals(meaning) || simplified.equals("cancelled") || simplified.equals("canceled")) {
+            return Outcome.review(delivered > 0 ? CANCELLED_PARTIAL : CANCELLED_NOTHING, CustomerAction.NONE);
+        }
+        if ("archived".equals(meaning)) {
+            return Outcome.review("ARCHIVED", CustomerAction.NONE);
+        }
+
         Known ac = ACCOUNT_CHECK.get(accountCheck);
         Known es = ECONOMY_STATE.get(economyState);
         // A sign-in refusal reported in status itself, as public pool orders mirror economyState there.
@@ -258,11 +281,16 @@ public final class VendorStatusMap {
             };
             return Outcome.review(reason, known.action());
         }
-        if (status.equals("interrupted")) {
+        if ("paused".equals(meaning)) {
+            return Outcome.review(PAUSED, CustomerAction.NONE);
+        }
+        if (status.equals("interrupted") || simplified.equals("interrupted")) {
             return Outcome.review("INTERRUPTED", CustomerAction.NONE);
         }
-        return Outcome.working("delivering".equals(STATUS.get(status)) || delivered > 0
-                ? State.IN_DELIVERY : State.SUBMITTED);
+        if (simplified.equals("error")) {
+            return Outcome.review("PARTNER_ERROR", CustomerAction.NONE);
+        }
+        return Outcome.working("delivering".equals(meaning) || delivered > 0 ? State.IN_DELIVERY : State.SUBMITTED);
     }
 
     private static String norm(String s) {

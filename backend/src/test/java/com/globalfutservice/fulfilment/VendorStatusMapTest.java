@@ -133,6 +133,54 @@ class VendorStatusMapTest {
     }
 
     @Test
+    @DisplayName("FUT Transfer's status list of 2026-10-15: every word maps as agreed, and none but finished delivers")
+    void everyStatusWord() {
+        for (String w : List.of("entered", "ready", "waitingForAssignment")) {
+            assertThat(map(w, "started", "entered", 500L, 0L, false).state()).as(w).isEqualTo(State.SUBMITTED);
+            assertThat(map(w, "started", "entered", 500L, 20L, false).state()).as(w).isEqualTo(State.IN_DELIVERY);
+        }
+        for (String w : List.of("transfersInProgress", "partlyDelivered")) {
+            assertThat(map(w, "finished", "transfersInProgress", 500L, 0L, false).state()).as(w)
+                    .isEqualTo(State.IN_DELIVERY);
+            assertThat(map(w, "finished", "transfersInProgress", 500L, 500L, false).state()).as(w + ", all delivered")
+                    .isEqualTo(State.IN_DELIVERY);
+        }
+        assertThat(map("finished", "finished", "finished", 500L, 500L, false).state()).isEqualTo(State.DELIVERED);
+
+        Outcome paused = map("paused", "finished", "transfersInProgress", 500L, 120L, false);
+        assertThat(paused.state()).isEqualTo(State.NEEDS_REVIEW);
+        assertThat(paused.reason()).isEqualTo(VendorStatusMap.PAUSED);
+        assertThat(VendorStatusMap.RECOVERABLE_REASONS).contains(VendorStatusMap.PAUSED);
+
+        for (String w : List.of("cancelled", "canceled", "Cancelled")) {
+            assertThat(map(w, "finished", "transfersInProgress", 500L, 120L, false).reason()).as(w)
+                    .isEqualTo(VendorStatusMap.CANCELLED_PARTIAL);
+            assertThat(map(w, "finished", "transfersInProgress", 500L, 0L, false).reason()).as(w)
+                    .isEqualTo(VendorStatusMap.CANCELLED_NOTHING);
+        }
+        assertThat(map("archived", "finished", "finished", 500L, 500L, false).reason()).isEqualTo("ARCHIVED");
+        assertThat(map("interrupted", "finished", "entered", 500L, 0L, false).reason()).isEqualTo("INTERRUPTED");
+        assertThat(map("somethingBrandNew", "finished", "finished", 500L, 500L, false).reason())
+                .isEqualTo("UNKNOWN_STATUS");
+    }
+
+    @Test
+    @DisplayName("simplifiedStatus: completed is finished; error, interrupted and cancelled go to an admin")
+    void simplifiedStatuses() {
+        java.util.function.Function<String, Outcome> with = s -> VendorStatusMap.map(
+                new Report("transfersInProgress", "finished", "transfersInProgress", 500L, 120L, false, false, s), OURS);
+        assertThat(with.apply("pending").state()).isEqualTo(State.IN_DELIVERY);
+        assertThat(with.apply("error").reason()).isEqualTo("PARTNER_ERROR");
+        assertThat(with.apply("interrupted").reason()).isEqualTo("INTERRUPTED");
+        assertThat(with.apply("cancelled").reason()).isEqualTo(VendorStatusMap.CANCELLED_PARTIAL);
+        assertThat(with.apply("somethingNew").state()).as("an unknown summary is never completion")
+                .isEqualTo(State.IN_DELIVERY);
+        for (String s : List.of("error", "interrupted", "cancelled", "somethingNew")) {
+            assertThat(with.apply(s).state()).isNotEqualTo(State.DELIVERED);
+        }
+    }
+
+    @Test
     @DisplayName("the word behind an unknown-word review, as field:word; null for any other outcome")
     void unknownWord() {
         Report r = new Report("SomethingNew", "finished", "transfersInProgress", 500L, 0L, false);

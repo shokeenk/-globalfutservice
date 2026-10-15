@@ -29,10 +29,54 @@ The collection documents `status` as one of `ready`, `entered`, `partlyDelivered
 
 **What we saw.** Every link `/generateOrderStatusLink` returned was in its documented form, `https://transferstatus.top/<shortCode>`. Each one answered "404 - File or directory not found", an IIS error page served behind Cloudflare. The site's root page answered with an empty 200. The same code worked on FUT Transfer's own page, `https://futtransfer.top/orderStatus?code=<shortCode>`. FUT Transfer has been asked about it.
 
-**What we do now.** `GFS_FUTTRANSFER_SHOW_PARTNER_LINK` defaults to `false`. While it is off:
+**What we did then** (superseded the same day, see below). `GFS_FUTTRANSFER_SHOW_PARTNER_LINK` defaulted to `false`. While it is off:
 - customers get no partner Track order button;
 - the "Your coins are on the way" email's TRACK ORDER button opens our own `/track?ref=` page;
 - the link is still requested, stored exactly as returned and shown to admins, marked "hidden from customers".
 
 Turning it on needs no backfill.
+
+## 2026-10-15: FUT Transfer's answers
+
+FUT Transfer answered our questions in writing. Their answers override what we had assumed from the collection.
+
+### Tracking link
+
+- Their short-link fix (`transferstatus.top/<shortCode>`) isn't live yet. Until it is, use `https://futtransfer.top/orderStatus?code=<shortCode>`, keeping parameters such as `shop`.
+- We store `shortCode`, `shop` and `specialParams` from `/generateOrderStatusLink` beside the link, which we still keep exactly as returned. For links stored earlier, the code is taken from the link's path.
+- `GFS_FUTTRANSFER_PARTNER_LINK_STYLE` chooses what customers get:
+  - **`STATUS_PAGE`** (default): `https://futtransfer.top/orderStatus?code=<shortCode>`, plus `&shop=<shop>` when the shop isn't empty.
+  - **`SHORT_LINK`**: the link as returned.
+- An order whose link came with a non-empty `specialParams` gets the short link instead. Nothing says how to add `specialParams` to the status page, and the admin page says so for that order.
+- `GFS_FUTTRANSFER_SHOW_PARTNER_LINK` is back to `true` by default.
+
+### Status values
+
+The overall `status` values are: `entered`, `ready`, `waitingForAssignment`, `transfersInProgress`, `partlyDelivered`, `interrupted`, `finished`, `paused`, `cancelled` / `canceled` and `archived`. **The list is not closed.**
+
+`simplifiedStatus` is one of `pending`, `completed`, `error`, `interrupted` or `cancelled`.
+
+What we do with each:
+
+| Reported | Our state |
+| --- | --- |
+| `entered`, `ready`, `waitingForAssignment` (and `started`, observed earlier) | onboarding: SUBMITTED, or IN_DELIVERY once coins arrive |
+| `transfersInProgress`, `partlyDelivered` (and `transferCycleComplete`) | delivering: IN_DELIVERY |
+| `finished`, or `simplifiedStatus` `completed` | the existing finished rules (below) |
+| `paused` | NEEDS_REVIEW (`PAUSED`). Still read every 5 minutes, and recovers by itself once a later report says it is moving again. |
+| `cancelled` / `canceled`, or `simplifiedStatus` `cancelled` | NEEDS_REVIEW: `CANCELLED_PARTIAL` when some coins were delivered, `CANCELLED_NOTHING_DELIVERED` when none. No longer read. |
+| `archived` | NEEDS_REVIEW (`ARCHIVED`). No longer read. |
+| `interrupted`, or `simplifiedStatus` `interrupted` | NEEDS_REVIEW (`INTERRUPTED`) |
+| `simplifiedStatus` `error` | NEEDS_REVIEW (`PARTNER_ERROR`) |
+| a sign-in refusal in `status`, `accountCheck` or `economyState` | AWAITING_CUSTOMER, and the customer is asked to fix it |
+| any word we don't know | NEEDS_REVIEW (`UNKNOWN_*`), read every 5 minutes, recovers once understood. Never treated as completion. |
+
+DELIVERED comes only from the finished rules: `status` `finished` or `simplifiedStatus` `completed`, with at least the ordered amount delivered. Finished with less goes to review.
+
+### Ordering (applies when sending public-pool orders)
+
+- **`buyNowThreshold`**: a price **ceiling in EUR per 100K** for public-pool `targetedSnipe`. A positive value is required; 0 doesn't mean "unlimited". It's a maximum, not a fixed execution price.
+- **`maxPrice`**: a guard for the standard supplier-buying flow only (0 = off). `targetedSnipe` doesn't use it.
+- **Rate**: `/buyConditionAPI` with the platform (`PS`, which covers Xbox, or `PC`), then the supplier's `priceConsole` or `pricePC`. Re-check it just before sending. Never send the slider quantity or the order total as `buyNowThreshold`, and count tool and transfer fees only once.
+- **`minTransferAmount`**: the API default is 0 (off); 50 means 50K per transfer. To turn it off, send `"minTransferAmount": 0` explicitly. `targetedSnipe` needs at least 6K in total.
 

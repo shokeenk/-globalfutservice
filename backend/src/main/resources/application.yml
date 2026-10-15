@@ -348,9 +348,11 @@ gfs:
       every: ${GFS_FUTTRANSFER_AUTO_DISPATCH_EVERY:PT15S}
     base-url: ${GFS_FUTTRANSFER_BASE_URL:https://futtransfer.top}
     # Whether customers are given FUT Transfer's tracking link (order page button, "on the way"
-    # email). Off: its transferstatus.top links answered 404 on 2026-10-15. The link is still
-    # requested, stored and shown to admins; the email's button opens our own tracking page.
-    show-partner-link: ${GFS_FUTTRANSFER_SHOW_PARTNER_LINK:false}
+    # email). Off: the email's button opens our own tracking page; admins still see the link.
+    show-partner-link: ${GFS_FUTTRANSFER_SHOW_PARTNER_LINK:true}
+    # STATUS_PAGE: https://futtransfer.top/orderStatus?code=<shortCode>(&shop=<shop>), as FUT Transfer
+    # said to use while its transferstatus.top short links answer 404. SHORT_LINK: the link as returned.
+    partner-link-style: ${GFS_FUTTRANSFER_PARTNER_LINK_STYLE:STATUS_PAGE}
     # The vendor's second domain. Status reads may fall back to it; placing an order never does.
     backup-base-url: ${GFS_FUTTRANSFER_BACKUP_BASE_URL:https://eatransfer.top}
     api-user: ${GFS_FUTTRANSFER_API_USER:}

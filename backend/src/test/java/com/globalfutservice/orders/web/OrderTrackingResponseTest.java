@@ -95,7 +95,8 @@ class OrderTrackingResponseTest {
     @DisplayName("the partner's tracking link: on the owner's own coin order only -- never the guest lookup or staff")
     void partnerLinkOwnerOnly() {
         String link = "https://transferstatus.top/abc12345?lang=de";
-        when(ledger.trackingUrl(7L)).thenReturn(Optional.of(link));
+        when(ledger.partnerLink(7L)).thenReturn(Optional.of(new VendorOrderLedger.PartnerLink(link, "abc12345", null,
+                "lang=de")));
 
         assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl()).isEqualTo(link);
         assertThat(mapper.toResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
@@ -142,7 +143,8 @@ class OrderTrackingResponseTest {
     void partnerLinkHidden() {
         mapper.setPartnerLinks(com.globalfutservice.fulfilment.PartnerLinkVisibility.HIDDEN);
         ReflectionTestUtils.setField(order, "transferStartedAt", Instant.parse("2026-10-07T10:00:00Z"));
-        when(ledger.trackingUrl(7L)).thenReturn(Optional.of("https://transferstatus.top/abc12345"));
+        when(ledger.partnerLink(7L)).thenReturn(Optional.of(new VendorOrderLedger.PartnerLink(
+                "https://transferstatus.top/abc12345", "abc12345", null, null)));
         OrderDtos.OrderResponse r = mapper.toOwnerResponse(order, List.of(), true);
         assertThat(r.partnerTrackingUrl()).isNull();
         assertThat(r.partnerLinkState()).isNull();
@@ -152,7 +154,7 @@ class OrderTrackingResponseTest {
     @DisplayName("partner link shown, none yet: PENDING while one is coming, UNAVAILABLE when there will be none")
     void partnerLinkStates() {
         ReflectionTestUtils.setField(order, "transferStartedAt", Instant.parse("2026-10-07T10:00:00Z"));
-        when(ledger.trackingUrl(7L)).thenReturn(Optional.empty());
+        when(ledger.partnerLink(7L)).thenReturn(Optional.empty());
         when(ledger.trackingStatus(7L)).thenReturn(Optional.of(
                 new VendorOrderLedger.TrackingLinkStatus(null, null, null, 1, "HTTP_500", null)));
         assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerLinkState()).isEqualTo("PENDING");
@@ -169,9 +171,27 @@ class OrderTrackingResponseTest {
     }
 
     @Test
+    @DisplayName("STATUS_PAGE, the default style: FUT Transfer's status page with the code, and the shop when there is one")
+    void statusPageStyle() {
+        mapper.setPartnerLinks(new com.globalfutservice.fulfilment.PartnerLinkVisibility(true,
+                com.globalfutservice.fulfilment.PartnerLinkVisibility.Style.STATUS_PAGE));
+        when(ledger.partnerLink(7L)).thenReturn(Optional.of(new VendorOrderLedger.PartnerLink(
+                "https://transferstatus.top/abc12345", "abc12345", "gfs shop", null)));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl())
+                .isEqualTo("https://futtransfer.top/orderStatus?code=abc12345&shop=gfs+shop");
+
+        when(ledger.partnerLink(7L)).thenReturn(Optional.of(new VendorOrderLedger.PartnerLink(
+                "https://transferstatus.top/abc12345", "abc12345", null, null)));
+        assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl())
+                .isEqualTo("https://futtransfer.top/orderStatus?code=abc12345");
+        // Still never on the guest lookup.
+        assertThat(mapper.toResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
+    }
+
+    @Test
     @DisplayName("no link stored yet: the owner sees no Track order button")
     void noPartnerLinkYet() {
-        when(ledger.trackingUrl(7L)).thenReturn(Optional.empty());
+        when(ledger.partnerLink(7L)).thenReturn(Optional.empty());
         assertThat(mapper.toOwnerResponse(order, List.of(), true).partnerTrackingUrl()).isNull();
     }
 

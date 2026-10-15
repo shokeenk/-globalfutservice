@@ -119,7 +119,7 @@ public class PartnerTrackingLinks {
     private Outcome ask(VendorOrderLedger.LinkRow row) {
         return switch (client.trackingLink(row.vendorOrderId(), row.externalRef())) {
             case FutTransferClient.LinkReady r -> {
-                VendorOrderLedger.LinkStored stored = ledger.storeTrackingLink(row.orderId(), r.fullUrl());
+                VendorOrderLedger.LinkStored stored = ledger.storeTrackingLink(row.orderId(), r);
                 log.info("Tracking link stored for {}{}", row.externalRef(), stored.startedEmailNotNeeded()
                         ? "; within " + TransferStartedNotices.LINK_GRACE.toMinutes()
                                 + " min of the transfer starting, so only \"your coins are on the way\" is sent"
@@ -162,8 +162,10 @@ public class PartnerTrackingLinks {
             if (order == null || !order.getSku().isCoinTransfer() || FINISHED.contains(order.getStatus())) {
                 return;
             }
-            // The partner's link only when customers are given it; otherwise our own page.
-            notifications.coinsOnTheWay(orderService.notificationFor(order), partnerLinks.shown() ? link.get() : null);
+            // The partner's link, in the configured style, only when customers are given it;
+            // otherwise our own page.
+            String url = ledger.partnerLink(orderId).map(partnerLinks::customerUrl).orElse(null);
+            notifications.coinsOnTheWay(orderService.notificationFor(order), url);
             log.info("Order {}: \"your coins are on the way\" sent", order.getPublicRef());
         } catch (RuntimeException e) {
             log.warn("Could not send \"your coins are on the way\" for order {}: {}", orderId,
