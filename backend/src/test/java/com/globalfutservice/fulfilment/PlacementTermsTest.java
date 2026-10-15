@@ -38,16 +38,13 @@ class PlacementTermsTest {
     }
 
     @Test
-    @DisplayName("the client's defaults: public pool, targetedSnipe, threshold 0 on every order, no maxPrice")
+    @DisplayName("the defaults: public pool, targetedSnipe, no fixed threshold -- it is worked out from FUT "
+            + "Transfer's prices just before the send -- no maxPrice")
     void defaults() {
         var terms = send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
                 VendorTestSupport.DEFAULT_POOL), 100));
-        assertThat(terms).isEqualTo(new VendorOrderLedger.SendTerms("PUBLIC_POOL", "targetedSnipe",
-                BigDecimal.ZERO, null));
+        assertThat(terms).isEqualTo(new VendorOrderLedger.SendTerms("PUBLIC_POOL", "targetedSnipe", null, null));
         assertThat(terms.publicPool()).isTrue();
-        // Unset or empty is 0 too.
-        assertThat(send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
-                pool(BuyNowThresholdMode.FIXED, null, false, null)), 100)).buyNowThreshold()).isEqualByComparingTo("0");
     }
 
     @Test
@@ -59,10 +56,11 @@ class PlacementTermsTest {
                     VendorTestSupport.ORDER_AMOUNT_POOL, pool(BuyNowThresholdMode.ORDER_AMOUNT, null, false, null)}) {
                 BigDecimal sent = send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe", p),
                         amountK)).buyNowThreshold();
-                assertThat(sent).as(amountK + "K, " + p).isEqualByComparingTo("0");
+                // Not decided here: PoolThreshold works it out from FUT Transfer's prices at the send.
+                assertThat(sent).as(amountK + "K, " + p).isNull();
             }
         }
-        // A configured value is sent as configured, also under the retired mode.
+        // An emergency fixed value is passed on as configured, also under the retired mode.
         assertThat(send(PlacementTerms.decide(cfg(FutTransferOrderMode.PUBLIC_POOL, "targetedSnipe",
                 pool(BuyNowThresholdMode.ORDER_AMOUNT, "12", false, null)), 500)).buyNowThreshold())
                 .isEqualByComparingTo("12");

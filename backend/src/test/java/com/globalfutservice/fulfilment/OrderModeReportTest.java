@@ -2,8 +2,10 @@ package com.globalfutservice.fulfilment;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.domain.catalog.Platform;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -28,10 +30,17 @@ class OrderModeReportTest {
     @DisplayName("public pool at startup: the endpoint and every setting it sends, as information")
     void publicPoolLine() {
         assertThat(OrderModeReport.startupLine(POOL)).isEqualTo("FUT TRANSFER ORDER MODE: PUBLIC_POOL -- Approve "
-                + "sends /buyCoinsAPI (transferMethod=targetedSnipe, buyNowThreshold (price threshold per 100K)=0 on "
-                + "every order, minTransferAmount=50, topUpEnabled=300, autoFinishCycle=1, maxPrice not sent; no "
+                + "sends /buyCoinsAPI (transferMethod=targetedSnipe, buyNowThreshold (price ceiling, EUR per 100K)="
+                + "FUT Transfer's clearing supplier price + 10%, read at each send (limit PlayStation/Xbox none, PC "
+                + "none), minTransferAmount=0, topUpEnabled=300, autoFinishCycle=1, maxPrice not sent; no "
                 + "senderGroup, no supplierID).");
         assertThat(OrderModeReport.isWarning(POOL)).isFalse();
+
+        AppProperties.FutTransfer fixed = cfg(true, "targetedSnipe", AppProperties.FutTransferOrderMode.PUBLIC_POOL,
+                new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, new BigDecimal("4.10"),
+                        false, null, BigDecimal.TEN, new BigDecimal("4.50"), new BigDecimal("6")));
+        assertThat(OrderModeReport.startupLine(fixed))
+                .contains("=4.10 fixed on every order (limit PlayStation/Xbox €4.5, PC €6)");
     }
 
     @Test
@@ -39,7 +48,7 @@ class OrderModeReportTest {
     void retiredModeWarned() {
         AppProperties.FutTransfer retired = cfg(true, "targetedSnipe", AppProperties.FutTransferOrderMode.PUBLIC_POOL,
                 VendorTestSupport.ORDER_AMOUNT_POOL);
-        assertThat(OrderModeReport.startupLine(retired)).contains("(price threshold per 100K)=0 on every order")
+        assertThat(OrderModeReport.startupLine(retired)).contains("supplier price + 10%, read at each send")
                 .contains("GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE=ORDER_AMOUNT is set but ignored");
         assertThat(OrderModeReport.isWarning(retired)).isTrue();
     }
@@ -82,15 +91,16 @@ class OrderModeReportTest {
     }
 
     @Test
-    @DisplayName("for one order: public pool sends threshold 0, never the amount, no senderGroup, and the rest as set")
+    @DisplayName("for one order, without prices: public pool, the threshold still to be read, never the amount, no "
+            + "senderGroup, and the rest as set")
     void nextSendPool() {
         OrderModeReport.NextSend next = OrderModeReport.nextSend(POOL, 500);
         assertThat(next.orderMode()).isEqualTo("PUBLIC_POOL");
         assertThat(next.endpoint()).isEqualTo("/buyCoinsAPI");
         assertThat(next.transferMethod()).isEqualTo("targetedSnipe");
-        assertThat(next.buyNowThreshold()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(next.buyNowThresholdSource()).isEqualTo("the same on every order (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)");
-        assertThat(next.minTransferAmount()).isEqualTo(50);
+        assertThat(next.buyNowThreshold()).isNull();
+        assertThat(next.buyNowThresholdSource()).isEqualTo("FUT Transfer's supplier price + 10%, read at each send");
+        assertThat(next.minTransferAmount()).isZero();
         assertThat(next.pauseIfBelowMinTransfer()).isZero();
         assertThat(next.riskLevel()).isEqualTo(1);
         assertThat(next.maxPrice()).isNull();
@@ -118,6 +128,50 @@ class OrderModeReportTest {
         OrderModeReport.NextSend next = OrderModeReport.nextSend(maxPriceWithoutValue, 500);
         assertThat(next.refusal()).contains("GFS_FUTTRANSFER_MAX_PRICE");
         assertThat(next.buyNowThreshold()).isNull();
-        assertThat(next.minTransferAmount()).isEqualTo(50);
+        assertThat(next.minTransferAmount()).isZero();
+    }
+
+    private static FutTransferClient.BuyConditions market(String console, String pc) {
+        return new FutTransferClient.BuyConditions(List.of(new FutTransferClient.PoolSupplier(new BigDecimal(console),
+                new BigDecimal("100000"), new BigDecimal(pc), new BigDecimal("100000"))), new BigDecimal("0.10"),
+                new BigDecimal("0.25"), new BigDecimal("155.58"));
+    }
+
+    @Test
+    @DisplayName("for one order, with FUT Transfer's prices now: the rate, the margin, the threshold Approve would "
+            + "send and the estimated cost; above the limit or unreadable, the reason nothing would be sent")
+    void nextSendLive() {
+        OrderModeReport.NextSend ps = OrderModeReport.nextSend(POOL, 50, Platform.PLAYSTATION, market("4.00", "6.00"));
+        assertThat(ps.refusal()).isNull();
+        assertThat(ps.supplierRate()).isEqualByComparingTo("4.00");
+        assertThat(ps.marginPct()).isEqualByComparingTo("10");
+        assertThat(ps.buyNowThreshold()).isEqualByComparingTo("4.40");
+        assertThat(ps.limit()).isNull();
+        // 50K = 0.5 x (4.00 + 0.10 fee once).
+        assertThat(ps.estimatedCostEur()).isEqualByComparingTo("2.05");
+        assertThat(ps.priceNote()).isEqualTo("supplier rate + margin");
+        assertThat(ps.minTransferAmount()).isZero();
+
+        OrderModeReport.NextSend pc = OrderModeReport.nextSend(POOL, 500, Platform.PC, market("4.00", "6.00"));
+        assertThat(pc.buyNowThreshold()).isEqualByComparingTo("6.60");
+        assertThat(pc.estimatedCostEur()).isEqualByComparingTo("30.50");
+
+        AppProperties.FutTransfer limited = cfg(true, "targetedSnipe", AppProperties.FutTransferOrderMode.PUBLIC_POOL,
+                new AppProperties.FutTransferPublicPool(AppProperties.BuyNowThresholdMode.FIXED, null, false, null,
+                        BigDecimal.TEN, new BigDecimal("3.50"), null));
+        OrderModeReport.NextSend above = OrderModeReport.nextSend(limited, 50, Platform.XBOX, market("4.00", "6.00"));
+        assertThat(above.buyNowThreshold()).isNull();
+        assertThat(above.refusal()).isEqualTo("FUT Transfer price €4/100K is above your limit €3.5. Approve would "
+                + "send nothing.");
+        assertThat(above.supplierRate()).isEqualByComparingTo("4.00");
+        assertThat(above.limit()).isEqualByComparingTo("3.50");
+
+        OrderModeReport.NextSend unread = OrderModeReport.nextSend(POOL, 50, Platform.PLAYSTATION, null);
+        assertThat(unread.buyNowThreshold()).isNull();
+        assertThat(unread.refusal()).contains("could not be read").contains("tries again");
+
+        // Own senders: no threshold, whatever the prices.
+        assertThat(OrderModeReport.nextSend(OWN, 50, Platform.PLAYSTATION, market("4.00", "6.00")).buyNowThreshold())
+                .isNull();
     }
 }

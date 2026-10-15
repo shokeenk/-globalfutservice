@@ -108,7 +108,22 @@ final class FakeFutTransfer implements AutoCloseable {
         server.start();
         // The collection's "Ready (No Cooldown)" example, unless a test says otherwise.
         on("/getCooldownStatus", Reply.ok(COOLDOWN_READY));
+        // A public pool with stock at known prices, so a public-pool send has a threshold to work out.
+        on("/buyConditionAPI", Reply.ok(POOL_CONDITIONS));
     }
+
+    /**
+     * /buyConditionAPI in the collection's shape: one public supplier with deep stock at 4.00
+     * (console) and 6.00 (PC) EUR per 100K, so a threshold is 4.40 or 6.60 with the default
+     * 10% margin; a private supplier that is never used; a balance of 5000.
+     */
+    static final String POOL_CONDITIONS = """
+            {"transferFee":0,"suppliers":[{"supplierID":"md5_of_public_supplier_email","stockConsole":100000,
+             "priceConsole":4,"largestAccountConsole":100,"averageCoinsConsole":50,"stockPC":100000,"pricePC":6,
+             "largestAccountPC":100,"averageCoinsPC":50,"USDTOnly":0}],
+             "privateSuppliers":[{"supplierID":"sha1","stockConsole":1000,"priceConsole":1,"stockPC":0,"pricePC":0}],
+             "toolFee":0.25,"balance":5000}
+            """;
 
     static final String COOLDOWN_READY = "{\"success\":true,\"cooldownRemaining\":0,"
             + "\"message\":\"No recent transfers found. Account is ready.\",\"isReady\":true}";

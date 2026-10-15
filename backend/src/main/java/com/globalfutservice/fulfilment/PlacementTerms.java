@@ -44,9 +44,9 @@ final class PlacementTerms {
         }
 
         AppProperties.FutTransferPublicPool pool = cfg.publicPool();
-        // A price threshold per 100K, the same on every order: never the order's amount, whatever
-        // GFS_FUTTRANSFER_BUY_NOW_THRESHOLD_MODE still says. 0 unless configured.
-        BigDecimal threshold = pool.threshold();
+        // The threshold is worked out just before the send from FUT Transfer's prices (PoolThreshold);
+        // here only the emergency fixed value, if one is set. Never the order's amount.
+        BigDecimal threshold = pool.buyNowThreshold();
 
         BigDecimal maxPrice = null;
         if (pool.sendMaxPrice()) {

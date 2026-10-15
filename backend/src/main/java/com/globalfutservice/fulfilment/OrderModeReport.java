@@ -27,15 +27,67 @@ public final class OrderModeReport {
      * @param buyNowThresholdSource where that number comes from, in words
      * @param senderGroup           sent only by own-senders orders; null otherwise
      * @param refusal               why Approve would send nothing at all, or null
+     * @param supplierRate          FUT Transfer's clearing supplier price now, EUR per 100K; null if not read
+     * @param marginPct             the margin added, in percent; null for a fixed threshold
+     * @param limit                 the configured ceiling for the platform, EUR per 100K; null for none
+     * @param estimatedCostEur      the order at the supplier rate, fees once, EUR; null without a rate
+     * @param priceNote             how the threshold came about, in words
      */
     public record NextSend(String orderMode, String endpoint, String transferMethod, BigDecimal buyNowThreshold,
                            String buyNowThresholdSource, BigDecimal maxPrice, int topUpEnabled, int autoFinishCycle,
                            String senderGroup, String refusal, int minTransferAmount, int pauseIfBelowMinTransfer,
-                           int riskLevel) {
+                           int riskLevel, BigDecimal supplierRate, BigDecimal marginPct, BigDecimal limit,
+                           BigDecimal estimatedCostEur, String priceNote) {
+
+        public NextSend(String orderMode, String endpoint, String transferMethod, BigDecimal buyNowThreshold,
+                        String buyNowThresholdSource, BigDecimal maxPrice, int topUpEnabled, int autoFinishCycle,
+                        String senderGroup, String refusal, int minTransferAmount, int pauseIfBelowMinTransfer,
+                        int riskLevel) {
+            this(orderMode, endpoint, transferMethod, buyNowThreshold, buyNowThresholdSource, maxPrice, topUpEnabled,
+                    autoFinishCycle, senderGroup, refusal, minTransferAmount, pauseIfBelowMinTransfer, riskLevel,
+                    null, null, null, null, null);
+        }
     }
 
     /** What the admin page and the startup line call {@code buyNowThreshold}. */
-    public static final String THRESHOLD_LABEL = "price threshold per 100K";
+    public static final String THRESHOLD_LABEL = "price ceiling, EUR per 100K";
+
+    /**
+     * As {@link #nextSend(AppProperties.FutTransfer, long)}, with FUT Transfer's prices as read just
+     * now for the order's platform (null when the read failed): the numbers Approve would send.
+     */
+    public static NextSend nextSend(AppProperties.FutTransfer cfg, long amountK,
+                                    com.globalfutservice.domain.catalog.Platform platform,
+                                    FutTransferClient.BuyConditions market) {
+        NextSend shape = nextSend(cfg, amountK);
+        if (shape.refusal() != null || cfg.orderMode() == AppProperties.FutTransferOrderMode.OWN_SENDERS) {
+            return shape;
+        }
+        PoolThreshold.Result r = PoolThreshold.decide(market, platform, amountK, cfg.publicPool());
+        BigDecimal limit = PoolThreshold.pc(platform) ? cfg.publicPool().maxEurPer100kPc()
+                : cfg.publicPool().maxEurPer100kConsole();
+        return switch (r) {
+            case PoolThreshold.Price p -> new NextSend(shape.orderMode(), shape.endpoint(), shape.transferMethod(),
+                    p.threshold(), shape.buyNowThresholdSource(), shape.maxPrice(), shape.topUpEnabled(),
+                    shape.autoFinishCycle(), shape.senderGroup(), null, shape.minTransferAmount(),
+                    shape.pauseIfBelowMinTransfer(), shape.riskLevel(), p.supplierRate(), p.marginPct(), p.limit(),
+                    PoolThreshold.estimatedCost(p.supplierRate(), p.transferFee(), amountK),
+                    p.fixed() ? "fixed (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)"
+                            : p.cappedAtLimit() ? "supplier rate + margin, capped at your limit"
+                            : "supplier rate + margin");
+            case PoolThreshold.AboveLimit a -> new NextSend(shape.orderMode(), shape.endpoint(), shape.transferMethod(),
+                    null, shape.buyNowThresholdSource(), shape.maxPrice(), shape.topUpEnabled(), shape.autoFinishCycle(),
+                    shape.senderGroup(), a.message() + " Approve would send nothing.", shape.minTransferAmount(),
+                    shape.pauseIfBelowMinTransfer(), shape.riskLevel(), a.supplierRate(), null, a.limit(),
+                    PoolThreshold.estimatedCost(a.supplierRate(), market == null ? null : market.transferFee(), amountK),
+                    null);
+            case PoolThreshold.Unavailable u -> new NextSend(shape.orderMode(), shape.endpoint(), shape.transferMethod(),
+                    null, shape.buyNowThresholdSource(), shape.maxPrice(), shape.topUpEnabled(), shape.autoFinishCycle(),
+                    shape.senderGroup(), u.reason() + " Approve would send nothing now; automatic sending tries again "
+                    + "shortly.", shape.minTransferAmount(), shape.pauseIfBelowMinTransfer(), shape.riskLevel(), null,
+                    null, limit, null, null);
+        };
+    }
 
     public static NextSend nextSend(AppProperties.FutTransfer cfg, long amountK) {
         boolean ownSenders = cfg.orderMode() == AppProperties.FutTransferOrderMode.OWN_SENDERS;
@@ -49,10 +101,27 @@ public final class OrderModeReport {
                     order.minTransferAmount(), order.pauseIfBelowMinTransfer(), cfg.riskLevel());
         }
         VendorOrderLedger.SendTerms terms = ((PlacementTerms.Send) decision).terms();
-        String source = ownSenders ? null : "the same on every order (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)";
+        String source = ownSenders ? null : terms.buyNowThreshold() != null
+                ? "fixed (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)"
+                : "FUT Transfer's supplier price + " + cfg.publicPool().marginPct().stripTrailingZeros().toPlainString()
+                        + "%, read at each send";
         return new NextSend(terms.orderMode(), endpoint, terms.transferMethod(), terms.buyNowThreshold(), source,
                 terms.maxPrice(), order.topUpEnabled(), order.autoFinishCycle(), senderGroup, null,
                 order.minTransferAmount(), order.pauseIfBelowMinTransfer(), cfg.riskLevel());
+    }
+
+    /** How the threshold is set, in words, for the startup line. */
+    private static String thresholdRule(AppProperties.FutTransferPublicPool pool) {
+        String limits = "limit PlayStation/Xbox " + euro(pool.maxEurPer100kConsole()) + ", PC " + euro(pool.maxEurPer100kPc());
+        if (pool.buyNowThreshold() != null) {
+            return pool.buyNowThreshold().toPlainString() + " fixed on every order (" + limits + ")";
+        }
+        return "FUT Transfer's clearing supplier price + " + pool.marginPct().stripTrailingZeros().toPlainString()
+                + "%, read at each send (" + limits + ")";
+    }
+
+    private static String euro(BigDecimal v) {
+        return v == null ? "none" : "€" + v.stripTrailingZeros().toPlainString();
     }
 
     /** A retired setting still saying the order's amount: ignored, and worth a warning. */
@@ -84,7 +153,7 @@ public final class OrderModeReport {
         }
         AppProperties.FutTransferPublicPool pool = cfg.publicPool();
         return LOG_PREFIX + " PUBLIC_POOL -- Approve sends /buyCoinsAPI (transferMethod=" + cfg.transferMethod()
-                + ", buyNowThreshold (" + THRESHOLD_LABEL + ")=" + pool.threshold().toPlainString() + " on every order"
+                + ", buyNowThreshold (" + THRESHOLD_LABEL + ")=" + thresholdRule(pool)
                 + ", minTransferAmount=" + order.minTransferAmount() + ", topUpEnabled=" + order.topUpEnabled()
                 + ", autoFinishCycle=" + order.autoFinishCycle() + ", maxPrice "
                 + (pool.sendMaxPrice() ? pool.maxPrice().toPlainString() : "not sent") + "; no senderGroup, no supplierID)."

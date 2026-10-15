@@ -382,7 +382,9 @@ public class VendorOrderActions {
     public record Section(boolean enabled, boolean paused, VendorOrderLedger.Detail vendorOrder,
                           List<String> available, List<VendorCallLog.Call> calls,
                           List<VendorOrderActionLog.Entry> actions, String currentOrderMode,
-                          OrderModeReport.NextSend nextSend, Tracking tracking) {
+                          OrderModeReport.NextSend nextSend, Tracking tracking,
+                          /** What the customer paid, formatted in their currency; beside FUT Transfer's cost. */
+                          String customerPaid) {
     }
 
     /**
@@ -428,7 +430,38 @@ public class VendorOrderActions {
                         link.lastError(), link.nextAttemptAt(), ledger.linkable(order.getId()).isPresent(),
                         partnerLinks.shown());
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
-                actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order), tracking);
+                actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order), tracking,
+                customerPaid(order));
+    }
+
+    /** What the customer paid, in their currency, to set beside FUT Transfer's cost. */
+    private static String customerPaid(OrderEntity order) {
+        try {
+            return com.globalfutservice.domain.money.Money.ofMinor(order.getTotalMinor(), order.getCurrency()).format();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** FUT Transfer's prices per platform, kept a minute, so the admin page does not call it on every view. */
+    private final java.util.Map<String, CachedMarket> markets = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record CachedMarket(java.time.Instant at, FutTransferClient.BuyConditions market) {
+    }
+
+    private FutTransferClient.BuyConditions market(com.globalfutservice.domain.catalog.Platform platform) {
+        String key = FutTransferClient.poolPlatform(platform);
+        CachedMarket cached = markets.get(key);
+        java.time.Instant now = java.time.Instant.now();
+        if (cached != null && cached.at().isAfter(now.minusSeconds(60))) {
+            return cached.market();
+        }
+        FutTransferClient.BuyConditions read = client.buyConditions(platform, null)
+                instanceof FutTransferClient.ReadOk<FutTransferClient.BuyConditions> ok ? ok.value() : null;
+        if (read != null) {
+            markets.put(key, new CachedMarket(now, read));
+        }
+        return read;
     }
 
     private OrderModeReport.NextSend nextSend(OrderEntity order) {
@@ -444,6 +477,12 @@ public class VendorOrderActions {
                     null, null, shape.topUpEnabled(), shape.autoFinishCycle(), shape.senderGroup(),
                     e.getMessage() + " Nothing would be sent.", shape.minTransferAmount(),
                     shape.pauseIfBelowMinTransfer(), shape.riskLevel());
+        }
+        if (props.futTransfer().orderMode() == AppProperties.FutTransferOrderMode.PUBLIC_POOL
+                && order.getPlatform() != null) {
+            // The live numbers: FUT Transfer's prices now, as Approve would read them.
+            return OrderModeReport.nextSend(props.futTransfer(), amountK, order.getPlatform(),
+                    market(order.getPlatform()));
         }
         return OrderModeReport.nextSend(props.futTransfer(), amountK);
     }

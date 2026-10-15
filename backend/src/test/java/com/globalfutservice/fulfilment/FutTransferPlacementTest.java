@@ -85,7 +85,7 @@ class FutTransferPlacementTest {
         expected.put("senderGroup", "-1");
         expected.put("topUpEnabled", 300);
         expected.put("autoFinishCycle", 1);
-        expected.put("minTransferAmount", 50);
+        expected.put("minTransferAmount", 0);
         expected.put("pauseIfBelowMinTransfer", 0);
         expected.put("riskLevel", 1);
         expected.forEach((field, value) -> assertThat(new ObjectMapper().convertValue(sent.get(field), Object.class))

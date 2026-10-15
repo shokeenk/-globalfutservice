@@ -99,14 +99,20 @@ describe('VendorPanel', () => {
     api.get.mockResolvedValue({ balance: 4321.5, available: true, currency: 'unconfirmed' })
     renderPanel(section({
       currentOrderMode: 'PUBLIC_POOL',
-      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', buyNowThresholdSent: 0,
+      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', buyNowThresholdSent: 4.4,
+        supplierRateSent: 4, thresholdMarginPct: 10, transferFeeAtSend: 0, estimatedCostEur: 20,
         balanceAtSend: 5000 }),
+      customerPaid: '₹4,500.00',
     }))
 
     expect(screen.getByText('Order mode').nextSibling).toHaveTextContent('Public pool')
     expect(screen.getByText('Transfer method').nextSibling).toHaveTextContent('targetedSnipe')
-    // 0 is a value sent, not "Not sent".
-    expect(screen.getByText('Price threshold per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent(/^0$/)
+    // What the ceiling was worked out from, and what it implies, beside what the customer paid.
+    expect(screen.getByText('Supplier rate (€ per 100K)').nextSibling).toHaveTextContent(/^€4\.00$/)
+    expect(screen.getByText('Margin').nextSibling).toHaveTextContent(/^10%$/)
+    expect(screen.getByText('Price ceiling per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent(/^€4\.40$/)
+    expect(screen.getByText('Estimated cost (FUT Transfer)').nextSibling).toHaveTextContent(/^€20\.00$/)
+    expect(screen.getByText('Customer paid').nextSibling).toHaveTextContent('₹4,500.00')
     expect(screen.getByText('maxPrice sent').nextSibling).toHaveTextContent('Not sent')
     expect(screen.getByText('To pay (currency unconfirmed)').nextSibling).toHaveTextContent('12.5')
     expect(screen.getByText('Balance at send (currency unconfirmed)').nextSibling).toHaveTextContent('5,000')
@@ -117,22 +123,35 @@ describe('VendorPanel', () => {
   })
 
   const POOL_SEND = {
-    orderMode: 'PUBLIC_POOL', endpoint: '/buyCoinsAPI', transferMethod: 'targetedSnipe', buyNowThreshold: 0,
-    buyNowThresholdSource: 'the same on every order (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD)', maxPrice: null,
-    topUpEnabled: 300, autoFinishCycle: 1, senderGroup: null, refusal: null, minTransferAmount: 50,
-    pauseIfBelowMinTransfer: 0, riskLevel: 1,
+    orderMode: 'PUBLIC_POOL', endpoint: '/buyCoinsAPI', transferMethod: 'targetedSnipe', buyNowThreshold: 4.4,
+    buyNowThresholdSource: "FUT Transfer's supplier price + 10%, read at each send", maxPrice: null,
+    topUpEnabled: 300, autoFinishCycle: 1, senderGroup: null, refusal: null, minTransferAmount: 0,
+    pauseIfBelowMinTransfer: 0, riskLevel: 1, supplierRate: 4, marginPct: 10, limit: null, estimatedCostEur: 20.5,
+    priceNote: 'supplier rate + margin',
   }
 
-  it('before anything is sent, says what Approve will send, field by field', () => {
+  it('before anything is sent, says what Approve will send, field by field, with the live price', () => {
     renderPanel(section({ vendorOrder: null, currentOrderMode: 'PUBLIC_POOL', nextSend: POOL_SEND }))
     const note = screen.getByRole('note', { name: 'What Approve sends' })
     expect(note).toHaveTextContent('Approve sends this order to')
     expect(note).toHaveTextContent('Public pool · /buyCoinsAPI')
-    expect(note).toHaveTextContent('transferMethod targetedSnipe · price threshold per 100K (buyNowThreshold) 0 · '
-      + 'minTransferAmount 50 · pauseIfBelowMinTransfer 0 · topUpEnabled 300 · autoFinishCycle 1 · riskLevel 1 · '
+    expect(note).toHaveTextContent('transferMethod targetedSnipe · price ceiling per 100K (buyNowThreshold) €4.40 · '
+      + 'minTransferAmount 0 · pauseIfBelowMinTransfer 0 · topUpEnabled 300 · autoFinishCycle 1 · riskLevel 1 · '
       + 'no senderGroup, no supplierID · maxPrice not sent')
+    expect(screen.getByTestId('live-price')).toHaveTextContent('FUT Transfer now: supplier rate €4.00/100K · margin '
+      + '10% · limit none · estimated cost €20.50 (supplier rate + margin)')
     expect(note).not.toHaveTextContent("order's amount")
     expect(note).not.toHaveTextContent('own sender accounts')
+  })
+
+  it('a market above the limit: Approve would send nothing, with the price and the limit', () => {
+    renderPanel(section({ vendorOrder: null, currentOrderMode: 'PUBLIC_POOL', nextSend: { ...POOL_SEND,
+      buyNowThreshold: null, marginPct: null, limit: 3.5, estimatedCostEur: 2.05, priceNote: null,
+      refusal: 'FUT Transfer price €4/100K is above your limit €3.5. Approve would send nothing.' } }))
+    expect(screen.getByRole('note', { name: 'What Approve sends' }))
+      .toHaveTextContent('Approve would send nothing: FUT Transfer price €4/100K is above your limit €3.5.')
+    expect(screen.getByTestId('live-price')).toHaveTextContent('supplier rate €4.00/100K · limit €3.50/100K')
+    expect(document.body.textContent).not.toContain('undefined')
   })
 
   it('own senders is said as a warning, with how to switch', () => {
@@ -146,8 +165,8 @@ describe('VendorPanel', () => {
   })
 
   it('a setting that stops the send is shown before Approve, as the reason', () => {
-    renderPanel(section({ vendorOrder: null, nextSend: { ...POOL_SEND, buyNowThreshold: null,
-      refusal: 'GFS_FUTTRANSFER_METHOD is cycle.' } }))
+    renderPanel(section({ vendorOrder: null, nextSend: { ...POOL_SEND, buyNowThreshold: null, supplierRate: null,
+      marginPct: null, estimatedCostEur: null, priceNote: null, refusal: 'GFS_FUTTRANSFER_METHOD is cycle.' } }))
     expect(screen.getByRole('note', { name: 'What Approve sends' }))
       .toHaveTextContent('Approve would send nothing: GFS_FUTTRANSFER_METHOD is cycle.')
   })
@@ -174,7 +193,7 @@ describe('VendorPanel', () => {
     // The API omits the fields it has no value for.
     renderPanel(section({ currentOrderMode: 'PUBLIC_POOL', vendorOrder: detail({ orderMode: 'OWN_SENDERS' }) }))
     expect(screen.getByText('Transfer method').nextSibling).toHaveTextContent('Not recorded')
-    expect(screen.getByText('Price threshold per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent('Not sent')
+    expect(screen.getByText('Price ceiling per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent('Not sent')
     expect(screen.getByText(/Sent as Own senders\. Configured now: Public pool/)).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('undefined')
   })

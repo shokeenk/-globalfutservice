@@ -35,7 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FutTransferBuyCoinsTest {
 
     private static final String REF = "GFS-26-POOL0001";
-    private static final BigDecimal THRESHOLD = new BigDecimal("500");
+    /** A price ceiling in EUR per 100K, as PoolThreshold works out: not the order's 500K. */
+    private static final BigDecimal THRESHOLD = new BigDecimal("4.40");
 
     private FakeFutTransfer vendor;
     private FakeFutTransfer backup;
@@ -78,8 +79,7 @@ class FutTransferBuyCoinsTest {
         expected.put("transferMethod", "targetedSnipe");
         expected.put("topUpEnabled", 300);
         expected.put("autoFinishCycle", 1);
-        expected.put("buyNowThreshold", 500);
-        expected.put("minTransferAmount", 50);
+        expected.put("minTransferAmount", 0);
         expected.put("pauseIfBelowMinTransfer", 0);
         expected.put("riskLevel", 1);
         expected.put("persona", "-1");
@@ -94,9 +94,14 @@ class FutTransferBuyCoinsTest {
         expected.forEach((field, value) -> assertThat(new ObjectMapper().convertValue(sent.get(field), Object.class))
                 .as(field).isEqualTo(value));
 
+        // The ceiling as a number, exactly as given.
+        assertThat(sent.get("buyNowThreshold").isNumber()).isTrue();
+        assertThat(sent.get("buyNowThreshold").decimalValue()).isEqualByComparingTo("4.40");
+
         Set<String> fields = new TreeSet<>();
         sent.fieldNames().forEachRemaining(fields::add);
         Set<String> allowed = new TreeSet<>(expected.keySet());
+        allowed.add("buyNowThreshold");
         allowed.addAll(List.of("customerName", "user", "pass", "ba", "ba2", "apiUser", "apiKey"));
         assertThat(fields).isEqualTo(allowed);
         // Said outright, since these are the ones that would change what is bought.
@@ -247,6 +252,34 @@ class FutTransferBuyCoinsTest {
         backup.on("/buyConditionAPI", Reply.ok(CONDITIONS));
         assertThat(client.balance(null)).isEqualTo(new FutTransferClient.ReadOk<>(new BigDecimal("5000")));
         assertThat(backup.calls("/buyConditionAPI")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("buy conditions: the platform is sent (PS covers Xbox), and only the public suppliers' prices and "
+            + "stock are read")
+    void buyConditions() {
+        vendor.on("/buyConditionAPI", Reply.ok(FakeFutTransfer.POOL_CONDITIONS));
+
+        var xbox = (FutTransferClient.ReadOk<FutTransferClient.BuyConditions>) client.buyConditions(Platform.XBOX, REF);
+        assertThat(vendor.requests().get(0).body().get("platform").asText()).isEqualTo("PS");
+        assertThat(xbox.value().suppliers()).hasSize(1);
+        FutTransferClient.PoolSupplier s = xbox.value().suppliers().get(0);
+        assertThat(s.priceConsole()).isEqualByComparingTo("4");
+        assertThat(s.stockConsoleK()).isEqualByComparingTo("100000");
+        assertThat(s.pricePc()).isEqualByComparingTo("6");
+        assertThat(s.stockPcK()).isEqualByComparingTo("100000");
+        assertThat(xbox.value().transferFee()).isEqualByComparingTo("0");
+        assertThat(xbox.value().toolFee()).isEqualByComparingTo("0.25");
+        assertThat(xbox.value().balance()).isEqualByComparingTo("5000");
+
+        client.buyConditions(Platform.PC, REF);
+        assertThat(vendor.requests().get(1).body().get("platform").asText()).isEqualTo("PC");
+        // A read, never an order.
+        assertThat(vendor.calls("/buyCoinsAPI")).isZero();
+
+        vendor.on("/buyConditionAPI", Reply.of(503, "down"));
+        backup.on("/buyConditionAPI", Reply.of(503, "down"));
+        assertThat(client.buyConditions(Platform.PLAYSTATION, REF)).isInstanceOf(FutTransferClient.ReadFailed.class);
     }
 
     // ---------------------------------------------------------------- mothers ---

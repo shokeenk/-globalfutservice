@@ -69,11 +69,28 @@ public class VendorOrderLedger {
      * vendor method, and what a public-pool order sent for {@code buyNowThreshold} and
      * {@code maxPrice} (null: not sent).
      */
+    /**
+     * @param supplierRate the supplier price per 100K (EUR) the threshold was worked out from; null if none
+     * @param marginPct    the margin added to it, in percent; null for a fixed threshold
+     * @param transferFee  /buyConditionAPI's transferFee as reported; null if none
+     */
     public record SendTerms(String orderMode, String transferMethod, java.math.BigDecimal buyNowThreshold,
-                            java.math.BigDecimal maxPrice) {
+                            java.math.BigDecimal maxPrice, java.math.BigDecimal supplierRate,
+                            java.math.BigDecimal marginPct, java.math.BigDecimal transferFee) {
+
+        public SendTerms(String orderMode, String transferMethod, java.math.BigDecimal buyNowThreshold,
+                         java.math.BigDecimal maxPrice) {
+            this(orderMode, transferMethod, buyNowThreshold, maxPrice, null, null, null);
+        }
 
         public boolean publicPool() {
             return "PUBLIC_POOL".equals(orderMode);
+        }
+
+        /** These terms, with the threshold worked out from FUT Transfer's prices just now. */
+        public SendTerms priced(PoolThreshold.Price p) {
+            return new SendTerms(orderMode, transferMethod, p.threshold(), maxPrice, p.supplierRate(), p.marginPct(),
+                    p.transferFee());
         }
     }
 
@@ -98,12 +115,16 @@ public class VendorOrderLedger {
                 .addValue("mode", terms.orderMode())
                 .addValue("method", terms.transferMethod())
                 .addValue("threshold", terms.buyNowThreshold())
-                .addValue("maxPrice", terms.maxPrice());
+                .addValue("maxPrice", terms.maxPrice())
+                .addValue("rate", terms.supplierRate())
+                .addValue("margin", terms.marginPct())
+                .addValue("fee", terms.transferFee());
 
         List<Integer> inserted = jdbc.queryForList("""
                 insert into vendor_order (order_id, external_ref, state, amount_ordered_k, attempts, order_mode,
-                                          transfer_method, buy_now_threshold_sent, max_price_sent)
-                values (:orderId, :ref, 'SUBMITTING', :k, 1, :mode, :method, :threshold, :maxPrice)
+                                          transfer_method, buy_now_threshold_sent, max_price_sent, supplier_rate_sent,
+                                          threshold_margin_pct, transfer_fee_at_send)
+                values (:orderId, :ref, 'SUBMITTING', :k, 1, :mode, :method, :threshold, :maxPrice, :rate, :margin, :fee)
                 on conflict (order_id) do nothing
                 returning attempts
                 """, p, Integer.class);
@@ -116,7 +137,8 @@ public class VendorOrderLedger {
                    set state = 'SUBMITTING', attempts = attempts + 1, amount_ordered_k = :k,
                        last_error_code = null, review_reason = null, order_mode = :mode,
                        transfer_method = :method, buy_now_threshold_sent = :threshold,
-                       max_price_sent = :maxPrice, balance_at_send = null, updated_at = now()
+                       max_price_sent = :maxPrice, supplier_rate_sent = :rate, threshold_margin_pct = :margin,
+                       transfer_fee_at_send = :fee, balance_at_send = null, updated_at = now()
                  where order_id = :orderId and state = 'FAILED'
                    and (attempts < :max or last_error_code = 'RATE_LIMITED')
                 returning attempts
@@ -754,7 +776,27 @@ public class VendorOrderLedger {
                          java.math.BigDecimal balanceAtSend,
                          /** The partner's pending / completed / error, and its two details: staff only. */
                          String vendorSimplifiedStatus, String vendorAccountCheckLong,
-                         String vendorEconomyStateLong) {
+                         String vendorEconomyStateLong,
+                         /** What the threshold was worked out from, and the cost it implies, in EUR. */
+                         java.math.BigDecimal supplierRateSent, java.math.BigDecimal thresholdMarginPct,
+                         java.math.BigDecimal transferFeeAtSend, java.math.BigDecimal estimatedCostEur) {
+
+        public Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
+                      Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
+                      String vendorEconomyState, Boolean aborted, Long coinsUsed, java.math.BigDecimal toPay,
+                      int attempts, String lastErrorCode, String reviewReason, String customerAction,
+                      int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
+                      Instant resubmittedAt, Instant updatedAt, String orderMode, String transferMethod,
+                      java.math.BigDecimal buyNowThresholdSent, java.math.BigDecimal maxPriceSent,
+                      java.math.BigDecimal balanceAtSend, String vendorSimplifiedStatus, String vendorAccountCheckLong,
+                      String vendorEconomyStateLong) {
+            this(state, externalRef, vendorOrderId, amountOrderedK, vendorAmountOrderedK, deliveredK, vendorStatus,
+                    vendorAccountCheck, vendorEconomyState, aborted, coinsUsed, toPay, attempts, lastErrorCode,
+                    reviewReason, customerAction, missingPolls, submittedAt, lastPolledAt, lastProgressAt,
+                    resubmittedAt, updatedAt, orderMode, transferMethod, buyNowThresholdSent, maxPriceSent,
+                    balanceAtSend, vendorSimplifiedStatus, vendorAccountCheckLong, vendorEconomyStateLong,
+                    null, null, null, null);
+        }
 
         public Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
                       Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
@@ -788,7 +830,10 @@ public class VendorOrderLedger {
                 rs.getString("transfer_method"), rs.getBigDecimal("buy_now_threshold_sent"),
                 rs.getBigDecimal("max_price_sent"), rs.getBigDecimal("balance_at_send"),
                 rs.getString("vendor_simplified_status"), rs.getString("vendor_account_check_long"),
-                rs.getString("vendor_economy_state_long"))).stream().findFirst();
+                rs.getString("vendor_economy_state_long"), rs.getBigDecimal("supplier_rate_sent"),
+                rs.getBigDecimal("threshold_margin_pct"), rs.getBigDecimal("transfer_fee_at_send"),
+                PoolThreshold.estimatedCost(rs.getBigDecimal("supplier_rate_sent"), rs.getBigDecimal("transfer_fee_at_send"),
+                        rs.getLong("amount_ordered_k")))).stream().findFirst();
     }
 
     /** An order waiting for an admin's decision, for the review list on the Orders page. */

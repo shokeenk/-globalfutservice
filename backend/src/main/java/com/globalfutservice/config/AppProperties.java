@@ -751,26 +751,44 @@ public record AppProperties(
      * needed and missing does not: FIXED without a threshold, or {@code sendMaxPrice}
      * without a price, makes Approve refuse with the reason instead.
      *
-     * @param buyNowThresholdMode retired, see {@link BuyNowThresholdMode}; ignored
-     * @param buyNowThreshold     sent on every public-pool order: the vendor's "price threshold
-     *                            per 100K", in its own currency. Never the order's amount. 0 is
-     *                            the client's instruction (2026-10-15) and the default; set
-     *                            GFS_FUTTRANSFER_BUY_NOW_THRESHOLD to change it. Unset or empty
-     *                            means 0
-     * @param sendMaxPrice        whether {@code maxPrice} is sent at all. Off until FUT
-     *                            Transfer confirms its currency and unit
-     * @param maxPrice            the vendor's "maximum price per 100K", in FUT Transfer's
-     *                            currency -- never our own (rupee) price. No default
+     * <p>FUT Transfer (2026-10-15): {@code buyNowThreshold} is a price <b>ceiling in EUR per
+     * 100K</b>; a positive value is required and 0 is not "unlimited". It is worked out on every
+     * send from /buyConditionAPI's supplier prices (see {@code PoolThreshold}).
+     *
+     * @param buyNowThresholdMode   retired, see {@link BuyNowThresholdMode}; ignored
+     * @param buyNowThreshold       an emergency fixed threshold, EUR per 100K, instead of the worked-out
+     *                              one: positive only, and still within the limit. Unset: worked out
+     * @param sendMaxPrice          whether {@code maxPrice} is sent at all. FUT Transfer: it guards the
+     *                              standard supplier-buying flow only, and targetedSnipe ignores it
+     * @param maxPrice              the vendor's "maximum price per 100K", in FUT Transfer's currency --
+     *                              never our own (rupee) price. No default
+     * @param thresholdMarginPct    added on top of the supplier rate, in percent. Default 10
+     * @param maxEurPer100kConsole  optional ceiling for PlayStation/Xbox orders, EUR per 100K
+     * @param maxEurPer100kPc       optional ceiling for PC orders, EUR per 100K
      */
     public record FutTransferPublicPool(
             @DefaultValue("FIXED") BuyNowThresholdMode buyNowThresholdMode,
-            @DefaultValue("0") @DecimalMin(value = "0") java.math.BigDecimal buyNowThreshold,
+            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal buyNowThreshold,
             @DefaultValue("false") boolean sendMaxPrice,
-            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxPrice) {
+            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxPrice,
+            @DefaultValue("10") @DecimalMin(value = "0") @jakarta.validation.constraints.DecimalMax(value = "100")
+            java.math.BigDecimal thresholdMarginPct,
+            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxEurPer100kConsole,
+            @DecimalMin(value = "0", inclusive = false) java.math.BigDecimal maxEurPer100kPc) {
 
-        /** What is sent: the configured threshold, 0 when unset. */
-        public java.math.BigDecimal threshold() {
-            return buyNowThreshold == null ? java.math.BigDecimal.ZERO : buyNowThreshold;
+        @org.springframework.boot.context.properties.bind.ConstructorBinding
+        public FutTransferPublicPool {
+        }
+
+        /** Without margin or limits: the defaults (10%, no limit). */
+        public FutTransferPublicPool(BuyNowThresholdMode buyNowThresholdMode, java.math.BigDecimal buyNowThreshold,
+                                     boolean sendMaxPrice, java.math.BigDecimal maxPrice) {
+            this(buyNowThresholdMode, buyNowThreshold, sendMaxPrice, maxPrice, java.math.BigDecimal.TEN, null, null);
+        }
+
+        /** The margin, in percent: 10 when unset. */
+        public java.math.BigDecimal marginPct() {
+            return thresholdMarginPct == null ? java.math.BigDecimal.TEN : thresholdMarginPct;
         }
     }
 
@@ -808,7 +826,9 @@ public record AppProperties(
      *
      * @param topUpEnabled            targetedSnipe top-up threshold, in K (300 = 300K)
      * @param autoFinishCycle         1: the vendor may finish the remainder by its cycle method
-     * @param minTransferAmount       smallest single transfer, in K
+     * @param minTransferAmount       smallest single transfer, in K. 0 (off) by default, and always
+     *                                sent: FUT Transfer's own default is 0, and 50 would mean 50K per
+     *                                transfer (FUT Transfer, 2026-10-15)
      * @param pauseIfBelowMinTransfer 0: switch method rather than pause below the minimum
      * @param senderGroup             -1: the vendor chooses among our senders. OWN_SENDERS
      *                                only: the public pool has no senders of ours to restrict
@@ -817,7 +837,7 @@ public record AppProperties(
     public record FutTransferOrder(
             @DefaultValue("300") @Min(0) @Max(9999) int topUpEnabled,
             @DefaultValue("1") @Min(0) @Max(1) int autoFinishCycle,
-            @DefaultValue("50") @Min(0) @Max(9999) int minTransferAmount,
+            @DefaultValue("0") @Min(0) @Max(9999) int minTransferAmount,
             @DefaultValue("0") @Min(0) @Max(1) int pauseIfBelowMinTransfer,
             @DefaultValue("1") @Pattern(regexp = "[01]") String updateCustomer,
             @DefaultValue("0") @Min(0) @Max(1) int stopOrderAfterOnboarding,
