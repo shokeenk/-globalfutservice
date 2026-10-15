@@ -339,6 +339,8 @@ export interface Order {
    * change the customer's EA sign-in, so it is shown to them alone and never put anywhere else.
    */
   partnerTrackingUrl?: string | null
+  /** The coin transfer is waiting for our staff to look at it; the customer has nothing to do. */
+  transferUnderReview?: boolean
   /** What the customer must do to unstick a held order, or null if nothing. */
   customerAction: CustomerAction | null
   createdAt: string

@@ -81,10 +81,37 @@ public final class VendorStatusMap {
         return new Known(Meaning.FIXABLE, action);
     }
 
-    /** The documented {@code status} values. */
-    static final Map<String, String> STATUS = Map.of(
-            "ready", "onboarding", "entered", "onboarding", "waitingforassignment", "onboarding",
-            "partlydelivered", "delivering", "finished", "finished", "interrupted", "interrupted");
+    /**
+     * The {@code status} values: the six the collection documents, and the progress words
+     * public pool (/buyCoinsAPI) orders were seen putting in {@code status} on 2026-10-14 --
+     * economyState's words, e.g. {@code transfersInProgress} (docs/vendor/futtransfer-observed.md).
+     * A failure word there is still not a status we know.
+     */
+    static final Map<String, String> STATUS = Map.ofEntries(
+            Map.entry("ready", "onboarding"), Map.entry("entered", "onboarding"),
+            Map.entry("waitingforassignment", "onboarding"), Map.entry("partlydelivered", "delivering"),
+            Map.entry("finished", "finished"), Map.entry("interrupted", "interrupted"),
+            // Observed, public pool: economyState's progress words.
+            Map.entry("started", "onboarding"), Map.entry("transfersinprogress", "delivering"),
+            Map.entry("transfercyclecomplete", "delivering"));
+
+    /** The review reasons that are a word we did not know: read again, and recovered once understood. */
+    public static final java.util.Set<String> UNKNOWN_WORD_REASONS = java.util.Set.of(
+            "UNKNOWN_STATUS", "UNKNOWN_ACCOUNT_CHECK", "UNKNOWN_ECONOMY_STATE", "NO_STATUS");
+
+    /**
+     * The word behind an unknown-word outcome, as {@code field:word} -- what an admin is
+     * alerted about once per order. Null for any other outcome.
+     */
+    public static String unknownWord(Outcome o, Report r) {
+        if (o.reason() == null) return null;
+        return switch (o.reason()) {
+            case "UNKNOWN_STATUS", "NO_STATUS" -> "status:" + norm(r.status());
+            case "UNKNOWN_ACCOUNT_CHECK" -> "accountCheck:" + norm(r.accountCheck());
+            case "UNKNOWN_ECONOMY_STATE" -> "economyState:" + norm(r.economyState());
+            default -> null;
+        };
+    }
 
     /** The documented {@code accountCheck} values. */
     static final Map<String, Known> ACCOUNT_CHECK = Map.ofEntries(
@@ -217,7 +244,8 @@ public final class VendorStatusMap {
         if (status.equals("interrupted")) {
             return Outcome.review("INTERRUPTED", CustomerAction.NONE);
         }
-        return Outcome.working(status.equals("partlydelivered") || delivered > 0 ? State.IN_DELIVERY : State.SUBMITTED);
+        return Outcome.working("delivering".equals(STATUS.get(status)) || delivered > 0
+                ? State.IN_DELIVERY : State.SUBMITTED);
     }
 
     private static String norm(String s) {

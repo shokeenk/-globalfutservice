@@ -518,6 +518,7 @@ const es: Dictionary = {
     partnerTrackOrder: 'Seguir pedido',
     partnerTrackNote: 'Estado de la entrega en directo de nuestro socio de transferencias. Si tus datos de acceso de EA necesitan corregirse, puedes actualizarlos aquí. No compartas este enlace.',
     opensInNewTab: '(se abre en una pestaña nueva)',
+    transferChecking: 'Estamos revisando tu pedido, no tienes que hacer nada.',
     transferStatusLabel: 'Estado',
     transferStatus: {
       PROCESSING: 'En proceso',

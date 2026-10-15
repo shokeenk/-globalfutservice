@@ -521,6 +521,7 @@ const fr: Dictionary = {
     partnerTrackOrder: 'Suivre la commande',
     partnerTrackNote: 'Statut de livraison en direct de notre partenaire de transfert. Si tes identifiants EA doivent être corrigés, tu peux les mettre à jour ici. Ne partage pas ce lien.',
     opensInNewTab: '(s’ouvre dans un nouvel onglet)',
+    transferChecking: 'Nous vérifions ta commande, tu n’as rien à faire.',
     transferStatusLabel: 'Statut',
     transferStatus: {
       PROCESSING: 'En traitement',

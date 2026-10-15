@@ -106,6 +106,19 @@ class OrderTrackingResponseTest {
     }
 
     @Test
+    @DisplayName("waiting for our staff: the customer is told we are checking, and the progress still shows")
+    void underReview() {
+        ReflectionTestUtils.setField(order, "transferStartedAt", Instant.parse("2026-10-07T10:00:00Z"));
+        when(ledger.progress(7L)).thenReturn(Optional.of(new VendorOrderLedger.Progress(500, 110L, true)));
+        OrderDtos.OrderResponse r = mapper.toResponse(order, List.of(), true);
+        assertThat(r.transferUnderReview()).isTrue();
+        assertThat(r.deliveredCoins()).isEqualTo(110L);
+
+        when(ledger.progress(7L)).thenReturn(Optional.of(new VendorOrderLedger.Progress(500, 110L)));
+        assertThat(mapper.toResponse(order, List.of(), true).transferUnderReview()).isFalse();
+    }
+
+    @Test
     @DisplayName("no link stored yet: the owner sees no Track order button")
     void noPartnerLinkYet() {
         when(ledger.trackingUrl(7L)).thenReturn(Optional.empty());

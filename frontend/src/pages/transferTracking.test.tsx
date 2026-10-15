@@ -145,6 +145,31 @@ describe("the partner's live tracking page, on the owner's own coin order", () =
     })
 })
 
+describe('while our staff check the order', () => {
+  const CHECKING = 'We’re checking your order, nothing for you to do.'
+
+  it('the progress keeps showing, with the neutral line -- and never a reason', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 110, orderedCoins: 500, transferUnderReview: true }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(within(box).getByTestId('transfer-checking')).toHaveTextContent(CHECKING)
+    expect(box).toHaveTextContent('110K of 500K delivered')
+    expect(box).not.toHaveTextContent(/review|unknown|status code/i)
+  })
+
+  it('not under review, or already delivered: no such line', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 110, orderedCoins: 500, transferUnderReview: false }))
+    await screen.findByTestId('transfer-progress')
+    expect(screen.queryByTestId('transfer-checking')).toBeNull()
+  })
+
+  it('delivered: no checking line even if the flag lingers', async () => {
+    openOrder(order({ status: 'DELIVERED', transferStarted: true, deliveredCoins: 500, orderedCoins: 500,
+      transferUnderReview: true }))
+    await screen.findByTestId('transfer-progress')
+    expect(screen.queryByTestId('transfer-checking')).toBeNull()
+  })
+})
+
 describe('the simple status, and delivered of ordered in coins', () => {
   it.each<[string, Record<string, unknown>, string]>([
     ['nothing reported yet', { deliveredCoins: null }, 'Processing'],

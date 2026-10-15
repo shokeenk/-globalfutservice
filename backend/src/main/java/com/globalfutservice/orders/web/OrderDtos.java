@@ -279,7 +279,14 @@ public final class OrderDtos {
               Null for everyone else, on the guest lookup, and for staff. Whoever holds it can
               change the customer's EA sign-in.
             */
-            String partnerTrackingUrl) {
+            String partnerTrackingUrl,
+
+            /*
+              The coin transfer is waiting for one of our staff to look at it. The customer is
+              told only that we are checking and that there is nothing for them to do -- never
+              why. False otherwise.
+            */
+            boolean transferUnderReview) {
     }
 
     /**

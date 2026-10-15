@@ -609,6 +609,7 @@ const en = {
     partnerTrackOrder: 'Track order',
     partnerTrackNote: 'Live delivery status from our transfer partner. If your EA login details need fixing, you can update them here. Don’t share this link.',
     opensInNewTab: '(opens in a new tab)',
+    transferChecking: 'We’re checking your order, nothing for you to do.',
     // Where a coin transfer is, in one word or two.
     transferStatusLabel: 'Status',
     transferStatus: {

@@ -71,6 +71,8 @@ public class VendorPoller {
     private final AppProperties props;
     /** Customer tracking links still to be had, asked for again on each poll. Null in some tests. */
     private final PartnerTrackingLinks trackingLinks;
+    private final java.util.concurrent.atomic.AtomicBoolean reviewsListed =
+            new java.util.concurrent.atomic.AtomicBoolean();
 
     public VendorPoller(FutTransferClient client, VendorControl control, VendorOrderLedger ledger, SchedulerLock lock,
                         OrderService orderService, OrderRepository orders, CredentialVaultService vault,
@@ -123,6 +125,16 @@ public class VendorPoller {
         AppProperties.FutTransferPolling p = props.futTransfer().polling();
         boolean troubled = false;
 
+        if (reviewsListed.compareAndSet(false, true)) {
+            // Once per start: the orders waiting for review over a word we did not know, all
+            // of which this and later polls read again -- the record of what a fix touches.
+            List<String> refs = ledger.unknownWordReviews();
+            if (!refs.isEmpty()) {
+                log.info("FUT Transfer: {} order(s) waiting for review over a partner word we did not know, "
+                        + "read again from now: {}", refs.size(), String.join(", ", refs));
+            }
+        }
+
         for (VendorOrderLedger.PollRow row : ledger.staleSubmitting(p.submittingGrace())) {
             resolveStale(row);
         }
@@ -151,7 +163,7 @@ public class VendorPoller {
             for (VendorOrderLedger.PollRow row : batch) {
                 FutTransferClient.SupplierStatus s = found.get(row.vendorOrderId());
                 if (s == null) {
-                    missing(row);
+                    if (!inReview(row)) missing(row);
                 } else {
                     apply(row, s);
                 }
@@ -215,9 +227,13 @@ public class VendorPoller {
                 // The partner is struggling: the rest wait for the next poll.
                 return true;
             }
-            missing(row);
+            if (!inReview(row)) missing(row);
         }
         return troubled;
+    }
+
+    private static boolean inReview(VendorOrderLedger.PollRow row) {
+        return VendorOrderLedger.NEEDS_REVIEW.equals(row.state());
     }
 
     private static boolean trouble(FutTransferClient.ReadError error) {
@@ -253,15 +269,35 @@ public class VendorPoller {
         }
     }
 
-    /** What the vendor reported, recorded and acted on. */
+    /**
+     * What the vendor reported, recorded and acted on.
+     *
+     * <p>An order waiting for an admin is read too, so its numbers stay current. Only a review
+     * over a word we did not know is undone here: once the partner's report is understood
+     * again, the order moves where that report puts it, as a fresh report would, and its
+     * history says so. Any other review stays an admin's to decide. A word we do not know
+     * alerts an admin once per order, however often it comes back.
+     */
     private void apply(VendorOrderLedger.PollRow row, FutTransferClient.SupplierStatus s) {
         boolean progressed = !Objects.equals(s.status(), row.vendorStatus())
                 || !Objects.equals(s.amountDeliveredK(), row.deliveredK());
         ledger.recordReport(row.orderId(), s, progressed);
 
-        VendorStatusMap.Outcome o = VendorStatusMap.map(new VendorStatusMap.Report(s.status(), s.accountCheck(),
+        VendorStatusMap.Report report = new VendorStatusMap.Report(s.status(), s.accountCheck(),
                 s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted(), s.motherOrder(),
-                s.simplifiedStatus()), row.amountOrderedK());
+                s.simplifiedStatus());
+        VendorStatusMap.Outcome o = VendorStatusMap.map(report, row.amountOrderedK());
+        String unknownWord = VendorStatusMap.unknownWord(o, report);
+        boolean fromReview = inReview(row);
+        if (fromReview) {
+            if (!VendorStatusMap.UNKNOWN_WORD_REASONS.contains(row.lastErrorCode())) return;
+            if (unknownWord != null) {
+                if (ledger.claimUnknownWordAlert(row.orderId(), unknownWord)) {
+                    alert(row.externalRef(), headline(o, row.orderMode()), staffText(o, s, row), o.reason());
+                }
+                return;
+            }
+        }
         if (staleAfterRestart(row, s, o)) {
             log.info("FUT Transfer: {} still reports what it did before it was restarted; waiting",
                     row.externalRef());
@@ -272,7 +308,9 @@ public class VendorPoller {
         // refused for a different reason. They are asked again, for the new thing.
         boolean newAsk = o.state() == VendorStatusMap.State.AWAITING_CUSTOMER && to.equals(row.state())
                 && !o.action().name().equals(row.customerAction());
-        if (to.equals(row.state()) && !newAsk) return;
+        // Waiting for an admin before for a word we did not know, now for a reason we do.
+        boolean newReason = fromReview && to.equals(row.state()) && !Objects.equals(o.reason(), row.lastErrorCode());
+        if (to.equals(row.state()) && !newAsk && !newReason) return;
 
         String staffText = staffText(o, s, row);
         if (!ledger.move(row.orderId(), List.of(row.state()), to, o.reason(), staffText, o.action().name())) {
@@ -280,6 +318,9 @@ public class VendorPoller {
         }
         log.info("FUT Transfer: {} {} -> {}{}", row.externalRef(), row.state(), to,
                 o.reason() == null ? "" : " (" + o.reason() + ")");
+        if (fromReview) {
+            noteBackFromReview(row, s, to);
+        }
         OrderEntity order = null;
         if (newAsk) {
             order = orders.findById(row.orderId()).orElse(null);
@@ -293,8 +334,21 @@ public class VendorPoller {
                 && order.getStatus() == OrderStatus.ON_HOLD) {
             tellCustomer(order, o.action());
         }
-        if (o.alert()) {
+        if (o.alert() && (unknownWord == null || ledger.claimUnknownWordAlert(row.orderId(), unknownWord))) {
             alert(row.externalRef(), headline(o, row.orderMode()), staffText, o.reason());
+        }
+    }
+
+    /** The order's history, for staff: it was waiting for review over a word, and is understood again. */
+    private void noteBackFromReview(VendorOrderLedger.PollRow row, FutTransferClient.SupplierStatus s, String to) {
+        try {
+            orders.findById(row.orderId()).ifPresent(order -> orderService.note(order, Actor.SYSTEM, null, ACTOR,
+                    "FUT Transfer's report is understood again (status " + s.status() + ", accountCheck "
+                            + s.accountCheck() + ", economyState " + s.economyState() + "): no longer waiting for "
+                            + "review over " + row.lastErrorCode() + "; now " + to + ".",
+                    null, null, true));
+        } catch (RuntimeException e) {
+            log.warn("Could not note {} back from review: {}", row.externalRef(), e.getClass().getSimpleName());
         }
     }
 
