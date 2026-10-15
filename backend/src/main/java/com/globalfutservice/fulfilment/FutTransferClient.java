@@ -305,6 +305,11 @@ public class FutTransferClient {
                 if (code != null && BUY_REFUSAL_CODES.contains(code.toLowerCase(Locale.ROOT))) {
                     return new Refused(Reason.SUPPLIER_REFUSED, 400, code);
                 }
+                // /orderAPI's sign-in refusals, which /buyCoinsAPI shares with every /orderAPI
+                // parameter: nothing was created, and the customer is asked to fix it.
+                if (code != null && SIGN_IN_CODES.contains(code.toLowerCase(Locale.ROOT))) {
+                    return new Refused(Reason.SIGN_IN_REJECTED, 400, code);
+                }
                 // Not documented for /buyCoinsAPI. Nothing is assumed: an admin decides.
                 return new Unrecognised(400, code == null ? "UNPARSEABLE_ERROR" : code);
             }

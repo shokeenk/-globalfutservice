@@ -73,6 +73,27 @@ public class AutoDispatchQueue {
                 """, new MapSqlParameterSource("orderId", order.getId()));
     }
 
+    /**
+     * The customer has entered their sign-in again, for an order on hold. In the same
+     * transaction as the new details:
+     *
+     * <ul>
+     *   <li>whatever we asked them to fix in it is answered, and no longer shown;</li>
+     *   <li>if FUT Transfer is holding the order for them, the new details are due to go to it by
+     *       themselves -- once, by {@link SignInResends}.</li>
+     * </ul>
+     * An order whose send was refused for its sign-in has nothing at FUT Transfer to correct:
+     * it waits for Approve, as before. A hold staff made for their own reasons changes nothing.
+     */
+    public void signInReentered(OrderEntity order) {
+        MapSqlParameterSource id = new MapSqlParameterSource("orderId", order.getId());
+        jdbc.update("update orders set signin_problem = null where id = :orderId", id);
+        jdbc.update("""
+                update vendor_order set signin_resubmitted_at = now(), updated_at = now()
+                 where order_id = :orderId and state = 'AWAITING_CUSTOMER' and vendor_order_id is not null
+                """, id);
+    }
+
     /** Orders whose turn has come, oldest first. */
     public List<Long> due(Instant now, int limit) {
         return jdbc.queryForList("""

@@ -799,6 +799,7 @@ public class OrderService {
         }
 
         boolean wasWaitingForIt = order.getStatus() == OrderStatus.CREDENTIALS_PENDING;
+        boolean offHold = order.getStatus() == OrderStatus.ON_HOLD;
         OrderEntity ready = transition(order, OrderStatus.READY_FOR_DELIVERY, Actor.CUSTOMER, actorId,
                 order.getGuestEmail(), "Sign-in details received");
 
@@ -811,8 +812,31 @@ public class OrderService {
          */
         if (wasWaitingForIt) {
             autoDispatch.signInArrived(ready);
+        } else if (offHold) {
+            // FUT Transfer waiting for them: their new details go to it by themselves, once.
+            autoDispatch.signInReentered(ready);
         }
         return ready;
+    }
+
+    /**
+     * A send was refused for the customer's sign-in: the order is put on hold, its history says
+     * what to fix in our words, and the customer is told by email and on the order's ticket --
+     * the same notice a refusal found by a status check sends. Their order page shows what is
+     * wrong with the form to enter it again.
+     */
+    @Transactional
+    public OrderEntity askForSignInAgain(OrderEntity order, com.globalfutservice.domain.orders.CustomerAction action) {
+        String text = com.globalfutservice.fulfilment.CustomerText.forAction(action);
+        OrderEntity held = order.getStatus() == OrderStatus.ON_HOLD ? order
+                : transition(order, OrderStatus.ON_HOLD, Actor.SYSTEM, null, "GFS", text);
+        try {
+            notifications.customerActionNeeded(new com.globalfutservice.notify.CustomerActionNotification(
+                    notificationFor(held), text));
+        } catch (RuntimeException e) {
+            log.warn("Could not queue the sign-in notice for {}: {}", held.getPublicRef(), e.getClass().getSimpleName());
+        }
+        return held;
     }
 
     // ------------------------------------------------------------------ lookup

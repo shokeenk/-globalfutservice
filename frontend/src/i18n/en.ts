@@ -610,6 +610,14 @@ const en = {
     partnerTrackNote: 'Live delivery status from our transfer partner. If your EA login details need fixing, you can update them here. Don’t share this link.',
     opensInNewTab: '(opens in a new tab)',
     transferChecking: 'We’re checking your order, nothing for you to do.',
+    // Their EA sign-in was refused: which part, with the form right there.
+    signInWrongTitle: 'Your EA details need fixing',
+    signInWrongPassword: 'Your EA email or password was not accepted. Enter them again below and we’ll pick straight back up.',
+    signInWrongCodes: 'Your EA backup codes were not accepted. Create new ones in your EA account, then enter them below.',
+    signInToFix: 'Sign in to your account to enter them again.',
+    credCheckNote: 'We check your EA details a few minutes after your order starts. If anything is wrong, you’ll see it here and by email.',
+    partnerLinkComing: 'Live tracking link coming shortly.',
+    partnerLinkUnavailable: 'A live tracking link isn’t available for this order. You can follow your delivery right here.',
     // Where a coin transfer is, in one word or two.
     transferStatusLabel: 'Status',
     transferStatus: {

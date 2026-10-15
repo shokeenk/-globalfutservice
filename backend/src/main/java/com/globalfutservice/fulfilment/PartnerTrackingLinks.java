@@ -53,6 +53,13 @@ public class PartnerTrackingLinks {
     private final NotificationService notifications;
     private final Clock clock;
 
+    private PartnerLinkVisibility partnerLinks = PartnerLinkVisibility.SHOWN;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setPartnerLinks(PartnerLinkVisibility partnerLinks) {
+        this.partnerLinks = partnerLinks;
+    }
+
     public PartnerTrackingLinks(FutTransferClient client, VendorOrderLedger ledger, OrderRepository orders,
                                 OrderService orderService, NotificationService notifications, Clock clock) {
         this.client = client;
@@ -155,7 +162,8 @@ public class PartnerTrackingLinks {
             if (order == null || !order.getSku().isCoinTransfer() || FINISHED.contains(order.getStatus())) {
                 return;
             }
-            notifications.coinsOnTheWay(orderService.notificationFor(order), link.get());
+            // The partner's link only when customers are given it; otherwise our own page.
+            notifications.coinsOnTheWay(orderService.notificationFor(order), partnerLinks.shown() ? link.get() : null);
             log.info("Order {}: \"your coins are on the way\" sent", order.getPublicRef());
         } catch (RuntimeException e) {
             log.warn("Could not send \"your coins are on the way\" for order {}: {}", orderId,

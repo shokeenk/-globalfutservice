@@ -141,10 +141,15 @@ class FutTransferBuyCoinsTest {
     }
 
     @Test
-    @DisplayName("any other 400 proves nothing -- even /orderAPI's InvalidPassword is not taken as a sign-in refusal here")
+    @DisplayName("/orderAPI's sign-in refusals are sign-in refusals here too; any other 400 proves nothing")
     void undocumentedBadRequests() {
         vendor.on("/buyCoinsAPI", Reply.of(400, "{\"error\":\"InvalidPassword\"}"));
-        assertThat(buy()).isEqualTo(new Unrecognised(400, "InvalidPassword"));
+        assertThat(buy()).isEqualTo(new Refused(Reason.SIGN_IN_REJECTED, 400, "InvalidPassword"));
+        vendor.on("/buyCoinsAPI", Reply.of(400, "{\"error\":\"InvalidBA3\"}"));
+        assertThat(buy()).isEqualTo(new Refused(Reason.SIGN_IN_REJECTED, 400, "InvalidBA3"));
+
+        vendor.on("/buyCoinsAPI", Reply.of(400, "{\"error\":\"SomethingNew\"}"));
+        assertThat(buy()).isEqualTo(new Unrecognised(400, "SomethingNew"));
 
         vendor.on("/buyCoinsAPI", Reply.of(400, "Invalid JSON"));
         assertThat(buy()).isEqualTo(new Unrecognised(400, "UNPARSEABLE_ERROR"));

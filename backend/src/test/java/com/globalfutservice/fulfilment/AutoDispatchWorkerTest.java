@@ -241,8 +241,13 @@ class AutoDispatchWorkerTest {
 
         SupplierFulfilmentService.Release r = real.approveAndDispatch(order, null);
 
-        assertThat(r.result()).isEqualTo(SupplierFulfilmentService.Result.NOT_SENT);
+        // Never sent; the customer is asked for the part that is wrong instead of the order sitting unsent.
+        assertThat(r.result()).isEqualTo(SupplierFulfilmentService.Result.FAILED_SIGN_IN);
+        assertThat(r.reasonCode()).isEqualTo("NEW_BACKUP_CODES");
         assertThat(r.message()).contains("Backup code 3 is required.");
+        verify(ledger2).setSignInProblem(7L, com.globalfutservice.domain.orders.CustomerAction.NEW_BACKUP_CODES);
+        verify(vault2).purge(eq(7L), anyString());
         verify(ledger2, never()).claim(anyLong(), anyString(), anyLong(), org.mockito.ArgumentMatchers.anyInt(), any());
+        verify(client, never()).buyCoins(any(), any(), any(), anyLong(), any(), any(), any());
     }
 }

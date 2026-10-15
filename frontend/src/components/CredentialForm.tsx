@@ -126,6 +126,9 @@ export function CredentialForm({
     <form onSubmit={submit} noValidate className="surface p-5 sm:p-6">
       <h3 className="stamp">{t.track.credFormTitle}</h3>
       <p className="mt-2 text-[13px] leading-relaxed text-chalk-muted">{t.track.credFormLead}</p>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-chalk-muted" data-testid="cred-check-note">
+        {t.track.credCheckNote}
+      </p>
 
       {error && (
         <div className="mt-4">

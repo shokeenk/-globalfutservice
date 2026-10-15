@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Account } from '../lib/types'
@@ -143,6 +143,62 @@ describe("the partner's live tracking page, on the owner's own coin order", () =
       await screen.findByTestId('transfer-progress')
       expect(screen.queryByTestId('partner-tracking')).toBeNull()
     })
+})
+
+describe('a refused EA sign-in, on the order page', () => {
+  const held = (action: string) => order({ status: 'ON_HOLD', statusLabel: 'On hold', nextAction: 'RESUBMIT_CREDENTIALS',
+    customerAction: action, transferStarted: true, deliveredCoins: 30, orderedCoins: 500 })
+
+  it('the email or password: said plainly, with the form right there, and said once', async () => {
+    openOrder(held('RESUBMIT_SIGN_IN'))
+    const box = await screen.findByTestId('signin-retry')
+    expect(box).toHaveTextContent('Your EA details need fixing')
+    expect(box).toHaveTextContent('Your EA email or password was not accepted.')
+    expect(within(box).getByLabelText(/EA password/)).toBeInTheDocument()
+    expect(within(box).getByTestId('cred-check-note')).toHaveTextContent('We check your EA details a few minutes after your order starts. If anything is wrong, you\u2019ll see it here and by email.')
+    // Not repeated in the progress card above.
+    expect(screen.getAllByText(/was not accepted/)).toHaveLength(1)
+  })
+
+  it('the backup codes: said as the backup codes', async () => {
+    openOrder(held('NEW_BACKUP_CODES'))
+    const box = await screen.findByTestId('signin-retry')
+    expect(box).toHaveTextContent('Your EA backup codes were not accepted.')
+    expect(box).not.toHaveTextContent('email or password')
+  })
+
+  it('looked up without signing in: what is wrong, and to sign in to fix it -- no form', async () => {
+    api.post.mockResolvedValue(held('RESUBMIT_SIGN_IN'))
+    render(<MemoryRouter initialEntries={[`/track?ref=${REF}`]}><Track /></MemoryRouter>)
+    fireEvent.change(await screen.findByPlaceholderText('you@example.com'), { target: { value: 'rahul@example.test' } })
+    fireEvent.click(screen.getByRole('button', { name: /Find my order/ }))
+    expect(await screen.findByText(/Sign in to your account to enter them again\./)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/EA password/)).toBeNull()
+  })
+})
+
+describe('the partner tracking link, when there is none to give', () => {
+  it('coming: "Live tracking link coming shortly", with our progress', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250, partnerLinkState: 'PENDING' }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(within(box).getByTestId('partner-link-pending')).toHaveTextContent('Live tracking link coming shortly.')
+    expect(box).toHaveTextContent('120K of 250K delivered')
+    expect(within(box).queryByRole('link', { name: /Track order/ })).toBeNull()
+  })
+
+  it('unavailable: a plain message, and our progress stays', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250, partnerLinkState: 'UNAVAILABLE' }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(within(box).getByTestId('partner-link-unavailable'))
+      .toHaveTextContent('A live tracking link isn\u2019t available for this order.')
+    expect(box).toHaveTextContent('120K of 250K delivered')
+  })
+
+  it('hidden from customers (no state, no link): nothing about it at all', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 120, orderedCoins: 250 }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(box).not.toHaveTextContent(/tracking link/i)
+  })
 })
 
 describe('while our staff check the order', () => {
@@ -308,6 +364,7 @@ describe("staff opening the customer's tracking link", () => {
 
   it.each([
     ['their EA sign-in', { status: 'READY_FOR_DELIVERY', nextAction: 'SUBMIT_CREDENTIALS', credentialsSubmitted: false }],
+    ['a refused EA sign-in', { status: 'ON_HOLD', nextAction: 'RESUBMIT_CREDENTIALS', customerAction: 'RESUBMIT_SIGN_IN' }],
     ['paying', { status: 'AWAITING_PAYMENT', nextAction: 'PAY' }],
   ])('where the customer has a form (%s), staff are told there is one instead of getting it', async (_step, patch) => {
     openAsStaff('OPERATOR', order(patch))

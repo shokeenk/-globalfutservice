@@ -68,7 +68,14 @@ public class VendorOrderActions {
     }
 
     /** @param message for the admin; written by us, never containing a sign-in */
-    public record Result(Status status, String message) {
+    /**
+     * @param code the partner's own code for a refusal, or ours for how it went
+     *             ({@code continued}, {@code saved}); null when there is none
+     */
+    public record Result(Status status, String message, String code) {
+        public Result(Status status, String message) {
+            this(status, message, null);
+        }
     }
 
     /**
@@ -80,6 +87,12 @@ public class VendorOrderActions {
      */
     public record Admin(Long id, String label, String publicId) {
     }
+
+    /** Nobody at GFS: the customer's own re-entered details, sent by the system (SignInResends). */
+    public static final Admin AUTOMATIC = new Admin(null, "automatic: the customer re-entered their details", "GFS");
+
+    /** The code a refusal carries when the partner only asked us to wait. */
+    public static final String RATE_LIMITED = "RATE_LIMITED";
 
     /**
      * Sends the customer's corrected sign-in to the order the vendor is holding for them,
@@ -129,8 +142,9 @@ public class VendorOrderActions {
             case FutTransferClient.Changed c when FutTransferClient.CONTINUED.equals(c.outcome()) -> {
                 ledger.markRestarted(order.getId(), List.of(AWAITING_CUSTOMER));
                 startOrder(order, admin);
-                yield done(order, VendorOrderActionLog.Action.SEND_SIGN_IN, admin,
+                Result sent = done(order, VendorOrderActionLog.Action.SEND_SIGN_IN, admin,
                         "Sent the corrected sign-in; the partner restarted the order.");
+                yield new Result(sent.status(), sent.message(), FutTransferClient.CONTINUED);
             }
             case FutTransferClient.Changed c -> {
                 // Saved, not restarted. The claim goes, so Resume is not blocked behind it.
@@ -139,7 +153,8 @@ public class VendorOrderActions {
                         VendorOrderActionLog.Outcome.DONE, FutTransferClient.SAVED,
                         "The partner saved the new details but did not restart the order.");
                 yield new Result(Status.DONE, "The partner saved the new details for " + ref + " but did not "
-                        + "restart the order. Check why on the FUT Transfer dashboard, then resume it.");
+                        + "restart the order. Check why on the FUT Transfer dashboard, then resume it.",
+                        FutTransferClient.SAVED);
             }
             case FutTransferClient.NotChanged n -> {
                 ledger.releaseRestart(order.getId());
@@ -376,13 +391,29 @@ public class VendorOrderActions {
      * how asking for it is going. {@code canGenerate}: there is no link yet, the order is not
      * finished, and the partner has it under its id -- so "Generate link" can be offered.
      */
+    /** @param partnerLinkShown whether customers are given the partner's link (GFS_FUTTRANSFER_SHOW_PARTNER_LINK) */
     public record Tracking(java.time.Instant transferStartedAt, String customerUrl, String partnerUrl,
                            java.time.Instant partnerUrlStoredAt, String partnerLinkState, int partnerLinkAttempts,
-                           String partnerLinkError, java.time.Instant partnerLinkNextAt, boolean canGenerate) {
+                           String partnerLinkError, java.time.Instant partnerLinkNextAt, boolean canGenerate,
+                           boolean partnerLinkShown) {
+
+        public Tracking(java.time.Instant transferStartedAt, String customerUrl, String partnerUrl,
+                        java.time.Instant partnerUrlStoredAt, String partnerLinkState, int partnerLinkAttempts,
+                        String partnerLinkError, java.time.Instant partnerLinkNextAt, boolean canGenerate) {
+            this(transferStartedAt, customerUrl, partnerUrl, partnerUrlStoredAt, partnerLinkState, partnerLinkAttempts,
+                    partnerLinkError, partnerLinkNextAt, canGenerate, true);
+        }
 
         public Tracking(java.time.Instant transferStartedAt, String customerUrl) {
-            this(transferStartedAt, customerUrl, null, null, null, 0, null, null, false);
+            this(transferStartedAt, customerUrl, null, null, null, 0, null, null, false, true);
         }
+    }
+
+    private PartnerLinkVisibility partnerLinks = PartnerLinkVisibility.SHOWN;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setPartnerLinks(PartnerLinkVisibility partnerLinks) {
+        this.partnerLinks = partnerLinks;
     }
 
     public Section section(OrderEntity order, List<VendorCallLog.Call> calls) {
@@ -391,9 +422,11 @@ public class VendorOrderActions {
         String ours = started == null ? null
                 : com.globalfutservice.orders.TrackingLinks.trackUrl(props.publicUrl(), order.getPublicRef());
         VendorOrderLedger.TrackingLinkStatus link = ledger.trackingStatus(order.getId()).orElse(null);
-        Tracking tracking = link == null ? new Tracking(started, ours)
+        Tracking tracking = link == null
+                ? new Tracking(started, ours, null, null, null, 0, null, null, false, partnerLinks.shown())
                 : new Tracking(started, ours, link.url(), link.storedAt(), link.state(), link.attempts(),
-                        link.lastError(), link.nextAttemptAt(), ledger.linkable(order.getId()).isPresent());
+                        link.lastError(), link.nextAttemptAt(), ledger.linkable(order.getId()).isPresent(),
+                        partnerLinks.shown());
         return new Section(client.isEnabled(), control.isPaused(), d, available(d, order.getStatus()), calls,
                 actions.forOrder(order.getId()), props.futTransfer().orderMode().name(), nextSend(order), tracking);
     }
@@ -504,8 +537,9 @@ public class VendorOrderActions {
     private void startOrder(OrderEntity order, Admin admin) {
         OrderEntity current = orderService.requireAny(order.getPublicRef());
         if (current.getStatus() == OrderStatus.READY_FOR_DELIVERY || current.getStatus() == OrderStatus.ON_HOLD) {
-            orderService.transition(current, OrderStatus.IN_PROGRESS, Actor.OPERATOR, admin.id(), admin.publicId(),
-                    CustomerText.forState(VendorStatusMap.State.SUBMITTED, CustomerAction.NONE));
+            // No admin behind it: the customer's own re-entered details, sent by the system.
+            orderService.transition(current, OrderStatus.IN_PROGRESS, admin == AUTOMATIC ? Actor.SYSTEM : Actor.OPERATOR,
+                    admin.id(), admin.publicId(), CustomerText.forState(VendorStatusMap.State.SUBMITTED, CustomerAction.NONE));
         }
     }
 
@@ -530,7 +564,9 @@ public class VendorOrderActions {
         };
         actions.record(order.getId(), action, admin.id(), admin.label(), VendorOrderActionLog.Outcome.REFUSED,
                 n.code(), message);
-        return new Result(Status.REFUSED, message);
+        // "Wait and try again" is said the same way whatever the partner's own code for it was.
+        return new Result(Status.REFUSED, message,
+                n.refusal() == FutTransferClient.Refusal.RATE_LIMITED ? RATE_LIMITED : n.code());
     }
 
     private Result uncertain(OrderEntity order, VendorOrderActionLog.Action action, Admin admin, String code,
@@ -538,6 +574,6 @@ public class VendorOrderActions {
         log.warn("FULFILMENT ACTION UNCERTAIN: {} on order {} ({})", action, order.getPublicRef(), code);
         actions.record(order.getId(), action, admin.id(), admin.label(), VendorOrderActionLog.Outcome.UNCERTAIN,
                 code, message);
-        return new Result(Status.UNCERTAIN, message);
+        return new Result(Status.UNCERTAIN, message, code);
     }
 }

@@ -24,3 +24,15 @@ The collection documents `status` as one of `ready`, `entered`, `partlyDelivered
 - **A failure word in `status`** is still a status we don't know, and goes to review.
 - **A word we don't know never freezes an order.** An order in review is still read every 5 minutes while FUT Transfer has it open, and its delivered amount and status fields stay current. When a later report is fully understood, the order moves back where that report puts it, and its history notes the move. An admin is alerted once per unknown word per order.
 - **DELIVERED** still comes only from the finished rules: `status` "finished" or `simplifiedStatus` "completed", with at least the ordered amount delivered.
+
+## 2026-10-15: transferstatus.top short links answer 404
+
+**What we saw.** Every link `/generateOrderStatusLink` returned was in its documented form, `https://transferstatus.top/<shortCode>`. Each one answered "404 - File or directory not found", an IIS error page served behind Cloudflare. The site's root page answered with an empty 200. The same code worked on FUT Transfer's own page, `https://futtransfer.top/orderStatus?code=<shortCode>`. FUT Transfer has been asked about it.
+
+**What we do now.** `GFS_FUTTRANSFER_SHOW_PARTNER_LINK` defaults to `false`. While it is off:
+- customers get no partner Track order button;
+- the "Your coins are on the way" email's TRACK ORDER button opens our own `/track?ref=` page;
+- the link is still requested, stored exactly as returned and shown to admins, marked "hidden from customers".
+
+Turning it on needs no backfill.
+

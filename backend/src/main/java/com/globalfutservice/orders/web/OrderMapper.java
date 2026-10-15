@@ -144,7 +144,7 @@ public class OrderMapper {
                                               List<OrderEventEntity> timeline,
                                               boolean credentialsSubmitted) {
         return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto,
-                null);
+                null, null);
     }
 
     /**
@@ -155,10 +155,34 @@ public class OrderMapper {
     public OrderDtos.OrderResponse toOwnerResponse(OrderEntity order,
                                                    List<OrderEventEntity> timeline,
                                                    boolean credentialsSubmitted) {
-        String link = order.getId() == null || !order.getSku().isCoinTransfer() || vendorOrders == null ? null
-                : vendorOrders.trackingUrl(order.getId()).orElse(null);
+        boolean ours = order.getId() != null && order.getSku().isCoinTransfer() && vendorOrders != null
+                && partnerLinks.shown();
+        String link = ours ? vendorOrders.trackingUrl(order.getId()).orElse(null) : null;
         return toResponse(order, customerTimeline(timeline), credentialsSubmitted, OrderMapper::toCustomerEventDto,
-                link);
+                link, ours && link == null ? partnerLinkState(order) : null);
+    }
+
+    /**
+     * No link to give yet: PENDING while one is still to come for an order on its way,
+     * UNAVAILABLE when the partner will not make one. Null when there is nothing to say.
+     */
+    private String partnerLinkState(OrderEntity order) {
+        if (order.getTransferStartedAt() == null) return null;
+        var status = vendorOrders.trackingStatus(order.getId()).orElse(null);
+        if (status == null) return null;
+        if ("UNAVAILABLE".equals(status.state())) return "UNAVAILABLE";
+        boolean onItsWay = order.getStatus() == OrderStatus.IN_PROGRESS || order.getStatus() == OrderStatus.ON_HOLD
+                || order.getStatus() == OrderStatus.READY_FOR_DELIVERY;
+        return status.state() == null && onItsWay ? "PENDING" : null;
+    }
+
+    /** Whether customers are given FUT Transfer's tracking link; shown, for code built outside Spring. */
+    private com.globalfutservice.fulfilment.PartnerLinkVisibility partnerLinks =
+            com.globalfutservice.fulfilment.PartnerLinkVisibility.SHOWN;
+
+    @Autowired(required = false)
+    void setPartnerLinks(com.globalfutservice.fulfilment.PartnerLinkVisibility partnerLinks) {
+        this.partnerLinks = partnerLinks;
     }
 
     /**
@@ -174,14 +198,15 @@ public class OrderMapper {
     public OrderDtos.OrderResponse toAdminResponse(OrderEntity order,
                                                    List<OrderEventEntity> timeline,
                                                    boolean credentialsSubmitted) {
-        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toEventDto, null);
+        return toResponse(order, timeline, credentialsSubmitted, OrderMapper::toEventDto, null, null);
     }
 
     private OrderDtos.OrderResponse toResponse(OrderEntity order,
                                                List<OrderEventEntity> timeline,
                                                boolean credentialsSubmitted,
                                                java.util.function.Function<OrderEventEntity, OrderDtos.OrderEventDto> events,
-                                               String partnerTrackingUrl) {
+                                               String partnerTrackingUrl, String partnerLinkState) {
+        String action = customerActionFor(order);
         boolean coaching = order.getSku() == com.globalfutservice.domain.catalog.Sku.COACHING;
         OrderPaymentState.View payment = paymentState.of(order);
         /*
@@ -195,7 +220,7 @@ public class OrderMapper {
                 order.getPublicRef(),
                 order.getStatus().name(),
                 statusLabel(order),
-                nextAction(order, credentialsSubmitted),
+                nextAction(order, credentialsSubmitted, action),
                 OrderService.describe(order),
                 order.getSku().name(),
                 order.getPlatform() == null ? null : order.getPlatform().name(),
@@ -215,7 +240,7 @@ public class OrderMapper {
                 progress == null ? order.getSupplierAmountDelivered() : progress.deliveredK(),
                 progress == null ? order.getSupplierAmountOrdered() : Long.valueOf(progress.orderedK()),
                 order.getTransferStartedAt() != null,
-                customerActionFor(order),
+                action,
                 order.getCreatedAt(),
                 order.getDeliveredAt(),
                 order.getGuaranteeExpiresAt(),
@@ -232,7 +257,8 @@ public class OrderMapper {
                 results == null ? null : results.customer(order),
                 listingView(order),
                 partnerTrackingUrl,
-                progress != null && progress.underReview());
+                progress != null && progress.underReview(),
+                partnerLinkState);
     }
 
     /** The frozen listing of an Objectives or Tournaments order, never the listing as it is now. */
@@ -497,11 +523,16 @@ public class OrderMapper {
      * show a form — that is precisely how the two drift apart and a customer is shown a
      * "submit your sign-in" box on an order that was delivered yesterday.
      */
-    private static String nextAction(OrderEntity order, boolean credentialsSubmitted) {
+    /** The customer actions their order page answers with the sign-in form. */
+    private static final java.util.Set<String> SIGN_IN_ASKS = java.util.Set.of("RESUBMIT_SIGN_IN", "NEW_BACKUP_CODES");
+
+    private static String nextAction(OrderEntity order, boolean credentialsSubmitted, String customerAction) {
         return switch (order.getStatus()) {
             case AWAITING_PAYMENT -> "PAY";
             case CREDENTIALS_PENDING -> credentialsSubmitted ? "WAIT" : "SUBMIT_CREDENTIALS";
-            case ON_HOLD -> "CONTACT_SUPPORT";
+            // Their sign-in was refused: what is wrong, and the form to enter it again, right there.
+            case ON_HOLD -> customerAction != null && SIGN_IN_ASKS.contains(customerAction)
+                    ? "RESUBMIT_CREDENTIALS" : "CONTACT_SUPPORT";
             case DELIVERED -> "ROTATE_PASSWORD";
             case DISPUTED -> "AWAIT_REVIEW";
             default -> "WAIT";
@@ -516,7 +547,9 @@ public class OrderMapper {
      * customer. Null means there is nothing for them to do.
      */
     private String customerActionFor(OrderEntity order) {
-        if (order.getStatus() != OrderStatus.ON_HOLD) return null;
-        return vendorOrders.customerAction(order.getId()).orElse(null);
+        if (order.getStatus() != OrderStatus.ON_HOLD || order.getId() == null || vendorOrders == null) return null;
+        // What we last asked them to fix after a send was refused, before what a status report said.
+        return vendorOrders.signInProblem(order.getId())
+                .or(() -> vendorOrders.customerAction(order.getId())).orElse(null);
     }
 }

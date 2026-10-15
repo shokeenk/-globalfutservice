@@ -26,6 +26,7 @@ public interface Notifier {
      * link. Sent once per order. Only the customer's email carries it -- the link lets whoever
      * holds it change the customer's sign-in, so no other channel ever receives it.
      */
+    /* trackingUrl: the partner's link, or null to send our own tracking page instead. */
     default void coinsOnTheWay(OrderNotification notification, String trackingUrl) {
     }
 

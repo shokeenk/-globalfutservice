@@ -257,6 +257,23 @@ class PartnerTrackingLinkPostgresTest {
     }
 
     @Test
+    @DisplayName("partner link hidden from customers: still asked for and stored as returned, but the email "
+            + "carries our own page (no partner link)")
+    void hiddenFromCustomers() {
+        links.setPartnerLinks(PartnerLinkVisibility.HIDDEN);
+        long id = paid("GFS-26-LINK0010");
+        String vid = vendorId();
+        vendor.on("/buyCoinsAPI", Reply.ok(FakeFutTransfer.accepted(vid)));
+        vendor.on("/generateOrderStatusLink", Reply.ok(linkReply(LINK, vid)));
+
+        supplier.approveAndDispatch(entity(id), 1L);
+
+        assertThat(row(id).get("tracking_url")).isEqualTo(LINK);
+        verify(notifications, times(1)).coinsOnTheWay(any(), org.mockito.ArgumentMatchers.isNull());
+        verify(notifications, never()).coinsOnTheWay(any(), eq(LINK));
+    }
+
+    @Test
     @DisplayName("a failed link call leaves the order untouched, and is asked for again later until it works")
     void failureTouchesNothing() {
         long id = paid("GFS-26-LINK0002");

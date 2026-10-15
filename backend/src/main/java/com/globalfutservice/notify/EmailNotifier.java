@@ -198,10 +198,13 @@ public class EmailNotifier implements Notifier {
     /** "Your coins are on the way", with the customer's own tracking link. */
     @Override
     public void coinsOnTheWay(OrderNotification n, String trackingUrl) {
-        if (!TransactionalEmails.isCoins(n) || trackingUrl == null || trackingUrl.isBlank()) {
+        if (!TransactionalEmails.isCoins(n)) {
             return;
         }
-        sendHtml(n, TransactionalEmails.coinsOnTheWay(n, brand(), trackingUrl, supportUrl(n)));
+        // No partner link to give (GFS_FUTTRANSFER_SHOW_PARTNER_LINK off): our own tracking page.
+        boolean partner = trackingUrl != null && !trackingUrl.isBlank();
+        sendHtml(n, TransactionalEmails.coinsOnTheWay(n, brand(), partner ? trackingUrl : trackUrl(n), supportUrl(n),
+                partner));
     }
 
     @Override

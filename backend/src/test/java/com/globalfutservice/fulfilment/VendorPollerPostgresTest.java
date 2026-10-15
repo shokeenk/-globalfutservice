@@ -383,6 +383,33 @@ class VendorPollerPostgresTest {
         assertThat(r.get("state")).isEqualTo("IN_DELIVERY");
     }
 
+    // ------------------------------------------------- a refused sign-in, read ---
+
+    @Test
+    @DisplayName("FUT Transfer refuses the sign-in mid-transfer: the next read -- within a minute -- holds the "
+            + "order and tells the customer which part, by email and ticket")
+    void signInRefusalReachesTheCustomer() {
+        long pw = sent("GFS-26-SIGNPW01", "vid-signpw01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        long ba = sent("GFS-26-SIGNBA01", "vid-signba01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of(
+                // Public pool: the refusal in accountCheck, status still the economyState word.
+                "vid-signpw01", report("transfersInProgress", "wrongUserPass", "transfersInProgress", 500, 30, 0),
+                // Or in status itself.
+                "vid-signba01", report("FailedWrongBACodeTo", "finished", "FailedWrongBACodeTo", 500, 30, 0)));
+
+        poller.pollOnce();
+
+        assertThat(row(pw).get("state")).isEqualTo("AWAITING_CUSTOMER");
+        assertThat(row(pw).get("customer_action")).isEqualTo("RESUBMIT_SIGN_IN");
+        assertThat(row(ba).get("customer_action")).isEqualTo("NEW_BACKUP_CODES");
+        verify(orderService).transition(any(), eq(OrderStatus.ON_HOLD), any(), any(), anyString(),
+                eq(CustomerText.forState(VendorStatusMap.State.AWAITING_CUSTOMER, CustomerAction.RESUBMIT_SIGN_IN)));
+        assertThat(customerNotices()).extracting(CustomerActionNotification::instruction).containsExactlyInAnyOrder(
+                CustomerText.forAction(CustomerAction.RESUBMIT_SIGN_IN),
+                CustomerText.forAction(CustomerAction.NEW_BACKUP_CODES));
+        neverSent();
+    }
+
     // ------------------------------------------- partner words we did not know ---
 
     /** What FUT Transfer sent for a public pool order on 2026-10-14, 40 seconds after accepting it. */

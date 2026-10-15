@@ -827,6 +827,59 @@ public class VendorOrderLedger {
     }
 
     /** What the customer is asked to do, while their order waits for them. */
+    // ------------------------------------------------- the customer's new sign-in ---
+
+    /** At most one automatic corrected sign-in per order in this long. */
+    public static final java.time.Duration SIGN_IN_RESEND_GAP = java.time.Duration.ofMinutes(2);
+
+    private static final String SIGN_IN_RESEND_DUE = """
+            state = 'AWAITING_CUSTOMER' and vendor_order_id is not null and signin_resubmitted_at is not null
+            and (signin_sent_for is null or signin_sent_for < signin_resubmitted_at)
+            and (signin_sent_at is null or signin_sent_at <= now() - :gapSeconds * interval '1 second')
+            """;
+
+    /** Orders whose customer re-entered their sign-in, not yet sent, and whose turn has come. */
+    public List<Long> signInResendsDue(int limit) {
+        return jdbc.queryForList("select order_id from vendor_order where " + SIGN_IN_RESEND_DUE
+                        + " order by signin_resubmitted_at limit :limit",
+                new MapSqlParameterSource("limit", limit).addValue("gapSeconds", SIGN_IN_RESEND_GAP.toSeconds()),
+                Long.class);
+    }
+
+    /**
+     * Claims the customer's latest submission for sending: true once per submission, and at
+     * most once per {@link #SIGN_IN_RESEND_GAP}, whoever asks.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean claimSignInResend(long orderId) {
+        return jdbc.update("update vendor_order set signin_sent_for = signin_resubmitted_at, signin_sent_at = now(), "
+                        + "updated_at = now() where order_id = :orderId and " + SIGN_IN_RESEND_DUE,
+                new MapSqlParameterSource("orderId", orderId).addValue("gapSeconds", SIGN_IN_RESEND_GAP.toSeconds())) == 1;
+    }
+
+    /** Not sent after all, for a reason that passes (the partner asked us to wait): due again after the gap. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void unclaimSignInResend(long orderId) {
+        jdbc.update("update vendor_order set signin_sent_for = null, updated_at = now() where order_id = :orderId",
+                new MapSqlParameterSource("orderId", orderId));
+    }
+
+    /**
+     * What we asked the customer to fix in their sign-in, when a send was refused for it:
+     * RESUBMIT_SIGN_IN or NEW_BACKUP_CODES. Shown on their order page with the form.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void setSignInProblem(long orderId, com.globalfutservice.domain.orders.CustomerAction action) {
+        jdbc.update("update orders set signin_problem = :action where id = :orderId",
+                new MapSqlParameterSource("orderId", orderId).addValue("action", action.name()));
+    }
+
+    public Optional<String> signInProblem(long orderId) {
+        return jdbc.query("select signin_problem from orders where id = :orderId",
+                        new MapSqlParameterSource("orderId", orderId), (rs, i) -> rs.getString(1))
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
     public Optional<String> customerAction(long orderId) {
         return jdbc.query("""
                 select customer_action from vendor_order where order_id = :orderId and state = 'AWAITING_CUSTOMER'

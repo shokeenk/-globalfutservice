@@ -61,6 +61,9 @@ export function EaSignInFields({
 
   return (
     <div className="space-y-5">
+      <p className="text-[12.5px] leading-relaxed text-chalk-muted" data-testid="cred-check-note">
+        {t.track.credCheckNote}
+      </p>
       <Field label={t.track.credEmail} required hint={t.track.credEmailHint} error={errors.eaEmail}>
         {(props) => (
           <Input

@@ -57,6 +57,15 @@ public class FulfilmentRelease {
     private final SupplierFulfilmentService supplier;
     private final VendorOrderActionLog history;
 
+    private static com.globalfutservice.domain.orders.CustomerAction signInAsk(String code) {
+        try {
+            return code == null ? com.globalfutservice.domain.orders.CustomerAction.RESUBMIT_SIGN_IN
+                    : com.globalfutservice.domain.orders.CustomerAction.valueOf(code);
+        } catch (IllegalArgumentException e) {
+            return com.globalfutservice.domain.orders.CustomerAction.RESUBMIT_SIGN_IN;
+        }
+    }
+
     public FulfilmentRelease(OrderService orderService, CredentialVaultService vault,
                              SupplierFulfilmentService supplier, VendorOrderActionLog history) {
         this.orderService = orderService;
@@ -135,10 +144,9 @@ public class FulfilmentRelease {
                 }
             }
             case FAILED_SIGN_IN ->
-                // The sign-in was refused and deleted: the customer is asked for it again.
-                // This reason is on the order timeline, which the customer reads.
-                released = orderService.transition(released, OrderStatus.ON_HOLD, Actor.SYSTEM, null, "GFS",
-                        "Your EA sign-in was not accepted. Please enter your details again so we can start.");
+                // The sign-in was refused and deleted: the customer is asked for it again, for the
+                // part that was wrong -- on their order page, in its history and by email.
+                released = orderService.askForSignInAgain(released, signInAsk(release.reasonCode()));
             default -> {
                 // The order stays where it was. The reason is in the release's message.
             }

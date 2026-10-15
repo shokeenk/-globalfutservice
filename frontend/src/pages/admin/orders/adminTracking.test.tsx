@@ -197,6 +197,18 @@ describe("the FUT Transfer section's Tracking summary", () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
+  it('hidden from customers: still shown here, marked so, and the setting named', () => {
+    const PARTNER = 'https://transferstatus.top/abc12345'
+    const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
+      partnerUrl: PARTNER, partnerUrlStoredAt: '2026-10-07T10:00:05Z', partnerLinkState: 'STORED',
+      partnerLinkAttempts: 1, canGenerate: false, partnerLinkShown: false } }))
+    const box = within(summary).getByTestId('partner-link')
+    expect(within(box).getByRole('link', { name: PARTNER })).toBeInTheDocument()
+    expect(within(box).getByTestId('partner-link-hidden'))
+      .toHaveTextContent('Hidden from customers (GFS_FUTTRANSFER_SHOW_PARTNER_LINK is off)')
+    expect(box).not.toHaveTextContent('The customer was emailed it')
+  })
+
   it('the partner will not make one (finished): "link unavailable", and nothing to press', () => {
     const summary = panel(section({ tracking: { transferStartedAt: '2026-10-07T10:00:00Z', customerUrl: URL,
       partnerUrl: null, partnerLinkState: 'UNAVAILABLE', partnerLinkAttempts: 1, canGenerate: false } }))
