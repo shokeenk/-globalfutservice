@@ -242,6 +242,7 @@ class VendorPublicPoolPostgresTest {
         assertThat((BigDecimal) r.get("buy_now_threshold_sent")).isEqualByComparingTo("4.40");
         assertThat((BigDecimal) r.get("supplier_rate_sent")).isEqualByComparingTo("4");
         assertThat((BigDecimal) r.get("threshold_margin_pct")).isEqualByComparingTo("10");
+        assertThat(r.get("threshold_source")).as("worked out from FUT Transfer's price").isEqualTo("MARKET");
         assertThat((BigDecimal) r.get("transfer_fee_at_send")).isEqualByComparingTo("0");
         assertThat(r.get("max_price_sent")).isNull();
         assertThat((BigDecimal) r.get("balance_at_send")).isEqualByComparingTo("5000");
@@ -326,6 +327,7 @@ class VendorPublicPoolPostgresTest {
         assertThat(sent.get("buyNowThreshold").decimalValue()).isEqualByComparingTo("8.63");
         assertThat(sent.get("maxPrice").decimalValue()).isEqualByComparingTo("9.25");
         assertThat((BigDecimal) row(id).get("buy_now_threshold_sent")).isEqualByComparingTo("8.63");
+        assertThat(row(id).get("threshold_source")).as("the Render override").isEqualTo("FIXED_OVERRIDE");
         assertThat((BigDecimal) row(id).get("max_price_sent")).isEqualByComparingTo("9.25");
     }
 

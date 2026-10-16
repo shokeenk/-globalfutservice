@@ -610,6 +610,7 @@ const en = {
     partnerTrackNote: 'Live delivery status from our transfer partner. If your EA login details need fixing, you can update them here. Don’t share this link.',
     opensInNewTab: '(opens in a new tab)',
     transferChecking: 'We’re checking your order, nothing for you to do.',
+    transferPaused: 'Paused, our team is handling your order.',
     // Their EA sign-in was refused: which part, with the form right there.
     signInWrongTitle: 'Your EA details need fixing',
     signInWrongPassword: 'Your EA email or password was not accepted. Enter them again below and we’ll pick straight back up.',
@@ -625,6 +626,7 @@ const en = {
       DELIVERING: 'Delivering',
       DELIVERED: 'Delivered',
       NEEDS_ATTENTION: 'Needs attention',
+      PAUSED: 'Paused',
     },
     // Staff opening a customer's tracking link from the admin: the page as the customer sees it, read-only.
     staffViewTitle: 'Staff view',

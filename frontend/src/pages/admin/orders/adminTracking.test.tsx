@@ -142,7 +142,9 @@ describe("the FUT Transfer section's Tracking summary", () => {
 
   it.each<[string, Partial<VendorOrderDetail>, string]>([
     ['needs review', { state: 'NEEDS_REVIEW', reviewReason: 'Left out of the last 3 status checks', lastErrorCode: 'MISSING_FROM_POLL' },
-      'Needs review: Left out of the last 3 status checks'],
+      'Needs review (MISSING_FROM_POLL): Left out of the last 3 status checks. Latest report: 420 of 500 K delivered'],
+    ['stopped', { state: 'STOPPED', stoppedBy: 'admin@example.test', stoppedAt: '2026-10-15T16:21:00Z' },
+      'Stopped at FUT Transfer by admin@example.test'],
     ['waiting for the customer', { state: 'AWAITING_CUSTOMER', customerAction: 'BACKUP_CODES' },
       'Waiting for the customer: BACKUP_CODES'],
     ['aborted', { aborted: true }, 'FUT Transfer reports this order was aborted.'],

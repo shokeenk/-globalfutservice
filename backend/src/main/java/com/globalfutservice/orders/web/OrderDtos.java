@@ -293,7 +293,14 @@ public final class OrderDtos {
               one is still to come, UNAVAILABLE when the partner will not make one. Null
               otherwise, and always while customers are not given the partner's link.
             */
-            String partnerLinkState) {
+            String partnerLinkState,
+
+            /*
+              Our team stopped the coin transfer at the partner and is handling the order. The
+              customer is told it is paused and that we are on it, with the progress so far --
+              never "delivering". False otherwise.
+            */
+            boolean transferPaused) {
     }
 
     /**

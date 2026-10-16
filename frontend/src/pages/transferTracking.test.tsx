@@ -226,6 +226,23 @@ describe('while our staff check the order', () => {
   })
 })
 
+describe('stopped by our team', () => {
+  it('says paused and that we are handling it, with the progress so far -- never "Delivering"', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 28, orderedCoins: 50, transferPaused: true }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(within(box).getByTestId('transfer-stage')).toHaveTextContent('Paused, our team is handling your order.')
+    expect(within(box).getByTestId('transfer-status')).toHaveTextContent('Paused')
+    expect(box).toHaveTextContent('28K of 50K delivered')
+    expect(box).not.toHaveTextContent(/Delivering|being delivered/)
+  })
+
+  it('resumed: delivering again', async () => {
+    openOrder(order({ transferStarted: true, deliveredCoins: 31, orderedCoins: 50, transferPaused: false }))
+    const box = await screen.findByTestId('transfer-progress')
+    expect(within(box).getByTestId('transfer-status')).toHaveTextContent('Delivering')
+  })
+})
+
 describe('the simple status, and delivered of ordered in coins', () => {
   it.each<[string, Record<string, unknown>, string]>([
     ['nothing reported yet', { deliveredCoins: null }, 'Processing'],

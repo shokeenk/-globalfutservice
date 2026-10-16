@@ -111,3 +111,25 @@ Orders sent before #124 went with `minTransferAmount` 50 (50K per transfer), and
   - Orders sent from then on are never marked.
 - **Admin button "Update settings at partner":** sends the same call for one order while the partner has it. Pressing it again is safe.
 - **What FUT Transfer answers:** `{"outcome":"success","updatedFields":[...]}`. If `minTransferAmount` isn't among the `updatedFields`, the partner didn't apply it. Their docs say it only applies to `cycle` and `targetedSnipe` orders. We record that as `IGNORED`.
+
+## 2026-10-15: GFS-26-ZTE3A759, a stop that didn't hold
+
+**What happened.** The order was a 50K PlayStation order, sent before #124 with `buyNowThreshold` 50 (the order size) and `minTransferAmount` 50.
+- FUT Transfer reported `partlyDelivered` / `finished` / `transferInserted`. `transferInserted` wasn't in our map, so the order went to review (`UNKNOWN_ECONOMY_STATE`).
+- The next understood report brought it back to delivering, and the unknown one sent it to review again. It flipped every poll, and the admin buttons came and went.
+- An admin pressed **Stop at partner**, and FUT Transfer confirmed it. The next report moved the order back to IN_DELIVERY, so **Resume** was refused ("while it is IN_DELIVERY").
+- Meanwhile the review text said "20K of 50K" while the customer page said 28K, because the text wasn't refreshed while the order sat in review.
+
+**What we do now** (codes in `futtransfer-codes.md`):
+- **`transferInserted` is progress.** An `economyState` we don't know, while coins are moving and the delivered amount isn't going down, stays delivering, with one alert per code per order.
+- **No flip-flopping.** Once an order has recovered from a review over an unknown code, the same code doesn't send it back.
+- **A confirmed stop puts the order in STOPPED, recording who stopped it and when.** Reports still record what was delivered, but never move it back to delivering. Only the partner finishing it in full (delivered) does.
+- **Resume at partner** is offered for stopped and held orders, and for any order FUT Transfer reports `paused`. A refusal says why, for example "Resume is only for stopped or held orders; this order is delivering."
+- **The customer page:** a stopped order shows "Paused, our team is handling your order." with the progress so far.
+- **The admin review box and "Held up by"** show the latest delivered/ordered and when it was reported. The review text follows each report while the reason stays the same, and the box goes once the order recovers.
+- **Stopped orders are never resumed automatically.** An admin presses Resume.
+
+**`/editOrderAPI` `cyclePrice`: not touched.**
+- The collection describes it as "New price per 100K for cycle/targetedSnipe orders", and nowhere as the `buyNowThreshold` ceiling of `/buyCoinsAPI`.
+- Because that is unclear, we don't send it. FUT Transfer still needs to be asked whether it is the same thing.
+- `/editOrderAPI` is used only for `minTransferAmount` (#126).

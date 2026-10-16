@@ -1,4 +1,5 @@
-import type { VendorActionName, VendorSection } from '../../../lib/types'
+import { dateTime } from '../../../lib/format'
+import type { VendorActionName, VendorOrderDetail, VendorSection } from '../../../lib/types'
 
 /**
  * FUT Transfer on the admin's order page: what each action is called, where it posts, and
@@ -87,7 +88,23 @@ export function deliveredOfOrdered(deliveredK: number | null | undefined, ordere
   return `${(deliveredK ?? 0).toLocaleString('en-IN')} of ${orderedK.toLocaleString('en-IN')} K`
 }
 
-const IN_FLIGHT = new Set(['SUBMITTING', 'SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER', 'NEEDS_REVIEW'])
+const IN_FLIGHT = new Set(['SUBMITTING', 'SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER', 'NEEDS_REVIEW', 'STOPPED'])
+
+/** The partner's latest numbers and when they came: what a review is about, as it is now. */
+export function latestReport(v: VendorOrderDetail): string {
+  return `Latest report: ${deliveredOfOrdered(v.deliveredK, v.vendorAmountOrderedK ?? v.amountOrderedK)} delivered`
+    + `${v.lastPolledAt ? `, ${dateTime(v.lastPolledAt)}` : ''}`
+}
+
+/** Who stopped it and when, for a stopped order. */
+export function stoppedLine(v: VendorOrderDetail): string {
+  const by = v.stoppedBy ? ` by ${v.stoppedBy}` : ''
+  const at = v.stoppedAt ? `, ${dateTime(v.stoppedAt)}` : ''
+  return `Stopped at FUT Transfer${by}${at}. It stays stopped until someone presses Resume at partner.`
+}
+
+/** States that need someone: the red box shows for these, and goes once the order recovers. */
+export const ATTENTION_STATES = new Set(['NEEDS_REVIEW', 'PARTIALLY_DELIVERED', 'FAILED', 'STOPPED'])
 
 /**
  * What is holding the order up, in one line, or null when nothing is: the Tracking summary's
@@ -101,7 +118,10 @@ export function blockage(section: VendorSection): string | null {
   }
   switch (v.state) {
     case 'NEEDS_REVIEW':
-      return `Needs review: ${v.reviewReason ?? v.lastErrorCode ?? 'no reason recorded'}`
+      return `Needs review${v.lastErrorCode ? ` (${v.lastErrorCode})` : ''}: ${v.reviewReason ?? 'no reason recorded'}`
+        + `${/[.!?]$/.test(v.reviewReason ?? '') ? '' : '.'} ${latestReport(v)}.`
+    case 'STOPPED':
+      return `${stoppedLine(v)} ${latestReport(v)}.`
     case 'AWAITING_CUSTOMER':
       return `Waiting for the customer${v.customerAction ? `: ${v.customerAction}` : ''}`
     case 'PARTIALLY_DELIVERED':
@@ -113,6 +133,26 @@ export function blockage(section: VendorSection): string | null {
   if (v.aborted) return 'FUT Transfer reports this order was aborted.'
   if (section.paused && IN_FLIGHT.has(v.state)) return 'Calls to FUT Transfer are paused: it refused our API credentials.'
   return null
+}
+
+/**
+ * How the price ceiling an order was sent with came about, in one sentence for "How it was sent";
+ * null when it was worked out from FUT Transfer's price, which the cells beside it show.
+ */
+export function ceilingNote(v: VendorOrderDetail): string | null {
+  if (v.orderMode !== 'PUBLIC_POOL' || v.buyNowThresholdSent == null) return null
+  const ceiling = euroAmount(v.buyNowThresholdSent)
+  if (v.thresholdSource === 'FIXED_OVERRIDE') return `Fixed override from Render: ${ceiling}.`
+  if (v.thresholdSource === 'MARKET') return null
+  const sizeOfOrder = v.buyNowThresholdSent === v.amountOrderedK
+  return `Sent before automatic pricing: ceiling was ${sizeOfOrder
+    ? `the order size (${ceiling} for ${v.amountOrderedK.toLocaleString('en-IN')}K)`
+    : `${ceiling}`}. This is a maximum per 100K, not the price charged.`
+}
+
+/** A figure in euros, as FUT Transfer prices and charges. */
+export function euroAmount(value: number): string {
+  return `€${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
 
 /** How an order is placed at the partner. */
@@ -144,6 +184,7 @@ export const VENDOR_STATE_LABEL: Record<string, string> = {
   FAILED: 'Not created',
   NEEDS_REVIEW: 'Needs review',
   RESOLVED: 'Resolved',
+  STOPPED: 'Stopped',
 }
 
 export type VendorTone = 'ok' | 'warn' | 'attention' | 'neutral' | 'info'
@@ -151,7 +192,7 @@ export type VendorTone = 'ok' | 'warn' | 'attention' | 'neutral' | 'info'
 export function vendorStateTone(state: string): VendorTone {
   switch (state) {
     case 'DELIVERED': return 'ok'
-    case 'NEEDS_REVIEW': case 'PARTIALLY_DELIVERED': return 'warn'
+    case 'NEEDS_REVIEW': case 'PARTIALLY_DELIVERED': case 'STOPPED': return 'warn'
     case 'AWAITING_CUSTOMER': return 'attention'
     case 'SUBMITTED': case 'IN_DELIVERY': case 'SUBMITTING': return 'info'
     default: return 'neutral'
@@ -178,16 +219,19 @@ export function vendorQuestion(action: VendorActionName, ref: string, section: V
         + 'No new order is created. Once sent, the details are with the partner.'
     case 'RESUME':
       return `Resume ${ref} at FUT Transfer?\n\n`
-        + 'Only once whatever stopped it has been fixed — for example the customer has signed out of '
-        + 'their console, or cleared their unassigned items.'
+        + `Ordered ${ordered}; delivered ${delivered} as last reported.\n`
+        + 'FUT Transfer starts delivering the rest again, from where it stopped. Only do this once whatever '
+        + 'stopped it has been fixed — for example the customer has signed out of their console, or cleared '
+        + 'their unassigned items.'
     case 'STOP':
       return `Stop ${ref} at FUT Transfer?\n\n`
         + `Ordered ${ordered}; delivered ${delivered} as last reported.\n`
-        + 'What has been delivered stays delivered. The partner will not carry on, and this cannot be undone.'
+        + 'FUT Transfer stops sending coins. What has been delivered stays delivered. The order stays stopped here '
+        + 'until someone presses Resume at partner; Mark finished closes it instead.'
     case 'MARK_FINISHED':
       return `Mark ${ref} finished at FUT Transfer?\n\n`
         + `Ordered ${ordered}; delivered ${delivered} as last reported.\n`
-        + 'The partner closes the order and nothing more is delivered. This cannot be undone.'
+        + 'FUT Transfer closes the order and delivers nothing more. This cannot be undone.'
     case 'RETRY':
       return `Have you checked the FUT Transfer dashboard and found no order for ${ref}?\n\n`
         + 'We look it up as well. If the partner does not have it, the order can be approved again — '

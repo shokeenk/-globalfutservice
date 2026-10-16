@@ -38,13 +38,19 @@ function section(patch: Partial<VendorSection> = {}): VendorSection {
 }
 
 describe('vendor wording', () => {
-  it('says what was ordered and delivered before anything that ends an order', () => {
-    for (const action of ['STOP', 'MARK_FINISHED'] as const) {
+  it('says what was ordered and delivered, and what happens at FUT Transfer, before stop, resume and finish', () => {
+    for (const action of ['STOP', 'RESUME', 'MARK_FINISHED'] as const) {
       const q = vendorQuestion(action, REF, section())
       expect(q).toContain('Ordered 500K')
       expect(q).toContain('delivered 420K')
-      expect(q).toContain('cannot be undone')
+      expect(q).toContain('FUT Transfer')
     }
+    expect(vendorQuestion('STOP', REF, section())).toContain('FUT Transfer stops sending coins. What has been '
+      + 'delivered stays delivered. The order stays stopped here until someone presses Resume at partner')
+    expect(vendorQuestion('RESUME', REF, section())).toContain('FUT Transfer starts delivering the rest again, '
+      + 'from where it stopped.')
+    expect(vendorQuestion('MARK_FINISHED', REF, section())).toContain('FUT Transfer closes the order and delivers '
+      + 'nothing more. This cannot be undone.')
   })
 
   it('asks for the dashboard check before allowing a new send, and names the note when resolving', () => {
@@ -87,12 +93,16 @@ describe('VendorPanel', () => {
     return onChanged
   }
 
-  it('shows what the partner reports, with the cost labelled as unconfirmed', () => {
+  it('shows what the partner reports, and its own figure for the cost once it gives one', () => {
     renderPanel(section())
     expect(screen.getByText('vid-1')).toBeInTheDocument()
     expect(screen.getByText('420K')).toBeInTheDocument()
-    expect(screen.getByText('To pay (currency unconfirmed)')).toBeInTheDocument()
+    expect(screen.getByText('Actual cost (FUT Transfer)').nextSibling).toHaveTextContent(/^€12\.50$/)
+    expect(screen.queryByText(/To pay/)).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
+
+    renderPanel(section({ vendorOrder: detail({ toPay: null }) }))
+    expect(screen.getAllByText('Actual cost (FUT Transfer)')).toHaveLength(1)
   })
 
   it('shows how it was sent, with every partner figure labelled as unconfirmed', async () => {
@@ -101,7 +111,7 @@ describe('VendorPanel', () => {
       currentOrderMode: 'PUBLIC_POOL',
       vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', buyNowThresholdSent: 4.4,
         supplierRateSent: 4, thresholdMarginPct: 10, transferFeeAtSend: 0, estimatedCostEur: 20,
-        balanceAtSend: 5000 }),
+        thresholdSource: 'MARKET', balanceAtSend: 5000 }),
       customerPaid: '₹4,500.00',
     }))
 
@@ -114,12 +124,111 @@ describe('VendorPanel', () => {
     expect(screen.getByText('Estimated cost (FUT Transfer)').nextSibling).toHaveTextContent(/^€20\.00$/)
     expect(screen.getByText('Customer paid').nextSibling).toHaveTextContent('₹4,500.00')
     expect(screen.getByText('maxPrice sent').nextSibling).toHaveTextContent('Not sent')
-    expect(screen.getByText('To pay (currency unconfirmed)').nextSibling).toHaveTextContent('12.5')
+    expect(screen.getByText('Actual cost (FUT Transfer)').nextSibling).toHaveTextContent('€12.50')
+    // Worked out from the market: the cells say how, and no note is needed.
+    expect(screen.queryByTestId('ceiling-note')).toBeNull()
+    expect(screen.queryByText('Fixed')).toBeNull()
+    expect(screen.queryByText('Not recorded')).toBeNull()
     expect(screen.getByText('Balance at send (currency unconfirmed)').nextSibling).toHaveTextContent('5,000')
     expect(await screen.findByText('4,321.5')).toBeInTheDocument()
     expect(screen.getByText(/FUT Transfer balance \(currency unconfirmed\)/)).toBeInTheDocument()
     expect(api.get).toHaveBeenCalledWith('/api/v1/admin/vendor/balance')
     expect(screen.queryByText(/approving it again would use/)).toBeNull()
+  })
+
+  it('an order sent before automatic pricing says its ceiling was the order size, a maximum, not the price', () => {
+    renderPanel(section({
+      currentOrderMode: 'PUBLIC_POOL',
+      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', transferMethod: 'targetedSnipe', amountOrderedK: 50,
+        vendorAmountOrderedK: 50, deliveredK: 20, buyNowThresholdSent: 50, thresholdSource: null, toPay: null }),
+    }))
+    expect(screen.getByTestId('ceiling-note')).toHaveTextContent('Sent before automatic pricing: ceiling was the order '
+      + 'size (€50.00 for 50K). This is a maximum per 100K, not the price charged.')
+    expect(screen.getByText('Price ceiling per 100K (buyNowThreshold) sent').nextSibling).toHaveTextContent('€50.00')
+    // No more "Fixed" or "Not recorded", and no estimate made up for it.
+    expect(screen.queryByText('Fixed')).toBeNull()
+    expect(screen.queryByText('Not recorded')).toBeNull()
+    expect(screen.queryByText('Supplier rate (€ per 100K)')).toBeNull()
+    expect(screen.queryByText('Estimated cost (FUT Transfer)')).toBeNull()
+  })
+
+  it('a fixed ceiling set on Render says so', () => {
+    renderPanel(section({
+      vendorOrder: detail({ orderMode: 'PUBLIC_POOL', buyNowThresholdSent: 4.1, thresholdSource: 'FIXED_OVERRIDE' }),
+    }))
+    expect(screen.getByTestId('ceiling-note')).toHaveTextContent('Fixed override from Render: €4.10.')
+    expect(screen.queryByText('Margin')).toBeNull()
+  })
+
+  it('the red box shows while the order needs someone, with the latest report, and goes once it recovers', () => {
+    const { rerender } = render(<VendorPanel publicRef={REF} onChanged={vi.fn()} section={section({
+      vendorOrder: detail({ state: 'NEEDS_REVIEW', lastErrorCode: 'UNKNOWN_ECONOMY_STATE', deliveredK: 20,
+        reviewReason: 'The partner reports status partlyDelivered; 20K of 500K delivered.' }),
+    })} />)
+    expect(screen.getByTestId('review-box')).toHaveTextContent('UNKNOWN_ECONOMY_STATE')
+    expect(screen.getByTestId('review-latest')).toHaveTextContent(/^Latest report: 20 of 500 K delivered, /)
+
+    // The next report: the box follows it.
+    rerender(<VendorPanel publicRef={REF} onChanged={vi.fn()} section={section({
+      vendorOrder: detail({ state: 'NEEDS_REVIEW', lastErrorCode: 'UNKNOWN_ECONOMY_STATE', deliveredK: 28,
+        reviewReason: 'The partner reports status partlyDelivered; 28K of 500K delivered.' }),
+    })} />)
+    expect(screen.getByTestId('review-latest')).toHaveTextContent('28 of 500 K delivered')
+
+    // Recovered: delivering again, the box is gone; the history stays in Calls and actions.
+    rerender(<VendorPanel publicRef={REF} onChanged={vi.fn()} section={section({
+      vendorOrder: detail({ state: 'IN_DELIVERY', lastErrorCode: 'UNKNOWN_ECONOMY_STATE', deliveredK: 31,
+        reviewReason: 'The partner reports status partlyDelivered; 28K of 500K delivered.' }),
+      actions: [{ at: '2026-10-15T16:20:00Z', action: 'RESUME', actorLabel: 'admin@example.test', outcome: 'DONE',
+        code: null, detail: 'Resumed at the partner.' }],
+    })} />)
+    expect(screen.queryByTestId('review-box')).toBeNull()
+    expect(screen.getByText('Calls and actions')).toBeInTheDocument()
+  })
+
+  it('a stopped order says who stopped it and when, and offers Resume', () => {
+    renderPanel(section({
+      vendorOrder: detail({ state: 'STOPPED', stoppedBy: 'admin@example.test', stoppedAt: '2026-10-15T16:21:00Z',
+        lastErrorCode: 'STOPPED_BY_ADMIN' }),
+      available: ['RESUME', 'MARK_FINISHED', 'UPDATE_SETTINGS', 'RESOLVE'],
+    }))
+    expect(screen.getAllByText('Stopped').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('review-box')).toHaveTextContent('Stopped at FUT Transfer by admin@example.test')
+    expect(screen.getByTestId('review-box')).toHaveTextContent('It stays stopped until someone presses Resume at partner.')
+    expect(screen.getByRole('button', { name: 'Resume at partner' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Stop at partner' })).toBeNull()
+  })
+
+  it('names the partner codes we do not know yet', () => {
+    renderPanel(section({ vendorOrder: detail({ unknownWords: ['economyState:transfersomethingnew'] }) }))
+    expect(screen.getByTestId('unknown-words')).toHaveTextContent('economyState:transfersomethingnew')
+  })
+
+  it('while a request runs every action button is held, and the section reloads after it, done or not', async () => {
+    let finish: (v: unknown) => void = () => {}
+    api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const onChanged = renderPanel(section({ available: ['RESUME', 'STOP', 'MARK_FINISHED'] }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop at partner' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resume at partner' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Mark finished at partner' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Stop at partner/ })).toBeDisabled()
+    // A second press while it runs sends nothing more.
+    fireEvent.click(screen.getByRole('button', { name: 'Resume at partner' }))
+    expect(api.post).toHaveBeenCalledTimes(1)
+
+    finish({ status: 'DONE', message: 'Stopped at the partner.' })
+    await screen.findByText('Stopped at the partner.')
+    expect(onChanged).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resume at partner' })).toBeEnabled())
+
+    // A refusal reloads too, and says why.
+    api.post.mockRejectedValue(new ApiError(409, { message: 'Resume is only for stopped or held orders; this order '
+      + '(GFS-26-VENDOR01) is delivering. Nothing was sent.' } as never))
+    fireEvent.click(screen.getByRole('button', { name: 'Resume at partner' }))
+    expect(await screen.findByText(/Resume is only for stopped or held orders/)).toBeInTheDocument()
+    expect(onChanged).toHaveBeenCalledTimes(2)
   })
 
   const POOL_SEND = {

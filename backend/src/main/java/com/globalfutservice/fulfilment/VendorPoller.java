@@ -272,11 +272,20 @@ public class VendorPoller {
     /**
      * What the vendor reported, recorded and acted on.
      *
-     * <p>An order waiting for an admin is read too, so its numbers stay current. Only a review
-     * over a word we did not know, or a pause at the partner, is undone here: once the partner's report is understood
+     * <p>An order waiting for an admin is read too, so its numbers stay current, and so does the
+     * text the admin reads while the reason is the same. Only a review over a word we did not
+     * know, or a pause at the partner, is undone here: once the partner's report is understood
      * again, the order moves where that report puts it, as a fresh report would, and its
      * history says so. Any other review stays an admin's to decide. A word we do not know
-     * alerts an admin once per order, however often it comes back.
+     * alerts an admin once per order, however often it comes back -- and once an order has
+     * been understood again after one, the same word never sends it back to review: it would
+     * only flip back and forth, poll after poll.
+     *
+     * <p>An economyState we do not know while the partner says coins are moving is not a
+     * review at all: the order stays delivering and an admin hears about the word once.
+     *
+     * <p>An order an admin stopped stays STOPPED: its numbers are recorded, and only the partner
+     * finishing it in full moves it (to DELIVERED). Resume is the admin's.
      */
     private void apply(VendorOrderLedger.PollRow row, FutTransferClient.SupplierStatus s) {
         boolean progressed = !Objects.equals(s.status(), row.vendorStatus())
@@ -286,17 +295,40 @@ public class VendorPoller {
         VendorStatusMap.Report report = new VendorStatusMap.Report(s.status(), s.accountCheck(),
                 s.economyState(), s.amountOrderedK(), s.amountDeliveredK(), s.aborted(), s.motherOrder(),
                 s.simplifiedStatus());
-        VendorStatusMap.Outcome o = VendorStatusMap.map(report, row.amountOrderedK());
+        VendorStatusMap.Outcome o = VendorStatusMap.map(report, row.amountOrderedK(), row.deliveredK());
         String unknownWord = VendorStatusMap.unknownWord(o, report);
+        if (VendorStatusMap.UNKNOWN_ECONOMY_STATE_DELIVERING.equals(o.reason())) {
+            // Still delivering: an admin hears about the word once, and the order carries on as delivering.
+            if (unknownWord != null && ledger.claimUnknownWordAlert(row.orderId(), unknownWord)) {
+                alert(row.externalRef(), "Unknown transfer code while delivering", staffText(o, s, row)
+                        + " The order stays delivering: nothing to do unless it stops moving.", o.reason());
+            }
+            o = new VendorStatusMap.Outcome(VendorStatusMap.State.IN_DELIVERY, CustomerAction.NONE, null, false);
+            unknownWord = null;
+        }
+        if (VendorOrderLedger.STOPPED.equals(row.state())) {
+            stoppedReport(row, s, o);
+            return;
+        }
         boolean fromReview = inReview(row);
         if (fromReview) {
-            if (!VendorStatusMap.RECOVERABLE_REASONS.contains(row.lastErrorCode())) return;
+            if (!VendorStatusMap.RECOVERABLE_REASONS.contains(row.lastErrorCode())) {
+                refreshReview(row, s, o);
+                return;
+            }
             if (unknownWord != null) {
                 if (ledger.claimUnknownWordAlert(row.orderId(), unknownWord)) {
                     alert(row.externalRef(), headline(o, row.orderMode()), staffText(o, s, row), o.reason());
                 }
+                refreshReview(row, s, o);
                 return;
             }
+        } else if (unknownWord != null && ledger.unknownWordAlerted(row.orderId(), unknownWord)) {
+            // Said once already, and understood again since: back to review would only flip it
+            // back and forth. It stays as it is; the word is on its admin page.
+            log.info("FUT Transfer: {} reports {} again; already alerted, staying {}", row.externalRef(),
+                    unknownWord, row.state());
+            return;
         }
         if (staleAfterRestart(row, s, o)) {
             log.info("FUT Transfer: {} still reports what it did before it was restarted; waiting",
@@ -310,7 +342,10 @@ public class VendorPoller {
                 && !o.action().name().equals(row.customerAction());
         // Waiting for an admin before for a word we did not know, now for a reason we do.
         boolean newReason = fromReview && to.equals(row.state()) && !Objects.equals(o.reason(), row.lastErrorCode());
-        if (to.equals(row.state()) && !newAsk && !newReason) return;
+        if (to.equals(row.state()) && !newAsk && !newReason) {
+            if (fromReview) refreshReview(row, s, o);
+            return;
+        }
 
         String staffText = staffText(o, s, row);
         if (!ledger.move(row.orderId(), List.of(row.state()), to, o.reason(), staffText, o.action().name())) {
@@ -336,6 +371,33 @@ public class VendorPoller {
         }
         if (o.alert() && (unknownWord == null || ledger.claimUnknownWordAlert(row.orderId(), unknownWord))) {
             alert(row.externalRef(), headline(o, row.orderMode()), staffText, o.reason());
+        }
+    }
+
+    /** Still waiting for review for the same reason: the admin's text says what the partner reports now. */
+    private void refreshReview(VendorOrderLedger.PollRow row, FutTransferClient.SupplierStatus s,
+                               VendorStatusMap.Outcome o) {
+        if (o.reason() != null && o.reason().equals(row.lastErrorCode())) {
+            ledger.refreshReviewText(row.orderId(), o.reason(), staffText(o, s, row));
+        }
+    }
+
+    /**
+     * A report on an order an admin stopped. The numbers are already recorded; it moves only
+     * if the partner finished it in full. Anything else -- delivering, paused, an error -- leaves
+     * it stopped, for an admin to resume, finish or resolve.
+     */
+    private void stoppedReport(VendorOrderLedger.PollRow row, FutTransferClient.SupplierStatus s,
+                               VendorStatusMap.Outcome o) {
+        if (o.state() != VendorStatusMap.State.DELIVERED) return;
+        if (!ledger.move(row.orderId(), List.of(VendorOrderLedger.STOPPED), o.state().name(), o.reason(),
+                staffText(o, s, row), null)) {
+            return;
+        }
+        log.info("FUT Transfer: {} STOPPED -> DELIVERED", row.externalRef());
+        moveOrder(row.orderId(), o.state(), CustomerAction.NONE);
+        if (o.alert()) {
+            alert(row.externalRef(), headline(o, row.orderMode()), staffText(o, s, row), o.reason());
         }
     }
 

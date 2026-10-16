@@ -258,7 +258,8 @@ public class OrderMapper {
                 listingView(order),
                 partnerTrackingUrl,
                 progress != null && progress.underReview(),
-                partnerLinkState);
+                partnerLinkState,
+                progress != null && progress.paused());
     }
 
     /** The frozen listing of an Objectives or Tournaments order, never the listing as it is now. */

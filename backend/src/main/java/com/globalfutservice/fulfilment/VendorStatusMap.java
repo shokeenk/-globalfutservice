@@ -18,7 +18,11 @@ import com.globalfutservice.domain.orders.CustomerAction;
  *   <li>A report about a mother order: NEEDS_REVIEW. Its amounts would be a total over
  *       child orders, which the collection documents only for its deprecated auto-buy;
  *       nothing here sends one, so nothing is concluded from one.</li>
- *   <li>Any value not in the documentation: NEEDS_REVIEW.</li>
+ *   <li>Any value not in the documentation: NEEDS_REVIEW -- except an {@code economyState} we
+ *       do not know while {@code status} says coins are moving ({@code transfersInProgress},
+ *       {@code partlyDelivered}) and the delivered amount is not going down: that order is still
+ *       delivering. It stays IN_DELIVERY, and an admin is told once about the word
+ *       ({@link #UNKNOWN_ECONOMY_STATE_DELIVERING}).</li>
  *   <li>The vendor's ordered amount differs from ours: NEEDS_REVIEW.</li>
  *   <li>Aborted: PARTIALLY_DELIVERED if anything arrived, NEEDS_REVIEW if not.</li>
  *   <li>Finished -- {@code status} "finished", or {@code simplifiedStatus} "completed" --
@@ -49,8 +53,15 @@ public final class VendorStatusMap {
     /** Finished with more delivered than ordered: delivered, and an admin is told. */
     public static final String OVER_DELIVERY = "OVER_DELIVERY";
 
-    /** Our states for a vendor order, as vendor_order stores them. */
-    public enum State { SUBMITTED, IN_DELIVERY, AWAITING_CUSTOMER, DELIVERED, PARTIALLY_DELIVERED, NEEDS_REVIEW }
+    /**
+     * An {@code economyState} we do not know, reported while the order is delivering: it stays
+     * IN_DELIVERY, and an admin is told once about the word. Never a review.
+     */
+    public static final String UNKNOWN_ECONOMY_STATE_DELIVERING = "UNKNOWN_ECONOMY_STATE_DELIVERING";
+
+    /** Our states for a vendor order, as vendor_order stores them. STOPPED is an admin's, never a report's. */
+    public enum State { SUBMITTED, IN_DELIVERY, AWAITING_CUSTOMER, DELIVERED, PARTIALLY_DELIVERED, NEEDS_REVIEW,
+        STOPPED }
 
     /**
      * @param reason a short code for the admin and the audit, e.g. {@code UNKNOWN_STATUS} or
@@ -136,7 +147,7 @@ public final class VendorStatusMap {
         return switch (o.reason()) {
             case "UNKNOWN_STATUS", "NO_STATUS" -> "status:" + norm(r.status());
             case "UNKNOWN_ACCOUNT_CHECK" -> "accountCheck:" + norm(r.accountCheck());
-            case "UNKNOWN_ECONOMY_STATE" -> "economyState:" + norm(r.economyState());
+            case "UNKNOWN_ECONOMY_STATE", UNKNOWN_ECONOMY_STATE_DELIVERING -> "economyState:" + norm(r.economyState());
             default -> null;
         };
     }
@@ -172,6 +183,8 @@ public final class VendorStatusMap {
             Map.entry("started", k(Meaning.PROGRESS)),
             Map.entry("transfersinprogress", k(Meaning.PROGRESS)),
             Map.entry("transfercyclecomplete", k(Meaning.PROGRESS)),
+            // Observed 2026-10-15 on GFS-26-ZTE3A759 with status partlyDelivered and coins arriving.
+            Map.entry("transferinserted", k(Meaning.PROGRESS)),
             Map.entry("customerhasplayer", k(Meaning.PROGRESS)),
             Map.entry("customerlistedplayer", k(Meaning.PROGRESS)),
             Map.entry("finished", k(Meaning.PROGRESS)),
@@ -212,6 +225,14 @@ public final class VendorStatusMap {
 
     /** What the report means for an order we sent for {@code ourOrderedK} thousand coins. */
     public static Outcome map(Report r, long ourOrderedK) {
+        return map(r, ourOrderedK, null);
+    }
+
+    /**
+     * As {@link #map(Report, long)}, knowing what the last report said was delivered: an
+     * economyState we do not know while coins are moving, and not going down, is delivering.
+     */
+    public static Outcome map(Report r, long ourOrderedK, Long previousDeliveredK) {
         String status = norm(r.status());
         String accountCheck = norm(r.accountCheck());
         String economyState = norm(r.economyState());
@@ -222,8 +243,16 @@ public final class VendorStatusMap {
         if (!accountCheck.isEmpty() && !ACCOUNT_CHECK.containsKey(accountCheck)) {
             return Outcome.review("UNKNOWN_ACCOUNT_CHECK", CustomerAction.NONE);
         }
+        boolean unknownWhileDelivering = false;
         if (!economyState.isEmpty() && !ECONOMY_STATE.containsKey(economyState)) {
-            return Outcome.review("UNKNOWN_ECONOMY_STATE", CustomerAction.NONE);
+            boolean moving = "delivering".equals(STATUS.get(status)) && !"transfercyclecomplete".equals(status);
+            boolean notGoingDown = r.deliveredK() == null || previousDeliveredK == null
+                    || r.deliveredK() >= previousDeliveredK;
+            if (!moving || !notGoingDown) {
+                return Outcome.review("UNKNOWN_ECONOMY_STATE", CustomerAction.NONE);
+            }
+            unknownWhileDelivering = true;
+            economyState = "";
         }
         if (r.vendorOrderedK() != null && r.vendorOrderedK() != ourOrderedK) {
             return Outcome.review("AMOUNT_MISMATCH", CustomerAction.NONE);
@@ -289,6 +318,9 @@ public final class VendorStatusMap {
         }
         if (simplified.equals("error")) {
             return Outcome.review("PARTNER_ERROR", CustomerAction.NONE);
+        }
+        if (unknownWhileDelivering) {
+            return new Outcome(State.IN_DELIVERY, CustomerAction.NONE, UNKNOWN_ECONOMY_STATE_DELIVERING, true);
         }
         return Outcome.working("delivering".equals(meaning) || delivered > 0 ? State.IN_DELIVERY : State.SUBMITTED);
     }
