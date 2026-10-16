@@ -120,6 +120,20 @@ class OrderTrackingResponseTest {
     }
 
     @Test
+    @DisplayName("stopped by our team: the customer is told it is paused, with the progress so far")
+    void paused() {
+        ReflectionTestUtils.setField(order, "transferStartedAt", Instant.parse("2026-10-15T16:08:00Z"));
+        when(ledger.progress(7L)).thenReturn(Optional.of(new VendorOrderLedger.Progress(50, 28L, false, true)));
+        OrderDtos.OrderResponse r = mapper.toResponse(order, List.of(), true);
+        assertThat(r.transferPaused()).isTrue();
+        assertThat(r.transferUnderReview()).isFalse();
+        assertThat(r.deliveredCoins()).isEqualTo(28L);
+
+        when(ledger.progress(7L)).thenReturn(Optional.of(new VendorOrderLedger.Progress(50, 28L)));
+        assertThat(mapper.toResponse(order, List.of(), true).transferPaused()).isFalse();
+    }
+
+    @Test
     @DisplayName("held for a refused sign-in: the form to enter it again, and which part is wrong")
     void signInAsk() {
         ReflectionTestUtils.setField(order, "status", OrderStatus.ON_HOLD);

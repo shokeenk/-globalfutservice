@@ -948,4 +948,103 @@ class VendorPollerPostgresTest {
                 + String.join("\n", db.jdbc.queryForList("select row_to_json(c)::text from vendor_call c", String.class));
         assertThat(stored).doesNotContain("99887766");
     }
+
+    // ------------------------------------------------- 2026-10-15: GFS-26-ZTE3A759 ---
+
+    @Test
+    @DisplayName("GFS-26-ZTE3A759's reports: transferInserted is delivering, and an economyState we do not know while "
+            + "coins move stays delivering -- no review, one alert for the word, the word on the admin page")
+    void unknownCodeWhileDelivering() {
+        long id = sent("GFS-26-ZTE3A759", "vid-zte-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-zte-01", report("partlyDelivered", "finished", "transferInserted", 500, 200, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+        verify(notifications, never()).fulfilmentAlert(any());
+
+        for (long delivered : new long[]{280, 280, 310}) {
+            bulk(Map.of("vid-zte-01", report("partlyDelivered", "finished", "transferSomethingNew", 500, delivered, 0)));
+            poller.pollOnce();
+            assertThat(row(id).get("state")).isEqualTo("IN_DELIVERY");
+            assertThat(row(id).get("amount_delivered_k")).isEqualTo(delivered);
+        }
+        List<FulfilmentAlert> told = alerts();
+        assertThat(told).hasSize(1);
+        assertThat(told.get(0).code()).isEqualTo(VendorStatusMap.UNKNOWN_ECONOMY_STATE_DELIVERING);
+        assertThat(told.get(0).detail()).contains("transferSomethingNew").contains("stays delivering");
+        assertThat(ledger.detail(id).orElseThrow().unknownWords()).containsExactly("economyState:transfersomethingnew");
+        assertThat(row(id).get("last_error_code")).isNull();
+        neverSent();
+    }
+
+    @Test
+    @DisplayName("never back and forth: reports alternating between a word we know and one we do not move the order "
+            + "once, not on every poll")
+    void noFlipFlop() {
+        long id = sent("GFS-26-FLIPFLP1", "vid-flip-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        long zte = sent("GFS-26-FLIPFLP2", "vid-flip-02", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        List<String> states = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            bulk(Map.of(
+                    "vid-flip-01", report(i % 2 == 0 ? "someNewStatus" : "transfersInProgress", "finished",
+                            "transfersInProgress", 500, 100 + i * 10L, 0),
+                    // The incident's flavour: an economyState we do not know, every other poll.
+                    "vid-flip-02", report("partlyDelivered", "finished", i % 2 == 0 ? "transferOther" : "transferInserted",
+                            500, 100 + i * 10L, 0)));
+            lastReadAgo(id, Duration.ofMinutes(6));
+            poller.pollOnce();
+            states.add((String) row(id).get("state"));
+            assertThat(row(zte).get("state")).as("poll " + i).isEqualTo("IN_DELIVERY");
+        }
+        // Into review once for the word, back once it is understood, and there it stays.
+        assertThat(states).containsExactly("NEEDS_REVIEW", "IN_DELIVERY", "IN_DELIVERY", "IN_DELIVERY", "IN_DELIVERY",
+                "IN_DELIVERY");
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(150L);
+        // One alert per word per order, however often it comes back.
+        assertThat(alerts()).extracting(FulfilmentAlert::code)
+                .containsExactlyInAnyOrder("UNKNOWN_STATUS", VendorStatusMap.UNKNOWN_ECONOMY_STATE_DELIVERING);
+        neverSent();
+    }
+
+    @Test
+    @DisplayName("stopped by an admin: the poll records what arrived but never makes it delivering again; finished in "
+            + "full, it is delivered")
+    void stoppedStaysStopped() {
+        long id = sent("GFS-26-STOPPED1", "vid-stop-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        assertThat(ledger.markStopped(id, List.of("IN_DELIVERY"), "admin@example.test")).isTrue();
+        for (String status : new String[]{"partlyDelivered", "transfersInProgress", "paused", "someNewStatus"}) {
+            bulk(Map.of("vid-stop-01", report(status, "finished", "transferInserted", 500, 280, 0)));
+            poller.pollOnce();
+            assertThat(row(id).get("state")).as(status).isEqualTo("STOPPED");
+        }
+        assertThat(row(id).get("amount_delivered_k")).isEqualTo(280L);
+        assertThat(row(id).get("stopped_by")).isEqualTo("admin@example.test");
+        assertThat(row(id).get("stopped_at")).isNotNull();
+        assertThat(ledger.progress(id).orElseThrow().paused()).isTrue();
+        verify(orderService, never()).transition(any(), any(), any(), any(), anyString(), anyString());
+        verify(notifications, never()).fulfilmentAlert(any());
+
+        bulk(Map.of("vid-stop-01", report("finished", "finished", "finished", 500, 500, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("DELIVERED");
+        verify(orderService).transition(any(), eq(OrderStatus.DELIVERED), any(), any(), anyString(), anyString());
+        neverSent();
+    }
+
+    @Test
+    @DisplayName("the review text an admin reads follows the latest report while the reason is the same")
+    void reviewTextFollowsReports() {
+        long id = sent("GFS-26-REVTEXT1", "vid-revtext-1", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        bulk(Map.of("vid-revtext-1", report("partlyDelivered", "finished", "noSuitableSender", 500, 200, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat((String) row(id).get("review_reason")).contains("200K of 500K");
+
+        lastReadAgo(id, Duration.ofMinutes(6));
+        bulk(Map.of("vid-revtext-1", report("partlyDelivered", "finished", "noSuitableSender", 500, 280, 0)));
+        poller.pollOnce();
+        assertThat(row(id).get("state")).isEqualTo("NEEDS_REVIEW");
+        assertThat((String) row(id).get("review_reason")).contains("280K of 500K").doesNotContain("200K");
+        verify(notifications, times(1)).fulfilmentAlert(any());
+        neverSent();
+    }
 }

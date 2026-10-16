@@ -25,7 +25,7 @@ public final class CustomerText {
             case DELIVERED -> "All your coins have been delivered.";
             case AWAITING_CUSTOMER -> forAction(action);
             // Our team is looking into it; there is nothing for the customer to do.
-            case PARTIALLY_DELIVERED, NEEDS_REVIEW -> null;
+            case PARTIALLY_DELIVERED, NEEDS_REVIEW, STOPPED -> null;
         };
     }
 

@@ -4,6 +4,7 @@ import { ApiError, api } from '../../../lib/api'
 import { dateTime } from '../../../lib/format'
 import type { VendorActionName, VendorBalance, VendorNextSend, VendorSection } from '../../../lib/types'
 import {
+  ATTENTION_STATES, ceilingNote, latestReport, stoppedLine,
   VENDOR_ACTION_LABEL, VENDOR_ACTION_PATH, VENDOR_ACTIONS, VENDOR_FINAL_ACTIONS, VENDOR_STATE_LABEL,
   asReported, automaticNote, blockage, deliveredOfOrdered, historyLabel, orderModeLabel, vendorQuestion,
   vendorStateTone, vendorTimeline, whoSent,
@@ -153,7 +154,6 @@ export function VendorPanel({
             <Cell label="Economy state" value={v.vendorEconomyState ?? '—'} mono />
             <Cell label="Economy state (details)" value={v.vendorEconomyStateLong ?? '—'} />
             <Cell label="Coins used" value={v.coinsUsed == null ? '—' : v.coinsUsed.toLocaleString('en-IN')} />
-            <Cell label="To pay (currency unconfirmed)" value={v.toPay == null ? '—' : String(v.toPay)} />
             <Cell label="Sends" value={String(v.attempts)} />
             <Cell label="Sent" value={dateTime(v.submittedAt ?? null)} />
             <Cell label="Last report" value={dateTime(v.lastPolledAt ?? null)} />
@@ -164,14 +164,24 @@ export function VendorPanel({
           <dl className="grid gap-px overflow-hidden rounded-edge bg-ink-400 sm:grid-cols-3">
             <Cell label="Order mode" value={orderModeLabel(v.orderMode)} />
             <Cell label="Transfer method" value={v.transferMethod ?? 'Not recorded'} mono />
-            <Cell label="Supplier rate (€ per 100K)" value={v.supplierRateSent == null ? 'Not recorded' : euro(v.supplierRateSent)} />
-            <Cell label="Margin" value={v.thresholdMarginPct == null ? (v.buyNowThresholdSent == null ? '—' : 'Fixed') : `${asReported(v.thresholdMarginPct)}%`} />
+            {v.thresholdSource === 'MARKET' && (
+              <>
+                <Cell label="Supplier rate (€ per 100K)" value={v.supplierRateSent == null ? '—' : euro(v.supplierRateSent)} />
+                <Cell label="Margin" value={v.thresholdMarginPct == null ? '—' : `${asReported(v.thresholdMarginPct)}%`} />
+              </>
+            )}
             <Cell label="Price ceiling per 100K (buyNowThreshold) sent" value={v.buyNowThresholdSent == null ? 'Not sent' : euro(v.buyNowThresholdSent)} />
-            <Cell label="Estimated cost (FUT Transfer)" value={v.estimatedCostEur == null ? '—' : euro(v.estimatedCostEur)} />
+            {v.thresholdSource === 'MARKET' && (
+              <Cell label="Estimated cost (FUT Transfer)" value={v.estimatedCostEur == null ? '—' : euro(v.estimatedCostEur)} />
+            )}
+            {v.toPay != null && <Cell label="Actual cost (FUT Transfer)" value={euro(v.toPay)} />}
             <Cell label="Customer paid" value={section.customerPaid ?? '—'} />
             <Cell label="maxPrice sent" value={v.maxPriceSent == null ? 'Not sent' : asReported(v.maxPriceSent)} />
             <Cell label="Balance at send (currency unconfirmed)" value={asReported(v.balanceAtSend)} />
           </dl>
+          {ceilingNote(v) && (
+            <p className="mt-3 text-[12.5px] text-chalk-muted" data-testid="ceiling-note">{ceilingNote(v)}</p>
+          )}
           {modeChanged && (
             <p className="mt-3 text-[12.5px] text-warn">
               Sent as {orderModeLabel(v.orderMode)}. Configured now: {orderModeLabel(section.currentOrderMode)} —
@@ -187,13 +197,22 @@ export function VendorPanel({
               Left out of the partner&apos;s last {v.missingPolls} status {v.missingPolls === 1 ? 'check' : 'checks'}.
             </p>
           )}
-          {(v.reviewReason || v.lastErrorCode) && (
-            <div className="mt-4">
-              <Alert tone={v.state === 'NEEDS_REVIEW' || v.state === 'PARTIALLY_DELIVERED' ? 'warn' : 'neutral'}
-                     title={v.lastErrorCode ?? undefined}>
-                {v.reviewReason ?? 'No further detail.'}
+          {/* Only while the order needs someone; once it recovers, the box goes and Calls and actions keep the history. */}
+          {ATTENTION_STATES.has(v.state) && (
+            <div className="mt-4" data-testid="review-box">
+              <Alert tone="warn" title={v.state === 'STOPPED' ? 'Stopped' : v.lastErrorCode ?? undefined}>
+                {v.state === 'STOPPED' ? stoppedLine(v) : v.reviewReason ?? 'No further detail.'}
+                {v.submittedAt && (
+                  <span className="mt-1 block" data-testid="review-latest">{latestReport(v)}.</span>
+                )}
               </Alert>
             </div>
+          )}
+          {(v.unknownWords?.length ?? 0) > 0 && (
+            <p className="mt-3 text-[12.5px] text-chalk-muted" data-testid="unknown-words">
+              Partner codes we don&apos;t know yet (admins were told once about each):{' '}
+              <span className="font-mono text-chalk">{v.unknownWords!.join(', ')}</span>
+            </p>
           )}
           {v.customerAction && (
             <p className="mt-3 text-[12.5px] text-chalk-muted">

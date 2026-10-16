@@ -1053,20 +1053,24 @@ export function statusTone(status: string): BadgeTone {
 }
 
 /** Where a coin transfer is, in the four words a customer is shown. */
-export type TransferStatus = 'PROCESSING' | 'DELIVERING' | 'DELIVERED' | 'NEEDS_ATTENTION'
+export type TransferStatus = 'PROCESSING' | 'DELIVERING' | 'DELIVERED' | 'NEEDS_ATTENTION' | 'PAUSED'
 
 const TRANSFER_STATUS_TONE: Record<TransferStatus, BadgeTone> = {
-  PROCESSING: 'info', DELIVERING: 'info', DELIVERED: 'ok', NEEDS_ATTENTION: 'warn',
+  PROCESSING: 'info', DELIVERING: 'info', DELIVERED: 'ok', NEEDS_ATTENTION: 'warn', PAUSED: 'warn',
 }
 
 /**
  * The customer's one-word status for a coin transfer the partner has. Delivered only once the
  * order itself is -- never from the coins reported alone, which can reach the total before the
- * partner has finished. Needs attention while the customer has something to fix.
+ * partner has finished. Needs attention while the customer has something to fix. Paused while
+ * our team has stopped it at the partner -- never "delivering" then.
  */
-export function transferStatus(order: Pick<Order, 'status' | 'customerAction' | 'deliveredCoins'>): TransferStatus {
+export function transferStatus(
+  order: Pick<Order, 'status' | 'customerAction' | 'deliveredCoins' | 'transferPaused'>,
+): TransferStatus {
   if (order.status === 'DELIVERED' || order.status === 'COMPLETED') return 'DELIVERED'
   if (order.customerAction || order.status === 'ON_HOLD') return 'NEEDS_ATTENTION'
+  if (order.transferPaused) return 'PAUSED'
   return (order.deliveredCoins ?? 0) > 0 ? 'DELIVERING' : 'PROCESSING'
 }
 
@@ -1102,8 +1106,9 @@ function SupplierProgress({ order }: { order: Order }) {
   const finished = order.status === 'DELIVERED' || order.status === 'COMPLETED'
   const stage = !started ? null
     : finished ? t.track.transferDelivered
-      : done != null && done > 0 ? t.track.transferDelivering
-        : t.track.transferStarted
+      : order.transferPaused ? t.track.transferPaused
+        : done != null && done > 0 ? t.track.transferDelivering
+          : t.track.transferStarted
   const status = started ? transferStatus(order) : null
   const link = partnerLink(order.partnerTrackingUrl)
   // Said once, with the form, by the next step below.

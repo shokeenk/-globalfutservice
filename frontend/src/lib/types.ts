@@ -341,6 +341,8 @@ export interface Order {
   partnerTrackingUrl?: string | null
   /** The coin transfer is waiting for our staff to look at it; the customer has nothing to do. */
   transferUnderReview?: boolean
+  /** Our team stopped the transfer at the partner and is handling the order: shown as paused. */
+  transferPaused?: boolean
   /**
    * No partner link to give yet: PENDING while one is coming, UNAVAILABLE when there will be
    * none. Absent while customers are not given the partner's link at all.
@@ -1316,6 +1318,13 @@ export interface VendorOrderDetail {
   transferFeeAtSend?: number | null
   /** The order at the supplier rate, fees once, in EUR. */
   estimatedCostEur?: number | null
+  /** How the ceiling was set: MARKET, FIXED_OVERRIDE, or null for orders sent before automatic pricing. */
+  thresholdSource?: 'MARKET' | 'FIXED_OVERRIDE' | null
+  /** Who stopped it at the partner, and when. */
+  stoppedAt?: string | null
+  stoppedBy?: string | null
+  /** Partner words we did not know, as field:word; admins were alerted once about each. */
+  unknownWords?: string[]
   /** The partner's one-word summary: pending, completed or error. */
   vendorSimplifiedStatus?: string | null
   /** The partner's human-readable account check and economy state. Staff only. */

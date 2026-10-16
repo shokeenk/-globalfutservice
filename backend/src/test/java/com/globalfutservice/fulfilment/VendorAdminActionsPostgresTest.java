@@ -157,17 +157,74 @@ class VendorAdminActionsPostgresTest {
     // -------------------------------------------------------- stop and finish ---
 
     @Test
-    @DisplayName("stop: sent once as mode stop; the order is left to the poll, which records how it ends")
+    @DisplayName("stop: sent once as mode stop; the order is STOPPED, with who and when, until someone resumes it")
     void stop() {
         OrderEntity o = at("GFS-26-STOP0001", "vid-stop-01", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
         vendor.on("/resumeOrderAPI", Reply.ok("{\"outcome\":\"stopped\"}"));
 
+        VendorOrderActions.Result r = actions.stop(o, ADMIN);
+
+        assertThat(r.status()).isEqualTo(Status.DONE);
+        assertThat(r.message()).contains("stays stopped until someone presses Resume at partner");
+        assertThat(vendor.requests()).singleElement()
+                .satisfies(q -> assertThat(q.body().path("mode").asText()).isEqualTo("stop"));
+        assertThat(row("GFS-26-STOP0001").get("state")).isEqualTo("STOPPED");
+        assertThat(row("GFS-26-STOP0001").get("stopped_by")).isEqualTo("admin@example.test");
+        assertThat(row("GFS-26-STOP0001").get("stopped_at")).isNotNull();
+        assertThat(audit("GFS-26-STOP0001")).extracting(a -> a.get("action")).containsExactly("STOP");
+
+        // Stopped: Resume, Mark finished, Update settings and Resolve are offered; Stop is not.
+        VendorOrderLedger.Detail d = ledger.detail(ids.get("GFS-26-STOP0001")).orElseThrow();
+        assertThat(d.stoppedBy()).isEqualTo("admin@example.test");
+        assertThat(VendorOrderActions.available(d, OrderStatus.IN_PROGRESS))
+                .containsExactly("RESUME", "MARK_FINISHED", "UPDATE_SETTINGS", "RESOLVE");
+        // Stopping again says why not, and what to do instead.
+        assertThat(actions.stop(o, ADMIN).message()).isEqualTo("Stop is only for orders FUT Transfer is working on or "
+                + "holding; this order (GFS-26-STOP0001) is stopped. Nothing was sent. It is already stopped: use "
+                + "Resume at partner to carry on.");
+        assertThat(vendor.requests()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("resume a stopped order: sent once, it is with the partner again and the order in progress")
+    void resumeStopped() {
+        OrderEntity o = at("GFS-26-RESUME03", "vid-resume-03", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+        vendor.on("/resumeOrderAPI", body -> Reply.ok("{\"outcome\":\"" + ("stop".equals(body.path("mode").asText())
+                ? "stopped" : "resumed") + "\"}"));
         assertThat(actions.stop(o, ADMIN).status()).isEqualTo(Status.DONE);
 
-        assertThat(vendor.requests()).singleElement()
-                .satisfies(r -> assertThat(r.body().path("mode").asText()).isEqualTo("stop"));
-        assertThat(row("GFS-26-STOP0001").get("state")).isEqualTo("IN_DELIVERY");
-        assertThat(audit("GFS-26-STOP0001")).extracting(a -> a.get("action")).containsExactly("STOP");
+        VendorOrderActions.Result r = actions.resume(o, ADMIN);
+
+        assertThat(r.status()).isEqualTo(Status.DONE);
+        assertThat(r.message()).contains("from where it stopped");
+        assertThat(vendor.requests()).extracting(q -> q.body().path("mode").asText()).containsExactly("stop", "resume");
+        assertThat(row("GFS-26-RESUME03").get("state")).isEqualTo("SUBMITTED");
+        assertThat(row("GFS-26-RESUME03").get("last_error_code")).isNull();
+        assertThat(audit("GFS-26-RESUME03")).extracting(a -> a.get("action")).containsExactly("STOP", "RESUME");
+    }
+
+    @Test
+    @DisplayName("resume on a delivering order: refused, saying why and what it is for; on one the partner reports "
+            + "paused: offered and sent")
+    void resumeOnlyWhenStoppedOrHeld() {
+        OrderEntity o = at("GFS-26-RESUME04", "vid-resume-04", "IN_DELIVERY", OrderStatus.IN_PROGRESS);
+
+        VendorOrderActions.Result r = actions.resume(o, ADMIN);
+
+        assertThat(r.status()).isEqualTo(Status.NOT_SENT);
+        assertThat(r.message()).isEqualTo("Resume is only for stopped or held orders; this order (GFS-26-RESUME04) is "
+                + "delivering. Nothing was sent. It is already running at FUT Transfer: there is nothing to resume.");
+        assertThat(vendor.requests()).isEmpty();
+        assertThat(VendorOrderActions.available(ledger.detail(ids.get("GFS-26-RESUME04")).orElseThrow(),
+                OrderStatus.IN_PROGRESS)).doesNotContain("RESUME");
+
+        // The partner says it is paused: Resume applies, whatever our state.
+        db.jdbc.update("update vendor_order set vendor_status = 'paused' where order_id = ?", ids.get("GFS-26-RESUME04"));
+        assertThat(VendorOrderActions.available(ledger.detail(ids.get("GFS-26-RESUME04")).orElseThrow(),
+                OrderStatus.IN_PROGRESS)).contains("RESUME");
+        vendor.on("/resumeOrderAPI", Reply.ok("{\"outcome\":\"resumed\"}"));
+        assertThat(actions.resume(o, ADMIN).status()).isEqualTo(Status.DONE);
+        assertThat(vendor.calls("/resumeOrderAPI")).isOne();
     }
 
     @Test

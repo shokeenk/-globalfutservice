@@ -172,28 +172,30 @@ public class VendorOrderActions {
     }
 
     /**
-     * Restarts an order the vendor interrupted, once whatever stopped it has been fixed: the
-     * customer signed out of their console, cleared their unassigned items, or the vendor's
-     * own trouble has passed.
+     * Restarts an order an admin stopped, or the vendor interrupted or paused, once whatever
+     * stopped it has been fixed: the customer signed out of their console, cleared their
+     * unassigned items, or the vendor's own trouble has passed. Never automatic.
      */
     public Result resume(OrderEntity order, Admin admin) {
         String ref = order.getPublicRef();
         Result blocked = blocked();
         if (blocked != null) return blocked;
         VendorOrderLedger.Row row = ledger.find(order.getId()).orElse(null);
-        Result unusable = needsVendorOrder(ref, row, RESUMABLE);
+        List<String> from = resumableFrom(ledger.detail(order.getId()).orElse(null));
+        Result unusable = needsVendorOrder(Act.RESUME, ref, row, from);
         if (unusable != null) return unusable;
 
-        if (!ledger.claimRestart(order.getId(), RESUMABLE, props.futTransfer().polling().submittingGrace())) {
+        if (!ledger.claimRestart(order.getId(), from, props.futTransfer().polling().submittingGrace())) {
             return notSent("Order " + ref + " is already being restarted. Refresh in a moment.");
         }
         log.info("FULFILMENT ACTION: operator {} is resuming order {} (partner order {})", admin.id(), ref,
                 row.vendorOrderId());
         return switch (client.resume(row.vendorOrderId(), ref)) {
             case FutTransferClient.Changed c -> {
-                ledger.markRestarted(order.getId(), RESUMABLE);
+                ledger.markRestarted(order.getId(), from);
                 startOrder(order, admin);
-                yield done(order, VendorOrderActionLog.Action.RESUME, admin, "Resumed at the partner.");
+                yield done(order, VendorOrderActionLog.Action.RESUME, admin, "Resumed at the partner: FUT Transfer "
+                        + "carries on delivering from where it stopped.");
             }
             case FutTransferClient.NotChanged n -> {
                 ledger.releaseRestart(order.getId());
@@ -217,14 +219,18 @@ public class VendorOrderActions {
         Result blocked = blocked();
         if (blocked != null) return blocked;
         VendorOrderLedger.Row row = ledger.find(order.getId()).orElse(null);
-        Result unusable = needsVendorOrder(ref, row, STOPPABLE);
+        Result unusable = needsVendorOrder(Act.STOP, ref, row, STOPPABLE);
         if (unusable != null) return unusable;
 
         log.info("FULFILMENT ACTION: operator {} is stopping order {} (partner order {})", admin.id(), ref,
                 row.vendorOrderId());
         return switch (client.stop(row.vendorOrderId(), ref)) {
-            case FutTransferClient.Changed c -> done(order, VendorOrderActionLog.Action.STOP, admin,
-                    "Stopped at the partner. The next status check records how much was delivered.");
+            case FutTransferClient.Changed c -> {
+                // Stopped stays stopped: the poll records what was delivered, never moves it back.
+                ledger.markStopped(order.getId(), STOPPABLE, admin.label());
+                yield done(order, VendorOrderActionLog.Action.STOP, admin, "Stopped at the partner. It stays "
+                        + "stopped until someone presses Resume at partner; what is delivered is still recorded.");
+            }
             case FutTransferClient.NotChanged n -> refused(order, VendorOrderActionLog.Action.STOP, admin, n,
                     "The partner would not stop the order");
             case FutTransferClient.ChangeUncertain u -> uncertain(order, VendorOrderActionLog.Action.STOP, admin,
@@ -242,7 +248,7 @@ public class VendorOrderActions {
         Result blocked = blocked();
         if (blocked != null) return blocked;
         VendorOrderLedger.Row row = ledger.find(order.getId()).orElse(null);
-        Result unusable = needsVendorOrder(ref, row, FINISHABLE);
+        Result unusable = needsVendorOrder(Act.MARK_FINISHED, ref, row, FINISHABLE);
         if (unusable != null) return unusable;
         Long delivered = ledger.detail(order.getId()).map(VendorOrderLedger.Detail::deliveredK).orElse(null);
 
@@ -273,7 +279,7 @@ public class VendorOrderActions {
         Result blocked = blocked();
         if (blocked != null) return blocked;
         VendorOrderLedger.Row row = ledger.find(order.getId()).orElse(null);
-        Result unusable = needsVendorOrder(ref, row, STOPPABLE);
+        Result unusable = needsVendorOrder(Act.UPDATE_SETTINGS, ref, row, SETTINGS_STATES);
         if (unusable != null) return unusable;
         int min = props.futTransfer().order().minTransferAmount();
 
@@ -559,10 +565,10 @@ public class VendorOrderActions {
         if (hasId && AWAITING_CUSTOMER.equals(d.state()) && orderStatus == OrderStatus.READY_FOR_DELIVERY) {
             out.add(VendorOrderActionLog.Action.SEND_SIGN_IN.name());
         }
-        if (hasId && RESUMABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.RESUME.name());
+        if (hasId && resumableFrom(d).contains(d.state())) out.add(VendorOrderActionLog.Action.RESUME.name());
         if (hasId && STOPPABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.STOP.name());
         if (hasId && FINISHABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.MARK_FINISHED.name());
-        if (hasId && STOPPABLE.contains(d.state())) out.add(VendorOrderActionLog.Action.UPDATE_SETTINGS.name());
+        if (hasId && SETTINGS_STATES.contains(d.state())) out.add(VendorOrderActionLog.Action.UPDATE_SETTINGS.name());
         if (VendorOrderLedger.NEEDS_REVIEW.equals(d.state())) {
             if (!hasId) out.add(VendorOrderActionLog.Action.RETRY.name());
             out.add(VendorOrderActionLog.Action.LINK.name());
@@ -571,20 +577,71 @@ public class VendorOrderActions {
         return out;
     }
 
-    private static final List<String> RESUMABLE = List.of(AWAITING_CUSTOMER, "NEEDS_REVIEW");
+    private static final List<String> RESUMABLE = List.of(VendorOrderLedger.STOPPED, AWAITING_CUSTOMER, "NEEDS_REVIEW");
     private static final List<String> STOPPABLE = List.of("SUBMITTED", "IN_DELIVERY", AWAITING_CUSTOMER, "NEEDS_REVIEW");
     private static final List<String> FINISHABLE = List.of("SUBMITTED", "IN_DELIVERY", AWAITING_CUSTOMER, "NEEDS_REVIEW",
-            "PARTIALLY_DELIVERED");
+            "PARTIALLY_DELIVERED", VendorOrderLedger.STOPPED);
+    private static final List<String> SETTINGS_STATES = List.of("SUBMITTED", "IN_DELIVERY", AWAITING_CUSTOMER,
+            "NEEDS_REVIEW", VendorOrderLedger.STOPPED);
+
+    /**
+     * Where Resume applies: stopped by an admin, held for the customer or an admin -- and any
+     * order the partner reports paused, whatever our state says.
+     */
+    static List<String> resumableFrom(VendorOrderLedger.Detail d) {
+        if (d != null && "paused".equalsIgnoreCase(d.vendorStatus() == null ? null : d.vendorStatus().trim())
+                && STOPPABLE.contains(d.state()) && !RESUMABLE.contains(d.state())) {
+            List<String> out = new java.util.ArrayList<>(RESUMABLE);
+            out.add(d.state());
+            return List.copyOf(out);
+        }
+        return RESUMABLE;
+    }
 
     // ------------------------------------------------------------------ checks ---
 
+    /** The actions that address the partner's order, for saying why one cannot be done. */
+    enum Act { RESUME, STOP, MARK_FINISHED, UPDATE_SETTINGS }
+
+    /** Our states, as an admin says them. */
+    static String stateWords(String state) {
+        return switch (state == null ? "" : state) {
+            case "SUBMITTING" -> "being sent";
+            case "SUBMITTED" -> "with the partner, not delivering yet";
+            case "IN_DELIVERY" -> "delivering";
+            case AWAITING_CUSTOMER -> "waiting for the customer";
+            case "NEEDS_REVIEW" -> "waiting for review";
+            case VendorOrderLedger.STOPPED -> "stopped";
+            case "DELIVERED" -> "delivered";
+            case "PARTIALLY_DELIVERED" -> "partly delivered and closed";
+            case "FAILED" -> "not created at the partner";
+            case "RESOLVED" -> "resolved";
+            default -> state;
+        };
+    }
+
+    /** Why this action does not apply to an order in this state, and what to do instead. */
+    static String wrongState(Act action, String ref, String state) {
+        String now = "this order (" + ref + ") is " + stateWords(state) + ". Nothing was sent.";
+        return switch (action) {
+            case RESUME -> "Resume is only for stopped or held orders; " + now
+                    + ("IN_DELIVERY".equals(state) || "SUBMITTED".equals(state)
+                    ? " It is already running at FUT Transfer: there is nothing to resume." : "");
+            case STOP -> "Stop is only for orders FUT Transfer is working on or holding; " + now
+                    + (VendorOrderLedger.STOPPED.equals(state) ? " It is already stopped: use Resume at partner "
+                    + "to carry on." : "");
+            case MARK_FINISHED -> "Mark finished is only for orders still open at FUT Transfer; " + now;
+            case UPDATE_SETTINGS -> "Update settings is only for orders still open at FUT Transfer; " + now;
+        };
+    }
+
     /** An action that needs the vendor's own order, in one of {@code states}. */
-    private static Result needsVendorOrder(String ref, VendorOrderLedger.Row row, List<String> states) {
+    private static Result needsVendorOrder(Act action, String ref, VendorOrderLedger.Row row, List<String> states) {
         if (row == null) {
             return notSent("The partner has no order for " + ref + ". Nothing was sent.");
         }
         if (!states.contains(row.state())) {
-            return notSent("That cannot be done to " + ref + " while it is " + row.state() + ". Nothing was sent.");
+            return notSent(wrongState(action, ref, row.state()));
         }
         if (row.vendorOrderId() == null) {
             return notSent("We have no partner order id for " + ref + ", so it cannot be addressed. Link it first, "

@@ -41,6 +41,8 @@ public class VendorOrderLedger {
     public static final String SUBMITTED = "SUBMITTED";
     public static final String FAILED = "FAILED";
     public static final String NEEDS_REVIEW = "NEEDS_REVIEW";
+    /** An admin stopped it at the partner. Read on, never moved back to delivering by a report. */
+    public static final String STOPPED = "STOPPED";
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -118,13 +120,15 @@ public class VendorOrderLedger {
                 .addValue("maxPrice", terms.maxPrice())
                 .addValue("rate", terms.supplierRate())
                 .addValue("margin", terms.marginPct())
-                .addValue("fee", terms.transferFee());
+                .addValue("fee", terms.transferFee())
+                .addValue("source", thresholdSource(terms));
 
         List<Integer> inserted = jdbc.queryForList("""
                 insert into vendor_order (order_id, external_ref, state, amount_ordered_k, attempts, order_mode,
                                           transfer_method, buy_now_threshold_sent, max_price_sent, supplier_rate_sent,
-                                          threshold_margin_pct, transfer_fee_at_send)
-                values (:orderId, :ref, 'SUBMITTING', :k, 1, :mode, :method, :threshold, :maxPrice, :rate, :margin, :fee)
+                                          threshold_margin_pct, transfer_fee_at_send, threshold_source)
+                values (:orderId, :ref, 'SUBMITTING', :k, 1, :mode, :method, :threshold, :maxPrice, :rate, :margin, :fee,
+                        :source)
                 on conflict (order_id) do nothing
                 returning attempts
                 """, p, Integer.class);
@@ -138,7 +142,8 @@ public class VendorOrderLedger {
                        last_error_code = null, review_reason = null, order_mode = :mode,
                        transfer_method = :method, buy_now_threshold_sent = :threshold,
                        max_price_sent = :maxPrice, supplier_rate_sent = :rate, threshold_margin_pct = :margin,
-                       transfer_fee_at_send = :fee, balance_at_send = null, updated_at = now()
+                       transfer_fee_at_send = :fee, threshold_source = :source, balance_at_send = null,
+                       updated_at = now()
                  where order_id = :orderId and state = 'FAILED'
                    and (attempts < :max or last_error_code = 'RATE_LIMITED')
                 returning attempts
@@ -147,6 +152,15 @@ public class VendorOrderLedger {
             return new Claimed(reclaimed.get(0));
         }
         return new NotClaimed(find(orderId).orElseThrow());
+    }
+
+    /**
+     * How a public-pool threshold came about: MARKET (FUT Transfer's price + the margin) or
+     * FIXED_OVERRIDE (GFS_FUTTRANSFER_BUY_NOW_THRESHOLD). Null when none was sent.
+     */
+    static String thresholdSource(SendTerms terms) {
+        if (!terms.publicPool() || terms.buyNowThreshold() == null) return null;
+        return terms.marginPct() != null ? "MARKET" : "FIXED_OVERRIDE";
     }
 
     /**
@@ -236,9 +250,13 @@ public class VendorOrderLedger {
      * How far the partner has got, in thousands: what we asked for, and delivered so far; and
      * whether an admin is looking at the order (the customer is told only that we are checking).
      */
-    public record Progress(long orderedK, Long deliveredK, boolean underReview) {
+    public record Progress(long orderedK, Long deliveredK, boolean underReview, boolean paused) {
         public Progress(long orderedK, Long deliveredK) {
-            this(orderedK, deliveredK, false);
+            this(orderedK, deliveredK, false, false);
+        }
+
+        public Progress(long orderedK, Long deliveredK, boolean underReview) {
+            this(orderedK, deliveredK, underReview, false);
         }
     }
 
@@ -246,11 +264,11 @@ public class VendorOrderLedger {
     public Optional<Progress> progress(long orderId) {
         return jdbc.query("""
                 select coalesce(vendor_amount_ordered_k, amount_ordered_k) as ordered_k, amount_delivered_k,
-                       state = 'NEEDS_REVIEW' as under_review
+                       state = 'NEEDS_REVIEW' as under_review, state = 'STOPPED' as paused
                   from vendor_order where order_id = :orderId and submitted_at is not null
                 """, new MapSqlParameterSource("orderId", orderId), (rs, i) -> new Progress(
                 rs.getLong("ordered_k"), rs.getObject("amount_delivered_k", Long.class),
-                rs.getBoolean("under_review"))).stream().findFirst();
+                rs.getBoolean("under_review"), rs.getBoolean("paused"))).stream().findFirst();
     }
 
     /** {@link #progress} for a page of orders at once: the admin's Orders table, in one query. */
@@ -359,6 +377,7 @@ public class VendorOrderLedger {
         return jdbc.query("select " + POLL_COLUMNS + """
                   from vendor_order
                  where state in ('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER')
+                    or (state = 'STOPPED' and vendor_order_id is not null)
                     or (state = 'NEEDS_REVIEW' and vendor_order_id is not null
                         and lower(coalesce(vendor_status, '')) not in ('finished', 'cancelled', 'canceled', 'archived')
                         and not coalesce(vendor_was_aborted, false)
@@ -377,6 +396,26 @@ public class VendorOrderLedger {
                 update vendor_order set unknown_words_alerted = array_append(unknown_words_alerted, :word)
                  where order_id = :orderId and not (:word = any(unknown_words_alerted))
                 """, new MapSqlParameterSource("orderId", orderId).addValue("word", word)) == 1;
+    }
+
+    /** Whether this order has already alerted an admin about this word: it was seen, and said, before. */
+    public boolean unknownWordAlerted(long orderId, String word) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                select :word = any(unknown_words_alerted) from vendor_order where order_id = :orderId
+                """, new MapSqlParameterSource("orderId", orderId).addValue("word", word), Boolean.class));
+    }
+
+    /**
+     * The text an admin reads on an order still waiting for review for the same reason,
+     * brought up to date with the latest report -- delivered of ordered, and the codes.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void refreshReviewText(long orderId, String reasonCode, String text) {
+        jdbc.update("""
+                update vendor_order set review_reason = :text
+                 where order_id = :orderId and state = 'NEEDS_REVIEW' and last_error_code = :code
+                   and review_reason is distinct from :text
+                """, new MapSqlParameterSource("orderId", orderId).addValue("code", reasonCode).addValue("text", text));
     }
 
     /** Orders waiting for an admin because of a word we did not know: what a re-read can recover. */
@@ -447,7 +486,8 @@ public class VendorOrderLedger {
      * The vendor states in which the partner may still make a link: it has the order and has
      * not finished it. A finished order cannot have one generated.
      */
-    private static final String LINKABLE_STATES = "('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER', 'NEEDS_REVIEW')";
+    private static final String LINKABLE_STATES =
+            "('SUBMITTED', 'IN_DELIVERY', 'AWAITING_CUSTOMER', 'NEEDS_REVIEW', 'STOPPED')";
     private static final String FINISHED_ORDERS =
             "('DELIVERED', 'COMPLETED', 'REFUNDED', 'CREDITED', 'ABANDONED', 'DISPUTED')";
 
@@ -673,7 +713,7 @@ public class VendorOrderLedger {
     }
 
     /**
-     * Orders parked for an admin -- needing review, or delivered short -- that nobody has
+     * Orders parked for an admin -- needing review, delivered short, or stopped -- that nobody has
      * touched for longer than {@code retention}, and still holding a sign-in. Those sign-ins
      * are deleted: a decision that slow is not going to send the order again on the same
      * details.
@@ -681,7 +721,7 @@ public class VendorOrderLedger {
     public List<Long> heldForReviewLongerThan(java.time.Duration retention) {
         return jdbc.queryForList("""
                 select order_id from vendor_order
-                 where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED')
+                 where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED', 'STOPPED')
                    and updated_at < now() - make_interval(secs => :secs)
                    and exists (select 1 from credential_vault c
                                 where c.order_id = vendor_order.order_id and c.purged_at is null)
@@ -716,6 +756,20 @@ public class VendorOrderLedger {
     }
 
     /**
+     * The vendor confirmed an admin's stop: STOPPED, with who and when. The poll still records
+     * what was delivered, but never moves it back to delivering; only a resume does.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markStopped(long orderId, java.util.Collection<String> from, String who) {
+        return jdbc.update("""
+                update vendor_order
+                   set state = 'STOPPED', stopped_at = now(), stopped_by = :who, customer_action = null,
+                       last_error_code = 'STOPPED_BY_ADMIN', review_reason = null, updated_at = now()
+                 where order_id = :orderId and state in (:from)
+                """, new MapSqlParameterSource("orderId", orderId).addValue("from", from).addValue("who", who)) == 1;
+    }
+
+    /**
      * The vendor restarted the order: back to SUBMITTED, with a fresh stall clock and
      * nothing asked of the customer. {@code resubmitted_at} stays, for the poll's grace.
      */
@@ -724,6 +778,7 @@ public class VendorOrderLedger {
         return jdbc.update("""
                 update vendor_order
                    set state = 'SUBMITTED', customer_action = null, missing_polls = 0, review_reason = null,
+                       last_error_code = case when state = 'STOPPED' then null else last_error_code end,
                        last_progress_at = now(), updated_at = now()
                  where order_id = :orderId and state in (:from)
                 """, new MapSqlParameterSource("orderId", orderId).addValue("from", from)) == 1;
@@ -781,7 +836,7 @@ public class VendorOrderLedger {
 
     /** States an admin may close by hand: nothing more will happen to them on their own. */
     public static final List<String> RESOLVABLE = List.of("NEEDS_REVIEW", "PARTIALLY_DELIVERED", "AWAITING_CUSTOMER",
-            "FAILED");
+            "FAILED", STOPPED);
 
     /** Closed by an admin, with their note. Never polled again, never sent again. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -810,7 +865,33 @@ public class VendorOrderLedger {
                          String vendorEconomyStateLong,
                          /** What the threshold was worked out from, and the cost it implies, in EUR. */
                          java.math.BigDecimal supplierRateSent, java.math.BigDecimal thresholdMarginPct,
-                         java.math.BigDecimal transferFeeAtSend, java.math.BigDecimal estimatedCostEur) {
+                         java.math.BigDecimal transferFeeAtSend, java.math.BigDecimal estimatedCostEur,
+                         /** MARKET, FIXED_OVERRIDE, or null: sent before automatic pricing (#124). */
+                         String thresholdSource,
+                         /** Who stopped it at the partner, and when; staff only. */
+                         Instant stoppedAt, String stoppedBy,
+                         /** Partner words we did not know, as field:word, each alerted once. */
+                         List<String> unknownWords) {
+
+        public Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
+                      Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
+                      String vendorEconomyState, Boolean aborted, Long coinsUsed, java.math.BigDecimal toPay,
+                      int attempts, String lastErrorCode, String reviewReason, String customerAction,
+                      int missingPolls, Instant submittedAt, Instant lastPolledAt, Instant lastProgressAt,
+                      Instant resubmittedAt, Instant updatedAt, String orderMode, String transferMethod,
+                      java.math.BigDecimal buyNowThresholdSent, java.math.BigDecimal maxPriceSent,
+                      java.math.BigDecimal balanceAtSend, String vendorSimplifiedStatus, String vendorAccountCheckLong,
+                      String vendorEconomyStateLong, java.math.BigDecimal supplierRateSent,
+                      java.math.BigDecimal thresholdMarginPct, java.math.BigDecimal transferFeeAtSend,
+                      java.math.BigDecimal estimatedCostEur) {
+            this(state, externalRef, vendorOrderId, amountOrderedK, vendorAmountOrderedK, deliveredK, vendorStatus,
+                    vendorAccountCheck, vendorEconomyState, aborted, coinsUsed, toPay, attempts, lastErrorCode,
+                    reviewReason, customerAction, missingPolls, submittedAt, lastPolledAt, lastProgressAt,
+                    resubmittedAt, updatedAt, orderMode, transferMethod, buyNowThresholdSent, maxPriceSent,
+                    balanceAtSend, vendorSimplifiedStatus, vendorAccountCheckLong, vendorEconomyStateLong,
+                    supplierRateSent, thresholdMarginPct, transferFeeAtSend, estimatedCostEur, null, null, null,
+                    List.of());
+        }
 
         public Detail(String state, String externalRef, String vendorOrderId, long amountOrderedK,
                       Long vendorAmountOrderedK, Long deliveredK, String vendorStatus, String vendorAccountCheck,
@@ -864,7 +945,18 @@ public class VendorOrderLedger {
                 rs.getString("vendor_economy_state_long"), rs.getBigDecimal("supplier_rate_sent"),
                 rs.getBigDecimal("threshold_margin_pct"), rs.getBigDecimal("transfer_fee_at_send"),
                 PoolThreshold.estimatedCost(rs.getBigDecimal("supplier_rate_sent"), rs.getBigDecimal("transfer_fee_at_send"),
-                        rs.getLong("amount_ordered_k")))).stream().findFirst();
+                        rs.getLong("amount_ordered_k")), rs.getString("threshold_source"), instant(rs, "stopped_at"),
+                rs.getString("stopped_by"), words(rs.getArray("unknown_words_alerted")))).stream().findFirst();
+    }
+
+    private static List<String> words(java.sql.Array array) throws SQLException {
+        if (array == null) return List.of();
+        Object[] values = (Object[]) array.getArray();
+        List<String> out = new java.util.ArrayList<>();
+        for (Object v : values) {
+            if (v != null) out.add(v.toString());
+        }
+        return List.copyOf(out);
     }
 
     /** An order waiting for an admin's decision, for the review list on the Orders page. */
@@ -872,12 +964,12 @@ public class VendorOrderLedger {
                              long amountOrderedK, Long deliveredK, Instant updatedAt) {
     }
 
-    /** Everything waiting for an admin, longest-waiting first. */
+    /** Everything waiting for an admin -- review, delivered short, stopped -- longest-waiting first. */
     public List<ReviewItem> needingReview() {
         return jdbc.query("""
                 select external_ref, state, last_error_code, review_reason, amount_ordered_k, amount_delivered_k,
                        updated_at
-                  from vendor_order where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED')
+                  from vendor_order where state in ('NEEDS_REVIEW', 'PARTIALLY_DELIVERED', 'STOPPED')
                  order by updated_at, id
                 """, new MapSqlParameterSource(), (rs, i) -> new ReviewItem(rs.getString("external_ref"),
                 rs.getString("state"), rs.getString("last_error_code"), rs.getString("review_reason"),

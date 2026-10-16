@@ -321,4 +321,44 @@ class VendorStatusMapTest {
         assertThat(map("finished", "finished", "finished", OURS, OURS, false).state())
                 .isEqualTo(VendorStatusMap.State.DELIVERED);
     }
+
+    @Test
+    @DisplayName("transferInserted is progress: GFS-26-ZTE3A759's report (partlyDelivered, finished, transferInserted) "
+            + "is delivering, with nobody alerted")
+    void transferInserted() {
+        assertThat(map("partlyDelivered", "finished", "transferInserted", 500L, 200L, false))
+                .isEqualTo(new Outcome(State.IN_DELIVERY, CustomerAction.NONE, null, false));
+        assertThat(map("transfersInProgress", "finished", "TRANSFERINSERTED", 500L, 280L, false).state())
+                .isEqualTo(State.IN_DELIVERY);
+    }
+
+    @Test
+    @DisplayName("an economyState we do not know while coins are moving, and not going down: still delivering, "
+            + "an admin told about the word -- never a review")
+    void unknownEconomyStateWhileDelivering() {
+        for (String status : new String[]{"partlyDelivered", "transfersInProgress"}) {
+            Outcome o = VendorStatusMap.map(new Report(status, "finished", "someNewTransferCode", 50L, 28L, false),
+                    50, 20L);
+            assertThat(o).as(status).isEqualTo(new Outcome(State.IN_DELIVERY, CustomerAction.NONE,
+                    VendorStatusMap.UNKNOWN_ECONOMY_STATE_DELIVERING, true));
+            assertThat(VendorStatusMap.unknownWord(o, new Report(status, "finished", "someNewTransferCode", 50L, 28L,
+                    false))).isEqualTo("economyState:somenewtransfercode");
+            // Unchanged, or no earlier figure to compare with: the same.
+            assertThat(VendorStatusMap.map(new Report(status, "finished", "someNewTransferCode", 50L, 20L, false), 50, 20L)
+                    .state()).isEqualTo(State.IN_DELIVERY);
+            assertThat(VendorStatusMap.map(new Report(status, "finished", "someNewTransferCode", 50L, 20L, false), 50)
+                    .state()).isEqualTo(State.IN_DELIVERY);
+        }
+        // Delivered going down: something is wrong, an admin looks.
+        assertThat(VendorStatusMap.map(new Report("partlyDelivered", "finished", "someNewTransferCode", 50L, 10L, false),
+                50, 20L).reason()).isEqualTo("UNKNOWN_ECONOMY_STATE");
+        // Not delivering (onboarding, finished, a cycle complete): a review, as before.
+        assertThat(map("entered", "finished", "someNewTransferCode", 500L, 0L, false).reason())
+                .isEqualTo("UNKNOWN_ECONOMY_STATE");
+        assertThat(map("transferCycleComplete", "finished", "someNewTransferCode", 500L, 200L, false).reason())
+                .isEqualTo("UNKNOWN_ECONOMY_STATE");
+        // A code the customer can fix still wins over the unknown one.
+        assertThat(VendorStatusMap.map(new Report("partlyDelivered", "console", "someNewTransferCode", 50L, 20L, false),
+                50, 20L).state()).isEqualTo(State.AWAITING_CUSTOMER);
+    }
 }
