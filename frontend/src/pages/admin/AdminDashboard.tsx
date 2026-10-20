@@ -5,6 +5,7 @@ import { api } from '../../lib/api'
 import { useSeo } from '../../lib/seo'
 import { useAuth } from '../../state/AuthContext'
 import type { AdminDashboard as Dashboard, AdminOrderRow, CurrencyRevenue } from '../../lib/types'
+import { ServerMemory } from './ServerMemory'
 import { AdminPage } from './shell/AdminPage'
 import { OrderStatusBadge, PaymentBadge } from './ui/Badge'
 import { ago, shortDateTime } from './ui/format'
@@ -120,6 +121,8 @@ export default function AdminDashboard() {
         timeHeading="Date"
         time={(when) => shortDateTime(when)}
       />
+
+      {isAdmin && <ServerMemory />}
     </AdminPage>
   )
 }

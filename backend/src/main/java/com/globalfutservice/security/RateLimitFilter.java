@@ -14,9 +14,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Per-caller request budgets, applied before anything expensive happens.
@@ -40,8 +37,10 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final AppProperties props;
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
-    private final AtomicLong lastSweep = new AtomicLong(System.currentTimeMillis());
+    /** At most this many callers' buckets, dropped every ten minutes: a flood of IPs cannot grow it. */
+    static final int MAX_BUCKETS = 20_000;
+
+    private final BoundedBuckets buckets = new BoundedBuckets(MAX_BUCKETS, Duration.ofMinutes(10));
 
     public RateLimitFilter(AppProperties props) {
         this.props = props;
@@ -63,13 +62,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        sweepIfStale();
-
         String path = request.getRequestURI();
         int limit = limitFor(request.getMethod(), path);
         String key = limit + ":" + path.startsWith("/api/v1/admin") + ":" + clientKey(request);
 
-        Bucket bucket = buckets.computeIfAbsent(key, k -> newBucket(limit));
+        Bucket bucket = buckets.get(key, () -> newBucket(limit));
         if (bucket.tryConsume(1)) {
             chain.doFilter(request, response);
             return;
@@ -136,13 +133,4 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return "ip:" + request.getRemoteAddr();
     }
 
-    /** Cheap eviction so an IP-keyed map cannot grow without bound. */
-    private void sweepIfStale() {
-        long now = System.currentTimeMillis();
-        long previous = lastSweep.get();
-        if (now - previous > Duration.ofMinutes(10).toMillis()
-                && lastSweep.compareAndSet(previous, now)) {
-            buckets.clear();
-        }
-    }
 }

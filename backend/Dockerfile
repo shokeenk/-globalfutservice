@@ -48,9 +48,21 @@ COPY --from=build --chown=gfs:gfs /build/app.jar ./app.jar
 USER gfs
 EXPOSE 8080
 
-# Container-aware heap sizing, and a container-friendly entropy source so
-# SecureRandom does not block on a fresh VM with an empty entropy pool.
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseContainerSupport -Djava.security.egd=file:/dev/./urandom"
+# Memory, for a 512 MB instance. The container limit counts everything the JVM uses, not
+# just the heap: at 75% of RAM for the heap, metaspace + code cache + thread stacks + direct
+# buffers went over 512 MB and Render restarted the service (2026-10-20). So:
+#   heap 50% of RAM (256 MB at 512 MB)    MaxRAMPercentage=50
+#   class metadata capped                 MaxMetaspaceSize=180m
+#   JIT code capped                       ReservedCodeCacheSize=64m
+#   NIO direct buffers capped             MaxDirectMemorySize=48m
+#   platform thread stacks halved         Xss512k (request threads are virtual)
+#   one GC thread, smallest footprint     UseSerialGC
+#   an OutOfMemoryError restarts the container instead of leaving it half-alive
+#                                         ExitOnOutOfMemoryError
+# plus a container-friendly entropy source, so SecureRandom does not block on a fresh VM.
+# Render's JAVA_OPTS, when set, replaces all of this; the startup log line
+# "JVM MEMORY:" says what the running process actually got.
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=50 -XX:MaxMetaspaceSize=180m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=48m -Xss512k -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=45s --retries=3 \
     CMD ["sh", "-c", "curl -fsS http://localhost:8080/actuator/health/readiness || exit 1"]
