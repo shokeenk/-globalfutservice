@@ -23,7 +23,7 @@ server {
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
-    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+    gzip_types text/plain text/css application/javascript application/json application/manifest+json image/svg+xml;
 
     # ---- the API, served from this origin -----------------------------------
     #
@@ -124,6 +124,15 @@ server {
     location ~* \.(woff2|svg|png|webp|ico)$$ {
         expires 30d;
         add_header Cache-Control "public";
+    }
+
+    # The web app manifest, with its own type: nginx's mime.types does not reliably know
+    # .webmanifest, and without this it would go out as application/octet-stream. An exact
+    # match, so the SPA fallback below can never answer it with index.html.
+    location = /site.webmanifest {
+        default_type application/manifest+json;
+        types { }
+        add_header Cache-Control "public, max-age=86400";
     }
 
     # index.html must never be cached, or a deploy leaves returning visitors
