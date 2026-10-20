@@ -509,7 +509,6 @@ const en = {
       `window, you get ${cash}% back in cash or ${credit}% as store credit — your choice.`,
   },
 
-
   /*
    * The cookie bar. Deliberately specific: this site sets one cookie, to keep somebody
    * signed in, and stores two preferences. Saying "we use cookies to improve your
@@ -558,16 +557,6 @@ const en = {
     guestLookupClose: 'Hide the reference lookup',
     orderList: 'Order List',
     refreshedLive: 'This page updates itself.',
-    discordTicketTitle: 'Join Your Discord Ticket',
-    discordTicketBody: 'Continue your order on Discord. Our team is ready to assist you.',
-    discordTicketCta: 'Open Discord',
-    discordTicketCreated: 'Your ticket has been created!',
-    discordJoin: 'Join Discord',
-    discordPendingTitle: 'Your ticket opens automatically',
-    discordPendingBody:
-      'You signed in with Discord, so we already know your account. As soon as your '
-      + 'payment is submitted, your ticket appears in our server — nothing to do.',
-    discordOpenTicket: 'Open your ticket',
     sessionsTitle: 'Your sessions',
     sessionsBooked: (booked: number, total: number) => `${booked} of ${total} booked`,
     sessionsNoneYet:
@@ -848,19 +837,6 @@ const en = {
     yourTickets: 'Support requests',
   },
 
-  /*
-    The way to us on Discord for an order: a direct message to our account, with the order
-    reference. Replaces the /verify command, which Discord refuses to register.
-  */
-  discordDm: {
-    title: 'Message us on Discord',
-    messageUs: 'Message us on Discord:',
-    includeReference: 'Include your order reference:',
-    button: 'Message us on Discord',
-    copy: 'Copy',
-    copied: 'Copied',
-    copyLabel: (ref: string) => `Copy order reference ${ref}`,
-  },
   payopReturn: {
     eyebrow: 'Payment',
     checking: 'Checking your payment…',
@@ -1090,9 +1066,6 @@ const en = {
     fullNameHint: 'The name we put on your receipt.',
     countryCode: 'Country code',
     phoneHelper: 'Only used for urgent order issues — we will never spam you.',
-    discordLabel: 'Discord (optional)',
-    discordHelper: 'We may reach out on Discord for faster order support.',
-    discordPlaceholder: 'yourname',
     whereTitle: 'Where should it go?',
     email: 'Email',
     emailHint: 'Your receipt and delivery notice go here.',
@@ -1340,8 +1313,8 @@ const en = {
       + 'backup or recovery codes sit there, and you can generate a fresh set at any '
       + 'time. Copy the whole list and paste it in; we use one and the rest stay yours. '
       + 'Generate new ones after your order is finished and the old set stops working. '
-      + 'If the section is not where this describes, EA has moved it — message us on '
-      + 'Discord and we will walk you through the current screens.',
+      + 'If the section is not where this describes, EA has moved it — ask us on your '
+      + 'order’s live chat and we will walk you through the current screens.',
 
     qRefund: 'What is your refund policy?',
     aRefund:
@@ -1536,15 +1509,11 @@ const en = {
     needPlatform: 'Choose a platform to continue.',
     needLauncher: 'Choose where you play on PC to continue.',
 
-    discordDetailsTitle: 'Account Details via Discord',
-    discordDetailsLead: 'For your security, we do not collect EA login details on the website.',
-    discordDetailsCallout: 'After payment, you will be connected to our team on Discord.',
-    discordDetailsPoint1: 'Your EA login details will only be requested in your private Discord ticket.',
-    discordDetailsPoint2: 'Our team will guide you step by step.',
-    discordDetailsPoint3: 'This keeps your account safe and secure.',
-    afterPaymentNote: 'Place your order to continue. After payment you will be taken to Discord to finish setting up.',
-
-    ticketCreated: 'Your ticket has been created!',
+    afterPaymentNote: 'Place your order to continue. After payment, you enter your EA login on your order page.',
+    afterPaymentTitle: 'After payment',
+    afterPaymentBody:
+      'After payment, enter your EA login on your order page (it’s encrypted), and chat with our team on the '
+      + 'order’s live chat for anything else.',
 
     continueToPayment: 'Continue to Payment',
     termsLead: 'By continuing you agree to our',
@@ -1588,8 +1557,6 @@ const en = {
     submittedLead:
       'Your order is placed and our team has been notified. We confirm the payment by hand, '
       + 'usually within minutes — this page updates itself when it lands.',
-    joinDiscord: 'Join Our Discord',
-    joinCaption: 'Click the button above to join, and our team will pick up your order there.',
     orderId: 'Order ID',
     service: 'Service',
     platformLabel: 'Platform',
@@ -1927,8 +1894,17 @@ const en = {
     backToOrder: 'Back to your order',
     guestTitle: 'Need help with this order?',
     guestBody: (ref: string) =>
-      `Live chat is for orders placed from an account. Open a support ticket and mention order ${ref}.`,
-    guestCta: 'Open a support ticket',
+      `Chat with our team about order ${ref}. We’ll ask for the email you placed it with.`,
+    guestCta: 'Chat with us',
+    guestChatTitle: 'Chat about your order',
+    guestChatLead: (ref: string) => `Enter the email you placed order ${ref} with, and the live chat opens here.`,
+    guestChatRefLabel: 'Order reference',
+    guestChatEmailLabel: 'Email',
+    guestChatOpen: 'Open the chat',
+    guestChatNotFound: 'We couldn’t find an order with that reference and email.',
+    guestChatSignIn: 'Placed it from an account? Sign in and chat from your order.',
+    neverInChat: 'Never share your EA password or backup codes in chat. Use the secure form above.',
+    neverInChatShort: 'Never share your EA password or backup codes in chat.',
   },
   /*
     Completing the payment of an order placed and not paid, from the order page and My

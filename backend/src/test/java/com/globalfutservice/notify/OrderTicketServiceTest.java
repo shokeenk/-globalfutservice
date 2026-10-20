@@ -1,7 +1,6 @@
 package com.globalfutservice.notify;
 
 import com.globalfutservice.config.AppProperties;
-import com.globalfutservice.notify.discord.DiscordVerificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -54,7 +53,7 @@ class OrderTicketServiceTest {
         AppProperties props = mock(AppProperties.class);
         when(props.notifications()).thenReturn(notifications("bot-token"));
         when(bot.isEnabled()).thenReturn(true);
-        tickets = new OrderTicketService(bot, props, mock(DiscordVerificationService.class));
+        tickets = new OrderTicketService(bot, props);
     }
 
     private static PaymentClaimNotification claim(boolean hasProof, boolean credentialsHeld) {
@@ -165,6 +164,15 @@ class OrderTicketServiceTest {
                     .when(bot).postMessage(anyString(), anyString());
 
             assertThat(tickets.openTicket(claim(false, false))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the ticket is the team's own: opening it lets no customer in, whoever they signed in with")
+        void staffOnly() {
+            when(bot.createTicketChannel(anyString())).thenReturn("channel-9");
+
+            assertThat(tickets.openTicket(claim(false, false))).contains("channel-9");
+            verify(bot, never()).grantChannelAccess(anyString(), anyString());
         }
 
         @Test

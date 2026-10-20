@@ -1,12 +1,14 @@
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Order } from '../lib/types'
 
 /*
- * The order page offers the support card where the Discord panel used to be: the signed-in
- * owner gets the way to the order's support page, a guest the way to a support ticket.
- * Boosting orders keep their Discord ticket too, as the place the EA login is handed over.
+ * The order page's way to us is the order's live chat, and nothing else: the signed-in owner
+ * gets the order's support page, a guest the guest chat with the reference filled in. No
+ * Discord step for any order -- whatever an older API still says about Discord -- and the
+ * one rule about the chat said under it: the EA password and backup codes never go in it.
  */
 
 const api = vi.hoisted(() => ({ get: vi.fn(async () => ({ creditBalance: 0, upcoming: [] })), post: vi.fn() }))
@@ -31,66 +33,75 @@ function order(sku: string, status: string): Order {
     credentialsRequired: false, credentialsSubmitted: false, currency: 'INR', totalMinor: 100000,
     totalFormatted: '₹1,000.00', lines: [], pointsRedeemed: 0, pointsEarned: 0, createdAt: '2026-10-01T10:00:00Z',
     timeline: [],
-    // The Discord access the server sends: shown for boosting orders only.
-    discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x' },
+    // What an older API still sends: never shown.
+    discordAccess: { mode: 'DIRECT', channelUrl: 'https://discord.com/channels/1/2', inviteUrl: 'https://discord.gg/x' },
   } as unknown as Order
 }
 
-function view(o: Order, signedIn: boolean) {
-  return render(<MemoryRouter><OrderView order={o} signedIn={signedIn} /></MemoryRouter>)
+function view(o: Order, signedIn: boolean, guestEmail?: string) {
+  return render(<MemoryRouter><OrderView order={o} signedIn={signedIn} guestEmail={guestEmail} /></MemoryRouter>)
+}
+
+/** Nothing on the page takes a customer to Discord: no server invite, no channel, no direct message. */
+function expectNoDiscord() {
+  const links = [...document.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '')
+  expect(links.filter((href) => /discord/i.test(href))).toEqual([])
+  expect(document.body.textContent).not.toMatch(/discord|\/verify|run this command/i)
 }
 
 describe('the order page\'s support card', () => {
-  it('BOOST_CHAMPS, signed in: the support card, and the Discord ticket for the EA login', () => {
-    view(order('BOOST_CHAMPS', 'IN_PROGRESS'), true)
-    expect(screen.getByRole('link', { name: 'Connect to booster' }))
-      .toHaveAttribute('href', '/orders/GFS-26-70C4DPWH/support')
-    expect(screen.getByRole('link', { name: 'Message us on Discord' }))
-      .toHaveAttribute('href', 'https://discord.com/users/1300551868174569595')
-    expect(screen.getByText('globalfutservices')).toBeInTheDocument()
-    expect(screen.getByText('GFS-26-70C4DPWH', { selector: 'code' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Copy order reference GFS-26-70C4DPWH' })).toBeInTheDocument()
-    expect(document.body.textContent).not.toMatch(/\/verify|run this command/i)
-  })
-
-  it('the Discord step for each case: message us, join (ticket opens itself), or open the ticket', () => {
-    const withAccess = (discordAccess: object) => ({ ...order('BOOST_CHAMPS', 'IN_PROGRESS'), discordAccess } as Order)
-
-    const quote = view(withAccess({ mode: 'QUOTE', channelUrl: null, inviteUrl: 'https://discord.gg/x' }), true)
-    expect(screen.getByRole('link', { name: 'Message us on Discord' }))
-      .toHaveAttribute('href', 'https://discord.com/users/1300551868174569595')
-    quote.unmount()
-
-    const pending = view(withAccess({ mode: 'PENDING', channelUrl: null, inviteUrl: 'https://discord.gg/x' }), true)
-    expect(screen.getByRole('link', { name: 'Join Discord' })).toHaveAttribute('href', 'https://discord.gg/x')
-    expect(screen.queryByRole('link', { name: 'Message us on Discord' })).toBeNull()
-    pending.unmount()
-
-    view(withAccess({ mode: 'DIRECT', channelUrl: 'https://discord.com/channels/1/2', inviteUrl: 'https://discord.gg/x' }), true)
-    expect(screen.getByRole('link', { name: 'Open your ticket' }))
-      .toHaveAttribute('href', 'https://discord.com/channels/1/2')
-    expect(document.body.textContent).not.toMatch(/\/verify/i)
-  })
-
   it.each([
+    ['BOOST_CHAMPS', 'Connect to booster', '/orders/GFS-26-70C4DPWH/support'],
+    ['BOOST_RIVALS', 'Connect to booster', '/orders/GFS-26-70C4DPWH/support'],
+    ['BOOST_OBJECTIVES', 'Connect to booster', '/orders/GFS-26-70C4DPWH/support'],
+    ['BOOST_TOURNAMENTS', 'Connect to booster', '/orders/GFS-26-70C4DPWH/support'],
     ['TRADING_SERVICE', 'Create Order Support', '/orders/GFS-26-70C4DPWH/support'],
-    ['COACHING', 'Connect with Coach', '/coaching/GFS-26-70C4DPWH/support'],
-  ])('%s, signed in: the support card, and no Discord', (sku, cta, path) => {
+  ])('%s, signed in: the live chat, the rule about it, and no Discord', (sku, cta, path) => {
     view(order(sku, 'IN_PROGRESS'), true)
     expect(screen.getByRole('link', { name: cta })).toHaveAttribute('href', path)
-    expect(document.body.textContent).not.toMatch(/discord|\/verify/i)
+    expect(screen.getByTestId('never-in-chat'))
+      .toHaveTextContent('Never share your EA password or backup codes in chat. Use the secure form above.')
+    expectNoDiscord()
   })
 
-  it('a guest order: the way to a support ticket, not the chat', () => {
-    view(order('BOOST_CHAMPS', 'IN_PROGRESS'), false)
+  it('COACHING, signed in: the coach, and no Discord -- no sign-in, so no rule about one', () => {
+    view(order('COACHING', 'IN_PROGRESS'), true)
+    expect(screen.getByRole('link', { name: 'Connect with Coach' }))
+      .toHaveAttribute('href', '/coaching/GFS-26-70C4DPWH/support')
+    expect(screen.queryByTestId('never-in-chat')).toBeNull()
+    expectNoDiscord()
+  })
+
+  it('a guest order: the live chat too, with the reference in the address and the email out of it', async () => {
+    function Landed() {
+      const location = useLocation()
+      return <p data-testid="landed">{location.pathname + location.search} {JSON.stringify(location.state)}</p>
+    }
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route path="/" element={<OrderView order={order('BOOST_CHAMPS', 'IN_PROGRESS')} signedIn={false}
+                                              guestEmail="guest@example.test" />} />
+          <Route path="/support/chat" element={<Landed />} />
+        </Routes>
+      </MemoryRouter>,
+    )
     expect(screen.getByTestId('guest-support-card')).toBeInTheDocument()
     expect(screen.queryByTestId('support-card')).toBeNull()
+    expectNoDiscord()
+
+    const chat = screen.getByRole('link', { name: 'Chat with us' })
+    expect(chat).toHaveAttribute('href', '/support/chat?ref=GFS-26-70C4DPWH')
+    expect(chat.getAttribute('href')).not.toContain('guest@example.test')
+    await userEvent.click(chat)
+    expect(screen.getByTestId('landed')).toHaveTextContent('/support/chat?ref=GFS-26-70C4DPWH {"email":"guest@example.test"}')
   })
 
-  it('before payment and after the work is done, no card, as the Discord panel before it', () => {
+  it('before payment and after the work is done, no card', () => {
     view(order('BOOST_CHAMPS', 'AWAITING_PAYMENT'), true)
     expect(screen.queryByTestId('support-card')).toBeNull()
     view(order('BOOST_CHAMPS', 'COMPLETED'), true)
     expect(screen.queryByTestId('support-card')).toBeNull()
+    expectNoDiscord()
   })
 })

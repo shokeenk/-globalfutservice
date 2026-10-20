@@ -1,7 +1,6 @@
 package com.globalfutservice.notify;
 
 import com.globalfutservice.config.AppProperties;
-import com.globalfutservice.notify.discord.DiscordVerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -53,13 +52,10 @@ public class OrderTicketService {
 
     private final DiscordBotClient bot;
     private final AppProperties props;
-    private final DiscordVerificationService verification;
 
-    public OrderTicketService(DiscordBotClient bot, AppProperties props,
-                              DiscordVerificationService verification) {
+    public OrderTicketService(DiscordBotClient bot, AppProperties props) {
         this.bot = bot;
         this.props = props;
-        this.verification = verification;
     }
 
     public boolean isEnabled() {
@@ -80,16 +76,10 @@ public class OrderTicketService {
             String channelId = bot.createTicketChannel(n.publicRef());
             bot.postMessage(channelId, compose(n));
             /*
-             * Customers who signed in with Discord are let in here and never see the
-             * verification step -- their id has been on the account since they
-             * authenticated, so there is nothing left to prove. Everyone else, which is
-             * most people, joins the server and runs /verify instead.
-             *
-             * After the message, not before: the grant is the shortcut, and a customer
-             * walking into an empty channel because the submission had not posted yet
-             * would be a worse first look than waiting a second for the link.
+             * Staff only (2026-10-20). Customers were let into this channel when they had
+             * signed in with Discord; support is the order's live chat now, so the channel
+             * is the team's internal notice about the order and nobody else is added to it.
              */
-            verification.grantAtTicketCreation(n.publicRef(), channelId);
             return Optional.of(channelId);
         } catch (RuntimeException e) {
             // Reason only. A 403 here is almost always the bot missing Manage Channels in

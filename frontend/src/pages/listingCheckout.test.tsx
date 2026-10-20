@@ -7,7 +7,7 @@ import type { CatalogListing, CatalogOption } from '../lib/types'
  * The checkout of an Objectives or Tournaments listing, loaded by its id: the left side is
  * the listing as the team wrote it -- tasks, games, time, instructions, each hidden when
  * empty, the overview theirs when they wrote one -- with the boosting checkout's own
- * Discord guidance and no platform question. By the hour, nothing is priced until the hours
+ * after-payment note (EA login in the encrypted form, the live chat) and no platform question. By the hour, nothing is priced until the hours
  * are chosen, the sum is shown before Continue, and the acknowledgement must be ticked.
  */
 
@@ -126,8 +126,10 @@ describe('a fixed-price objective', () => {
     expect(screen.getByTestId('listing-time')).toHaveTextContent('An estimate, not a guarantee.')
     expect(screen.getByTestId('listing-instructions')).toHaveTextContent('Please make sure the objective is available')
 
-    // The boosting checkout's own Discord guidance; no platform question.
-    expect(screen.getByRole('heading', { name: 'Account Details via Discord' })).toBeInTheDocument()
+    // The boosting checkout's own after-payment note, and no Discord; no platform question.
+    expect(screen.getByRole('heading', { name: 'After payment' })).toBeInTheDocument()
+    expect(screen.getByTestId('after-payment')).toHaveTextContent('enter your EA login on your order page')
+    expect(document.body.innerHTML).not.toMatch(/discord/i)
     expect(screen.queryByRole('group', { name: 'Select Platform' })).toBeNull()
     expect(screen.queryByTestId('hours-picker')).toBeNull()
     expect(screen.queryByTestId('hourly-acknowledgement')).toBeNull()

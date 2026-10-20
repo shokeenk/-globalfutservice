@@ -87,7 +87,7 @@ beforeEach(() => {
 })
 
 describe('the Champions information card', () => {
-  it('shows on a Champions order: the client’s words, between the platform and the Discord block', async () => {
+  it('shows on a Champions order: the client’s words, between the platform and the after-payment note', async () => {
     open()
     const card = await screen.findByTestId('champs-info')
     expect(card).toHaveTextContent('Champions Boosting Information')
@@ -101,21 +101,21 @@ describe('the Champions information card', () => {
     expect(link).toHaveAttribute('href', '/support')
 
     const platform = screen.getByRole('group', { name: 'Select Platform' })
-    const discord = screen.getByRole('heading', { name: 'Account Details via Discord' })
+    const discord = screen.getByRole('heading', { name: 'After payment' })
     expect(platform.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(card.compareDocumentPosition(discord) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('is not on a Rivals order', async () => {
     open('BOOST_RIVALS', 'DIV_3_TO_2')
-    await screen.findByRole('heading', { name: 'Account Details via Discord' })
+    await screen.findByRole('heading', { name: 'After payment' })
     expect(screen.queryByTestId('champs-info')).toBeNull()
   })
 
   it('is not shown when Champions settlement is switched off', async () => {
     CATALOG.policy.champsSettlementEnabled = false
     open()
-    await screen.findByRole('heading', { name: 'Account Details via Discord' })
+    await screen.findByRole('heading', { name: 'After payment' })
     expect(screen.queryByTestId('champs-info')).toBeNull()
   })
 })

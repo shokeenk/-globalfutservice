@@ -290,20 +290,17 @@ public class OrderEntity {
     }
 
     /**
-     * Whether this order's sign-in is collected on the website.
+     * Whether this order's sign-in is collected on the website, in the encrypted form.
      *
-     * <p>Boosting is the exception, at the owner's instruction: the booster asks for the
-     * account in the customer's own Discord ticket instead, so the storefront stops
-     * collecting it and the order must not sit in CREDENTIALS_PENDING waiting for
-     * something nobody is going to type. The vault, the endpoint and every other service
-     * are untouched -- coin orders still hand their sign-in to the encrypted form.
-     *
-     * <p>Keyed on the SKU rather than the delivery method because the method is what the
-     * work <i>is</i> (a comfort trade either way) and this is about where the details are
-     * asked for.
+     * <p>Every order whose work is done on the customer's account: coins, and since
+     * 2026-10-20 boosting, Objectives and Tournaments too. Their sign-in used to be asked for
+     * in a Discord ticket; support is the live chat now, and a password or backup codes are
+     * never asked for in a chat. So after payment these orders wait in CREDENTIALS_PENDING for
+     * the form on the order page, unless the sign-in is already sealed -- the same vault,
+     * encryption, staff "Open the vault" with its audit, and deletion rules as coin orders.
      */
     public boolean requiresCredentials() {
-        return deliveryMethod.requiresCredentials() && !sku.isBoosting();
+        return deliveryMethod.requiresCredentials();
     }
 
     // --- accessors ------------------------------------------------------------

@@ -158,6 +158,8 @@ public class SecurityConfig {
                       database and their customers still have to be able to find them.
                     */
                     .requestMatchers(HttpMethod.POST, "/api/v1/orders/track").permitAll()
+                    // A guest order's live chat: the same reference-and-email proof as the lookup.
+                    .requestMatchers(HttpMethod.POST, "/api/v1/orders/track/support-context").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/tickets").permitAll()
                     /*
                       A ticket and its replies, for a guest with the private key from our

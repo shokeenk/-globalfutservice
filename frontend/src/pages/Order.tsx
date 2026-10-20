@@ -1266,7 +1266,6 @@ function CheckoutForm({
    */
   const [dialCode, setDialCode] = useState('+91')
   const [phone, setPhone] = useState('')
-  const [discord, setDiscord] = useState('')
   /*
    * Fixed, not chosen — see the delivery-method plate below. `useState` rather than a
    * plain const so that a policy arriving after first paint (the catalogue is fetched)
@@ -1348,7 +1347,8 @@ function CheckoutForm({
          * characters, which "+91 98765 43210" fits; a longer international number is
          * caught by the same @Size the operator console relies on.
          */
-        discordUsername: discord.trim().replace(/^@/, '') || null,
+        // No Discord at checkout (2026-10-20): support is the order's live chat. The API still takes null.
+        discordUsername: null,
         // Asked for after the order exists, on the credential form. See note 14.
         eaPlatformHandle: null,
         // No longer asked here -- see BalancePanel. The sign-in form still takes one.
@@ -1500,19 +1500,6 @@ function CheckoutForm({
               maxLength={20}
             />
           </div>
-        )}
-      </Field>
-
-      <Field label={t.order.discordLabel} hint={t.order.discordHelper}>
-        {(props) => (
-          <Input
-            {...props}
-            value={discord}
-            onChange={(e) => setDiscord(e.target.value)}
-            placeholder={t.order.discordPlaceholder}
-            autoComplete="off"
-            maxLength={64}
-          />
         )}
       </Field>
 

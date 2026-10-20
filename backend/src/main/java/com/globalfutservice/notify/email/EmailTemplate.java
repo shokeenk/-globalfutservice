@@ -358,7 +358,7 @@ public final class EmailTemplate {
          .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" ")
          .append("border=\"0\" class=\"gfs-stack\"><tr>\n");
         footerLink(b, "◆", "WEBSITE", brand.websiteLabel(), brand.websiteUrl(), false);
-        footerLink(b, "●", "DISCORD (SUPPORT)", brand.discordLabel(), brand.discordUrl(),
+        footerLink(b, "●", "DISCORD (COMMUNITY)", brand.discordLabel(), brand.discordUrl(),
                 false);
         footerLink(b, "■", "INSTAGRAM", brand.instagramLabel(), brand.instagramUrl(), true);
         b.append("</tr></table>\n</td></tr>\n");

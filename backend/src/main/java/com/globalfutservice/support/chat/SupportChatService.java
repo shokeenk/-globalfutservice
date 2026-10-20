@@ -105,7 +105,22 @@ public class SupportChatService {
         OrderEntity order = orders.requireOwned(publicRef, accountId);
         AccountEntity account = accounts.findById(accountId)
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("No such order."));
+        return contextFor(order, blankToNull(account.getDisplayName()), account.getEmail());
+    }
 
+    /**
+     * A guest order's support page: the same summary and chat fields, for whoever gives its
+     * reference and the email it was placed with -- the same proof the guest order lookup
+     * asks for, and "not found" for anything else. The chat is told the order's own email,
+     * never one the visitor typed.
+     */
+    @Transactional(readOnly = true)
+    public SupportContext guestContextFor(String publicRef, String email) {
+        OrderEntity order = orders.requireGuest(publicRef, email);
+        return contextFor(order, null, order.contactEmail());
+    }
+
+    private SupportContext contextFor(OrderEntity order, String name, String email) {
         Mode mode = modeOf(order.getSku());
         String service = OrderService.describe(order);
         String platform = platform(order);
@@ -130,10 +145,8 @@ public class SupportChatService {
         attributes.put("session-id", value(summary.session()));
         attributes.put("coach", value(coach));
 
-        String email = account.getEmail();
         return new SupportContext(mode, summary,
-                new Chat(blankToNull(account.getDisplayName()), email, hash(email),
-                        java.util.Collections.unmodifiableMap(attributes)));
+                new Chat(name, email, hash(email), java.util.Collections.unmodifiableMap(attributes)));
     }
 
     static Mode modeOf(Sku sku) {
