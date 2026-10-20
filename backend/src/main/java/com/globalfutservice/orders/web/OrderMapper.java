@@ -95,48 +95,15 @@ public class OrderMapper {
         return s == null || s.isBlank();
     }
 
-    /**
-     * How this customer gets to their ticket.
-     *
-     * <p>Only services that are actually run in Discord get a panel at all — a coin order
-     * is tracked on this site and pointing its customer at a ticket would be inventing a
-     * step. For the rest it comes down to whether we already know their Discord account:
-     * if they signed in with Discord they were let into the channel when it opened, and
-     * anyone else has to join and claim the order.
-     */
+    /** How the customer gets to a Discord ticket for this order: never, any more. */
     private OrderDtos.DiscordAccessDto discordAccess(OrderEntity order) {
-        if (order.getSku() == Sku.TRADING_SERVICE) {
-            return new OrderDtos.DiscordAccessDto("NONE", null, null);
-        }
-        String invite = props.discordInvite();
-
         /*
-         * Without the bot there is no ticket to let anybody into: the customer messages us
-         * with their reference (QUOTE), as they do when we do not know their account.
+         * No Discord step for any order (2026-10-20): support is the order's live chat, and the
+         * ticket channels are the team's internal notices, which customers are not let into.
+         * The field stays, always NONE, so a storefront still loaded in an old tab shows no
+         * Discord panel either.
          */
-        if (!bot.isEnabled() || isBlank(props.notifications().discordApplicationId())) {
-            return new OrderDtos.DiscordAccessDto("QUOTE", null, invite);
-        }
-
-        /*
-         * A deep link is only offered to somebody who has actually been granted the
-         * channel -- every Discord-authenticated customer once the ticket exists, and
-         * anybody staff have let in. Linking a channel the reader cannot open would look
-         * like the site was broken.
-         */
-        Optional<String> ticket = verification.ticketUrl(
-                order.getId(), props.notifications().discordGuildId());
-        if (ticket.isPresent()) {
-            return new OrderDtos.DiscordAccessDto("DIRECT", ticket.get(), invite);
-        }
-        if (verification.isDiscordAuthenticated(order.getAccountId())) {
-            // Signed in with Discord, but the ticket is not open yet -- the payment has
-            // not been submitted. They will be let in without doing anything.
-            return new OrderDtos.DiscordAccessDto("PENDING", null, invite);
-        }
-        // We do not know their Discord account: they message us, with their reference.
-        // (The /verify command is not offered: Discord refuses to register it.)
-        return new OrderDtos.DiscordAccessDto("VERIFY", null, invite);
+        return new OrderDtos.DiscordAccessDto("NONE", null, null);
     }
 
     /** The order as its customer reads it: the timeline in {@link #toCustomerEventDto} form. */

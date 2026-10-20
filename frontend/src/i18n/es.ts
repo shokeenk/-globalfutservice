@@ -430,7 +430,6 @@ const es: Dictionary = {
       `ese plazo, recibes el ${cash}% en efectivo o el ${credit}% en saldo: tú eliges.`,
   },
 
-
   cookies: {
     title: 'Cookies en este sitio',
     body:
@@ -469,16 +468,6 @@ const es: Dictionary = {
     guestLookupClose: 'Ocultar la búsqueda por referencia',
     orderList: 'Lista de pedidos',
     refreshedLive: 'Esta página se actualiza sola.',
-    discordTicketTitle: 'Entra en tu ticket de Discord',
-    discordTicketBody: 'Continúa tu pedido en Discord. Nuestro equipo está listo para ayudarte.',
-    discordTicketCta: 'Abrir Discord',
-    discordTicketCreated: '¡Tu ticket está creado!',
-    discordJoin: 'Entrar en Discord',
-    discordPendingTitle: 'Tu ticket se abre solo',
-    discordPendingBody:
-      'Iniciaste sesión con Discord, así que ya conocemos tu cuenta. En cuanto se envíe '
-      + 'tu pago, tu ticket aparecerá en el servidor: no tienes que hacer nada.',
-    discordOpenTicket: 'Abrir tu ticket',
     sessionsTitle: 'Tus sesiones',
     sessionsBooked: (booked: number, total: number) => `${booked} de ${total} reservadas`,
     sessionsNoneYet:
@@ -746,15 +735,6 @@ const es: Dictionary = {
     withReference: 'con la referencia.',
   },
 
-  discordDm: {
-    title: 'Escríbenos por Discord',
-    messageUs: 'Escríbenos por Discord:',
-    includeReference: 'Incluye tu referencia de pedido:',
-    button: 'Escríbenos por Discord',
-    copy: 'Copiar',
-    copied: 'Copiado',
-    copyLabel: (ref: string) => `Copiar la referencia de pedido ${ref}`,
-  },
   payopReturn: {
     eyebrow: 'Pago',
     checking: 'Comprobando tu pago…',
@@ -922,9 +902,6 @@ const es: Dictionary = {
     fullNameHint: 'El nombre que aparecerá en tu recibo.',
     countryCode: 'Prefijo país',
     phoneHelper: 'Solo para incidencias urgentes del pedido — nunca te enviaremos spam.',
-    discordLabel: 'Discord (opcional)',
-    discordHelper: 'Podemos escribirte por Discord para resolver el pedido más rápido.',
-    discordPlaceholder: 'tunombre',
     whereTitle: '¿Dónde lo enviamos?',
     email: 'Correo electrónico',
     emailHint: 'Aquí llegan tu recibo y el aviso de entrega.',
@@ -1140,7 +1117,7 @@ const es: Dictionary = {
       + 'generar un juego nuevo cuando quieras. Copia la lista entera y pégala; usamos '
       + 'uno y el resto siguen siendo tuyos. Genera unos nuevos al terminar tu pedido y '
       + 'los antiguos dejarán de funcionar. Si la sección no está donde se describe, EA '
-      + 'la ha movido: escríbenos por Discord y te guiamos por las pantallas actuales.',
+      + 'la ha movido: escríbenos en el chat en vivo de tu pedido y te guiamos por las pantallas actuales.',
     qRefund: '¿Cuál es vuestra política de reembolsos?',
     aRefund:
       'Una vez que hemos empezado, un pedido no se puede cancelar sin más, porque las ' +
@@ -1324,15 +1301,11 @@ const es: Dictionary = {
     needPlatform: 'Elige una plataforma para continuar.',
     needLauncher: 'Elige dónde juegas en PC para continuar.',
 
-    discordDetailsTitle: 'Datos de la cuenta por Discord',
-    discordDetailsLead: 'Por tu seguridad, no pedimos los datos de acceso de EA en la web.',
-    discordDetailsCallout: 'Después del pago te pondremos en contacto con nuestro equipo en Discord.',
-    discordDetailsPoint1: 'Tus datos de EA solo se piden en tu ticket privado de Discord.',
-    discordDetailsPoint2: 'Nuestro equipo te guía paso a paso.',
-    discordDetailsPoint3: 'Así tu cuenta está más segura.',
-    afterPaymentNote: 'Haz el pedido para continuar. Tras el pago te llevamos a Discord para terminar de prepararlo.',
-
-    ticketCreated: '¡Tu ticket está creado!',
+    afterPaymentNote: 'Haz el pedido para continuar. Tras el pago, introduces tu inicio de sesión de EA en la página de tu pedido.',
+    afterPaymentTitle: 'Después del pago',
+    afterPaymentBody:
+      'Después del pago, introduce tu inicio de sesión de EA en la página de tu pedido (está cifrado) y habla con '
+      + 'nuestro equipo en el chat en vivo del pedido para cualquier otra cosa.',
 
     continueToPayment: 'Continuar al pago',
     termsLead: 'Al continuar aceptas nuestros',
@@ -1376,8 +1349,6 @@ const es: Dictionary = {
     submittedLead:
       'Tu pedido está hecho y nuestro equipo ya está avisado. Confirmamos el pago a mano, '
       + 'normalmente en minutos, y esta página se actualiza sola cuando llega.',
-    joinDiscord: 'Únete a nuestro Discord',
-    joinCaption: 'Pulsa el botón para entrar; nuestro equipo atenderá allí tu pedido.',
     orderId: 'Nº de pedido',
     service: 'Servicio',
     platformLabel: 'Plataforma',
@@ -1689,8 +1660,17 @@ const es: Dictionary = {
     backToOrder: 'Volver a tu pedido',
     guestTitle: '¿Necesitas ayuda con este pedido?',
     guestBody: (ref: string) =>
-      `El chat en vivo es para pedidos hechos desde una cuenta. Abre un ticket de soporte e indica el pedido ${ref}.`,
-    guestCta: 'Abrir un ticket de soporte',
+      `Habla con nuestro equipo sobre el pedido ${ref}. Te pediremos el email con el que lo hiciste.`,
+    guestCta: 'Habla con nosotros',
+    guestChatTitle: 'Chat sobre tu pedido',
+    guestChatLead: (ref: string) => `Introduce el email con el que hiciste el pedido ${ref} y el chat en vivo se abre aquí.`,
+    guestChatRefLabel: 'Referencia del pedido',
+    guestChatEmailLabel: 'Email',
+    guestChatOpen: 'Abrir el chat',
+    guestChatNotFound: 'No encontramos un pedido con esa referencia y ese email.',
+    guestChatSignIn: '¿Lo hiciste desde una cuenta? Inicia sesión y habla desde tu pedido.',
+    neverInChat: 'Nunca compartas tu contraseña de EA ni tus códigos de respaldo en el chat. Usa el formulario seguro de arriba.',
+    neverInChatShort: 'Nunca compartas tu contraseña de EA ni tus códigos de respaldo en el chat.',
   },
   completePayment: {
     banner: 'Este pedido aún no se ha pagado. Completa el pago para confirmarlo. La referencia de tu pedido no cambia.',

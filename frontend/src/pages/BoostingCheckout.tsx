@@ -13,8 +13,7 @@ import { useCatalogLabels } from '../content/catalogLabels'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { SupportCard } from '../components/support/SupportCard'
-import { DiscordMessageUs } from '../components/DiscordMessageUs'
-import { ticketLink } from '../lib/discordTicket'
+import { CredentialForm } from '../components/CredentialForm'
 import { isStubGateway, openCheckout } from '../lib/razorpay'
 import { paymentChoices, type PaymentChoiceKey } from '../lib/paymentMethods'
 import { internationalCopy, useInternationalOffer } from '../components/internationalOffer'
@@ -44,12 +43,12 @@ import { useCatalog } from '../state/CatalogContext'
  * and turns itself into "confirmed" when the order moves. Telling somebody their payment
  * succeeded before anyone has looked is the one thing a checkout must not do.
  *
- * <p><b>No sign-in is collected here, at the owner's instruction.</b> A booster asks for
- * the account in the customer's own Discord ticket instead, and the checkout says so
- * before the money rather than after it -- a customer who finds out at the end that they
- * still have to hand over an account has been told the price of something they had not
- * agreed to. The vault, the encrypted form and the coin checkout that uses them are
- * untouched; boosting simply stops being one of their callers.
+ * <p><b>No sign-in is collected here; it is asked for right after payment.</b> The EA login
+ * goes into the encrypted form -- on the confirmation, and on the order page -- and anything
+ * else into the order's live chat. Never Discord, and never a password in a chat. The
+ * checkout says so before the money rather than after it: a customer who finds out at the
+ * end that they still have to hand over an account has been told the price of something
+ * they had not agreed to.
  */
 
 type Step = 'details' | 'pay' | 'processing' | 'done'
@@ -321,7 +320,7 @@ export default function BoostingCheckout() {
         email: account.email,
         fullName: account.displayName ?? null,
         acceptedTerms: true,
-        // Objectives and Tournaments ask for no platform: the account is set up in Discord.
+        // Objectives and Tournaments ask for no platform: the account is given after payment, in the encrypted form.
         boostPlatform: listingMode ? null : platform,
         pcLauncher: !listingMode && platform === 'PC' ? launcher : null,
         hourlyAcknowledged: listingMode && hourly ? acknowledged : null,
@@ -435,7 +434,7 @@ export default function BoostingCheckout() {
                   acknowledged={acknowledged}
                   onAcknowledged={setAcknowledged}
                   touched={touched}
-                  discord={<DiscordGuidance />}
+                  guidance={<AfterPaymentGuidance />}
                   /*
                     Pressable while the hours are still missing, so it can say so; not while
                     a new price for changed hours is on its way.
@@ -577,7 +576,7 @@ function DetailsStep({
   disabled: boolean
   placing: boolean
   onContinue: () => void
-  /** A Champions order: the information card goes between the platform and the Discord block. */
+  /** A Champions order: the information card goes between the platform and the after-payment note. */
   champs?: boolean
 }) {
   const t = useT()
@@ -667,7 +666,7 @@ function DetailsStep({
         </div>
       )}
 
-      <DiscordGuidance />
+      <AfterPaymentGuidance />
 
       <ContinueBlock onContinue={onContinue} disabled={disabled} placing={placing} />
     </div>
@@ -675,59 +674,29 @@ function DetailsStep({
 }
 
 /**
- * Where the account is asked for, said before the money: the same on every boosting
- * checkout, Champs, Rivals, Objectives and Tournaments.
+ * What happens after payment, said before the money: the same on every boosting checkout,
+ * Champs, Rivals, Objectives and Tournaments. The EA login goes into the encrypted form on
+ * the order page, and anything else into the order's live chat.
  */
-function DiscordGuidance() {
+function AfterPaymentGuidance() {
   const t = useT()
   const b = t.boostingCheckout
   return (
-    <>
-      {/*
-        Said before the money, not after it.
-
-        The account is still needed -- somebody has to sign in and play -- but it is asked
-        for in Discord now. A customer who pays expecting to be done, and only then learns
-        they must hand over an account somewhere else, has been sold something they did
-        not agree to. So this sits above the pay button rather than on the receipt.
-      */}
-      <div className="mt-6 border-t border-ink-400 pt-6">
-        <div className="text-center">
-          <span aria-hidden="true" className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-ink-700 text-chalk">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <rect x="4" y="10" width="16" height="10" rx="2" />
-              <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-            </svg>
-          </span>
-          <h2 className="display mt-3 text-[16px] text-chalk">{b.discordDetailsTitle}</h2>
-          <p className="mx-auto mt-1 max-w-[46ch] text-body-sm leading-relaxed text-chalk-muted">
-            {b.discordDetailsLead}
-          </p>
+    <div className="mt-6 border-t border-ink-400 pt-6" data-testid="after-payment">
+      <div className="flex gap-3 rounded-panel border border-ink-400 bg-paper p-4">
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-700 text-chalk">
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <rect x="4" y="10" width="16" height="10" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-body-sm font-semibold text-chalk">{b.afterPaymentTitle}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-chalk-muted">{b.afterPaymentBody}</p>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-chalk-faint">{t.orderSupport.neverInChatShort}</p>
         </div>
-
-        <div className="mt-4 flex items-center gap-3 rounded-panel border border-[#5865F2]/30 bg-[#5865F2]/[0.07] p-3.5">
-          <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-edge bg-[#5865F2] text-paper">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
-            </svg>
-          </span>
-          <p className="text-[13px] font-semibold leading-snug text-chalk">{b.discordDetailsCallout}</p>
-        </div>
-
-        <ul className="mt-4 space-y-2.5">
-          {[b.discordDetailsPoint1, b.discordDetailsPoint2, b.discordDetailsPoint3].map((line) => (
-            <li key={line} className="flex gap-2.5">
-              <span aria-hidden="true" className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full bg-ok text-paper">
-                <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3.2">
-                  <path d="m5 10.5 3.5 3.5L15 7" />
-                </svg>
-              </span>
-              <p className="text-[12.5px] leading-relaxed text-chalk-muted">{line}</p>
-            </li>
-          ))}
-        </ul>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -927,7 +896,7 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
   }
 
   const paid = isPaid(order)
-  const ticket = ticketLink(order.discordAccess)
+  const needsSignIn = order.nextAction === 'SUBMIT_CREDENTIALS'
   const platformLabel = order.platform === 'PLAYSTATION' ? b.playstation
     : order.platform === 'PC'
       ? `${b.pc}${order.pcLauncher === 'STEAM' ? ` · ${b.steam}`
@@ -955,41 +924,18 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
         {paid ? b.confirmedLead : b.submittedLead}
       </p>
 
-      {ticket && ticket.kind !== 'MESSAGE' ? (<>
       {/*
-        The Discord ticket the bot opened when the payment was submitted, for a customer who
-        is already in it or will be let in automatically. It is where they hand over their
-        EA login, as the checkout told them before they paid.
+        The EA login, right here once the payment is confirmed: the encrypted form, the same
+        one the order page has. Never asked for in the chat.
       */}
-      <p className="mt-5 text-[13px] font-semibold text-ok">{b.ticketCreated}</p>
-
-      <div className="mt-3">
-        <a
-          href={ticket.href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-edge
-                     bg-brand-500 px-6 text-body-sm font-semibold text-paper transition-colors
-                     duration-200 hover:bg-brand-400 focus-visible:outline focus-visible:outline-2
-                     focus-visible:outline-offset-2 focus-visible:outline-brand-400"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-            <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
-          </svg>
-          {ticket.kind === 'TICKET' ? t.track.discordOpenTicket : b.joinDiscord}
-          <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 4h4v4M16 4l-7 7M14 12v4H4V6h4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </a>
-        {ticket.kind === 'JOIN' && <p className="mt-2 text-[12px] text-chalk-faint">{b.joinCaption}</p>}
-      </div>
-      </>) : (
-        /*
-          We do not know their Discord account, so they message us directly, with the
-          reference to paste in. (No /verify: Discord refuses to register the command.)
-        */
-        <div className="mt-5">
-          <DiscordMessageUs reference={order.publicRef} align="center" />
+      {needsSignIn && !order.credentialsSubmitted && (
+        <div className="mt-6 text-left" data-testid="confirmation-signin">
+          <CredentialForm publicRef={order.publicRef} onSubmitted={setOrder} />
+        </div>
+      )}
+      {needsSignIn && order.credentialsSubmitted && (
+        <div className="mt-6 text-left">
+          <Alert tone="ok" title={t.track.credDone}>{t.track.credDoneBody}</Alert>
         </div>
       )}
 
@@ -999,6 +945,9 @@ function Confirmation({ orderRef, emailsEnabled }: { orderRef: string; emailsEna
       */}
       <div className="mt-6">
         <SupportCard reference={order.publicRef} sku={order.sku} />
+        <p className="mt-2 text-left text-[12.5px] leading-relaxed text-chalk-faint" data-testid="never-in-chat">
+          {t.orderSupport.neverInChat}
+        </p>
       </div>
 
       {/* An Objectives or Tournaments order asked for no platform: its hours, if any, instead. */}

@@ -108,34 +108,37 @@ class TransactionalEmailsTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {"BOOST_CHAMPS", "BOOST_RIVALS"})
-        @DisplayName("boosting: message us on Discord, with the order reference -- never /verify")
-        void discord_branch(String sku) {
-            var r = TransactionalEmails.orderConfirmed(
-                    order(sku, "A service", "PlayStation"), BRAND, TRACK, DISCORD_DM, COACH);
+        @ValueSource(strings = {"BOOST_CHAMPS", "BOOST_RIVALS", "BOOST_OBJECTIVES", "BOOST_TOURNAMENTS"})
+        @DisplayName("boosting: the EA login in the encrypted form on the order page, the live chat for the rest -- "
+                + "never Discord, never the password in a chat")
+        void boosting_branch(String sku) {
+            String chat = "https://globalfutservices.com/support/chat?ref=GFS-26-ABC123";
+            var r = TransactionalEmails.orderConfirmed(order(sku, "A service", "PlayStation"), BRAND, TRACK, chat, COACH);
 
             assertThat(r.html())
                     .contains("NEXT STEPS")
-                    .contains("Message us on Discord: globalfutservices")
-                    .contains("MESSAGE US ON DISCORD")
-                    .contains("href=\"" + DISCORD_DM + "\"")
-                    .contains("Include your order reference: GFS-26-ABC123")
-                    .contains("Our Operations Executive will reply");
+                    .contains("Enter your EA login on your order page")
+                    .contains("ENTER YOUR EA LOGIN")
+                    .contains("href=\"" + TRACK + "\"")
+                    .contains("Chat with our team on your order&#39;s live chat")
+                    .contains("CHAT WITH US")
+                    .contains("href=\"" + chat + "\"")
+                    .contains("Never share your EA password or backup codes in chat.");
             assertThat(r.text())
-                    .contains("1. Message us on Discord: globalfutservices")
-                    .contains(DISCORD_DM)
-                    .contains("2. Include your order reference: GFS-26-ABC123");
-            for (String part : new String[] {r.html(), r.text()}) {
+                    .contains("1. Enter your EA login on your order page (it is encrypted):")
+                    .contains(TRACK)
+                    .contains("2. Chat with our team on your order's live chat for anything else:")
+                    .contains(chat)
+                    .contains("Never share your EA password or backup codes in chat.");
+            // The body names no Discord at all; only the shared footer keeps the community link.
+            String body = r.html().substring(0, r.html().indexOf("DISCORD (COMMUNITY)"));
+            for (String part : new String[] {body, r.text()}) {
                 assertThat(part)
+                        .doesNotContainIgnoringCase("discord")
                         .doesNotContainIgnoringCase("/verify")
-                        .doesNotContain("Join our Discord server")
-                        .doesNotContain("Your ticket will be created")
-                        .doesNotContain("verification");
+                        .doesNotContain(DISCORD_DM);
             }
-
-            // The tracking button belongs to the coins branch only; these customers are
-            // told to go to Discord, and two competing primary actions is one too many.
-            assertThat(r.html()).doesNotContain("TRACK YOUR ORDER").doesNotContain("CONNECT WITH COACH");
+            assertThat(r.html()).doesNotContain("CONNECT WITH COACH");
         }
 
         @Test

@@ -667,7 +667,8 @@ class ServiceListingPostgresTest {
         OrderEntity order = inTx(() -> orders.findByPublicRef(placed.publicRef()).orElseThrow());
         assertThat(order.getSku().name()).isEqualTo("BOOST_TOURNAMENTS");
         assertThat(order.getPlatform()).as("no platform is asked for").isNull();
-        assertThat(order.requiresCredentials()).as("the account is asked for in Discord").isFalse();
+        assertThat(order.requiresCredentials())
+                .as("the EA login goes into the encrypted form after payment, never Discord or the chat").isTrue();
         assertThat(snapshotOf(placed.publicRef()).categoryName()).isEqualTo("Tournaments");
     }
 

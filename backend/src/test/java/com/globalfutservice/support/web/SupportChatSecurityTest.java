@@ -26,11 +26,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** The support page's data is the signed-in owner's only; everyone else is told nothing. */
+/**
+ * The support page's data is the signed-in owner's by reference; a guest order's, by its
+ * reference and email, as the guest lookup asks. Everyone else is told nothing.
+ */
 @WebMvcTest(SupportChatController.class)
 @Import(SecurityConfig.class)
 @TestPropertySource(properties = {
@@ -84,5 +88,38 @@ class SupportChatSecurityTest {
         mvc.perform(get(PATH).with(authentication(customer(8L))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("No such order."));
+    }
+
+    private static final String GUEST = "/api/v1/orders/track/support-context";
+
+    @Test
+    @DisplayName("a guest order: open to anyone with its reference and email, never cached; anything else not found")
+    void guest() throws Exception {
+        when(support.guestContextFor("GFS-26-GUEST001", "guest@example.test")).thenReturn(new SupportChatService.SupportContext(
+                SupportChatService.Mode.BOOSTING,
+                new SupportChatService.Summary("GFS-26-GUEST001", "Champs Boosting", "PlayStation", "In progress", null,
+                        null, null, null, null, false),
+                new SupportChatService.Chat(null, "guest@example.test", null, Map.of("order-id", "GFS-26-GUEST001"))));
+
+        mvc.perform(post(GUEST).contentType("application/json")
+                        .content("{\"publicRef\":\"GFS-26-GUEST001\",\"email\":\"guest@example.test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.mode").value("BOOSTING"))
+                .andExpect(jsonPath("$.chat.email").value("guest@example.test"));
+
+        when(support.guestContextFor(eq("GFS-26-GUEST001"), eq("someone@example.test")))
+                .thenThrow(new ApiExceptions.NotFoundException("We could not find an order with that reference and email."));
+        mvc.perform(post(GUEST).contentType("application/json")
+                        .content("{\"publicRef\":\"GFS-26-GUEST001\",\"email\":\"someone@example.test\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("a guest request without both the reference and the email is refused before any lookup")
+    void guestNeedsBoth() throws Exception {
+        mvc.perform(post(GUEST).contentType("application/json").content("{\"publicRef\":\"GFS-26-GUEST001\"}"))
+                .andExpect(status().isBadRequest());
+        verify(support, never()).guestContextFor(anyString(), anyString());
     }
 }

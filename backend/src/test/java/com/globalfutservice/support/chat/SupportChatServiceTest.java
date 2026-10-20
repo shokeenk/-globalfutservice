@@ -197,6 +197,34 @@ class SupportChatServiceTest {
     }
 
     @Test
+    @DisplayName("a guest order: the same chat by its reference and email -- the order's own email told to the "
+            + "chat, never the one typed, and no name")
+    void guest() throws Exception {
+        OrderEntity o = order(Sku.BOOST_OBJECTIVES, OrderStatus.CREDENTIALS_PENDING, "Objectives — Weekly", null, "1");
+        when(o.contactEmail()).thenReturn("guest@example.test");
+        when(orders.requireGuest(REF, " Guest@Example.test ")).thenReturn(o);
+
+        SupportChatService.SupportContext ctx = service.guestContextFor(REF, " Guest@Example.test ");
+
+        assertThat(ctx.mode()).isEqualTo(Mode.BOOSTING);
+        assertThat(ctx.chat().name()).isNull();
+        assertThat(ctx.chat().email()).isEqualTo("guest@example.test");
+        assertThat(ctx.chat().attributes()).containsEntry("order-id", REF).containsEntry("service", "Objectives — Weekly");
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        assertThat(ctx.chat().hash())
+                .isEqualTo(HexFormat.of().formatHex(mac.doFinal("guest@example.test".getBytes(StandardCharsets.UTF_8))));
+        // Nothing about the order beyond the allowlist reaches the chat.
+        assertThat(ctx.chat().attributes().values()).noneMatch(v -> v.contains(SECRET));
+
+        // A reference and email that do not match: the lookup's own "not found".
+        when(orders.requireGuest(anyString(), anyString()))
+                .thenThrow(new ApiExceptions.NotFoundException("We could not find an order with that reference and email."));
+        assertThatThrownBy(() -> service.guestContextFor(REF, "someone@example.test"))
+                .isInstanceOf(ApiExceptions.NotFoundException.class);
+    }
+
+    @Test
     @DisplayName("Secure Mode: the email signed with the key as tawk.to checks it; no key, no hash")
     void secureMode() throws Exception {
         order(Sku.BOOST_CHAMPS, OrderStatus.PAID, "Champs Boosting", Platform.PC, "1");

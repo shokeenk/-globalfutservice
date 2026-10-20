@@ -48,8 +48,8 @@ function ChatIcon() {
 /**
  * Connect with GFS, or with your coach: the way from an order to its support page.
  *
- * <p>It replaces the Discord panel the customer used to be sent to. The button stays on
- * this site: it opens the order's support page, where the chat sits inside the page.
+ * <p>The button stays on this site: it opens the order's support page, where the live chat
+ * sits inside the page. Support is the live chat only -- never Discord.
  */
 export function SupportCard({ reference, sku }: { reference: string; sku: string }) {
   const mode = supportModeFor(sku)
@@ -76,17 +76,25 @@ export function SupportCard({ reference, sku }: { reference: string; sku: string
   )
 }
 
+/** The live chat for any order, signed in or not: /support/chat with the order's reference. */
+export function guestChatPath(reference: string): string {
+  return `/support/chat?ref=${encodeURIComponent(reference)}`
+}
+
 /**
- * For an order placed without an account. The chat is for signed-in owners only, and a
- * guest order belongs to no account, so the way to us is a support ticket.
+ * For an order placed without an account: the same live chat, by the guest chat page, with
+ * the reference filled in. The email the guest looked the order up with travels in router
+ * state, never in the address, so they are not asked for it twice.
  */
-export function GuestSupportCard({ reference }: { reference: string }) {
+export function GuestSupportCard({ reference, email }: { reference: string; email?: string }) {
   const s = useT().orderSupport
   return (
     <div className="rounded-panel border border-ink-400 bg-paper p-4 text-left" data-testid="guest-support-card">
       <p className="text-body-sm font-semibold text-chalk">{s.guestTitle}</p>
       <p className="mt-1 text-[12.5px] leading-relaxed text-chalk-muted">{s.guestBody(reference)}</p>
-      <ButtonLink to="/support" variant="secondary" size="md" className="mt-3">{s.guestCta}</ButtonLink>
+      <ButtonLink to={guestChatPath(reference)} state={email ? { email } : undefined} size="md" className="mt-3">
+        {s.guestCta}
+      </ButtonLink>
     </div>
   )
 }

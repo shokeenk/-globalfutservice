@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import indexHtml from '../../index.html?raw'
-import { BUSINESS } from '../content/business'
 import en from '../i18n/en'
 import es from '../i18n/es'
 import fr from '../i18n/fr'
@@ -55,20 +54,47 @@ describe('the /verify command is gone from everything a customer reads', () => {
   })
 })
 
-describe('instead: message us on Discord, with the order reference', () => {
-  it('names the account and opens a direct message, never the server', () => {
-    expect(BUSINESS.discordName).toBe('globalfutservices')
-    expect(BUSINESS.discordDm).toBe(`https://discord.com/users/${BUSINESS.discordUserId}`)
+/*
+ * Support is the live chat only (2026-10-20). No checkout or order page sends a customer to
+ * Discord -- not a server invite, not a direct message -- and none of the words they show
+ * names it. "Sign in with Discord" and the community link in the header and footer stay;
+ * they are not on these pages.
+ */
+const CHECKOUT_AND_ORDER_PAGES = [
+  'pages/Order.tsx', 'pages/BoostingCheckout.tsx', 'pages/Track.tsx', 'pages/GuestOrderChat.tsx',
+  'pages/OrderSupport.tsx', 'pages/CoachingBook.tsx', 'components/CredentialForm.tsx',
+  'components/CompletePayment.tsx', 'components/ManualPayment.tsx', 'components/support/SupportCard.tsx',
+  'components/support/SupportChat.tsx', 'components/listing/ListingDetails.tsx',
+]
+
+/** A link or a way to one that takes a customer to Discord. */
+const DISCORD_LINK = /discord\.gg|discord\.com\/(users|invite)|discordDm|discordInvite|BUSINESS\.discord/
+
+describe('no checkout or order page sends a customer to Discord', () => {
+  it('none of them links to a Discord server or a Discord direct message', () => {
+    for (const path of CHECKOUT_AND_ORDER_PAGES) {
+      const text = SOURCES[`/src/${path}`]
+      expect(text, path).toBeDefined()
+      expect(withoutComments(text!), path).not.toMatch(DISCORD_LINK)
+    }
   })
 
-  it('in all three languages', () => {
-    expect(en.discordDm.button).toBe('Message us on Discord')
-    expect(en.discordDm.messageUs).toBe('Message us on Discord:')
-    expect(en.discordDm.includeReference).toBe('Include your order reference:')
-    for (const dict of [es, fr]) {
-      expect(dict.discordDm.button).not.toBe(en.discordDm.button)
-      expect(dict.discordDm.includeReference).not.toBe(en.discordDm.includeReference)
-      expect(dict.discordDm.copyLabel('GFS-26-ABC')).toContain('GFS-26-ABC')
+  it('the words those pages show never name Discord, in any language', () => {
+    for (const dict of [en, es, fr]) {
+      for (const section of ['order', 'boostingCheckout', 'track', 'orderSupport'] as const) {
+        expect(JSON.stringify((dict as Record<string, unknown>)[section]), section).not.toMatch(/discord/i)
+      }
+      // The guest's line to the chat is a function: called, it still names no Discord.
+      expect(dict.orderSupport.guestBody('GFS-26-ABC')).not.toMatch(/discord/i)
+      expect(dict.orderSupport.guestChatLead('GFS-26-ABC')).toContain('GFS-26-ABC')
     }
+  })
+
+  it('the check itself catches each kind of Discord link', () => {
+    expect(DISCORD_LINK.test('href="https://discord.gg/abc"')).toBe(true)
+    expect(DISCORD_LINK.test('href="https://discord.com/users/1300551868174569595"')).toBe(true)
+    expect(DISCORD_LINK.test('href="https://discord.com/invite/8FeP7C6tXt"')).toBe(true)
+    expect(DISCORD_LINK.test('href={BUSINESS.discordDm}')).toBe(true)
+    expect(DISCORD_LINK.test('Chat with us')).toBe(false)
   })
 })

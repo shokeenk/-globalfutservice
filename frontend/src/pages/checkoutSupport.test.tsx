@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Order } from '../lib/types'
 
 /*
- * After paying, the boosting and coaching checkouts point to the order's support page on
- * this site. Boosting keeps its Discord ticket as well: it is where the EA login is handed
- * over, as the checkout says before payment. Coaching has no Discord step any more.
+ * After paying, the boosting and coaching checkouts point to the order's live chat on this
+ * site, and nowhere else: no Discord, on any checkout or confirmation. Boosting, Objectives
+ * and Tournaments ask for the EA login in the encrypted form, right on the confirmation,
+ * and say it never goes in the chat.
  */
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
@@ -29,14 +30,31 @@ vi.mock('../lib/razorpay', () => ({ isStubGateway: () => true, openCheckout: vi.
 const { default: BoostingCheckout } = await import('./BoostingCheckout')
 const { default: CoachingBook } = await import('./CoachingBook')
 
-function paid(sku: string, publicRef: string): Order {
+function paid(sku: string, publicRef: string, patch: Partial<Order> = {}): Order {
   return {
     publicRef, status: 'PAID', statusLabel: 'Queued', nextAction: 'NONE', serviceLabel: 'A service', sku,
     platform: 'PLAYSTATION', quantity: 1, currency: 'INR', totalMinor: 100000, totalFormatted: '₹1,000.00',
     lines: [], pointsRedeemed: 0, pointsEarned: 0, createdAt: '2026-10-01T10:00:00Z', timeline: [],
-    // A customer whose Discord account we do not know: the confirmation asks them to message us.
+    // What an older API still sends: the page must not act on it.
     discordAccess: { mode: 'VERIFY', channelUrl: null, inviteUrl: 'https://discord.gg/x' },
+    ...patch,
   } as unknown as Order
+}
+
+/** Nothing on the page takes a customer to Discord: no server invite, no direct message. */
+function expectNoDiscord() {
+  const links = [...document.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '')
+  expect(links.filter((href) => /discord/i.test(href))).toEqual([])
+  expect(document.body.textContent).not.toMatch(/discord|\/verify|run this command/i)
+}
+
+function confirmation(sku: string, ref: string, order: Order) {
+  api.get.mockImplementation(async (path: string) => (path.startsWith('/api/v1/orders/') ? order : []))
+  render(
+    <MemoryRouter initialEntries={[`/boosting/checkout?service=${sku}&order=${ref}`]}>
+      <Routes><Route path="/boosting/checkout" element={<BoostingCheckout />} /></Routes>
+    </MemoryRouter>,
+  )
 }
 
 beforeEach(() => {
@@ -45,29 +63,41 @@ beforeEach(() => {
 })
 
 describe('after paying', () => {
-  it('boosting: the confirmation offers the Discord ticket for the EA login, and the support page', async () => {
-    api.get.mockImplementation(async (path: string) =>
-      path.startsWith('/api/v1/orders/') ? paid('BOOST_CHAMPS', 'GFS-26-BOOST001') : [])
-    render(
-      <MemoryRouter initialEntries={['/boosting/checkout?service=BOOST_CHAMPS&order=GFS-26-BOOST001']}>
-        <Routes><Route path="/boosting/checkout" element={<BoostingCheckout />} /></Routes>
-      </MemoryRouter>,
-    )
+  it('boosting: the encrypted EA login form right there, the live chat, and no Discord', async () => {
+    confirmation('BOOST_CHAMPS', 'GFS-26-BOOST001', paid('BOOST_CHAMPS', 'GFS-26-BOOST001', {
+      status: 'CREDENTIALS_PENDING', nextAction: 'SUBMIT_CREDENTIALS', credentialsSubmitted: false,
+    } as Partial<Order>))
 
     const cta = await screen.findByRole('link', { name: 'Connect to booster' })
     expect(cta).toHaveAttribute('href', '/orders/GFS-26-BOOST001/support')
     expect(screen.getByText('Connect with GFS')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'contact support' })).toHaveAttribute('href', '/support')
-    // Message us on Discord, with the reference to paste in: the site's own direct-message link.
-    expect(screen.getByRole('link', { name: 'Message us on Discord' }))
-      .toHaveAttribute('href', 'https://discord.com/users/1300551868174569595')
-    expect(screen.getByText('globalfutservices')).toBeInTheDocument()
-    expect(screen.getByText('Include your order reference:')).toBeInTheDocument()
-    expect(screen.getByText('GFS-26-BOOST001', { selector: 'code' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Copy order reference GFS-26-BOOST001' })).toBeInTheDocument()
-    expect(document.body.textContent).not.toMatch(/\/verify|run this command/i)
-    expect(screen.queryByRole('link', { name: /Join Our Discord/ })).toBeNull()
+    // The EA login goes in the secure form, not the chat -- and the page says so.
+    expect(screen.getByTestId('confirmation-signin')).toBeInTheDocument()
+    expect(screen.getByTestId('never-in-chat'))
+      .toHaveTextContent('Never share your EA password or backup codes in chat. Use the secure form above.')
+    expectNoDiscord()
   })
+
+  it('boosting, sign-in already given: no form again, the live chat, no Discord', async () => {
+    confirmation('BOOST_RIVALS', 'GFS-26-BOOST002', paid('BOOST_RIVALS', 'GFS-26-BOOST002', {
+      status: 'CREDENTIALS_PENDING', nextAction: 'SUBMIT_CREDENTIALS', credentialsSubmitted: true,
+    } as Partial<Order>))
+
+    expect(await screen.findByRole('link', { name: 'Connect to booster' })).toBeInTheDocument()
+    expect(screen.queryByTestId('confirmation-signin')).toBeNull()
+    expectNoDiscord()
+  })
+
+  it.each([['BOOST_OBJECTIVES', 'GFS-26-OBJ00001'], ['BOOST_TOURNAMENTS', 'GFS-26-TOUR0001']])(
+    '%s: the same form, the live chat and no Discord', async (sku, ref) => {
+      confirmation(sku, ref, paid(sku, ref, {
+        status: 'CREDENTIALS_PENDING', nextAction: 'SUBMIT_CREDENTIALS', credentialsSubmitted: false, platform: null,
+      } as Partial<Order>))
+      expect(await screen.findByRole('link', { name: 'Connect to booster' }))
+        .toHaveAttribute('href', `/orders/${ref}/support`)
+      expect(screen.getByTestId('confirmation-signin')).toBeInTheDocument()
+      expectNoDiscord()
+    })
 
   it('coaching: the step after the confirmation connects with the coach, and no Discord', async () => {
     api.get.mockImplementation(async (path: string) =>
@@ -84,7 +114,7 @@ describe('after paying', () => {
     expect(screen.getByText('Connect with Your Coach')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Connect with Coach' }))
       .toHaveAttribute('href', '/coaching/GFS-26-COACH001/support')
-    expect(document.body.textContent).not.toMatch(/discord|\/verify/i)
+    expectNoDiscord()
 
     await userEvent.click(screen.getByRole('button', { name: /Continue/ }))
     expect(await screen.findByText('You’re all set!')).toBeInTheDocument()

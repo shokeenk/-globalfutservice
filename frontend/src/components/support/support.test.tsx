@@ -63,10 +63,11 @@ describe('the card on an order', () => {
     expect(supportPath('COINS', 'GFS 26/X')).toBe('/orders/GFS%2026%2FX/support')
   })
 
-  it('a guest order is pointed to a support ticket, not the chat', () => {
+  it('a guest order goes to the same live chat, with its reference filled in -- never a Discord link', () => {
     inRouter(<GuestSupportCard reference="GFS-26-GUEST001" />)
-    expect(screen.getByText(/mention order GFS-26-GUEST001/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open a support ticket' })).toHaveAttribute('href', '/support')
+    expect(screen.getByText(/Chat with our team about order GFS-26-GUEST001/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Chat with us' })).toHaveAttribute('href', '/support/chat?ref=GFS-26-GUEST001')
+    expect(document.body.innerHTML).not.toMatch(/discord/i)
   })
 
   it('knows the two support addresses, and nothing else, as support pages', () => {

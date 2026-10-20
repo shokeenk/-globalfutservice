@@ -33,6 +33,7 @@ const Coaching = lazy(() => import('./pages/Coaching'))
 const BoostingCheckout = lazy(() => import('./pages/BoostingCheckout'))
 const CoachingBook = lazy(() => import('./pages/CoachingBook'))
 const OrderSupport = lazy(() => import('./pages/OrderSupport'))
+const GuestOrderChat = lazy(() => import('./pages/GuestOrderChat'))
 const Login = lazy(() => import('./pages/Login'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
 const Account = lazy(() => import('./pages/Account'))
@@ -165,6 +166,8 @@ export default function App() {
               <Route path="/unsubscribe" element={<Unsubscribe />} />
               <Route path="/help" element={<Help />} />
               <Route path="/support" element={<Support />} />
+              {/* Any order's live chat, signed in or not: from emails and guest order pages. */}
+              <Route path="/support/chat" element={<GuestOrderChat />} />
               {/* Unguarded like /unsubscribe: a guest opens it from our email, with the
                   ticket's own key in the link. The server decides who may read it. */}
               <Route path="/support/tickets/:ref" element={<SupportTicket />} />

@@ -83,20 +83,8 @@ public class EmailNotifier implements Notifier {
     @Override
     public void orderConfirmed(OrderNotification n) {
         var rendered = TransactionalEmails.orderConfirmed(
-                n, brand(), trackUrl(n), discordDmUrl(), coachUrl(n));
+                n, brand(), trackUrl(n), supportUrl(n), coachUrl(n));
         sendHtml(n, rendered);
-    }
-
-    /**
-     * A direct message to our Discord account: discord.com/users/{GFS_DISCORD_ADMIN_ID},
-     * the same account the storefront's Discord links open. Discord has no link that opens a
-     * DM from a username, so without the id the server invite stands in -- the email still
-     * names the account to message.
-     */
-    String discordDmUrl() {
-        String id = props.notifications().discordAdminId();
-        return id != null && id.trim().matches("\\d{5,25}")
-                ? "https://discord.com/users/" + id.trim() : props.discordInvite();
     }
 
     @Override
@@ -137,7 +125,7 @@ public class EmailNotifier implements Notifier {
     @Override
     public void customerActionNeeded(CustomerActionNotification a) {
         OrderNotification n = a.order();
-        sendHtml(n, TransactionalEmails.actionNeeded(n, a.instruction(), brand(), trackUrl(n), publicUrl()));
+        sendHtml(n, TransactionalEmails.actionNeeded(n, a.instruction(), brand(), trackUrl(n), supportUrl(n)));
     }
 
     /**
@@ -192,7 +180,7 @@ public class EmailNotifier implements Notifier {
         if (!TransactionalEmails.isCoins(n)) {
             return;
         }
-        sendHtml(n, TransactionalEmails.transferStarted(n, brand(), trackUrl(n), supportUrl(n), discordDmUrl()));
+        sendHtml(n, TransactionalEmails.transferStarted(n, brand(), trackUrl(n), supportUrl(n)));
     }
 
     /** "Your coins are on the way", with the customer's own tracking link. */
@@ -434,9 +422,15 @@ public class EmailNotifier implements Notifier {
     }
 
     /** The order's support page on this site, with the live chat. */
-    private String supportUrl(OrderNotification n) {
-        return publicUrl() + "/orders/"
-                + UriUtils.encodePathSegment(n.publicRef(), StandardCharsets.UTF_8) + "/support";
+    /**
+     * The order's live chat, for any customer: /support/chat?ref=..., which sends a signed-in
+     * owner on to the order's own support page and asks anyone else for the order's email
+     * first. The order's own page (/orders/{ref}/support) opens only when signed in, and a
+     * guest order has nobody to sign in as.
+     */
+    String supportUrl(OrderNotification n) {
+        return publicUrl() + "/support/chat?ref="
+                + UriUtils.encodeQueryParam(n.publicRef(), StandardCharsets.UTF_8);
     }
 
     /** The order's Connect with Coach page: where a coaching customer reaches their coach. */

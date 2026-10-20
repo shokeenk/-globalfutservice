@@ -32,10 +32,14 @@ import java.util.List;
  */
 public final class TransactionalEmails {
 
-    /** The Discord account customers message, as the storefront names it. */
-    static final String DISCORD_NAME = "globalfutservices";
+    /**
+     * Never in a chat or an email: said wherever a customer is sent to the live chat, and next
+     * to every ask for their sign-in.
+     */
+    static final String NEVER_IN_CHAT = "Never share your EA password or backup codes in chat. Use the secure "
+            + "form on your order page.";
 
-    /** Coins go to order tracking, coaching to the order's support page, the rest to Discord. */
+    /** Coins go to order tracking, coaching to the coach's page, the rest to the sign-in form and the live chat. */
     private static final String COINS_SKU = "TRADING_SERVICE";
     private static final String COACHING_SKU = "COACHING";
 
@@ -138,16 +142,18 @@ public final class TransactionalEmails {
      * <p>Branches on the SKU, because what the customer does next genuinely differs.
      * A coin order is fulfilled without them: the useful next step is watching it. A
      * coaching order is arranged with the coach on the order's own support page, on this
-     * site. Champs and boosting need a conversation before anyone can start, and that
-     * conversation happens in a Discord ticket, where the EA login is handed over.
+     * site. Champs, Rivals, Objectives and Tournaments need the customer's EA login, entered
+     * in the encrypted form on the order page, and anything else goes through the order's
+     * live chat -- never Discord, and never the password in a chat.
      *
+     * @param chatUrl  the order's live chat page; used for boosting orders
      * @param coachUrl the order's Connect with Coach page; used for coaching orders only
      */
     public static Rendered orderConfirmed(OrderNotification n, EmailTemplate.Brand brand,
-                                          String trackUrl, String discordDmUrl, String coachUrl) {
+                                          String trackUrl, String chatUrl, String coachUrl) {
         boolean coins = COINS_SKU.equals(n.sku());
         boolean coaching = COACHING_SKU.equals(n.sku());
-        boolean discord = !coins && !coaching;
+        boolean boosting = !coins && !coaching;
 
         List<EmailTemplate.InfoCard> cards = new ArrayList<>();
         cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
@@ -165,20 +171,17 @@ public final class TransactionalEmails {
             cards.add(EmailTemplate.InfoCard.accented("◷", "Your session", session));
         }
 
-        // A direct message to our account, with the reference in it. The /verify command
-        // this used to lead to is not offered to customers any more.
-        List<EmailTemplate.Step> steps = !discord ? List.of() : List.of(
+        // The EA login in the encrypted form on the order page; everything else in the live chat.
+        List<EmailTemplate.Step> steps = !boosting ? List.of() : List.of(
                 new EmailTemplate.Step(
-                        "Message us on Discord: " + DISCORD_NAME,
-                        "Send a direct message to " + DISCORD_NAME + " on Discord.",
-                        "MESSAGE US ON DISCORD", discordDmUrl),
-                EmailTemplate.Step.of(
-                        "Include your order reference: " + n.publicRef(),
-                        "Put it in your message so we can find your order straight away."),
-                EmailTemplate.Step.of(
-                        "Our Operations Executive will reply",
-                        "One of our operations executives will connect with you and guide you "
-                                + "through the next steps."));
+                        "Enter your EA login on your order page",
+                        "It is encrypted, and only the booster working on your order can open it. " + NEVER_IN_CHAT,
+                        "ENTER YOUR EA LOGIN", trackUrl),
+                new EmailTemplate.Step(
+                        "Chat with our team on your order's live chat",
+                        "For anything else about your order, with your order reference " + n.publicRef()
+                                + " already filled in.",
+                        "CHAT WITH US", chatUrl));
 
         EmailTemplate.Content content = new EmailTemplate.Content(
                 "Your payment is verified and your order is confirmed.",
@@ -189,7 +192,7 @@ public final class TransactionalEmails {
                         + "now being processed.",
                 cards,
                 coaching ? coachBlock() : null,
-                discord ? "NEXT STEPS" : null,
+                boosting ? "NEXT STEPS" : null,
                 steps,
                 coaching ? COACH_SIGN_IN : null,
                 coins ? "TRACK YOUR ORDER" : coaching ? COACH_BUTTON : null,
@@ -208,11 +211,12 @@ public final class TransactionalEmails {
                   %s""".formatted(COACH_BODY, coachUrl, COACH_SIGN_IN)
                 : """
                   NEXT STEPS
-                    1. Message us on Discord: %s
+                    1. Enter your EA login on your order page (it is encrypted):
                        %s
-                    2. Include your order reference: %s
-                    3. Our Operations Executive will reply and guide you through the next steps."""
-                  .formatted(DISCORD_NAME, discordDmUrl, n.publicRef());
+                    2. Chat with our team on your order's live chat for anything else:
+                       %s
+                  %s"""
+                  .formatted(trackUrl, chatUrl, NEVER_IN_CHAT);
 
         String text = """
                 YOUR GFS ORDER IS CONFIRMED
@@ -311,9 +315,11 @@ public final class TransactionalEmails {
     /**
      * The order is on hold until the customer fixes something on their EA account, as plain
      * text. The instruction is the storefront's own sentence.
+     *
+     * @param chatUrl the order's live chat page
      */
     public static String actionNeededText(OrderNotification n, String instruction, String trackUrl,
-                                          String publicUrl) {
+                                          String chatUrl) {
         return """
                 Your order is paused until you do one thing for us.
 
@@ -323,17 +329,18 @@ public final class TransactionalEmails {
 
                 Track your order: %s
 
-                When it's done, or if you have a question, tell us in your order's Discord ticket or
-                at %s/support. Replies to this email do not reach us.
-                We will never ask for your password or backup codes by email.
+                When it's done, or if you have a question, tell us on your order's live chat:
+                %s
+                Replies to this email do not reach us.
+                We will never ask for your password or backup codes by email or in chat.
 
                 — Global FUT Services
-                """.formatted(n.publicRef(), instruction, trackUrl, publicUrl);
+                """.formatted(n.publicRef(), instruction, trackUrl, chatUrl);
     }
 
     /** The on-hold notice: branded, with the button to the order's tracking page. */
     public static Rendered actionNeeded(OrderNotification n, String instruction, EmailTemplate.Brand brand,
-                                        String trackUrl, String publicUrl) {
+                                        String trackUrl, String chatUrl) {
         List<EmailTemplate.InfoCard> cards = List.of(
                 EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()),
                 EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()),
@@ -346,8 +353,8 @@ public final class TransactionalEmails {
                 HOLD_INTRO,
                 cards,
                 EmailTemplate.paragraphs(instruction,
-                        "When it's done, or if you have a question, tell us in your order's Discord ticket or at "
-                                + publicUrl + "/support. Replies to this email do not reach us.",
+                        "When it's done, or if you have a question, tell us on your order's live chat: " + chatUrl
+                                + ". Replies to this email do not reach us.",
                         NO_PASSWORD_BY_EMAIL),
                 null,
                 List.of(),
@@ -356,7 +363,7 @@ public final class TransactionalEmails {
                 trackUrl,
                 orderFooterNote());
         return new Rendered("Action needed on order " + n.publicRef(), EmailTemplate.render(content, brand),
-                actionNeededText(n, instruction, trackUrl, publicUrl));
+                actionNeededText(n, instruction, trackUrl, chatUrl));
     }
 
     // ---------------------------------------------------------------- delivered
@@ -406,13 +413,13 @@ public final class TransactionalEmails {
      * Sent once, when FUT Transfer first accepts a coin order -- by an admin's Approve or
      * automatically. Says the transfer has started, gives the button and the plain address of
      * the order's tracking page, where the coins can be watched arriving, and says where help
-     * is: the order's support page, with the live chat, and our Discord account.
+     * is: the order's live chat.
      *
      * <p>In our words only. The partner is never named, nor any of its methods; the customer
      * has GFS Transfer Method 3.0, and the tracking page is ours.
      */
     public static Rendered transferStarted(OrderNotification n, EmailTemplate.Brand brand, String trackUrl,
-                                           String supportUrl, String discordDmUrl) {
+                                           String supportUrl) {
         List<EmailTemplate.InfoCard> cards = new ArrayList<>();
         cards.add(EmailTemplate.InfoCard.of("◆", "Order Number", "#" + n.publicRef()));
         cards.add(EmailTemplate.InfoCard.of("●", "Service", n.serviceLabel()));
@@ -430,9 +437,7 @@ public final class TransactionalEmails {
                 + "\n<p style=\"margin:0 0 12px 0;\">Your tracking page: <a href=\"" + EmailTemplate.esc(trackUrl)
                 + "\" style=\"" + link + "\">" + EmailTemplate.esc(trackUrl) + "</a></p>"
                 + "\n<p style=\"margin:0 0 12px 0;\">Need help? <a href=\"" + EmailTemplate.esc(supportUrl)
-                + "\" style=\"" + link + "\">Chat with us on your order's support page</a>, or message <a href=\""
-                + EmailTemplate.esc(discordDmUrl) + "\" style=\"" + link + "\">" + DISCORD_NAME + " on Discord</a> "
-                + "with your order reference.</p>";
+                + "\" style=\"" + link + "\">Chat with us on your order's live chat</a>.</p>";
 
         EmailTemplate.Content content = new EmailTemplate.Content(
                 "Your coin transfer has started. Track it live.",
@@ -465,11 +470,10 @@ public final class TransactionalEmails {
                 companion app -- until the transfer is complete. Signing in can pause it.
 
                 Need help?
-                  Chat with us on your order's support page: %s
-                  Or message %s on Discord, with your order reference: %s
+                  Chat with us on your order's live chat: %s
 
                 — Global FUT Services
-                """.formatted(n.publicRef(), n.serviceLabel(), trackUrl, supportUrl, DISCORD_NAME, discordDmUrl);
+                """.formatted(n.publicRef(), n.serviceLabel(), trackUrl, supportUrl);
 
         return new Rendered(transferStartedSubject(n), EmailTemplate.render(content, brand), text);
     }

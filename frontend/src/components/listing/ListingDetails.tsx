@@ -14,11 +14,11 @@ import { listingImageSrc } from '../../lib/listings'
  * theirs when they wrote one, and otherwise built from the listing: what we do, and the
  * reward when one is named.
  *
- * <p>The account-security and Discord guidance and the Continue button are the boosting
+ * <p>The after-payment note (EA login in the encrypted form, the order's live chat) and the Continue button are the boosting
  * checkout's own, passed in, so they read exactly as they do on Champs and Rivals.
  */
 export function ListingDetails({
-  sku, listing, hours, onHours, acknowledged, onAcknowledged, touched, discord, cta,
+  sku, listing, hours, onHours, acknowledged, onAcknowledged, touched, guidance, cta,
 }: {
   sku: ListingSku
   listing: CatalogListing
@@ -29,7 +29,8 @@ export function ListingDetails({
   onAcknowledged: (next: boolean) => void
   /** Continue has been pressed: missing answers are now errors. */
   touched: boolean
-  discord: ReactNode
+  /** What happens after payment: the boosting checkout's own note. */
+  guidance: ReactNode
   cta: ReactNode
 }) {
   const t = useT()
@@ -133,7 +134,7 @@ export function ListingDetails({
         />
       )}
 
-      {discord}
+      {guidance}
 
       {listing.customerInstructions && (
         <section className="mt-6 flex gap-3 rounded-panel border border-brand-500/20 bg-brand-500/[0.05] p-4"

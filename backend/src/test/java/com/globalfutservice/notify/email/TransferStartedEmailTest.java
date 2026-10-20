@@ -31,7 +31,7 @@ class TransferStartedEmailTest {
             Pattern.compile("(?i)fut\\s*transfer|eatransfer"));
 
     private static TransactionalEmails.Rendered render() {
-        return TransactionalEmails.transferStarted(ORDER, BRAND, TRACK, SUPPORT, DM);
+        return TransactionalEmails.transferStarted(ORDER, BRAND, TRACK, SUPPORT);
     }
 
     @Test
@@ -48,12 +48,14 @@ class TransferStartedEmailTest {
     }
 
     @Test
-    @DisplayName("where to get help: the order's support page (live chat) and globalfutservices on Discord")
+    @DisplayName("where to get help: the order's live chat, and never Discord")
     void help() {
         TransactionalEmails.Rendered r = render();
-        assertThat(r.html()).contains("href=\"" + SUPPORT + "\"").contains("href=\"" + DM + "\"")
-                .contains("globalfutservices on Discord");
-        assertThat(r.text()).contains(SUPPORT).contains(DM).contains("globalfutservices");
+        assertThat(r.html()).contains("href=\"" + SUPPORT + "\"").contains("Chat with us on your order's live chat")
+                .doesNotContain(DM);
+        assertThat(r.text()).contains(SUPPORT).doesNotContain(DM).doesNotContain("Discord");
+        // The body names no Discord; only the shared footer keeps the community link.
+        assertThat(r.html().substring(0, r.html().indexOf("DISCORD (COMMUNITY)"))).doesNotContainIgnoringCase("discord");
     }
 
     @Test

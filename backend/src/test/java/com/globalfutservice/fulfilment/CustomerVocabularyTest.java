@@ -190,7 +190,7 @@ class CustomerVocabularyTest {
         files.add(FRONTEND.resolve("pages").resolve("Track.tsx"));
         files.add(FRONTEND.resolve("components").resolve("listing").resolve("ListingDetails.tsx"));
         files.add(FRONTEND.resolve("components").resolve("listing").resolve("ListingSnapshotCard.tsx"));
-        files.add(FRONTEND.resolve("components").resolve("DiscordMessageUs.tsx"));
+        files.add(FRONTEND.resolve("pages").resolve("GuestOrderChat.tsx"));
         Pattern verify = Pattern.compile("(?i)/verify\\b|run this command|ejecuta allí este comando"
                 + "|lance cette commande");
         Map<String, String> hits = new LinkedHashMap<>();
@@ -205,9 +205,11 @@ class CustomerVocabularyTest {
     }
 
     @Test
-    @DisplayName("instead, the boosting confirmation names globalfutservices and opens a direct message to it")
-    void discordDirectMessage() {
+    @DisplayName("instead, the boosting confirmation sends the customer to the encrypted form and the live chat -- "
+            + "never Discord")
+    void liveChatNotDiscord() {
         String dm = "https://discord.com/users/1300551868174569595";
+        String chat = "https://globalfutservices.com/support/chat?ref=GFS-26-DMCHECK1";
         com.globalfutservice.notify.email.TransactionalEmails.Rendered email =
                 com.globalfutservice.notify.email.TransactionalEmails.orderConfirmed(
                         new OrderNotification("GFS-26-DMCHECK1", "PAID", "Champs Boosting — 15 wins", "₹1,000.00",
@@ -216,11 +218,12 @@ class CustomerVocabularyTest {
                         new com.globalfutservice.notify.email.EmailTemplate.Brand("https://globalfutservices.com",
                                 "globalfutservices.com", "https://discord.com/invite/x", "Join the GFS Discord",
                                 "https://instagram.com/x", "@x"),
-                        "https://globalfutservices.com/track?ref=GFS-26-DMCHECK1", dm,
+                        "https://globalfutservices.com/track?ref=GFS-26-DMCHECK1", chat,
                         "https://globalfutservices.com/coaching/GFS-26-DMCHECK1/support");
-        for (String part : List.of(email.html(), email.text())) {
-            assertThat(part).contains("globalfutservices").contains(dm)
-                    .contains("Include your order reference: GFS-26-DMCHECK1");
+        String body = email.html().substring(0, email.html().indexOf("DISCORD (COMMUNITY)"));
+        for (String part : List.of(body, email.text())) {
+            assertThat(part).contains(chat).contains("https://globalfutservices.com/track?ref=GFS-26-DMCHECK1")
+                    .doesNotContain(dm).doesNotContainIgnoringCase("discord");
         }
     }
 
