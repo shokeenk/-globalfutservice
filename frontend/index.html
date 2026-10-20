@@ -5,14 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#E7E2FA" />
     <!--
-      Two icons, in this order on purpose. Browsers that understand SVG take the
-      first and get a mark that stays crisp at any size, including the 16px
-      favourites-bar slot. Everything else — and iOS, which ignores SVG icons
-      entirely — falls through to the PNGs rendered from the real badge.
+      The icons are the original logo -- the red GLOBAL FUT SERVICES ring -- on white, never on
+      black: Google search shows one beside the result. All are made from brand/gfs-mark.png by
+      scripts/make-icons.py, square, with padding so a circular crop keeps the ring, and in
+      multiples of 48 px as Google asks. favicon.ico (16, 32, 48 inside) is also what anything
+      asking for /favicon.ico without reading this page gets.
     -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
-    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
 
     <title>Global FUT Services — Buy FC 27 Coins, Boosting &amp; Coaching</title>
     <!--
@@ -50,6 +53,22 @@
     <meta property="og:site_name" content="Global FUT Services" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://globalfutservices.com/brand/og-card.png" />
+
+    <!--
+      Who runs the site, for search engines: the name, the address, and the logo Google may
+      show for it. A JSON-LD data block, not a script: browsers never run it, so the
+      Content-Security-Policy's script-src (no 'unsafe-inline') does not apply to it and
+      needs no hole or hash for it.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Global FUT Services",
+        "url": "https://globalfutservices.com",
+        "logo": "https://globalfutservices.com/icon-512.png"
+      }
+    </script>
   </head>
   <body class="bg-ink text-chalk antialiased">
     <div id="root"></div>
