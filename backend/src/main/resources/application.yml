@@ -55,7 +55,12 @@ spring:
     username: ${GFS_DB_USER:gfs}
     password: ${GFS_DB_PASSWORD:gfs}
     hikari:
-      maximum-pool-size: 10
+      # 8, not 10 (2026-10-20, Render memory limit), and not 5: eight scheduled jobs each hold
+      # one connection for the whole of their run (SchedulerLock's advisory lock) and, with
+      # virtual threads, can run at once -- the FUT Transfer poll, automatic sending, sign-in
+      # resends and transfer notices every 15-30 s -- each also needing one for its own work.
+      # At 5 they could take every connection and leave a customer's payment waiting.
+      maximum-pool-size: ${GFS_DB_POOL_SIZE:8}
       minimum-idle: 2
       connection-timeout: 10000
       # Below Postgres' own idle timeout, so the pool discards connections before

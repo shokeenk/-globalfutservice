@@ -14,9 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Granting a customer access to their own ticket, once they are in the server.
@@ -62,7 +60,8 @@ public class DiscordVerificationService {
      * On more than one replica each would grant its own budget; the durable attempt log
      * is what stops that being the whole story.
      */
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final com.globalfutservice.security.BoundedBuckets buckets =
+            new com.globalfutservice.security.BoundedBuckets(5_000, Duration.ofMinutes(10));
 
     public DiscordVerificationService(OrderRepository orders,
                                       DiscordVerificationRepository verifications,
@@ -310,7 +309,7 @@ public class DiscordVerificationService {
     }
 
     private boolean allow(String discordUserId) {
-        return buckets.computeIfAbsent(discordUserId, k -> Bucket.builder()
+        return buckets.get(discordUserId, () -> Bucket.builder()
                 // Greedy refill, for the reason RateLimitFilter spells out: an interval
                 // refill lets somebody spend a whole budget either side of the boundary.
                 .addLimit(limit -> limit

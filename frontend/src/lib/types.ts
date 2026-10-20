@@ -1545,3 +1545,24 @@ export interface OrderPaymentStaffView {
   currentBreakdown: PaymentBreakdown | null
   attempts: PaymentAttempt[]
 }
+
+/** The server's memory now, in MB; null where it cannot be read or has no limit. Admins only. */
+export interface ServerMemory {
+  heapUsedMb: number
+  heapCommittedMb: number
+  heapMaxMb: number
+  metaspaceUsedMb: number
+  metaspaceMaxMb: number | null
+  codeCacheUsedMb: number
+  codeCacheMaxMb: number | null
+  directUsedMb: number
+  directMaxMb: number | null
+  nonHeapUsedMb: number
+  threads: number
+  peakThreads: number
+  processRssMb: number | null
+  containerLimitMb: number | null
+  containerUsedMb: number | null
+  gc: string
+  uptimeSeconds: number
+}

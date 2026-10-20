@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AdminDashboard, AdminOrderRow, CurrencyRevenue } from '../../lib/types'
+import type { AdminDashboard, AdminOrderRow, CurrencyRevenue, ServerMemory } from '../../lib/types'
 
 const api = vi.hoisted(() => ({ get: vi.fn() }))
 vi.mock('../../lib/api', () => ({ api, ApiError: class ApiError extends Error {} }))
@@ -38,8 +38,16 @@ const REVENUE: CurrencyRevenue[] = [
   { currency: 'GBP', todayMinor: 2399, todayFormatted: '£23.99', yesterdayMinor: 0, yesterdayFormatted: '£0.00' },
 ]
 
+const MEMORY: ServerMemory = {
+  heapUsedMb: 140, heapCommittedMb: 200, heapMaxMb: 256, metaspaceUsedMb: 120, metaspaceMaxMb: 180,
+  codeCacheUsedMb: 38, codeCacheMaxMb: 64, directUsedMb: 3, directMaxMb: 48, nonHeapUsedMb: 170,
+  threads: 41, peakThreads: 55, processRssMb: 455, containerLimitMb: 512, containerUsedMb: 470,
+  gc: 'Copy, MarkSweepCompact', uptimeSeconds: 7_380,
+}
+
 function stub({ dashboard = DATA as AdminDashboard | Error, revenue = REVENUE as CurrencyRevenue[] | Error } = {}) {
   api.get.mockImplementation(async (path: string) => {
+    if (path === '/api/v1/admin/system/memory') return MEMORY
     if (path === '/api/v1/admin/dashboard') {
       if (dashboard instanceof Error) throw dashboard
       return dashboard
@@ -87,6 +95,21 @@ describe('Dashboard', () => {
     expect(screen.queryByText("Today's Revenue")).toBeNull()
     expect(screen.queryByText('₹58,450.00')).toBeNull()
     expect(api.get).not.toHaveBeenCalledWith('/api/v1/admin/dashboard/revenue')
+    // Server memory is an admin's too: not drawn, not asked for.
+    expect(screen.queryByText('Server memory')).toBeNull()
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/admin/system/memory')
+  })
+
+  it('shows an admin the server memory against its limit, warning when it is close', async () => {
+    renderPage()
+
+    const box = await screen.findByTestId('server-memory')
+    expect(within(box).getByText('Container (what Render counts)').nextSibling).toHaveTextContent('470 of 512 MB (92%)')
+    expect(within(box).getByText('470 of 512 MB (92%)')).toHaveClass('text-warn')
+    expect(within(box).getByText('Heap').nextSibling).toHaveTextContent('140 of 256 MB (55%)')
+    expect(within(box).getByText('Class metadata').nextSibling).toHaveTextContent('120 of 180 MB (67%)')
+    expect(within(box).getByText('Threads').nextSibling).toHaveTextContent('41 (peak 55)')
+    expect(within(box).getByText('Up for').nextSibling).toHaveTextContent('2 h 3 min')
   })
 
   it('lists the newest orders with their payment, and the latest changes with their status', async () => {
