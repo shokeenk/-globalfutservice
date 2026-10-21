@@ -8,7 +8,7 @@ import { SocialSignIn } from '../components/SocialSignIn'
 import { Turnstile } from '../components/Turnstile'
 import { useI18n } from '../i18n'
 import { ApiError } from '../lib/api'
-import { authErrorMessage } from '../lib/authErrors'
+import { authErrorMessage, registerFieldErrors } from '../lib/authErrors'
 import { looksLikeEmail } from '../lib/validation'
 import { useSignupConfig } from '../lib/signupConfig'
 import { rememberReturnTo, safeReturnPath } from '../lib/returnTo'
@@ -132,10 +132,10 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
         // One sentence for every failed sign-in, in their language. Never which field.
         setError(authErrorMessage(e, t))
       } else if (e instanceof ApiError) {
-        setFieldErrors(e.fieldErrors)
+        setFieldErrors(registerFieldErrors(e.fieldErrors, t))
         // When the server named the fields, the banner would only repeat what is now
         // written under each input. Show it only when there is nothing more specific.
-        setError(Object.keys(e.fieldErrors).length > 0 ? null : e.status === 429 ? t.auth.tooManyAttempts : e.message)
+        setError(Object.keys(e.fieldErrors).length > 0 ? null : authErrorMessage(e, t))
       } else {
         setError(t.auth.genericError)
       }

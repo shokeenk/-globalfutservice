@@ -22,9 +22,27 @@ export function authErrorMessage(e: unknown, t: Dictionary): string {
       return t.auth.humanCheckRequired
     case 'human_check_failed':
       return t.auth.humanCheckFailed
+    case 'registration_failed':
+      return t.auth.registerFailed
     case 'network_unreachable':
       return e.message
     default:
       return t.auth.genericError
   }
+}
+
+/**
+ * Sign-up's field errors in the customer's language. The server names the field in English;
+ * the page already checks the common ones itself, so these are the rest (too long, terms).
+ */
+export function registerFieldErrors(fields: Record<string, string>, t: Dictionary): Record<string, string> {
+  const words: Record<string, string> = {
+    email: t.auth.emailInvalid,
+    password: t.auth.passwordTooLong,
+    displayName: t.auth.displayNameTooLong,
+    acceptedTerms: t.auth.termsRequired,
+  }
+  const out: Record<string, string> = {}
+  for (const field of Object.keys(fields)) out[field] = words[field] ?? t.auth.genericError
+  return out
 }

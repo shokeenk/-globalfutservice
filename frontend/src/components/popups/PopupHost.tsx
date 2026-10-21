@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useI18n } from '../../i18n'
 import { api } from '../../lib/api'
@@ -30,6 +31,16 @@ import { usePopupFacts } from './popupFacts'
 
 /** Pixels kept between the card and anything it must not touch. */
 const GAP = 12
+/**
+ * What the card must never cover. The order and checkout pages mark their key controls;
+ * on those pages every other control counts too -- a platform choice, an amount preset, a
+ * field -- since marking alone missed the ones nobody had marked. Pages with no marks (a
+ * listing, the home page) only keep their fields clear, so the card can still show there.
+ */
+const MARKED = '[data-popup-avoid]'
+const FIELDS = 'main input:not([type="hidden"]), main select, main textarea, main [role="slider"]'
+const CONTROLS = `${MARKED}, ${FIELDS}, main button, main [role="button"], main a[class*="rounded"]`
+
 /** The card must keep this much clear below the top of the screen (the header). */
 const TOP_CLEARANCE = 80
 
@@ -58,7 +69,9 @@ export function cardPlacement(cardWidth: number, cardHeight: number): number | n
   }
   const card: Rect = { left: vw - 16 - cardWidth, right: vw - 16, top: vh - bottom - cardHeight, bottom: vh - bottom }
   if (card.top < TOP_CLEARANCE) return null
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-popup-avoid]'))) {
+  const avoid = document.querySelector(MARKED) ? CONTROLS : FIELDS
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>(avoid))) {
+    if (el.closest('[data-popup-card]')) continue
     const r = el.getBoundingClientRect()
     if (!visible(r)) continue
     const padded = { top: r.top - GAP, bottom: r.bottom + GAP, left: r.left - GAP, right: r.right + GAP }
@@ -217,9 +230,15 @@ export function PopupHost() {
 
   if (!current || context.blocked) return null
   const closeLabel = t.popups.close
-  return current.type === 'CENTER_MODAL'
+  /*
+   * Into the document body, not the layout: the layout is its own stacking context, so a
+   * popup inside it sat under the header and the help button, and a transformed ancestor
+   * moved the "fixed" modal off-centre on phones.
+   */
+  return createPortal(current.type === 'CENTER_MODAL'
     ? <PopupModal popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} facts={facts} />
-    : <PlacedCard popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} facts={facts} />
+    : <PlacedCard popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} facts={facts} />,
+  document.body)
 }
 
 /** The card, placed clear of the chat button, sticky bars and checkout controls -- or hidden. */
