@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Atmosphere } from '../components/Atmosphere'
 import { BrandBadge } from '../brand/Logo'
-import { Alert, Button, Card, Checkbox, Field, Input, Section } from '../components/ui'
+import { Alert, Button, Card, Checkbox, Field, Input, Section, revealFirstError } from '../components/ui'
+import { PasswordInput } from '../components/PasswordInput'
 import { SocialSignIn } from '../components/SocialSignIn'
 import { useT } from '../i18n'
 import { ApiError } from '../lib/api'
+import { authErrorMessage } from '../lib/authErrors'
+import { looksLikeEmail } from '../lib/validation'
 import { rememberReturnTo, safeReturnPath } from '../lib/returnTo'
 import { useSeo } from '../lib/seo'
 import { useAuth } from '../state/AuthContext'
@@ -29,6 +32,8 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
   // Unticked by default, and stays that way unless somebody ticks it. A pre-ticked
   // marketing box records a consent nobody gave.
   const [marketingOptIn, setMarketingOptIn] = useState(false)
+  // Unticked: a session that ends with the browser. Ticked: the long-lived cookie.
+  const [rememberMe, setRememberMe] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Per-field messages from the server. The summary it sends says "check the
@@ -51,11 +56,26 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
     return <Navigate to={destination} replace />
   }
 
+  /** The required fields, checked here first so the answer is in the customer's language. */
+  function missing(): Record<string, string> {
+    const errors: Record<string, string> = {}
+    if (!email.trim()) errors.email = t.auth.emailRequired
+    else if (!looksLikeEmail(email)) errors.email = t.auth.emailInvalid
+    if (!password) errors.password = t.auth.passwordRequired
+    else if (isRegister && password.length < 12) errors.password = t.auth.passwordTooShort
+    return errors
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
-    setFieldErrors({})
+    const errors = missing()
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      revealFirstError()
+      return
+    }
+    setBusy(true)
     try {
       if (isRegister) {
         await register({
@@ -66,16 +86,19 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
           marketingOptIn,
         })
       } else {
-        await login(email.trim(), password)
+        await login(email.trim(), password, rememberMe)
       }
       rememberReturnTo(null)
       navigate(from ?? '/account', { replace: true })
     } catch (e) {
-      if (e instanceof ApiError) {
+      if (!isRegister) {
+        // One sentence for every failed sign-in, in their language. Never which field.
+        setError(authErrorMessage(e, t))
+      } else if (e instanceof ApiError) {
         setFieldErrors(e.fieldErrors)
         // When the server named the fields, the banner would only repeat what is now
         // written under each input. Show it only when there is nothing more specific.
-        setError(Object.keys(e.fieldErrors).length > 0 ? null : e.message)
+        setError(Object.keys(e.fieldErrors).length > 0 ? null : e.status === 429 ? t.auth.tooManyAttempts : e.message)
       } else {
         setError(t.auth.genericError)
       }
@@ -134,9 +157,8 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
               hint={isRegister ? t.auth.passwordHint : undefined}
             >
               {(props) => (
-                <Input
+                <PasswordInput
                   {...props}
-                  type="password"
                   value={password}
                   required
                   minLength={isRegister ? 12 : undefined}
@@ -183,6 +205,17 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
               </>
             )}
 
+            {!isRegister && (
+              <div className="flex items-center justify-between gap-4">
+                <Checkbox checked={rememberMe} onChange={setRememberMe}>
+                  {t.auth.rememberMe}
+                </Checkbox>
+                <Link to="/forgot-password" className="shrink-0 text-[13px] font-semibold text-brand-400 hover:underline">
+                  {t.auth.forgotLink}
+                </Link>
+              </div>
+            )}
+
             {error && <Alert tone="warn">{error}</Alert>}
 
             <Button
@@ -204,7 +237,7 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
             state={from ? { from } : undefined}
             className="font-semibold text-brand-400 hover:underline"
           >
-            {isRegister ? t.auth.signInLink : t.auth.createLink}
+            {isRegister ? t.auth.signInLink : t.auth.createAccount}
           </Link>
         </p>
 

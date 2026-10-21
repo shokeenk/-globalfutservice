@@ -225,7 +225,7 @@ public class EmailNotifier implements Notifier {
                 n.publicRef());
     }
 
-    private String publicUrl() {
+    String publicUrl() {
         return props.publicUrl();
     }
 
@@ -388,7 +388,7 @@ public class EmailNotifier implements Notifier {
     }
 
     /** Footer destinations, resolved from configuration rather than written into the copy. */
-    private EmailTemplate.Brand brand() {
+    EmailTemplate.Brand brand() {
         String website = props.publicUrl();
         return new EmailTemplate.Brand(
                 website, hostOf(website),
@@ -487,6 +487,34 @@ public class EmailNotifier implements Notifier {
             log.error("Sender name is not encodable: {}", e.getMessage());
         } catch (Exception e) {
             log.warn("Email to order {} failed: {}", n.publicRef(), e.getMessage());
+        }
+    }
+
+    /**
+     * A branded message to an address with no order behind it -- the account security
+     * emails. {@code what} names it in the log in place of the address.
+     */
+    void sendHtmlTo(String to, TransactionalEmails.Rendered rendered, String what) {
+        if (!isEnabled()) {
+            log.debug("Email disabled; would have sent '{}' ({})", rendered.subject(), what);
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message, MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name());
+            helper.setFrom(props.notifications().emailFrom(),
+                    props.notifications().emailFromName());
+            helper.setTo(to);
+            helper.setSubject(rendered.subject());
+            helper.setText(rendered.text(), rendered.html());
+            mailSender.send(message);
+            log.info("Sent '{}' ({})", rendered.subject(), what);
+        } catch (UnsupportedEncodingException e) {
+            log.error("Sender name is not encodable: {}", e.getMessage());
+        } catch (Exception e) {
+            log.warn("Email ({}) failed: {}", what, e.getMessage());
         }
     }
 

@@ -34,6 +34,9 @@ import java.util.UUID;
  *       does not distinguish "no such user" from "wrong password".</li>
  *   <li><b>Failed attempts lock the account temporarily</b>, and the lock is reported the
  *       same way as a wrong password.</li>
+ *   <li><b>Failed attempts are also counted per address and per IP</b> by
+ *       {@link SignInThrottle}, account or not, so a password list run against one address
+ *       or one password run against many both slow to a crawl.</li>
  *   <li><b>Refresh tokens rotate, and reuse revokes the whole family.</b> A stolen token
  *       can be used once; the moment either party refreshes again, both are signed out
  *       and the theft becomes visible instead of silent.</li>
@@ -56,23 +59,32 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final LoyaltyService loyaltyService;
+    private final SignInThrottle throttle;
     private final AppProperties props;
     private final Clock clock;
 
     public AuthService(AccountRepository accounts, RefreshTokenRepository refreshTokens,
                        PasswordEncoder passwordEncoder, JwtService jwtService,
-                       LoyaltyService loyaltyService, AppProperties props, Clock clock) {
+                       LoyaltyService loyaltyService, SignInThrottle throttle,
+                       AppProperties props, Clock clock) {
         this.accounts = accounts;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.loyaltyService = loyaltyService;
+        this.throttle = throttle;
         this.props = props;
         this.clock = clock;
     }
 
-    /** A newly issued session: the access token, and the raw refresh token for the cookie. */
-    public record Session(String accessToken, String refreshToken, AccountEntity account) {
+    /**
+     * A newly issued session: the access token, and the raw refresh token for the cookie.
+     *
+     * @param persistent "Remember me": true for a cookie that outlives the browser, false
+     *                   for a session cookie
+     */
+    public record Session(String accessToken, String refreshToken, AccountEntity account,
+                          boolean persistent) {
         @Override
         public String toString() {
             return "Session[redacted]";
@@ -114,17 +126,22 @@ public class AuthService {
 
         AccountEntity saved = accounts.save(account);
         log.info("Registered account {}", saved.getPublicId());
-        return issue(saved, userAgent, ip);
+        return issue(saved, true, userAgent, ip);
     }
 
-    @Transactional
+    /**
+     * Not rolled back on a wrong password: the failure count it writes is the point.
+     */
+    @Transactional(noRollbackFor = ApiExceptions.BadRequestException.class)
     public Session login(AuthDtos.LoginRequest request, String userAgent, String ip) {
         String normalised = AccountEntity.normalise(request.email());
+        throttle.checkSignIn(normalised, ip);
         Optional<AccountEntity> maybe = accounts.findByEmailNormalised(normalised);
 
         if (maybe.isEmpty()) {
             // Burn the same amount of time a real verification would.
             passwordEncoder.matches(request.password(), DUMMY_HASH);
+            throttle.recordFailure(normalised, ip);
             throw invalidCredentials();
         }
 
@@ -132,16 +149,19 @@ public class AuthService {
         Instant now = clock.instant();
 
         if (!account.isActive()) {
+            throttle.recordFailure(normalised, ip);
             throw invalidCredentials();
         }
         if (account.isLocked(now)) {
             // Same message as a wrong password: telling an attacker they have triggered a
             // lockout tells them the address is real and that they are being counted.
+            throttle.recordFailure(normalised, ip);
             throw invalidCredentials();
         }
         if (account.getPasswordHash() == null
                 || !passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             registerFailure(account, now);
+            throttle.recordFailure(normalised, ip);
             throw invalidCredentials();
         }
 
@@ -150,7 +170,8 @@ public class AuthService {
             account.setLockedUntil(null);
             accounts.save(account);
         }
-        return issue(account, userAgent, ip);
+        // Absent means ticked: the long-lived cookie every sign-in issued before the box existed.
+        return issue(account, !Boolean.FALSE.equals(request.rememberMe()), userAgent, ip);
     }
 
     /**
@@ -189,7 +210,8 @@ public class AuthService {
         token.setUsedAt(now);
         refreshTokens.save(token);
 
-        return issue(account, token.getFamilyId(), userAgent, ip);
+        // The family keeps the kind of cookie it started with.
+        return issue(account, token.getFamilyId(), token.isPersistent(), userAgent, ip);
     }
 
     @Transactional
@@ -219,7 +241,8 @@ public class AuthService {
                 valueMinor,
                 Money.ofMinor(valueMinor, Currency.INR).format(),
                 account.isFirstOrder(),
-                account.getReferredByCode());
+                account.getReferredByCode(),
+                account.getPasswordHash() != null);
     }
 
     public long accessTokenSeconds() {
@@ -235,29 +258,33 @@ public class AuthService {
      * point: one session model, not two.
      */
     public Session issueFor(AccountEntity account, String userAgent, String ip) {
-        return issue(account, userAgent, ip);
+        return issue(account, true, userAgent, ip);
     }
 
     // ----------------------------------------------------------------- private
 
-    private Session issue(AccountEntity account, String userAgent, String ip) {
-        return issue(account, UUID.randomUUID().toString(), userAgent, ip);
+    private Session issue(AccountEntity account, boolean persistent, String userAgent, String ip) {
+        return issue(account, UUID.randomUUID().toString(), persistent, userAgent, ip);
     }
 
-    private Session issue(AccountEntity account, String familyId, String userAgent, String ip) {
+    private Session issue(AccountEntity account, String familyId, boolean persistent,
+                          String userAgent, String ip) {
         String raw = jwtService.newRefreshToken();
         RefreshTokenEntity token = new RefreshTokenEntity(
                 account.getId(),
                 jwtService.hashRefreshToken(raw),
                 familyId,
-                clock.instant().plus(props.security().refreshTokenTtl()));
+                clock.instant().plus(persistent
+                        ? props.security().refreshTokenTtl()
+                        : props.security().sessionRefreshTokenTtl()));
+        token.setPersistent(persistent);
         token.setUserAgent(truncate(userAgent, 255));
         // The IP is stored as a hash: it is useful for spotting a session hopping
         // continents, and it is personal data this table has no business holding in clear.
         token.setIpHash(ip == null ? null : jwtService.hashRefreshToken(ip));
         refreshTokens.save(token);
 
-        return new Session(jwtService.issueAccessToken(account), raw, account);
+        return new Session(jwtService.issueAccessToken(account), raw, account, persistent);
     }
 
     private void registerFailure(AccountEntity account, Instant now) {
@@ -271,9 +298,16 @@ public class AuthService {
         accounts.save(account);
     }
 
-    private static ApiExceptions.ForbiddenException invalidCredentials() {
-        return new ApiExceptions.ForbiddenException("Email or password is incorrect.");
+    /**
+     * The one answer to every failed sign-in. Its own code so the storefront can word it in
+     * the customer's language; a 400 rather than a 401 so the client does not take it as an
+     * expired session and retry the sign-in after a refresh.
+     */
+    static ApiExceptions.BadRequestException invalidCredentials() {
+        return new ApiExceptions.BadRequestException(INVALID_CREDENTIALS, "Email or password is incorrect.");
     }
+
+    static final String INVALID_CREDENTIALS = "invalid_credentials";
 
     private static String truncate(String value, int max) {
         if (value == null) {

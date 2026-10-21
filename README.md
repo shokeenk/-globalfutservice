@@ -262,7 +262,18 @@ Player-auction delivery needs no credentials at all, so it is the **default**.
 - BCrypt strength 12. Registration cannot set a role. Sign-in verifies a dummy hash
   when no account exists, so response time does not distinguish "no such user" from
   "wrong password". Lockout after repeated failures reports identically to a wrong
-  password.
+  password. Failed sign-ins are also counted **per email and per IP** (5 and 20 per
+  15 minutes), account or not, and answer "too many attempts" once spent.
+- **Remember me.** Ticked: the refresh cookie above, with a 30-day `Max-Age`. Unticked:
+  the same cookie with no `Max-Age` — a session cookie the browser drops on close —
+  backed by a 12-hour idle limit on the server. Refreshing keeps the kind chosen.
+- **Password recovery.** "Forgot password?" always answers the same sentence. The
+  reset token is random, stored as a SHA-256 hash, single use, and lapses after 30
+  minutes; asking again voids the older one. Requests are limited per email and per IP.
+  A reset signs out every session; a change from Account settings signs out every
+  other one. Both send a "your password was changed" email, whatever the marketing
+  preference. Google/Discord-only accounts set their first password through the same
+  link. Other devices notice at their next refresh — at most one access-token lifetime.
 
 ### Everything else
 

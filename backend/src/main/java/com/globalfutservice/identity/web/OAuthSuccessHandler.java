@@ -16,7 +16,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -70,7 +69,9 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
             AuthService.Session session = authService.issueFor(
                     account, request.getHeader(HttpHeaders.USER_AGENT), request.getRemoteAddr());
 
-            response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(session).toString());
+            // The very cookie the password flow sets, built by the same method: a social
+            // sign-in has no business issuing a weaker one.
+            response.addHeader(HttpHeaders.SET_COOKIE, AuthController.refreshCookie(session, props).toString());
             log.info("OAuth sign-in via {} for account {}", registration, account.getPublicId());
             /*
              * The session exists in the cookie by this point; the redirect carries
@@ -115,23 +116,6 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
                 user.getAttribute("email"),
                 Boolean.TRUE.equals(verified),
                 user.getAttribute("name"));
-    }
-
-    /**
-     * The same cookie the password flow sets.
-     *
-     * <p>Kept identical on purpose — {@code SameSite=Strict} and {@code HttpOnly} are
-     * what make the refresh token unreachable to script and unusable cross-site, and a
-     * social sign-in has no business issuing a weaker one.
-     */
-    private ResponseCookie refreshCookie(AuthService.Session session) {
-        return ResponseCookie.from(AuthController.REFRESH_COOKIE, session.refreshToken())
-                .httpOnly(true)
-                .secure(props.security().requireHttps())
-                .sameSite("Strict")
-                .path("/api/v1/auth")
-                .maxAge(props.security().refreshTokenTtl())
-                .build();
     }
 
     /**

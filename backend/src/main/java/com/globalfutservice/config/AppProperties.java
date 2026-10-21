@@ -99,7 +99,32 @@ public record AppProperties(
             @DefaultValue("false") boolean requireHttps,
 
             @DefaultValue("5") int maxFailedLogins,
-            @DefaultValue("15m") Duration loginLockout) {
+            @DefaultValue("15m") Duration loginLockout,
+
+            /**
+             * Server-side life of a session started with "Remember me" unticked. Its cookie
+             * has no Max-Age and goes when the browser closes; this caps a browser that
+             * restores its session cookies, and is renewed on every refresh, so it is an
+             * idle limit rather than a hard one.
+             */
+            @DefaultValue("12h") Duration sessionRefreshTokenTtl,
+
+            /**
+             * Failed sign-ins allowed per email address and per IP within
+             * {@code loginFailureWindow}, refilling evenly over it. Counted whether or not
+             * the address has an account, so being slowed down says nothing about it.
+             */
+            @DefaultValue("5") int loginFailuresPerEmail,
+            @DefaultValue("20") int loginFailuresPerIp,
+            @DefaultValue("15m") Duration loginFailureWindow,
+
+            /** How long a password reset link works. */
+            @DefaultValue("30m") Duration passwordResetTtl,
+
+            /** Reset links that can be asked for per email address and per IP within the window. */
+            @DefaultValue("3") int resetRequestsPerEmail,
+            @DefaultValue("10") int resetRequestsPerIp,
+            @DefaultValue("1h") Duration resetRequestWindow) {
     }
 
     public record Pricing(
