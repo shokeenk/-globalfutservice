@@ -47,6 +47,11 @@ public final class AttemptThrottle {
         return key == null || bucket(key).tryConsume(1);
     }
 
+    /** Attempts spent and not yet refilled: 0 for a key never recorded. */
+    public long used(String key) {
+        return key == null ? 0 : Math.max(0, capacity - bucket(key).getAvailableTokens());
+    }
+
     /** When {@code key} will next have an attempt, at the earliest: one refill step from now. */
     public Instant retryAt(Instant now) {
         return now.plus(window.dividedBy(capacity));

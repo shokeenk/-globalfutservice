@@ -99,7 +99,7 @@ export default function AdminCustomers() {
   // An admin's column. The server sends the figures to admins only, so for anyone else
   // there would be nothing to put in it.
   const withMoney = isAdmin
-  const columns = withMoney ? 7 : 6
+  const columns = withMoney ? 8 : 7
   const closePanel = useCallback(() => update({ customer: null }), [update])
 
   return (
@@ -115,6 +115,8 @@ export default function AdminCustomers() {
           value={overview?.withOrders ?? null} failed={overviewFailed && !overview}
           aside={overview && <TrendBlock current={overview.withOrders} previous={overview.withOrdersLastMonth} against="last month" />} />
       </div>
+
+      {isAdmin && <SignupSettingsCard />}
 
       <div className={open ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-4' : ''}>
         <div className="min-w-0">
@@ -165,6 +167,7 @@ export default function AdminCustomers() {
                 <tr className="border-b border-admin-line">
                   <Th>Customer</Th>
                   <Th>Email</Th>
+                  <Th>Verified</Th>
                   <Th>Orders</Th>
                   {withMoney && <Th>Total Spent</Th>}
                   <Th>Last Order</Th>
@@ -240,6 +243,7 @@ function CustomerRow({
       <td className={`${compact ? 'max-w-[150px]' : 'max-w-[210px]'} truncate px-3 py-2.5 text-admin-ink`} title={c.email}>
         {c.email}
       </td>
+      <td className="whitespace-nowrap px-3 py-2.5 text-admin-ink">{verifiedText(c)}</td>
       <td className="px-3 py-2.5 tabular-nums text-admin-ink">{c.orders}</td>
       {withMoney && (
         <td className="whitespace-nowrap px-3 py-2.5 font-medium tabular-nums text-admin-ink">
@@ -272,5 +276,61 @@ function CustomerRow({
         </div>
       </td>
     </tr>
+  )
+}
+
+/** Email verified yes or no; a guest has no account to verify. */
+export function verifiedText(c: AdminCustomer): string {
+  if (c.kind === 'GUEST' || c.emailVerified == null) return '—'
+  return c.emailVerified ? 'Yes' : 'No'
+}
+
+/**
+ * "Pre-tick marketing consent": whether the sign-up form's marketing box starts ticked.
+ * Admins only, off by default. What is recorded is still what the customer submits.
+ */
+function SignupSettingsCard() {
+  const [on, setOn] = useState<boolean | null>(null)
+  const [state, setState] = useState<'idle' | 'saving' | 'failed' | 'unavailable'>('idle')
+
+  useEffect(() => {
+    api.get<{ prefillMarketingConsent: boolean }>('/api/v1/admin/settings/signup')
+      .then((r) => setOn(r.prefillMarketingConsent))
+      .catch(() => setState('unavailable'))
+  }, [])
+
+  async function save(next: boolean) {
+    setState('saving')
+    try {
+      const r = await api.put<{ prefillMarketingConsent: boolean }>('/api/v1/admin/settings/signup',
+        { prefillMarketingConsent: next })
+      setOn(r.prefillMarketingConsent)
+      setState('idle')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <div className="mb-5 rounded-admin-card border border-admin-line bg-white p-4 shadow-admin-card">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input type="checkbox" checked={on === true} disabled={on === null || state === 'saving'}
+               onChange={(e) => { void save(e.target.checked) }}
+               className="mt-0.5 h-4 w-4 accent-[#E10B2E]" />
+        <span>
+          <span className="block text-[13.5px] font-semibold text-admin-ink">Pre-tick marketing consent</span>
+          <span className="mt-0.5 block text-[12.5px] leading-relaxed text-admin-muted">
+            Whether the "Send me offers and news by email" box on the sign-up form starts ticked. Off by
+            default: a pre-ticked box is not valid consent for customers in the EU (GDPR).
+          </span>
+        </span>
+      </label>
+      {state === 'unavailable' && (
+        <p className="mt-2 text-[12.5px] text-admin-muted">Could not load this setting. Reload the page to try again.</p>
+      )}
+      {state === 'failed' && (
+        <p role="alert" className="mt-2 text-[12.5px] text-admin-red-ink">That did not save. Try again.</p>
+      )}
+    </div>
   )
 }

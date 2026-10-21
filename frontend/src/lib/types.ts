@@ -461,6 +461,8 @@ export interface Account {
   referredByCode: string | null
   /** False for an account made with Google or Discord that has never set a password. */
   hasPassword?: boolean
+  /** False until the address is verified from the emailed link. */
+  emailVerified?: boolean
 }
 
 export interface AdminStats {
@@ -584,6 +586,8 @@ export interface AdminCustomer {
   joinedAt: string
   status: 'ACTIVE' | 'DISABLED' | 'LOCKED' | 'GUEST'
   discordConnected: boolean
+  /** Whether the account's email is verified. Null for a guest, who has no account. */
+  emailVerified?: boolean | null
 }
 
 export interface AdminCustomerPage {

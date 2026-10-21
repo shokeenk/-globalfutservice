@@ -718,8 +718,7 @@ const en = {
     acceptTerms: 'terms of service',
     acceptAnd: 'and',
     acceptPrivacy: 'privacy policy',
-    marketingOptIn:
-      'Email me GFS offers and coin sale announcements. Optional — order updates arrive either way.',
+    marketingOptIn: 'Send me offers and news by email',
     createAccount: 'Create account',
     signInButton: 'Sign in',
     haveAccount: 'Already have an account?',
@@ -730,6 +729,9 @@ const en = {
       'You do not need an account to order — guest checkout works fine. An account is how ' +
       'you collect points.',
     genericError: 'Something went wrong. Please try again.',
+    marketingOptInNote: 'Optional. Order, payment and account emails reach you either way.',
+    humanCheckRequired: 'Please complete the check below to continue.',
+    humanCheckFailed: 'The check did not pass. Please try it again.',
     showPassword: 'Show password',
     hidePassword: 'Hide password',
     rememberMe: 'Remember me',
@@ -766,6 +768,23 @@ const en = {
   liveChat: {
     button: 'Live chat',
     failed: 'The live chat could not load. Please try again, or use the form on the Support page.',
+  },
+
+  /* "Please verify your email": the banner, and the page the link opens. */
+  verifyEmail: {
+    bannerTitle: 'Please verify your email',
+    bannerBody: (email: string) => `We sent a link to ${email}. Open it to confirm the address is yours.`,
+    resend: 'Resend email',
+    resent: 'Sent — check your inbox.',
+    resendTooMany: 'We have sent a few links already. Please wait a while before asking again.',
+    resendFailed: 'That did not send. Please try again.',
+    pageTitle: 'Verify your email',
+    verifying: 'Verifying…',
+    done: 'Your email is verified. Thank you!',
+    invalid: 'This verification link has expired or has already been used.',
+    invalidSignedIn: 'Use “Resend email” to get a new one.',
+    invalidSignedOut: 'Sign in and use “Resend email” to get a new one.',
+    toAccount: 'Go to my account',
   },
 
   support: {
@@ -1081,6 +1100,8 @@ const en = {
      */
     earnsPoints: (points: number) =>
       `You'll earn about ${points} reward points, once your guarantee window closes.`,
+    // Guests earn no points: only an order placed from an account does (OrderService.settleRewards).
+    guestPoints: 'Create an account to collect points on this order.',
     earnsPointsGuest: (points: number) =>
       `Sign in to earn ${points} reward points on this order — guest orders cannot earn them.`,
     continue: 'Continue',

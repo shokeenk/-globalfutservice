@@ -6,6 +6,8 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.identity.web.AuthDtos;
 import com.globalfutservice.loyalty.LoyaltyService;
+import com.globalfutservice.marketing.MarketingConsent;
+import com.globalfutservice.security.HumanCheck;
 import com.globalfutservice.security.JwtService;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
@@ -60,13 +62,23 @@ public class AuthService {
     private final JwtService jwtService;
     private final LoyaltyService loyaltyService;
     private final SignInThrottle throttle;
+    private final HumanCheck humanCheck;
+    private final MarketingConsent consent;
+    private final EmailVerificationService verification;
     private final AppProperties props;
     private final Clock clock;
 
+    /** Failed sign-ins at an address or from an IP after which the human check is asked for. */
+    static final int HUMAN_CHECK_AFTER_FAILURES = 3;
+
     public AuthService(AccountRepository accounts, RefreshTokenRepository refreshTokens,
                        PasswordEncoder passwordEncoder, JwtService jwtService,
-                       LoyaltyService loyaltyService, SignInThrottle throttle,
+                       LoyaltyService loyaltyService, SignInThrottle throttle, HumanCheck humanCheck,
+                       MarketingConsent consent, EmailVerificationService verification,
                        AppProperties props, Clock clock) {
+        this.humanCheck = humanCheck;
+        this.consent = consent;
+        this.verification = verification;
         this.accounts = accounts;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
@@ -93,6 +105,7 @@ public class AuthService {
 
     @Transactional
     public Session register(AuthDtos.RegisterRequest request, String userAgent, String ip) {
+        humanCheck.require(request.humanToken(), ip, "sign-up");
         String normalised = AccountEntity.normalise(request.email());
 
         if (accounts.existsByEmailNormalised(normalised)) {
@@ -114,17 +127,14 @@ public class AuthService {
         if (request.referralCode() != null && !request.referralCode().isBlank()) {
             account.setReferredByCode(request.referralCode().trim().toUpperCase(Locale.ROOT));
         }
-        /*
-         * Only when they ticked it. The column already defaults to false, so this branch
-         * is the single place in the application that can turn marketing consent on for a
-         * new account -- which is what makes "where did this consent come from" a
-         * question with one answer and a timestamp.
-         */
-        if (request.marketingOptIn()) {
-            account.optInToMarketing();
-        }
-
         AccountEntity saved = accounts.save(account);
+        /*
+         * What they submitted, ticked or not, with when and how: the sign-up form. Whether
+         * the box started ticked is an admin setting (SignupSettings); what is recorded is
+         * only ever the answer that came back.
+         */
+        consent.record(saved, request.marketingOptIn(), ConsentSource.SIGN_UP, null);
+        verification.sendFor(saved, request.language());
         log.info("Registered account {}", saved.getPublicId());
         return issue(saved, true, userAgent, ip);
     }
@@ -136,6 +146,9 @@ public class AuthService {
     public Session login(AuthDtos.LoginRequest request, String userAgent, String ip) {
         String normalised = AccountEntity.normalise(request.email());
         throttle.checkSignIn(normalised, ip);
+        if (throttle.recentFailures(normalised, ip) >= HUMAN_CHECK_AFTER_FAILURES) {
+            humanCheck.require(request.humanToken(), ip, "sign-in after failures");
+        }
         Optional<AccountEntity> maybe = accounts.findByEmailNormalised(normalised);
 
         if (maybe.isEmpty()) {
@@ -242,7 +255,8 @@ public class AuthService {
                 Money.ofMinor(valueMinor, Currency.INR).format(),
                 account.isFirstOrder(),
                 account.getReferredByCode(),
-                account.getPasswordHash() != null);
+                account.getPasswordHash() != null,
+                account.isEmailVerified());
     }
 
     public long accessTokenSeconds() {

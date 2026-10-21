@@ -3,7 +3,9 @@ package com.globalfutservice.identity;
 import java.time.Duration;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.security.HumanCheck;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -12,6 +14,13 @@ import static org.mockito.Mockito.when;
 final class TestSecurity {
 
     private TestSecurity() {
+    }
+
+    /** Turnstile not configured: every check passes, as before the keys are added. */
+    static HumanCheck humanCheckOff() {
+        return new HumanCheck(null, new ObjectMapper(), (url, form) -> {
+            throw new AssertionError("Cloudflare must not be called when Turnstile is off");
+        });
     }
 
     static AppProperties props() {

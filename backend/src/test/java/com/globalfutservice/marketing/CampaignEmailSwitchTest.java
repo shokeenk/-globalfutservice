@@ -46,7 +46,7 @@ class CampaignEmailSwitchTest {
         when(props.notifications().emailEnabled()).thenReturn(false);
         service = new CampaignService(campaigns, mock(CampaignRecipientRepository.class),
                 mock(MarketingAudienceRepository.class), mock(AccountRepository.class), sender,
-                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC), props);
+                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC), props, mock(MarketingConsent.class));
         draft = new CampaignEntity("n", "Subject", "Heading", "Body",
                 CampaignAudience.ALL_OPTED_IN, 1L);
         when(campaigns.findByPublicId(draft.getPublicId())).thenReturn(Optional.of(draft));

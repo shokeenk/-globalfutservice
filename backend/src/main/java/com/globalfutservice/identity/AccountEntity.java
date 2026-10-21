@@ -92,6 +92,11 @@ public class AccountEntity {
     @Column(name = "marketing_opt_out_campaign_id")
     private Long marketingOptOutCampaignId;
 
+    /** How the current marketing choice was made: see {@link ConsentSource}. Null before V58. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "marketing_consent_source")
+    private ConsentSource marketingConsentSource;
+
     /** Opaque token carried by unsubscribe links. Not derived from the address. */
     @Column(name = "marketing_token", nullable = false, updatable = false)
     private java.util.UUID marketingToken = java.util.UUID.randomUUID();
@@ -271,6 +276,18 @@ public class AccountEntity {
     @Override
     public String toString() {
         return "Account[" + publicId + ", role=" + role + "]";
+    }
+
+    public ConsentSource getMarketingConsentSource() {
+        return marketingConsentSource;
+    }
+
+    public void setMarketingConsentSource(ConsentSource marketingConsentSource) {
+        this.marketingConsentSource = marketingConsentSource;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerifiedAt != null;
     }
 
     public boolean isMarketingOptIn() {

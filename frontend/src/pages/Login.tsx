@@ -5,17 +5,19 @@ import { BrandBadge } from '../brand/Logo'
 import { Alert, Button, Card, Checkbox, Field, Input, Section, revealFirstError } from '../components/ui'
 import { PasswordInput } from '../components/PasswordInput'
 import { SocialSignIn } from '../components/SocialSignIn'
-import { useT } from '../i18n'
+import { Turnstile } from '../components/Turnstile'
+import { useI18n } from '../i18n'
 import { ApiError } from '../lib/api'
 import { authErrorMessage } from '../lib/authErrors'
 import { looksLikeEmail } from '../lib/validation'
+import { useSignupConfig } from '../lib/signupConfig'
 import { rememberReturnTo, safeReturnPath } from '../lib/returnTo'
 import { useSeo } from '../lib/seo'
 import { useAuth } from '../state/AuthContext'
 
 export default function Login({ mode }: { mode: 'login' | 'register' }) {
   const isRegister = mode === 'register'
-  const t = useT()
+  const { t, lang } = useI18n()
   useSeo({
     title: isRegister ? t.auth.registerTitle : t.auth.signInTitle,
     noindex: true,
@@ -29,9 +31,27 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
-  // Unticked by default, and stays that way unless somebody ticks it. A pre-ticked
-  // marketing box records a consent nobody gave.
+  /*
+   * Unticked unless an admin has turned on "Pre-tick marketing consent" (off by default:
+   * pre-ticked consent is not valid for EU customers). Either way what is recorded is what
+   * the customer submits, and once they touch the box the setting no longer moves it.
+   */
+  const config = useSignupConfig()
   const [marketingOptIn, setMarketingOptIn] = useState(false)
+  const [marketingTouched, setMarketingTouched] = useState(false)
+  useEffect(() => {
+    if (config && !marketingTouched) setMarketingOptIn(config.prefillMarketingConsent)
+  }, [config]) // eslint-disable-line react-hooks/exhaustive-deps -- only as the setting arrives
+  /*
+   * The human check: always on sign-up; on sign-in once three tries have failed here, or
+   * the server asks for it. A token is good once, so the widget is remounted after use.
+   */
+  const [humanToken, setHumanToken] = useState<string | null>(null)
+  const [widget, setWidget] = useState(0)
+  const [failures, setFailures] = useState(0)
+  const [checkAsked, setCheckAsked] = useState(false)
+  const siteKey = config?.turnstileSiteKey ?? null
+  const showCheck = Boolean(siteKey) && (isRegister || checkAsked || failures >= 3)
   // Unticked: a session that ends with the browser. Ticked: the long-lived cookie.
   const [rememberMe, setRememberMe] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -75,6 +95,16 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
       revealFirstError()
       return
     }
+    if (showCheck && !humanToken) {
+      setError(t.auth.humanCheckRequired)
+      return
+    }
+    const token = showCheck ? humanToken : null
+    if (token) {
+      // Spent by this submit, whatever the answer: the next try needs a fresh one.
+      setHumanToken(null)
+      setWidget((w) => w + 1)
+    }
     setBusy(true)
     try {
       if (isRegister) {
@@ -84,14 +114,21 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
           displayName: displayName.trim() || undefined,
           acceptedTerms,
           marketingOptIn,
+          language: lang,
+          humanToken: token,
         })
       } else {
-        await login(email.trim(), password, rememberMe)
+        await login(email.trim(), password, rememberMe, token)
       }
       rememberReturnTo(null)
       navigate(from ?? '/account', { replace: true })
     } catch (e) {
-      if (!isRegister) {
+      if (e instanceof ApiError && (e.code === 'human_check_required' || e.code === 'human_check_failed')) {
+        setCheckAsked(true)
+      } else if (!isRegister && e instanceof ApiError && e.code === 'invalid_credentials') {
+        setFailures((n) => n + 1)
+      }
+      if (!isRegister || (e instanceof ApiError && e.code.startsWith('human_check'))) {
         // One sentence for every failed sign-in, in their language. Never which field.
         setError(authErrorMessage(e, t))
       } else if (e instanceof ApiError) {
@@ -196,13 +233,21 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
                     {fieldErrors.acceptedTerms}
                   </p>
                 )}
-                {/* Its own control, below the terms and never bundled with them. The
-                    submit button does not depend on it: saying no to marketing is a
-                    complete answer. */}
-                <Checkbox checked={marketingOptIn} onChange={setMarketingOptIn}>
-                  {t.auth.marketingOptIn}
-                </Checkbox>
+                {/* Its own control, below the terms and set apart from them, in plain grey:
+                    an offer, not a condition. The submit button does not depend on it --
+                    saying no to marketing is a complete answer. */}
+                <div className="border-t border-ink-400 pt-4" data-testid="marketing-consent">
+                  <Checkbox checked={marketingOptIn}
+                            onChange={(next) => { setMarketingTouched(true); setMarketingOptIn(next) }}>
+                    <span className="text-chalk-muted">{t.auth.marketingOptIn}</span>
+                    <span className="mt-0.5 block text-[12px] text-chalk-faint">{t.auth.marketingOptInNote}</span>
+                  </Checkbox>
+                </div>
               </>
+            )}
+
+            {showCheck && (
+              <Turnstile key={widget} siteKey={siteKey} language={lang} onToken={setHumanToken} />
             )}
 
             {!isRegister && (

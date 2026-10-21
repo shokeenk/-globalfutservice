@@ -398,6 +398,8 @@ export default function BoostingCheckout() {
         <div className="mx-auto max-w-lg text-center">
           <h1 className="display text-display-md text-chalk">{b.signInTitle}</h1>
           <p className="mt-3 text-body-sm text-chalk-muted">{b.signInBody}</p>
+          {/* Points need an account: a guest order earns none (OrderService.settleRewards). */}
+          <p className="mt-2 text-[12.5px] text-chalk-faint">{t.order.guestPoints}</p>
           <div className="mt-6">
             <Button
               full

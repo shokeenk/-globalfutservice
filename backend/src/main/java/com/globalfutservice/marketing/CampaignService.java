@@ -1,5 +1,7 @@
 package com.globalfutservice.marketing;
 
+import com.globalfutservice.identity.ConsentSource;
+
 import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.catalog.Sku;
 import com.globalfutservice.identity.AccountEntity;
@@ -69,6 +71,7 @@ public class CampaignService {
     private final CampaignRenderer renderer;
     private final Clock clock;
     private final AppProperties props;
+    private final MarketingConsent consent;
 
     public CampaignService(CampaignRepository campaigns,
                            CampaignRecipientRepository recipients,
@@ -77,7 +80,8 @@ public class CampaignService {
                            CampaignSender sender,
                            CampaignRenderer renderer,
                            Clock clock,
-                           AppProperties props) {
+                           AppProperties props,
+                           MarketingConsent consent) {
         this.campaigns = campaigns;
         this.recipients = recipients;
         this.audience = audience;
@@ -86,6 +90,7 @@ public class CampaignService {
         this.renderer = renderer;
         this.clock = clock;
         this.props = props;
+        this.consent = consent;
     }
 
     // ---- composing ---------------------------------------------------------
@@ -606,8 +611,7 @@ public class CampaignService {
         Long campaignId = campaignPublicId == null ? null
                 : campaigns.findByPublicId(campaignPublicId)
                         .map(CampaignEntity::getId).orElse(null);
-        account.optOutOfMarketing(campaignId);
-        accounts.save(account);
+        consent.record(account, false, ConsentSource.UNSUBSCRIBE_LINK, campaignId);
         log.info("Account {} unsubscribed from marketing (campaign {})",
                 account.getPublicId(), campaignPublicId);
         return true;

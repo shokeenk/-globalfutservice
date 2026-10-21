@@ -40,6 +40,15 @@ public class AccountMailer {
     }
 
     @Async
+    public void sendVerification(String to, String accountPublicId, AccountEmails.Lang lang,
+                                 String rawToken, long hours) {
+        String url = email.publicUrl() + "/confirm-email?token="
+                + UriUtils.encodeQueryParam(rawToken, StandardCharsets.UTF_8);
+        email.sendHtmlTo(to, AccountEmails.verifyEmail(lang, email.brand(), url, hours),
+                "email verification for " + accountPublicId);
+    }
+
+    @Async
     public void sendPasswordChanged(String to, String accountPublicId, AccountEmails.Lang lang,
                                     Instant changedAt) {
         email.sendHtmlTo(to, AccountEmails.passwordChanged(lang, email.brand(),

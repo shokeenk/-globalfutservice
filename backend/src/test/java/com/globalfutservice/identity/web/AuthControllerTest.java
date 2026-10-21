@@ -63,7 +63,7 @@ class AuthControllerTest {
     @BeforeEach
     void describe() {
         when(authService.describe(any())).thenReturn(new AuthDtos.AccountResponse(
-                "acc_ada", "ada@example.test", null, "CUSTOMER", 0, 0, "₹0.00", true, null, true));
+                "acc_ada", "ada@example.test", null, "CUSTOMER", 0, 0, "₹0.00", true, null, true, true));
     }
 
     private String loginBody(Boolean rememberMe) {
@@ -86,7 +86,7 @@ class AuthControllerTest {
         String cookie = setCookie(true, true);
         assertThat(cookie).startsWith("gfs_refresh=refresh-raw").contains("Max-Age=2592000")
                 .contains("HttpOnly").contains("SameSite=Strict").contains("Path=/api/v1/auth");
-        verify(authService).login(eq(new AuthDtos.LoginRequest("ada@example.test", "correct horse battery", true)),
+        verify(authService).login(eq(new AuthDtos.LoginRequest("ada@example.test", "correct horse battery", true, null)),
                 any(), any());
     }
 
@@ -96,7 +96,7 @@ class AuthControllerTest {
         String cookie = setCookie(false, false);
         assertThat(cookie).startsWith("gfs_refresh=refresh-raw").doesNotContain("Max-Age").doesNotContain("Expires")
                 .contains("HttpOnly").contains("SameSite=Strict");
-        verify(authService).login(eq(new AuthDtos.LoginRequest("ada@example.test", "correct horse battery", false)),
+        verify(authService).login(eq(new AuthDtos.LoginRequest("ada@example.test", "correct horse battery", false, null)),
                 any(), any());
     }
 
@@ -122,7 +122,7 @@ class AuthControllerTest {
                     .andExpect(jsonPath("$.message")
                             .value("If an account exists for that email, we've sent a reset link."));
         }
-        verify(passwordService).requestReset(eq("nobody@example.test"), eq("es"), anyString());
+        verify(passwordService).requestReset(eq("nobody@example.test"), eq("es"), eq(null), anyString());
     }
 
     @Test
@@ -130,7 +130,7 @@ class AuthControllerTest {
     void forgotLimited() throws Exception {
         doThrow(new ApiExceptions.TooManyRequestsException("too_many_attempts", "Too many attempts.",
                 java.time.Instant.parse("2026-10-21T10:20:00Z")))
-                .when(passwordService).requestReset(any(), any(), any());
+                .when(passwordService).requestReset(any(), any(), any(), any());
         mvc.perform(post("/api/v1/auth/password/forgot").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"ada@example.test\"}"))
                 .andExpect(status().isTooManyRequests())

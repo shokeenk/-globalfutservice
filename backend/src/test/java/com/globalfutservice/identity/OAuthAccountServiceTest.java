@@ -94,6 +94,17 @@ class OAuthAccountServiceTest {
         }
 
         @Test
+        @DisplayName("linking on a provider-verified address verifies the password account's email")
+        void linkingVerifies() {
+            AccountEntity existing = accounts.withPassword("ada@example.com");
+            assertThat(existing.isEmailVerified()).isFalse();
+
+            service.resolve(google("sub-11", "ada@example.com", true));
+
+            assertThat(existing.isEmailVerified()).isTrue();
+        }
+
+        @Test
         @DisplayName("matches on a differently-cased address")
         void matchesCaseInsensitively() {
             AccountEntity existing = accounts.withPassword("ada@example.com");
@@ -127,6 +138,14 @@ class OAuthAccountServiceTest {
             AccountEntity got = service.resolve(google("sub-7", "nobody@example.com", false));
 
             assertThat(got.getOauthSubject()).isEqualTo("sub-7");
+        }
+
+        @Test
+        @DisplayName("counts as email-verified when the provider verified the address")
+        void verifiedByProvider() {
+            assertThat(service.resolve(google("sub-9", "g@example.com", true)).isEmailVerified()).isTrue();
+            // Not vouched for: the account is made, and asks to be verified like a password sign-up.
+            assertThat(service.resolve(google("sub-10", "u@example.com", false)).isEmailVerified()).isFalse();
         }
 
         @Test

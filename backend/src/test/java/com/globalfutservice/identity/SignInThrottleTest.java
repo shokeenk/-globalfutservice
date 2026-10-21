@@ -55,9 +55,10 @@ class SignInThrottleTest {
         SignInThrottle throttle = new SignInThrottle(props, clock);
         mailer = mock(AccountMailer.class);
         auth = new AuthService(accounts, refreshTokens, encoder, jwt, mock(LoyaltyService.class),
-                throttle, props, clock);
+                throttle, TestSecurity.humanCheckOff(), mock(com.globalfutservice.marketing.MarketingConsent.class),
+                mock(EmailVerificationService.class), props, clock);
         passwords = new PasswordService(accounts, mock(PasswordResetTokenRepository.class), refreshTokens,
-                encoder, jwt, throttle, mailer, props, clock);
+                encoder, jwt, throttle, mailer, TestSecurity.humanCheckOff(), props, clock);
     }
 
     private AccountEntity existing(String email) {
@@ -68,7 +69,7 @@ class SignInThrottleTest {
     }
 
     private Throwable login(String email, String password, String ip) {
-        return catchThrowable(() -> auth.login(new AuthDtos.LoginRequest(email, password, true), "test", ip));
+        return catchThrowable(() -> auth.login(new AuthDtos.LoginRequest(email, password, true, null), "test", ip));
     }
 
     @Test
@@ -143,18 +144,18 @@ class SignInThrottleTest {
     void forgotLimits() {
         existing("erin@example.test");
         for (int i = 0; i < 3; i++) {
-            passwords.requestReset("erin@example.test", "en", "203.0.113." + (20 + i));
+            passwords.requestReset("erin@example.test", "en", null, "203.0.113." + (20 + i));
         }
         verify(mailer, org.mockito.Mockito.times(3)).sendResetLink(anyString(), anyString(), any(), anyString(),
                 anyLong());
-        assertThatThrownBy(() -> passwords.requestReset("Erin@example.test", "en", "203.0.113.30"))
+        assertThatThrownBy(() -> passwords.requestReset("Erin@example.test", "en", null, "203.0.113.30"))
                 .isInstanceOf(ApiExceptions.TooManyRequestsException.class);
 
         // Unknown addresses: nothing is sent, nothing is thrown, until the IP has asked too often.
         for (int i = 0; i < 6; i++) {
-            passwords.requestReset("ghost" + i + "@example.test", "es", "203.0.113.40");
+            passwords.requestReset("ghost" + i + "@example.test", "es", null, "203.0.113.40");
         }
-        assertThatThrownBy(() -> passwords.requestReset("ghost9@example.test", "es", "203.0.113.40"))
+        assertThatThrownBy(() -> passwords.requestReset("ghost9@example.test", "es", null, "203.0.113.40"))
                 .isInstanceOf(ApiExceptions.TooManyRequestsException.class);
         verify(mailer, never()).sendResetLink(org.mockito.ArgumentMatchers.startsWith("ghost"), anyString(), any(),
                 anyString(), anyLong());

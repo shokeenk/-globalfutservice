@@ -52,6 +52,11 @@ public class SignInThrottle {
         failuresByIp.record(ip);
     }
 
+    /** Recent failed sign-ins at this address or from this IP, whichever is more. */
+    public long recentFailures(String emailNormalised, String ip) {
+        return Math.max(failuresByEmail.used(emailNormalised), failuresByIp.used(ip));
+    }
+
     /** Spends one reset request, or refuses when this address or this IP has asked too often. */
     public void spendResetRequest(String emailNormalised, String ip) {
         if (resetsByEmail.exhausted(emailNormalised) || resetsByIp.exhausted(ip)) {

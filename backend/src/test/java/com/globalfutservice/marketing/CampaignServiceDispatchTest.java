@@ -52,7 +52,7 @@ class CampaignServiceDispatchTest {
         when(props.notifications().emailEnabled()).thenReturn(true);
         service = new CampaignService(campaigns, recipients, mock(MarketingAudienceRepository.class),
                 mock(AccountRepository.class), sender, mock(CampaignRenderer.class),
-                Clock.fixed(NOW, ZoneOffset.UTC), props);
+                Clock.fixed(NOW, ZoneOffset.UTC), props, mock(MarketingConsent.class));
         campaign = new CampaignEntity("n", "Subject", "Heading", "Body",
                 CampaignAudience.ALL_OPTED_IN, 1L);
         when(campaigns.findById(ID)).thenReturn(Optional.of(campaign));

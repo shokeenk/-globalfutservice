@@ -90,7 +90,8 @@ public class AuthController {
             description = "Answers the same whether or not the address has an account.")
     public ResponseEntity<AuthDtos.MessageResponse> forgotPassword(
             @Valid @RequestBody AuthDtos.ForgotPasswordRequest request, HttpServletRequest http) {
-        passwordService.requestReset(request.email(), request.language(), http.getRemoteAddr());
+        passwordService.requestReset(request.email(), request.language(), request.humanToken(),
+                http.getRemoteAddr());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(new AuthDtos.MessageResponse(PasswordService.FORGOT_REPLY));

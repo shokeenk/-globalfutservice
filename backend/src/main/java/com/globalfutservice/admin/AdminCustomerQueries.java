@@ -71,12 +71,12 @@ public class AdminCustomerQueries {
             cust as (
               select 'a' || a.id as ckey, 'ACCOUNT' as kind, 'a-' || a.public_id as ref, a.email,
                      a.display_name as name, a.created_at as joined, a.disabled_at, a.locked_until,
-                     a.oauth_provider
+                     a.oauth_provider, a.email_verified_at is not null as email_verified
                 from account a
                where a.role = 'CUSTOMER'
               union all
               select o.ckey, 'GUEST', 'g-' || (array_agg(o.public_ref order by o.created_at, o.id))[1],
-                     substr(o.ckey, 2), null, min(o.created_at), null, null, null
+                     substr(o.ckey, 2), null, min(o.created_at), null, null, null, null
                 from ord o
                where o.ckey like 'g%'
                group by o.ckey
@@ -111,7 +111,9 @@ public class AdminCustomerQueries {
     /** One row of the customer table. {@code spent} is null for anyone but an admin. */
     public record Row(String key, String kind, String name, String email, String eaHandle,
                       String platform, long orders, List<Spent> spent, Instant lastOrderAt,
-                      Instant joinedAt, String status, boolean discordConnected) {
+                      Instant joinedAt, String status, boolean discordConnected,
+                      /** Whether the account's email is verified; null for a guest, who has no account. */
+                      Boolean emailVerified) {
     }
 
     public record Page(List<Row> items, long total, int page, int size) {
@@ -250,14 +252,15 @@ public class AdminCustomerQueries {
     /** What the list query itself returns, before the per-page details are added. */
     record Base(String ckey, String kind, String ref, String email, String name, Instant joined,
                 Instant disabledAt, Instant lockedUntil, String oauthProvider, long orders,
-                Instant lastOrder) {
+                Instant lastOrder, Boolean emailVerified) {
     }
 
     private static Base base(ResultSet rs, int i) throws SQLException {
         return new Base(rs.getString("ckey"), rs.getString("kind"), rs.getString("ref"),
                 rs.getString("email"), rs.getString("name"), instant(rs, "joined"),
                 instant(rs, "disabled_at"), instant(rs, "locked_until"), rs.getString("oauth_provider"),
-                rs.getLong("orders"), instant(rs, "last_order"));
+                rs.getLong("orders"), instant(rs, "last_order"),
+                (Boolean) rs.getObject("email_verified"));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -324,7 +327,7 @@ public class AdminCustomerQueries {
             boolean discord = onDiscord.contains(b.ckey()) || "discord".equalsIgnoreCase(b.oauthProvider());
             out.put(b.ckey(), new Row(b.ref(), b.kind(), name, b.email(), l[1], l[2], b.orders(),
                     withMoney ? spent.getOrDefault(b.ckey(), List.of()) : null,
-                    b.lastOrder(), b.joined(), status, discord));
+                    b.lastOrder(), b.joined(), status, discord, guest ? null : b.emailVerified()));
         }
         return new ArrayList<>(out.values());
     }
