@@ -71,6 +71,18 @@ public class PopupCampaignEntity {
     @Column(name = "trigger_event")
     private String triggerEvent;
 
+    /** DELAY_OR_SCROLL's scroll percentage; its seconds are {@code triggerValue}. */
+    @Column(name = "trigger_scroll")
+    private Integer triggerScroll;
+
+    /** Never on a checkout page, whatever its target pages say. */
+    @Column(name = "exclude_checkout", nullable = false)
+    private boolean excludeCheckout;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "preset")
+    private PopupTypes.Preset preset;
+
     @Column(name = "starts_at")
     private Instant startsAt;
 
@@ -163,6 +175,12 @@ public class PopupCampaignEntity {
     public void setTriggerValue(Integer triggerValue) { this.triggerValue = triggerValue; }
     public String getTriggerEvent() { return triggerEvent; }
     public void setTriggerEvent(String triggerEvent) { this.triggerEvent = triggerEvent; }
+    public Integer getTriggerScroll() { return triggerScroll; }
+    public void setTriggerScroll(Integer triggerScroll) { this.triggerScroll = triggerScroll; }
+    public boolean isExcludeCheckout() { return excludeCheckout; }
+    public void setExcludeCheckout(boolean excludeCheckout) { this.excludeCheckout = excludeCheckout; }
+    public PopupTypes.Preset getPreset() { return preset; }
+    public void setPreset(PopupTypes.Preset preset) { this.preset = preset; }
     public Instant getStartsAt() { return startsAt; }
     public void setStartsAt(Instant startsAt) { this.startsAt = startsAt; }
     public Instant getEndsAt() { return endsAt; }

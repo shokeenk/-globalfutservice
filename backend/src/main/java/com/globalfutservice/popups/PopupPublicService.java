@@ -46,7 +46,8 @@ public class PopupPublicService {
     public record PublicPopup(String id, int version, Type type, PublicImage desktopImage, PublicImage mobileImage,
                               LocalizedCopy copy, List<Button> buttons, List<Page> targetPages,
                               List<String> targetPaths, Trigger triggerType, Integer triggerValue,
-                              String triggerEvent, Frequency frequency, Integer frequencyDays, int priority) {
+                              String triggerEvent, Frequency frequency, Integer frequencyDays, int priority,
+                              Integer triggerScroll, boolean excludeCheckout, PopupTypes.Preset preset) {
     }
 
     /** A cached campaign with the schedule kept beside it, to re-check per request. */
@@ -134,7 +135,8 @@ public class PopupPublicService {
                         image(c.getDesktopImageId()), image(c.getMobileImageId()), service.copyOf(c),
                         service.buttonsOf(c), service.pagesOf(c), service.pathsOf(c), c.getTriggerType(),
                         c.getTriggerValue(), c.getTriggerEvent(), c.getFrequency(), c.getFrequencyDays(),
-                        c.getPriority()), c.getStartsAt(), c.getEndsAt()))
+                        c.getPriority(), c.getTriggerScroll(), c.isExcludeCheckout(), c.getPreset()),
+                        c.getStartsAt(), c.getEndsAt()))
                 .toList();
     }
 

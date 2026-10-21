@@ -121,7 +121,7 @@ class PopupPostgresTest {
         PopupInput v = PopupValidationTest.valid();
         return new PopupInput(v.name(), v.type(), v.copy(), v.buttons(), v.targetPages(), v.targetPaths(),
                 v.triggerType(), v.triggerValue(), v.triggerEvent(), starts, ends, v.frequency(), v.frequencyDays(),
-                v.priority());
+                v.priority(), null, false);
     }
 
     private PopupService.PopupView withImage(String id, byte[] bytes, boolean mobile) {

@@ -11,8 +11,37 @@ public final class PopupTypes {
     /** A centred modal over a dimmed page, or a compact card in the bottom-right corner. */
     public enum Type { CENTER_MODAL, BOTTOM_RIGHT }
 
-    /** When it appears: as the page loads, after N seconds, after N% scroll, or at a named page step. */
-    public enum Trigger { PAGE_LOAD, DELAY, SCROLL, STEP }
+    /**
+     * When it appears: as the page loads, after N seconds, after N% scroll, whichever of those
+     * two comes first, or at a named page step.
+     */
+    public enum Trigger { PAGE_LOAD, DELAY, SCROLL, DELAY_OR_SCROLL, STEP }
+
+    /**
+     * The guide's seven popups (V60), created as drafts for the client. A preset decides what
+     * the admin may change: three of them never carry a button, and the membership popup
+     * shows the live tier ladder. Not settable from the admin; kept by a duplicate.
+     */
+    public enum Preset {
+        HOME_ENTRY(true),
+        COINS_OFFER(false),
+        COINS_CHECKOUT(false),
+        CHAMPS_LISTING(true),
+        CHAMPS_CHECKOUT(false),
+        MEMBERSHIP(true),
+        REWARDS_REMINDER(true);
+
+        private final boolean buttons;
+
+        Preset(boolean buttons) {
+            this.buttons = buttons;
+        }
+
+        /** Whether this popup may have buttons at all. */
+        public boolean allowsButtons() {
+            return buttons;
+        }
+    }
 
     /** How often one browser sees it: once per session, once every N days, or every visit. */
     public enum Frequency { SESSION, DAYS, EVERY_VISIT }

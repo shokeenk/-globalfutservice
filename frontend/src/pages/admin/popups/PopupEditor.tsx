@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError } from '../../../lib/api'
-import { POPUP_PAGES } from '../../../lib/popups'
+import { NO_BUTTON_PRESETS, POPUP_PAGES } from '../../../lib/popups'
 import type { PopupFrequency, PopupPage, PopupTrigger, PopupType, PublicPopup } from '../../../lib/popups'
 import { PopupCard, PopupModal } from '../../../components/popups/PopupViews'
+import { usePopupFacts } from '../../../components/popups/popupFacts'
 import { AdminButton } from '../ui/controls'
 import { PAGE_LABELS } from './types'
 import type { AdminPopup, PopupChange } from './types'
@@ -31,7 +32,9 @@ type Form = {
   targetPaths: string
   triggerType: PopupTrigger
   triggerValue: string
+  triggerScroll: string
   triggerEvent: string
+  excludeCheckout: boolean
   startsAt: string
   endsAt: string
   frequency: PopupFrequency
@@ -61,7 +64,9 @@ export function formFrom(p?: AdminPopup | null): Form {
     targetPaths: (p?.targetPaths ?? []).join('\n'),
     triggerType: p?.triggerType ?? 'PAGE_LOAD',
     triggerValue: p?.triggerValue != null ? String(p.triggerValue) : '',
+    triggerScroll: p?.triggerScroll != null ? String(p.triggerScroll) : '',
     triggerEvent: p?.triggerEvent ?? '',
+    excludeCheckout: p?.excludeCheckout ?? false,
     startsAt: toLocalInput(p?.startsAt),
     endsAt: toLocalInput(p?.endsAt),
     frequency: p?.frequency ?? 'SESSION',
@@ -88,8 +93,11 @@ export function inputFrom(f: Form) {
     targetPages: f.targetPages,
     targetPaths: f.targetPaths.split(/\s+/).filter(Boolean),
     triggerType: f.triggerType,
-    triggerValue: f.triggerType === 'DELAY' || f.triggerType === 'SCROLL' ? num(f.triggerValue) : null,
+    triggerValue: f.triggerType === 'DELAY' || f.triggerType === 'SCROLL' || f.triggerType === 'DELAY_OR_SCROLL'
+      ? num(f.triggerValue) : null,
+    triggerScroll: f.triggerType === 'DELAY_OR_SCROLL' ? num(f.triggerScroll) : null,
     triggerEvent: f.triggerType === 'STEP' ? blank(f.triggerEvent) : null,
+    excludeCheckout: f.excludeCheckout,
     startsAt: f.startsAt ? new Date(f.startsAt).toISOString() : null,
     endsAt: f.endsAt ? new Date(f.endsAt).toISOString() : null,
     frequency: f.frequency,
@@ -134,6 +142,9 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop')
   const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null)
   const [changes, setChanges] = useState<PopupChange[]>([])
+  const facts = usePopupFacts()
+  // Three of the guide's popups never carry a button: the server refuses one, so no form offers it.
+  const noButtons = popup?.preset != null && NO_BUTTON_PRESETS.includes(popup.preset)
 
   useEffect(() => {
     if (!popup) return
@@ -186,10 +197,11 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
   }
 
   /** The form as the storefront would draw it, right now. */
-  const previewPopup = useMemo<Pick<PublicPopup, 'id' | 'copy' | 'buttons' | 'desktopImage' | 'mobileImage'>>(() => {
+  const previewPopup = useMemo<Pick<PublicPopup, 'id' | 'copy' | 'buttons' | 'desktopImage' | 'mobileImage' | 'preset'>>(() => {
     const input = inputFrom(form)
     return {
       id: popup?.id ?? 'preview',
+      preset: popup?.preset ?? null,
       copy: { en: input.copy.en ?? {}, es: input.copy.es, fr: input.copy.fr },
       buttons: input.buttons.map((b) => ({ label: b.label, destination: b.destination })),
       desktopImage: popup?.desktopImage ?? null,
@@ -238,7 +250,8 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
           ))}
         </Section>
 
-        <Section title="Buttons (up to 2)">
+        <Section title={noButtons ? 'Buttons' : 'Buttons (up to 2)'}>
+          {noButtons && <p className="text-[12.5px] text-admin-muted">The guide sets this popup out with no button.</p>}
           {form.buttons.map((b, i) => (
             <div key={i} className="space-y-2 rounded-admin-control border border-admin-line p-3">
               <div className="grid gap-2 sm:grid-cols-3">
@@ -258,7 +271,7 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
             </div>
           ))}
           {errors.buttons && <p role="alert" className="text-[12px] text-admin-red-ink">{errors.buttons}</p>}
-          {form.buttons.length < 2 && (
+          {!noButtons && form.buttons.length < 2 && (
             <AdminButton size="sm" onClick={() => set('buttons', [...form.buttons, { en: '', es: '', fr: '', destination: '/' }])}>
               Add button
             </AdminButton>
@@ -279,6 +292,11 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
             </div>
             {errors.targetPages && <p role="alert" className="mt-1 text-[12px] text-admin-red-ink">{errors.targetPages}</p>}
           </fieldset>
+          <label className="flex items-center gap-2 text-[13px] text-admin-ink">
+            <input type="checkbox" checked={form.excludeCheckout} className="accent-[#E10B2E]"
+                   onChange={(e) => set('excludeCheckout', e.target.checked)} />
+            Never during checkout
+          </label>
           <Row label="Selected pages (one path per line)" error={errors.targetPaths} hint="e.g. /help or /coaching">
             <textarea className={`${INPUT} h-20 py-2 font-mono`} value={form.targetPaths}
                       onChange={(e) => set('targetPaths', e.target.value)} />
@@ -291,6 +309,7 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
               <option value="PAGE_LOAD">On page load</option>
               <option value="DELAY">After a number of seconds</option>
               <option value="SCROLL">After scrolling part of the page</option>
+              <option value="DELAY_OR_SCROLL">After a number of seconds or scrolling, whichever comes first</option>
               <option value="STEP">At a page step</option>
             </select>
           </Row>
@@ -298,6 +317,16 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
             <Row label={form.triggerType === 'DELAY' ? 'Seconds' : 'Percent of the page'} error={errors.triggerValue}>
               <input className={INPUT} type="number" value={form.triggerValue} onChange={(e) => set('triggerValue', e.target.value)} />
             </Row>
+          )}
+          {form.triggerType === 'DELAY_OR_SCROLL' && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Row label="Seconds" error={errors.triggerValue}>
+                <input className={INPUT} type="number" value={form.triggerValue} onChange={(e) => set('triggerValue', e.target.value)} />
+              </Row>
+              <Row label="Or percent of the page" error={errors.triggerScroll}>
+                <input className={INPUT} type="number" value={form.triggerScroll} onChange={(e) => set('triggerScroll', e.target.value)} />
+              </Row>
+            </div>
           )}
           {form.triggerType === 'STEP' && (
             <Row label="Step" error={errors.triggerEvent} hint={`The storefront fires: ${steps.join(', ')}`}>
@@ -406,9 +435,9 @@ export function PopupEditor({ popup, steps, onSaved, onClose }: {
           <div className="absolute inset-0 grid place-items-center text-[12px] text-chalk-faint">The page behind it</div>
           {form.type === 'CENTER_MODAL'
             ? <PopupModal popup={previewPopup} lang={lang} onClose={() => {}} onButton={() => {}} preview
-                          phone={device === 'phone'} closeLabel="Close" />
+                          phone={device === 'phone'} closeLabel="Close" facts={facts} />
             : <PopupCard popup={previewPopup} lang={lang} onClose={() => {}} onButton={() => {}} preview
-                         phone={device === 'phone'} closeLabel="Close" />}
+                         phone={device === 'phone'} closeLabel="Close" facts={facts} />}
         </div>
         <p className="text-[11.5px] text-admin-muted">Showing the {lang.toUpperCase()} words, as saved or as typed.</p>
       </section>

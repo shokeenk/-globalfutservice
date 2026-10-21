@@ -1,4 +1,4 @@
-import type { PopupButton, PopupCopy, PopupFrequency, PopupPage, PopupTrigger, PopupType } from '../../../lib/popups'
+import type { PopupButton, PopupCopy, PopupFrequency, PopupPage, PopupPreset, PopupTrigger, PopupType } from '../../../lib/popups'
 
 /** A popup as the Popup Manager sees it: everything the storefront gets, plus status and stats. */
 export interface AdminPopup {
@@ -27,6 +27,10 @@ export interface AdminPopup {
   createdAt: string
   updatedAt: string
   stats: { views: number; closes: number; clicks: number; views30d: number; closes30d: number; clicks30d: number }
+  triggerScroll?: number | null
+  excludeCheckout?: boolean
+  /** One of the guide's seven popups (V60), or null. */
+  preset?: PopupPreset | null
 }
 
 export interface AdminPopupImage {
