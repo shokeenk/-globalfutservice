@@ -23,6 +23,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
             + "where t.accountId = :accountId and t.revokedAt is null")
     int revokeAllForAccount(@Param("accountId") Long accountId, @Param("now") Instant now);
 
+    /** A password changed on this device: every other device signs in again. */
+    @Modifying
+    @Query("update RefreshTokenEntity t set t.revokedAt = :now "
+            + "where t.accountId = :accountId and t.familyId <> :keepFamilyId and t.revokedAt is null")
+    int revokeAllForAccountExcept(@Param("accountId") Long accountId,
+                                  @Param("keepFamilyId") String keepFamilyId, @Param("now") Instant now);
+
     @Modifying
     @Query("delete from RefreshTokenEntity t where t.expiresAt < :cutoff")
     int deleteExpired(@Param("cutoff") Instant cutoff);

@@ -215,6 +215,14 @@ gfs:
     require-https: ${GFS_REQUIRE_HTTPS:false}
     max-failed-logins: 5
     login-lockout: 15m
+    session-refresh-token-ttl: 12h # "Remember me" unticked: idle limit behind the session cookie
+    login-failures-per-email: 5    # failed sign-ins per address per window, account or not
+    login-failures-per-ip: 20      # and per IP
+    login-failure-window: 15m
+    password-reset-ttl: 30m        # how long a reset link works
+    reset-requests-per-email: 3    # reset links asked for per address per window
+    reset-requests-per-ip: 10
+    reset-request-window: 1h
 
   pricing:
     market-tax-bps: ${GFS_MARKET_TAX_BPS:500}       # EA transfer market tax, 5%

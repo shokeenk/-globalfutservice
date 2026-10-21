@@ -19,5 +19,7 @@ Disallow: /account
 Disallow: /admin
 Disallow: /login
 Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
 
 Sitemap: https://globalfutservices.com/sitemap.xml

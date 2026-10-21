@@ -57,6 +57,10 @@ public class RefreshTokenEntity {
     @Column(name = "ip_hash")
     private String ipHash;
 
+    /** "Remember me" ticked: the cookie outlives the browser. See V57. */
+    @Column(name = "persistent", nullable = false)
+    private boolean persistent = true;
+
     protected RefreshTokenEntity() {
     }
 
@@ -113,5 +117,13 @@ public class RefreshTokenEntity {
 
     public void setIpHash(String ipHash) {
         this.ipHash = ipHash;
+    }
+
+    public boolean isPersistent() {
+        return persistent;
+    }
+
+    public void setPersistent(boolean persistent) {
+        this.persistent = persistent;
     }
 }

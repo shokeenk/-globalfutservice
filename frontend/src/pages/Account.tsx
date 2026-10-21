@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ChangePassword } from '../components/ChangePassword'
 import { PageHeader } from '../components/PageHeader'
 import { StoreCreditBalance } from '../components/StoreCredit'
 import { Badge, ButtonLink, Checkbox, EmptyState, Section, Skeleton } from '../components/ui'
@@ -349,6 +350,12 @@ export default function Account() {
                 </p>
               )}
             </Reveal>
+
+            {account && (
+              <Reveal delay={160} className="plate p-5">
+                <ChangePassword email={account.email} hasPassword={account.hasPassword !== false} />
+              </Reveal>
+            )}
 
             <Reveal delay={180} className="plate p-5">
               <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-chalk-faint">

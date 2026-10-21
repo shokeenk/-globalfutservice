@@ -36,6 +36,8 @@ const OrderSupport = lazy(() => import('./pages/OrderSupport'))
 const GuestOrderChat = lazy(() => import('./pages/GuestOrderChat'))
 const Login = lazy(() => import('./pages/Login'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Account = lazy(() => import('./pages/Account'))
 const AdminShell = lazy(() => import('./pages/admin/shell/AdminShell'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
@@ -204,6 +206,8 @@ export default function App() {
 
               <Route path="/login" element={<Login mode="login" />} />
               <Route path="/register" element={<Login mode="register" />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               {/* Where Google and Discord send the browser back. */}
               <Route path="/auth/callback" element={<AuthCallback />} />
 

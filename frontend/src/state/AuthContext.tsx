@@ -6,7 +6,12 @@ import type { Account } from '../lib/types'
 type AuthState = {
   account: Account | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  /**
+   * `rememberMe` ticked keeps the long-lived refresh cookie; unticked, the server sets a
+   * session cookie the browser drops when it closes. The password is sent once and kept
+   * nowhere.
+   */
+  login: (email: string, password: string, rememberMe: boolean) => Promise<void>
   register: (input: RegisterInput) => Promise<void>
   logout: () => Promise<void>
   refreshAccount: () => Promise<void>
@@ -67,8 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [adopt])
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      adopt(await api.post<TokenResponse>('/api/v1/auth/login', { email, password }))
+    async (email: string, password: string, rememberMe: boolean) => {
+      adopt(await api.post<TokenResponse>('/api/v1/auth/login', { email, password, rememberMe }))
     },
     [adopt],
   )

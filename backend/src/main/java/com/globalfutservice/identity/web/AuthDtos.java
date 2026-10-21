@@ -68,14 +68,68 @@ public final class AuthDtos {
         }
     }
 
+    /**
+     * @param rememberMe ticked: the long-lived refresh cookie. Unticked: a session cookie
+     *                   that goes when the browser closes. Absent: ticked, as every
+     *                   sign-in was before the box existed.
+     */
     public record LoginRequest(
             @Email @NotBlank String email,
-            @NotBlank String password) {
+            @NotBlank String password,
+            Boolean rememberMe) {
 
         @Override
         public String toString() {
             return "LoginRequest[email=" + email + ", redacted]";
         }
+    }
+
+    /**
+     * "Forgot password?". {@code language} is the storefront's, en, es or fr, and picks the
+     * email's; anything else gets English.
+     */
+    public record ForgotPasswordRequest(
+            @Email(message = "That does not look like an email address")
+            @NotBlank(message = "Email is required")
+            @Size(max = 255)
+            String email,
+            @Size(max = 8) String language) {
+    }
+
+    /** The same length rule as sign-up: see {@link RegisterRequest#password()}. */
+    public record ResetPasswordRequest(
+            @NotBlank @Size(max = 512) String token,
+            @NotBlank(message = "Password is required")
+            @Size(min = 12, max = 128, message = "Use at least 12 characters — a short phrase works well")
+            String password,
+            @Size(max = 8) String language) {
+
+        @Override
+        public String toString() {
+            return "ResetPasswordRequest[redacted]";
+        }
+    }
+
+    /** Signed in, from Account settings. The new password follows the sign-up rule. */
+    public record ChangePasswordRequest(
+            @NotBlank(message = "Enter your current password") @Size(max = 128) String currentPassword,
+            @NotBlank(message = "Password is required")
+            @Size(min = 12, max = 128, message = "Use at least 12 characters — a short phrase works well")
+            String newPassword,
+            @Size(max = 8) String language) {
+
+        @Override
+        public String toString() {
+            return "ChangePasswordRequest[redacted]";
+        }
+    }
+
+    /** "Set a password" for an account made with Google or Discord: the reset link goes to its email. */
+    public record SetPasswordLinkRequest(@Size(max = 8) String language) {
+    }
+
+    /** The answer to a forgot-password request, identical whether or not the account exists. */
+    public record MessageResponse(String message) {
     }
 
     /**
@@ -99,6 +153,8 @@ public final class AuthDtos {
             long pointsValueMinor,
             String pointsValueFormatted,
             boolean firstOrder,
-            String referredByCode) {
+            String referredByCode,
+            /** False for an account made with Google or Discord that has never set one. */
+            boolean hasPassword) {
     }
 }

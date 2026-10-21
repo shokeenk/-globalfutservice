@@ -459,6 +459,8 @@ export interface Account {
   pointsValueFormatted: string
   firstOrder: boolean
   referredByCode: string | null
+  /** False for an account made with Google or Discord that has never set a password. */
+  hasPassword?: boolean
 }
 
 export interface AdminStats {
