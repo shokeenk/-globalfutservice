@@ -787,6 +787,10 @@ const en = {
     toAccount: 'Go to my account',
   },
 
+  popups: {
+    close: 'Close',
+  },
+
   support: {
     seoTitle: 'Support',
     seoDescription: 'Get in touch about an order.',

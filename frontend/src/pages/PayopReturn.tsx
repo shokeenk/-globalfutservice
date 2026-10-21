@@ -4,6 +4,7 @@ import { Alert, ButtonLink, Section, Spinner } from '../components/ui'
 import { useT } from '../i18n'
 import { ApiError, api } from '../lib/api'
 import { useSeo } from '../lib/seo'
+import { useNoPopups } from '../state/popupContext'
 
 /**
  * Where Payop sends the customer back, with our order reference and Payop's invoice ID.
@@ -31,6 +32,8 @@ const POLL_FOR_MS = 10 * 60 * 1000
 
 export default function PayopReturn() {
   const t = useT()
+  // Back from the payment gateway: never a popup here.
+  useNoPopups()
   useSeo({ title: t.payopReturn.eyebrow, noindex: true })
   const [params] = useSearchParams()
   const ref = params.get('ref') ?? ''

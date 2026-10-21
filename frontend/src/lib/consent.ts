@@ -60,13 +60,15 @@ export function setConsent(consent: Consent): void {
 /** The preference keys this site writes. Kept here so "forget it" stays honest. */
 const PREFERENCE_KEYS = ['gfs.language', 'gfs.currency']
 
+/** Which popups this browser has seen, for "once every N days" (lib/popups). */
+const POPUP_PREFIX = 'gfs.popup.'
+
 function forgetPreferences(): void {
-  for (const key of PREFERENCE_KEYS) {
-    try {
-      window.localStorage.removeItem(key)
-    } catch {
-      /* ignore */
-    }
+  try {
+    const popupKeys = Object.keys(window.localStorage).filter((k) => k.startsWith(POPUP_PREFIX))
+    for (const key of [...PREFERENCE_KEYS, ...popupKeys]) window.localStorage.removeItem(key)
+  } catch {
+    /* ignore */
   }
 }
 

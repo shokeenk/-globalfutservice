@@ -7,6 +7,7 @@ import { PayopPayment, type PayopRoutes } from './PayopPayment'
 import { ORDER_SUMMARY, usePublishPaySummary } from './paySummary'
 import { INTERNATIONAL, paymentMethods, type PaymentMethodKey } from '../lib/paymentMethods'
 import { useInternationalOffer } from './internationalOffer'
+import { useNoPopups } from '../state/popupContext'
 
 /** Where a payment claim and its screenshot are sent. */
 export interface ManualRoutes {
@@ -116,6 +117,8 @@ export function ManualPayment({
    */
   onSubmitted?: () => void
 }) {
+  // Paying, and the UPI proof upload: never a popup over it.
+  useNoPopups()
   const { t, lang } = useI18n()
   const via = useMemo(() => routes ?? guestManualRoutes(publicRef, email ?? ''), [routes, publicRef, email])
 

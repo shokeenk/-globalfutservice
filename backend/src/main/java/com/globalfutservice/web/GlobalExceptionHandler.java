@@ -108,6 +108,14 @@ public class GlobalExceptionHandler {
                         trace));
     }
 
+    /** A popup with fields that do not pass: each one named, as a form's own validation is. */
+    @ExceptionHandler(com.globalfutservice.popups.PopupService.PopupInvalid.class)
+    public ResponseEntity<ApiError> popupInvalid(com.globalfutservice.popups.PopupService.PopupInvalid e) {
+        Map<String, List<String>> details = new LinkedHashMap<>();
+        e.problems().forEach((field, problem) -> details.put(field, List.of(problem)));
+        return ResponseEntity.badRequest().body(ApiError.of("validation_failed", e.getMessage(), details, traceId()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> validation(MethodArgumentNotValidException e) {
         Map<String, List<String>> details = new LinkedHashMap<>();

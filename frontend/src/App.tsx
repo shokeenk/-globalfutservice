@@ -8,6 +8,7 @@ import { AskWidget } from './components/AskWidget'
 import { isSupportPage } from './components/support/SupportCard'
 import { LiveChatButton, showsLiveChat } from './components/LiveChatButton'
 import { VerifyEmailBanner } from './components/VerifyEmailBanner'
+import { PopupHost } from './components/popups/PopupHost'
 import { CursorLight } from './components/CursorLight'
 import { Header } from './components/Header'
 import { Spinner } from './components/ui'
@@ -46,6 +47,7 @@ const AdminShell = lazy(() => import('./pages/admin/shell/AdminShell'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
 const AdminOrder = lazy(() => import('./pages/admin/AdminOrder'))
 const AdminCoupons = lazy(() => import('./pages/admin/AdminCoupons'))
+const AdminPopups = lazy(() => import('./pages/admin/AdminPopups'))
 const AdminRates = lazy(() => import('./pages/admin/AdminRates'))
 const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
 const SendCampaign = lazy(() => import('./pages/admin/campaigns/SendCampaign'))
@@ -134,6 +136,7 @@ export default function App() {
             element={<RequireAdmin><AdminComingSoon eyebrow="Email Marketing" title="Settings" /></RequireAdmin>}
           />
           <Route path="promotions" element={<AdminCoupons />} />
+          <Route path="popups" element={<RequireAdmin><AdminPopups /></RequireAdmin>} />
           {/* RequireAdmin: revenue is an admin's figure, and the endpoint is ADMIN only. */}
           <Route path="analytics" element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
           <Route path="support" element={<AdminSupport />} />
@@ -270,6 +273,8 @@ function PublicLayout() {
           button get that instead of the help assistant -- one red button in the corner,
           not two. An order's support page has the live chat in the page and needs neither. */}
       <CornerWidget pathname={location.pathname} />
+      {/* Popups: at most one on screen, never on the payment step. See PopupHost. */}
+      <PopupHost />
     </div>
   )
 }

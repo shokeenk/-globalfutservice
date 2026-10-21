@@ -669,7 +669,8 @@ function Privacy({ policy }: { policy: Policy | null }) {
         */}
         <p>
           On your first visit we ask whether this browser may also remember your language and
-          currency. Accept and those two choices are kept here on your device. Decline and they
+          currency, and which offers you have already seen so they are not shown again for a while.
+          Accept and those choices are kept here on your device. Decline and they
           are not: they last until you close the tab, anything already stored is deleted, and
           only the sign-in cookie above remains. Your answer itself is stored, so that we do
           not ask again on every page.

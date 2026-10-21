@@ -685,6 +685,10 @@ const fr: Dictionary = {
     toAccount: 'Aller à mon compte',
   },
 
+  popups: {
+    close: 'Fermer',
+  },
+
   support: {
     seoTitle: 'Assistance',
     seoDescription: 'Contacte-nous au sujet d’une commande.',

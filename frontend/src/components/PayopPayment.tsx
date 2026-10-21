@@ -5,6 +5,7 @@ import { ApiError, api } from '../lib/api'
 import { COUNTRY_CODES, countryCode, countryFromLocale, countryName } from '../lib/countries'
 import type { QuoteLine } from '../lib/types'
 import { ORDER_SUMMARY, usePublishPaySummary } from './paySummary'
+import { useNoPopups } from '../state/popupContext'
 
 /**
  * Paying an international order through Payop, from the International tab: the country and
@@ -142,6 +143,8 @@ export function PayopPayment({
   /** Whether a card method is offered for the country chosen, each time its methods arrive. */
   onCards?: (cards: boolean) => void
 }) {
+  // The payment gateway step: never a popup over it.
+  useNoPopups()
   const { t, lang } = useI18n()
   const via = useMemo(() => routes ?? guestPayopRoutes(publicRef, email ?? ''), [routes, publicRef, email])
   const [country, setCountry] = useState<string | null>(null)
