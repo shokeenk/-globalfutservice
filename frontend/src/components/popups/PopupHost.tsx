@@ -2,10 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useI18n } from '../../i18n'
 import { api } from '../../lib/api'
-import { alreadySeen, pageKeyFor, POPUP_STEP_EVENT, rememberSeen, reportPopup } from '../../lib/popups'
+import { alreadySeen, forgetStepsNotOn, isCheckout, pageKeyFor, POPUP_STEP_EVENT, rememberSeen, reportPopup,
+  stepFiredOn } from '../../lib/popups'
 import type { PopupPage, PublicPopup } from '../../lib/popups'
 import { usePopupContext } from '../../state/popupContext'
 import { PopupCard, PopupModal } from './PopupViews'
+import { usePopupFacts } from './popupFacts'
 
 /**
  * The one place popups are shown, mounted once in the storefront layout.
@@ -118,7 +120,8 @@ export function PopupHost() {
   const [current, setCurrent] = useState<PublicPopup | null>(null)
   /** Shown this page view and not closed by the customer: then no other may follow. */
   const [spent, setSpent] = useState(false)
-  const steps = useRef<Set<string>>(new Set())
+  const checkout = isCheckout(page, path)
+  const facts = usePopupFacts()
 
   // A new page view: forget everything about the last one.
   useEffect(() => {
@@ -126,22 +129,23 @@ export function PopupHost() {
     setReady([])
     setCurrent(null)
     setSpent(false)
-    steps.current = new Set()
+    // Steps fired on another path are over; one fired on this path stays heard.
+    forgetStepsNotOn(path)
     if (popupFreeRoute(path)) return
     let live = true
     void loadFor(page, path).then((list) => {
-      if (live) setCandidates(list.filter((p) => !alreadySeen(p)))
+      // "Never during checkout" popups are dropped on checkout pages, whatever they target.
+      if (live) setCandidates(list.filter((p) => !alreadySeen(p) && !(p.excludeCheckout && checkout)))
     })
     return () => { live = false }
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps -- the view key is page + path
 
-  // Page steps are heard from the start of the page view, so one fired before the list
-  // arrived still counts.
+  // Page steps: heard as they fire, and remembered per path by lib/popups, so one fired
+  // before the list arrived -- or as the page key changed -- still counts.
   useEffect(() => {
     function onStep(e: Event) {
       const name = (e as CustomEvent<string>).detail
       if (typeof name !== 'string') return
-      steps.current.add(name)
       setReady((r) => [...r, ...candidates.filter((c) => c.triggerType === 'STEP' && c.triggerEvent === name)
         .map((c) => c.id).filter((id) => !r.includes(id))])
     }
@@ -158,20 +162,27 @@ export function PopupHost() {
       else if (c.triggerType === 'DELAY') {
         const timer = window.setTimeout(() => fire(c.id), Math.max(0, c.triggerValue ?? 0) * 1000)
         cleanups.push(() => window.clearTimeout(timer))
-      } else if (c.triggerType === 'SCROLL') {
+      }
+      if (c.triggerType === 'DELAY_OR_SCROLL') {
+        // Whichever comes first: the seconds, or the scroll.
+        const timer = window.setTimeout(() => fire(c.id), Math.max(0, c.triggerValue ?? 0) * 1000)
+        cleanups.push(() => window.clearTimeout(timer))
+      }
+      if (c.triggerType === 'SCROLL' || c.triggerType === 'DELAY_OR_SCROLL') {
+        const percent = c.triggerType === 'SCROLL' ? c.triggerValue : c.triggerScroll
         const check = () => {
           const room = document.documentElement.scrollHeight - window.innerHeight
           const pct = room <= 0 ? 100 : (window.scrollY / room) * 100
-          if (pct >= (c.triggerValue ?? 0)) fire(c.id)
+          if (pct >= (percent ?? 0)) fire(c.id)
         }
         window.addEventListener('scroll', check, { passive: true })
         cleanups.push(() => window.removeEventListener('scroll', check))
-      } else if (c.triggerType === 'STEP' && c.triggerEvent && steps.current.has(c.triggerEvent)) {
+      } else if (c.triggerType === 'STEP' && c.triggerEvent && stepFiredOn(c.triggerEvent, path)) {
         fire(c.id)
       }
     }
     return () => cleanups.forEach((f) => f())
-  }, [candidates])
+  }, [candidates]) // eslint-disable-line react-hooks/exhaustive-deps -- the path is part of the view that loaded them
 
   // The slot: one popup, when none is showing, nothing blocks, and none was left open.
   useEffect(() => {
@@ -207,8 +218,8 @@ export function PopupHost() {
   if (!current || context.blocked) return null
   const closeLabel = t.popups.close
   return current.type === 'CENTER_MODAL'
-    ? <PopupModal popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} />
-    : <PlacedCard popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} />
+    ? <PopupModal popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} facts={facts} />
+    : <PlacedCard popup={current} lang={lang} onClose={close} onButton={follow} closeLabel={closeLabel} facts={facts} />
 }
 
 /** The card, placed clear of the chat button, sticky bars and checkout controls -- or hidden. */

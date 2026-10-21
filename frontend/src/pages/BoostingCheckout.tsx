@@ -147,8 +147,10 @@ export default function BoostingCheckout() {
   const [step, setStep] = useState<Step>('details')
   // The payment step: never a popup here.
   useNoPopups(step === 'pay')
-  // Opening a boosting checkout is a page step a popup can wait for.
-  useEffect(() => { firePopupStep('champs:checkout') }, [])
+  // The Champs order and payment page is a step a popup can wait for: Champs only, not Rivals.
+  useEffect(() => {
+    if (sku === 'BOOST_CHAMPS') firePopupStep('champs:checkout')
+  }, [sku])
   const [platform, setPlatform] = useState<BoostPlatform | null>(null)
   const [launcher, setLauncher] = useState<Launcher | null>(null)
   const [touched, setTouched] = useState(false)

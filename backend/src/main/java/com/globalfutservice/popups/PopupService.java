@@ -68,7 +68,11 @@ public class PopupService {
             Instant endsAt,
             Frequency frequency,
             Integer frequencyDays,
-            Integer priority) {
+            Integer priority,
+            /** DELAY_OR_SCROLL's percentage; its seconds go in {@code triggerValue}. */
+            Integer triggerScroll,
+            /** Never on a checkout page. */
+            Boolean excludeCheckout) {
     }
 
     public record ImageView(long id, String url, String contentType, int width, int height, int sizeBytes) {
@@ -84,7 +88,8 @@ public class PopupService {
             LocalizedCopy copy, List<Button> buttons, List<Page> targetPages, List<String> targetPaths,
             Trigger triggerType, Integer triggerValue, String triggerEvent,
             Instant startsAt, Instant endsAt, Frequency frequency, Integer frequencyDays, int priority,
-            boolean live, Instant createdAt, Instant updatedAt, Stats stats) {
+            boolean live, Instant createdAt, Instant updatedAt, Stats stats,
+            Integer triggerScroll, boolean excludeCheckout, PopupTypes.Preset preset) {
     }
 
     public record Change(String action, String detail, Long adminId, String adminEmail, Instant at) {
@@ -137,7 +142,7 @@ public class PopupService {
 
     @Transactional
     public PopupView create(PopupInput input, Long adminId) {
-        Checked ok = check(input);
+        Checked ok = check(input, null);
         Instant now = clock.instant();
         PopupCampaignEntity c = new PopupCampaignEntity("pop_" + SecureIds.token(9), ok.name, ok.type,
                 json(ok.copy), adminId, now);
@@ -150,7 +155,7 @@ public class PopupService {
     @Transactional
     public PopupView update(String publicId, PopupInput input, Long adminId) {
         PopupCampaignEntity c = require(publicId);
-        Checked ok = check(input);
+        Checked ok = check(input, c.getPreset());
         if (c.getStatus() == Status.PUBLISHED) {
             requirePublishable(ok, c.getDesktopImageId());
         }
@@ -180,6 +185,10 @@ public class PopupService {
         copy.setFrequency(source.getFrequency());
         copy.setFrequencyDays(source.getFrequencyDays());
         copy.setPriority(source.getPriority());
+        copy.setTriggerScroll(source.getTriggerScroll());
+        copy.setExcludeCheckout(source.isExcludeCheckout());
+        // A copy of a guide popup keeps its rules: no buttons where it had none.
+        copy.setPreset(source.getPreset());
         copy = campaigns.save(copy);
         // The images too, as rows of their own, so deleting either campaign leaves the other whole.
         copy.setDesktopImageId(copyImage(source.getDesktopImageId(), copy.getId(), adminId));
@@ -210,7 +219,7 @@ public class PopupService {
     @Transactional
     public PopupView publish(String publicId, Long adminId) {
         PopupCampaignEntity c = require(publicId);
-        requirePublishable(check(input(c)), c.getDesktopImageId());
+        requirePublishable(check(input(c), c.getPreset()), c.getDesktopImageId());
         Instant now = clock.instant();
         c.setStatus(Status.PUBLISHED);
         c.touched(adminId, now);
@@ -303,11 +312,17 @@ public class PopupService {
     /** An input that has passed {@link #check}: trimmed, defaulted, every value in range. */
     record Checked(String name, Type type, LocalizedCopy copy, List<Button> buttons, List<Page> targetPages,
                    List<String> targetPaths, Trigger triggerType, Integer triggerValue, String triggerEvent,
-                   Instant startsAt, Instant endsAt, Frequency frequency, Integer frequencyDays, int priority) {
+                   Instant startsAt, Instant endsAt, Frequency frequency, Integer frequencyDays, int priority,
+                   Integer triggerScroll, boolean excludeCheckout) {
+    }
+
+    /** Every rule, for a popup with no preset. */
+    static Checked check(PopupInput in) {
+        return check(in, null);
     }
 
     /** Every rule, with every problem named at once, keyed by field. */
-    static Checked check(PopupInput in) {
+    static Checked check(PopupInput in, PopupTypes.Preset preset) {
         Map<String, String> problems = new LinkedHashMap<>();
         String name = trim(in.name());
         if (name == null) problems.put("name", "Give the popup a name.");
@@ -323,6 +338,9 @@ public class PopupService {
         List<Button> rawButtons = in.buttons() == null ? List.of() : in.buttons();
         if (rawButtons.size() > PopupTypes.MAX_BUTTONS) {
             problems.put("buttons", "At most " + PopupTypes.MAX_BUTTONS + " buttons.");
+        }
+        if (preset != null && !preset.allowsButtons() && !rawButtons.isEmpty()) {
+            problems.put("buttons", "This popup has no buttons, as the guide sets it out.");
         }
         for (int i = 0; i < Math.min(rawButtons.size(), PopupTypes.MAX_BUTTONS); i++) {
             Button b = rawButtons.get(i);
@@ -355,6 +373,7 @@ public class PopupService {
 
         Trigger trigger = in.triggerType() == null ? Trigger.PAGE_LOAD : in.triggerType();
         Integer value = null;
+        Integer scroll = null;
         String event = null;
         switch (trigger) {
             case DELAY -> {
@@ -364,6 +383,12 @@ public class PopupService {
             case SCROLL -> {
                 value = in.triggerValue();
                 if (value == null || value < 1 || value > 100) problems.put("triggerValue", "Between 1% and 100%.");
+            }
+            case DELAY_OR_SCROLL -> {
+                value = in.triggerValue();
+                scroll = in.triggerScroll();
+                if (value == null || value < 1 || value > 600) problems.put("triggerValue", "Between 1 and 600 seconds.");
+                if (scroll == null || scroll < 1 || scroll > 100) problems.put("triggerScroll", "Between 1% and 100%.");
             }
             case STEP -> {
                 event = trim(in.triggerEvent());
@@ -390,7 +415,8 @@ public class PopupService {
             throw new PopupInvalid(problems);
         }
         return new Checked(name, in.type(), new LocalizedCopy(en, es, fr), List.copyOf(buttons), pages,
-                List.copyOf(paths), trigger, value, event, in.startsAt(), in.endsAt(), frequency, days, priority);
+                List.copyOf(paths), trigger, value, event, in.startsAt(), in.endsAt(), frequency, days, priority,
+                scroll, Boolean.TRUE.equals(in.excludeCheckout()));
     }
 
     /** Publishing also needs somewhere to show and a picture to show. */
@@ -455,13 +481,15 @@ public class PopupService {
         c.setFrequency(ok.frequency());
         c.setFrequencyDays(ok.frequencyDays());
         c.setPriority(ok.priority());
+        c.setTriggerScroll(ok.triggerScroll());
+        c.setExcludeCheckout(ok.excludeCheckout());
     }
 
     /** The stored campaign as an input again, for re-checking at publish time. */
     PopupInput input(PopupCampaignEntity c) {
         return new PopupInput(c.getName(), c.getType(), copyOf(c), buttonsOf(c), pagesOf(c), pathsOf(c),
                 c.getTriggerType(), c.getTriggerValue(), c.getTriggerEvent(), c.getStartsAt(), c.getEndsAt(),
-                c.getFrequency(), c.getFrequencyDays(), c.getPriority());
+                c.getFrequency(), c.getFrequencyDays(), c.getPriority(), c.getTriggerScroll(), c.isExcludeCheckout());
     }
 
     PopupView view(PopupCampaignEntity c, Stats stats, Instant now) {
@@ -469,7 +497,7 @@ public class PopupService {
                 image(c.getDesktopImageId()), image(c.getMobileImageId()), copyOf(c), buttonsOf(c), pagesOf(c),
                 pathsOf(c), c.getTriggerType(), c.getTriggerValue(), c.getTriggerEvent(), c.getStartsAt(),
                 c.getEndsAt(), c.getFrequency(), c.getFrequencyDays(), c.getPriority(), c.isLive(now),
-                c.getCreatedAt(), c.getUpdatedAt(), stats);
+                c.getCreatedAt(), c.getUpdatedAt(), stats, c.getTriggerScroll(), c.isExcludeCheckout(), c.getPreset());
     }
 
     ImageView image(Long id) {

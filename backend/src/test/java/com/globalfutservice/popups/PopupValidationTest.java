@@ -29,13 +29,13 @@ class PopupValidationTest {
                         null, new Copy("10 % sur les pièces", null, null, null)),
                 List.of(new Button(new Label("Buy coins", "Comprar", null), "/order")),
                 List.of(Page.HOME, Page.COINS), List.of("/help"), Trigger.DELAY, 5, null,
-                Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-11-08T00:00:00Z"), Frequency.DAYS, 7, 10);
+                Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-11-08T00:00:00Z"), Frequency.DAYS, 7, 10, null, false);
     }
 
     static PopupInput with(PopupInput v, List<Button> buttons, Trigger trigger, Integer value, String event,
                            Instant starts, Instant ends, Frequency freq, Integer days) {
         return new PopupInput(v.name(), v.type(), v.copy(), buttons, v.targetPages(), v.targetPaths(), trigger, value,
-                event, starts, ends, freq, days, v.priority());
+                event, starts, ends, freq, days, v.priority(), null, false);
     }
 
     private static Map<String, String> problems(PopupInput in) {
@@ -60,7 +60,7 @@ class PopupValidationTest {
     @DisplayName("name, type and the English headline are required")
     void required() {
         PopupInput empty = new PopupInput(" ", null, new LocalizedCopy(new Copy(" ", null, null, null), null, null),
-                null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
         assertThat(problems(empty)).containsKeys("name", "type", "copy.en.headline");
     }
 
@@ -103,7 +103,7 @@ class PopupValidationTest {
     void publishable() {
         PopupService.Checked c = PopupService.check(new PopupInput("x", Type.BOTTOM_RIGHT,
                 new LocalizedCopy(new Copy("Hi", null, null, null), null, null), null, null, null, null, null, null,
-                null, null, null, null, null));
+                null, null, null, null, null, null, null));
         assertThatThrownBy(() -> PopupService.requirePublishable(c, null))
                 .isInstanceOfSatisfying(PopupService.PopupInvalid.class,
                         e -> assertThat(e.problems()).containsKeys("targetPages", "desktopImage"));

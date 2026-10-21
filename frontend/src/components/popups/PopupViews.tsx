@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react'
-import { localized, popupImageUrl } from '../../lib/popups'
+import { fillTokens, localized, popupImageUrl } from '../../lib/popups'
+import type { PopupFacts } from './popupFacts'
 import type { PublicPopup } from '../../lib/popups'
 
 /**
@@ -10,7 +11,9 @@ import type { PublicPopup } from '../../lib/popups'
  * @param phone   for the preview: draw as a phone would (mobile image, compact card)
  */
 type ViewProps = {
-  popup: Pick<PublicPopup, 'id' | 'copy' | 'buttons' | 'desktopImage' | 'mobileImage'>
+  popup: Pick<PublicPopup, 'id' | 'copy' | 'buttons' | 'desktopImage' | 'mobileImage'> & Pick<Partial<PublicPopup>, 'preset'>
+  /** Live numbers from the catalogue: the point value, and the tiers for the membership popup. */
+  facts?: PopupFacts
   lang: string
   onClose: () => void
   onButton: (destination: string) => void
@@ -34,12 +37,37 @@ function Picture({ popup, phone, className }: { popup: ViewProps['popup']; phone
   )
 }
 
-function Words({ popup, lang, onButton, compact, titleId }: Pick<ViewProps, 'popup' | 'lang' | 'onButton'> & {
+/** A line of copy as paragraphs: a blank line in the text starts a new one. */
+function Paragraphs({ text, className }: { text: string; className: string }) {
+  return <>{text.split(/\n\s*\n/).map((p, i) => <p key={i} className={className}>{p.trim()}</p>)}</>
+}
+
+/**
+ * The membership popup's tier ladder, from the catalogue. Percentages only while tier
+ * discounts are switched on, and only for a tier that has one.
+ */
+function Tiers({ facts }: { facts?: PopupFacts }) {
+  if (!facts?.tiers?.length) return null
+  return (
+    <ul className="flex flex-wrap gap-1.5 pt-1" data-testid="popup-tiers">
+      {facts.tiers.map((t) => (
+        <li key={t.name} className="rounded-full border border-ink-400 px-2.5 py-1 text-[12px] text-chalk">
+          {t.name}{t.percent && <span className="ml-1 font-semibold text-gold-400">{t.percent}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function Words({ popup, lang, onButton, compact, titleId, facts }: Pick<ViewProps, 'popup' | 'lang' | 'onButton' | 'facts'> & {
   compact?: boolean
   /** The id the dialog is labelled by: the visible headline itself. */
   titleId?: string
 }) {
-  const w = localized(popup, lang)
+  const raw = localized(popup, lang)
+  const tokens = { pointValue: facts?.pointValue }
+  const w = { ...raw, body: fillTokens(raw.body, tokens), referral: fillTokens(raw.referral, tokens),
+    trust: fillTokens(raw.trust, tokens) }
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-2.5'}>
       {w.headline && (
@@ -47,7 +75,8 @@ function Words({ popup, lang, onButton, compact, titleId }: Pick<ViewProps, 'pop
           {w.headline}
         </p>
       )}
-      {w.body && <p className={`text-chalk-muted ${compact ? 'text-[12.5px]' : 'text-[14px]'} leading-relaxed`}>{w.body}</p>}
+      {w.body && <Paragraphs text={w.body} className={`text-chalk-muted ${compact ? 'text-[12.5px]' : 'text-[14px]'} leading-relaxed`} />}
+      {popup.preset === 'MEMBERSHIP' && <Tiers facts={facts} />}
       {w.referral && <p className="text-[12.5px] font-medium text-gold-400">{w.referral}</p>}
       {w.buttons.length > 0 && (
         <div className={`flex flex-wrap gap-2 ${compact ? 'pt-1' : 'pt-2'}`}>
@@ -61,7 +90,7 @@ function Words({ popup, lang, onButton, compact, titleId }: Pick<ViewProps, 'pop
           ))}
         </div>
       )}
-      {w.trust && <p className="pt-1 text-[11.5px] text-chalk-faint">{w.trust}</p>}
+      {w.trust && <Paragraphs text={w.trust} className="pt-1 text-[11.5px] text-chalk-faint" />}
     </div>
   )
 }
@@ -71,7 +100,7 @@ function Words({ popup, lang, onButton, compact, titleId }: Pick<ViewProps, 'pop
  * stays inside while it is open. Never wider than the screen less a 16px gutter each side,
  * and scrolls inside itself rather than the page sideways.
  */
-export function PopupModal({ popup, lang, onClose, onButton, preview, phone, closeLabel }: ViewProps) {
+export function PopupModal({ popup, lang, onClose, onButton, preview, phone, closeLabel, facts }: ViewProps) {
   const dialog = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const w = localized(popup, lang)
@@ -124,7 +153,7 @@ export function PopupModal({ popup, lang, onClose, onButton, preview, phone, clo
         </button>
         <Picture popup={popup} phone={phone} className="block h-auto w-full max-w-full" />
         <div className="p-5 sm:p-6">
-          <Words popup={popup} lang={lang} onButton={onButton} titleId={titleId} />
+          <Words popup={popup} lang={lang} onButton={onButton} titleId={titleId} facts={facts} />
         </div>
       </div>
     </div>
@@ -136,7 +165,7 @@ export function PopupModal({ popup, lang, onClose, onButton, preview, phone, clo
  * chat button and any sticky checkout bar -- and keeps it hidden while it would cover a
  * checkout control. On a phone it drops the picture to stay small.
  */
-export function PopupCard({ popup, lang, onClose, onButton, preview, phone, closeLabel, bottom = 96, hidden }: ViewProps & {
+export function PopupCard({ popup, lang, onClose, onButton, preview, phone, closeLabel, facts, bottom = 96, hidden }: ViewProps & {
   bottom?: number
   hidden?: boolean
 }) {
@@ -154,7 +183,7 @@ export function PopupCard({ popup, lang, onClose, onButton, preview, phone, clos
       </button>
       {!phone && <Picture popup={popup} className="hidden h-auto max-h-[150px] w-full object-cover sm:block" />}
       <div className="p-4 pr-10">
-        <Words popup={popup} lang={lang} onButton={onButton} compact />
+        <Words popup={popup} lang={lang} onButton={onButton} compact facts={facts} />
       </div>
     </div>
   )

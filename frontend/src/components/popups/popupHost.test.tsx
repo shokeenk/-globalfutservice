@@ -18,7 +18,7 @@ vi.mock('../../lib/consent', async (original) => ({
 }))
 
 const { PopupHost, resetPopupHostForTests, cardPlacement, nextPopup } = await import('./PopupHost')
-const { firePopupStep, alreadySeen, rememberSeen } = await import('../../lib/popups')
+const { firePopupStep, alreadySeen, rememberSeen, resetStepsForTests } = await import('../../lib/popups')
 const { useNoPopups, resetPopupContextForTests } = await import('../../state/popupContext')
 
 function popup(over: Partial<PublicPopup> & { id: string }): PublicPopup {
@@ -62,6 +62,8 @@ const card = () => screen.queryByTestId('popup-card')
 
 beforeEach(() => {
   resetPopupHostForTests()
+  resetStepsForTests()
+  window.history.pushState({}, '', '/')
   resetPopupContextForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -172,6 +174,8 @@ describe('triggers', () => {
   it('at a page step, even one fired just before the list arrived', async () => {
     let answer: (v: PublicPopup[]) => void = () => {}
     api.get.mockImplementation(() => new Promise((r) => { answer = r }))
+    // The real router keeps window.location in step; the in-memory one used here does not.
+    window.history.pushState({}, '', '/order')
     at('/order')
     await waitFor(() => expect(api.get).toHaveBeenCalled())
     act(() => firePopupStep('coins:continue'))

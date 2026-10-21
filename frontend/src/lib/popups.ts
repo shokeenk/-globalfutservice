@@ -10,7 +10,12 @@ import { mayStorePreferences } from './consent'
  */
 
 export type PopupType = 'CENTER_MODAL' | 'BOTTOM_RIGHT'
-export type PopupTrigger = 'PAGE_LOAD' | 'DELAY' | 'SCROLL' | 'STEP'
+export type PopupTrigger = 'PAGE_LOAD' | 'DELAY' | 'SCROLL' | 'DELAY_OR_SCROLL' | 'STEP'
+/** The guide's seven popups (V60). Three never have a button; MEMBERSHIP shows the live tiers. */
+export type PopupPreset = 'HOME_ENTRY' | 'COINS_OFFER' | 'COINS_CHECKOUT' | 'CHAMPS_LISTING' | 'CHAMPS_CHECKOUT'
+  | 'MEMBERSHIP' | 'REWARDS_REMINDER'
+
+export const NO_BUTTON_PRESETS: PopupPreset[] = ['COINS_OFFER', 'COINS_CHECKOUT', 'CHAMPS_CHECKOUT']
 export type PopupFrequency = 'SESSION' | 'DAYS' | 'EVERY_VISIT'
 export type PopupPage = 'HOME' | 'COINS' | 'COINS_CHECKOUT' | 'CHAMPS_LISTING' | 'CHAMPS_CHECKOUT' | 'REWARDS'
 
@@ -50,6 +55,11 @@ export interface PublicPopup {
   frequency: PopupFrequency
   frequencyDays?: number | null
   priority: number
+  /** DELAY_OR_SCROLL: the scroll percentage; the seconds are triggerValue. */
+  triggerScroll?: number | null
+  /** Never on a checkout page. */
+  excludeCheckout?: boolean
+  preset?: PopupPreset | null
 }
 
 /** The words in the visitor's language, each one falling back to English where empty. */
@@ -66,6 +76,21 @@ export function localized(p: Pick<PublicPopup, 'copy' | 'buttons'>, lang: string
       destination: b.destination,
     })),
   }
+}
+
+/** Checkout pages, where a popup marked "never during checkout" is not shown. */
+export function isCheckout(page: PopupPage | null, pathname: string): boolean {
+  return page === 'COINS_CHECKOUT' || page === 'CHAMPS_CHECKOUT'
+    || /^\/(boosting\/checkout|coaching\/book)\/?$/.test(pathname)
+}
+
+/**
+ * "{pointValue}" in a popup's words, filled in from the live point value: never typed into
+ * the copy, so it cannot stop matching what checkout gives.
+ */
+export function fillTokens(text: string | null, facts: { pointValue?: string | null }): string | null {
+  if (text == null) return null
+  return facts.pointValue ? text.replace(/\{pointValue\}/g, facts.pointValue) : text.replace(/\{pointValue\}/g, '')
 }
 
 /** The page key a route is, before a page says otherwise (the coin order says COINS_CHECKOUT past step one). */
@@ -153,7 +178,28 @@ export const POPUP_STEP_EVENT = 'gfs:popup-step'
  */
 export function firePopupStep(name: string): void {
   if (typeof window === 'undefined') return
+  firedOn.set(name, window.location.pathname)
   window.dispatchEvent(new CustomEvent<string>(POPUP_STEP_EVENT, { detail: name }))
+}
+
+/**
+ * Which steps have fired, and on which path. A step stays heard on its own path -- a page
+ * can fire one in the same moment it changes the page key, or before the popup host has
+ * caught up with the route -- and is forgotten once the visitor is on another path.
+ */
+const firedOn = new Map<string, string>()
+
+export function stepFiredOn(name: string, pathname: string): boolean {
+  return firedOn.get(name) === pathname
+}
+
+export function forgetStepsNotOn(pathname: string): void {
+  for (const [name, path] of firedOn) if (path !== pathname) firedOn.delete(name)
+}
+
+/** For tests. */
+export function resetStepsForTests(): void {
+  firedOn.clear()
 }
 
 /** A view, close or button click, counted on the server. Nothing about the visitor is sent. */

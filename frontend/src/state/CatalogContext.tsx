@@ -135,6 +135,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>
 }
 
+/** The catalogue where there is one, or null: for decoration that must never break a page. */
+export function useOptionalCatalog(): CatalogState | null {
+  return useContext(CatalogContext)
+}
+
 export function useCatalog(): CatalogState {
   const context = useContext(CatalogContext)
   if (!context) throw new Error('useCatalog must be used inside CatalogProvider')

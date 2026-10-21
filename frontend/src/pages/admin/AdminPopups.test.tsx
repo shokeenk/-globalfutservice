@@ -113,6 +113,24 @@ describe('the editor', () => {
     await waitFor(() => expect(screen.getByText(/owner@example.test/)).toBeInTheDocument())
   })
 
+  it('offers no button on the guide popups that have none', async () => {
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/admin/popups') return [popup({ id: 'pop_guide_coins', preset: 'COINS_OFFER', buttons: [] })]
+      if (path === '/api/v1/admin/popups/options') return { pages: [], steps: [] }
+      return []
+    })
+    page('/admin/popups?edit=pop_guide_coins')
+    await screen.findByTestId('popup-editor')
+    expect(screen.getByText('The guide sets this popup out with no button.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add button' })).toBeNull()
+  })
+
+  it('keeps "after seconds or scroll" and "never during checkout" through the form', () => {
+    const p = popup({ triggerType: 'DELAY_OR_SCROLL', triggerValue: 8, triggerScroll: 40, excludeCheckout: true })
+    expect(inputFrom(formFrom(p))).toMatchObject({ triggerType: 'DELAY_OR_SCROLL', triggerValue: 8, triggerScroll: 40,
+      excludeCheckout: true })
+  })
+
   it('round-trips a popup through the form unchanged', () => {
     const p = popup({ triggerType: 'DELAY', triggerValue: 5, frequency: 'DAYS', frequencyDays: 7 })
     const back = inputFrom(formFrom(p))
