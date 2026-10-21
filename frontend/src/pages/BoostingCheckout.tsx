@@ -29,6 +29,8 @@ import type {
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 import { useLiveChatOrder } from '../components/LiveChatButton'
+import { firePopupStep } from '../lib/popups'
+import { useNoPopups } from '../state/popupContext'
 
 /**
  * Boosting, from "which account" to "we have your payment".
@@ -143,6 +145,10 @@ export default function BoostingCheckout() {
   }, [listing, hourly, stored])
 
   const [step, setStep] = useState<Step>('details')
+  // The payment step: never a popup here.
+  useNoPopups(step === 'pay')
+  // Opening a boosting checkout is a page step a popup can wait for.
+  useEffect(() => { firePopupStep('champs:checkout') }, [])
   const [platform, setPlatform] = useState<BoostPlatform | null>(null)
   const [launcher, setLauncher] = useState<Launcher | null>(null)
   const [touched, setTouched] = useState(false)
@@ -716,7 +722,7 @@ function ContinueBlock({ onContinue, disabled, placing }: { onContinue: () => vo
         reason used to sit beneath it in grey where it read as a footnote; pressing it now
         puts the red required-field error under the choice that is missing.
       */}
-      <Button full size="lg" onClick={onContinue} disabled={disabled}>
+      <Button full size="lg" data-popup-avoid="" onClick={onContinue} disabled={disabled}>
         {placing ? <Spinner size={18} /> : <>{b.continueToPayment} <span aria-hidden="true" className="ml-1.5">&rarr;</span></>}
       </Button>
       <div className="mt-3 rounded-edge border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">
@@ -1107,7 +1113,7 @@ function OrderPanel({
         ))}
       </dl>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex gap-2" data-popup-avoid="">
         <Input
           value={couponInput}
           onChange={(e) => onCouponInput(e.target.value)}
@@ -1145,7 +1151,7 @@ function OrderPanel({
 
       <div className="mt-4 flex items-baseline justify-between gap-3 rounded-edge bg-brand-500/[0.06] px-4 py-3">
         <p className="text-[13px] font-semibold text-chalk">{b.total}</p>
-        <p className="tnum text-[18px] font-semibold text-chalk" data-testid="summary-total">
+        <p className="tnum text-[18px] font-semibold text-chalk" data-testid="summary-total" data-popup-avoid="">
           {listing?.hourly && listing.hours == null && !payop
             ? <span className="text-[12.5px] font-normal text-chalk-muted">{t.listingCheckout.hoursForTotal}</span>
             : quoting && !quote ? <Spinner size={16} /> : payop ? payopTotal(payop) : quote?.totalFormatted ?? ''}

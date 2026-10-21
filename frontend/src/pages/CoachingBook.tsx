@@ -30,6 +30,7 @@ import type {
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
 import { useLiveChatOrder } from '../components/LiveChatButton'
+import { useNoPopups } from '../state/popupContext'
 
 /**
  * Coaching, from choosing a package to the order's support page.
@@ -93,6 +94,8 @@ export default function CoachingBook() {
     (VARIANTS as string[]).includes(params.get('variant') ?? '')
       ? (params.get('variant') as Variant) : 'SINGLE_SESSION')
   const [step, setStep] = useState<Step>('option')
+  // The payment step: never a popup here.
+  useNoPopups(step === 'pay')
 
   const [handle, setHandle] = useState('')
   const [platform, setPlatform] = useState<CoachingPlatform | null>(null)
@@ -599,7 +602,7 @@ function OptionStep({
       </div>
 
       {signedIn ? (
-        <Button full size="lg" className="mt-6" onClick={onContinue}>
+        <Button full size="lg" className="mt-6" data-popup-avoid="" onClick={onContinue}>
           {b.continue} <CoachIcon name="arrowRight" className="ml-1.5 h-4 w-4" />
         </Button>
       ) : (
@@ -752,7 +755,7 @@ function DetailsStep({
         </Field>
       </div>
 
-      <Button full size="lg" className="mt-6" onClick={onContinue}>
+      <Button full size="lg" className="mt-6" data-popup-avoid="" onClick={onContinue}>
         {b.continue} <CoachIcon name="arrowRight" className="ml-1.5 h-4 w-4" />
       </Button>
     </div>
@@ -918,7 +921,7 @@ function ReviewStep({
               </Checkbox>
             </div>
 
-            <Button full size="lg" className="mt-5" loading={placing} disabled={!quote} onClick={onPay}>
+            <Button full size="lg" className="mt-5" loading={placing} disabled={!quote} data-popup-avoid="" onClick={onPay}>
               <CoachIcon name="lock" className="mr-1.5 h-4 w-4" /> {b.payNow}
             </Button>
             <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-chalk-faint">
@@ -962,7 +965,7 @@ function SummaryLines({ lines, totalFormatted }: { lines: QuoteLine[]; totalForm
       </ul>
       <div className="mt-3 flex items-baseline justify-between border-t border-ink-400 pt-3">
         <span className="text-body-sm font-semibold text-chalk">{t.coachingBook.total}</span>
-        <span className="tnum display text-[1.4rem] text-chalk" data-testid="summary-total">{totalFormatted}</span>
+        <span className="tnum display text-[1.4rem] text-chalk" data-testid="summary-total" data-popup-avoid="">{totalFormatted}</span>
       </div>
     </>
   )

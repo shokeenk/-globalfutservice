@@ -8,7 +8,7 @@ describe('navFor', () => {
   it('offers an admin every entry in the reference order', () => {
     expect(navFor('ADMIN').map((i) => i.label)).toEqual([
       'Dashboard', 'Orders', 'Customers', 'Services', 'Payments', 'Discord Integration',
-      'Email Marketing', 'Promotions', 'Analytics', 'Support', 'Website Settings',
+      'Email Marketing', 'Promotions', 'Popups', 'Analytics', 'Support', 'Website Settings',
     ])
   })
 
@@ -20,6 +20,7 @@ describe('navFor', () => {
     expect(operator).not.toContain('Listings')
     expect(operator).not.toContain('Add Listing')
     expect(operator).not.toContain('Analytics')
+    expect(operator).not.toContain('Popups')
     // ...but not the operator's own work, which shares a group with an admin-only screen.
     expect(operator).toContain('Coaching diary')
   })

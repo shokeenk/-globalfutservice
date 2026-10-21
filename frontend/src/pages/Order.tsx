@@ -32,6 +32,8 @@ import { coinsText, useCatalogLabels } from '../content/catalogLabels'
 import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
 import { useLiveChatOrder } from '../components/LiveChatButton'
+import { firePopupStep } from '../lib/popups'
+import { useNoPopups, usePopupPage } from '../state/popupContext'
 
 type Step = 'configure' | 'details' | 'paying' | 'placed'
 
@@ -112,6 +114,9 @@ export default function Order() {
   // Spend the customer's GFS Store Credit; offered only when they hold some in this currency.
   const [useStoreCredit, setUseStoreCredit] = useState(false)
   const [step, setStep] = useState<Step>('configure')
+  // Past choosing an amount, popups treat this as the coin checkout.
+  usePopupPage(step === 'configure' ? null : 'COINS_CHECKOUT')
+  useNoPopups(step === 'paying')
   // What the pay step says the summary should show: the order as placed, or a Payop payment.
   const [paySummary, setPaySummary] = useState<PaySummary>(ORDER_SUMMARY)
 
@@ -517,6 +522,7 @@ export default function Order() {
                 <div className="relative">
                   <input
                     type="range"
+                    data-popup-avoid=""
                     min={min}
                     max={max}
                     step={stepSize}
@@ -1049,7 +1055,7 @@ function QuotePanel({
                 }}
               >
                 <span className="text-[13px] font-medium text-chalk">{t.order.total}</span>
-                <span className="tnum display text-display-md text-chalk" data-testid="summary-total">
+                <span className="tnum display text-display-md text-chalk" data-testid="summary-total" data-popup-avoid="">
                   {payop ? payopTotal(payop) : quote.totalFormatted}
                 </span>
               </div>
@@ -1137,7 +1143,7 @@ function QuotePanel({
               */}
               {step === 'configure' && (
                 account ? (
-                  <Button full size="lg" onClick={() => setStep('details')}>
+                  <Button full size="lg" data-popup-avoid="" onClick={() => { setStep('details'); firePopupStep('coins:continue') }}>
                     {t.order.continue}
                   </Button>
                 ) : (
@@ -1633,6 +1639,7 @@ function CheckoutForm({
           full
           size="lg"
           loading={submitting}
+          data-popup-avoid=""
           onClick={() => void submit()}
         >
           {t.order.pay(quote.totalFormatted)}
@@ -2346,6 +2353,8 @@ function PaymentStage({
   const t = useT()
   // Placed: the live chat shows staff which order this is -- its reference, nothing else.
   useLiveChatOrder(order.publicRef)
+  // The payment step: never a popup here.
+  useNoPopups()
   const [error, setError] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
   const [settled, setSettled] = useState(false)
@@ -2416,7 +2425,7 @@ function PaymentStage({
         customer their payment could not go through, on the screen where they pay.
       */}
       {!stub && (
-        <Button full size="lg" loading={opening} onClick={() => void pay()}>
+        <Button full size="lg" loading={opening} data-popup-avoid="" onClick={() => void pay()}>
           {t.order.pay(order.totalFormatted)}
         </Button>
       )}

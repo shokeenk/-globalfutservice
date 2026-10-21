@@ -1,7 +1,7 @@
 import type { IconType } from 'react-icons'
 import {
   LuChartColumn, LuCreditCard, LuFileText, LuHeadset, LuLayers, LuLayoutDashboard,
-  LuMail, LuSettings, LuTag, LuUser,
+  LuMail, LuMegaphone, LuSettings, LuTag, LuUser,
 } from 'react-icons/lu'
 import { SiDiscord } from 'react-icons/si'
 
@@ -77,6 +77,7 @@ export const ADMIN_NAV: NavItem[] = [
     ],
   },
   { label: 'Promotions', to: '/admin/promotions', icon: LuTag },
+  { label: 'Popups', to: '/admin/popups', icon: LuMegaphone, adminOnly: true },
   { label: 'Analytics', to: '/admin/analytics', icon: LuChartColumn, adminOnly: true },
   { label: 'Support', to: '/admin/support', icon: LuHeadset },
   { label: 'Website Settings', to: '/admin/settings', icon: LuSettings },

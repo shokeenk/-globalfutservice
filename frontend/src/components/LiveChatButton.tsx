@@ -82,7 +82,7 @@ export function LiveChatButton() {
   if (!config) return null
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2" data-popup-above="">
       {state === 'failed' && (
         <p role="alert" className="max-w-[260px] rounded-panel border border-ink-400 bg-ink-700 p-3
                                     text-[12.5px] leading-relaxed text-chalk shadow-e3">

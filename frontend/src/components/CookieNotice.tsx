@@ -46,6 +46,7 @@ export function CookieNotice() {
     <div
       role="region"
       aria-label={t.cookies.title}
+      data-popup-sticky-bar=""
       className="fixed inset-x-0 bottom-0 z-[60] border-t border-ink-400 bg-paper/95 backdrop-blur
                  supports-[backdrop-filter]:bg-paper/90"
     >

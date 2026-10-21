@@ -242,6 +242,9 @@ public class SecurityConfig {
                       check, so it lives in the controller.
                     */
                     .requestMatchers(HttpMethod.POST, "/api/v1/discord/interactions").permitAll()
+                    // Popups: which to show, their images, and the anonymous counters.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/popups", "/api/v1/popups/images/**").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/popups/*/events").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
 
                     // The OAuth redirect dance. Both legs must be reachable to a browser

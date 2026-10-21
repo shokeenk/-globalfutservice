@@ -34,7 +34,7 @@ export function CouponRow({
   const canApply = trimmed !== '' && !isApplied && !busy
 
   return (
-    <div>
+    <div data-popup-avoid="">
       <label htmlFor="coupon-code" className="stamp mb-2 block">
         {t.order.couponLabel}
       </label>

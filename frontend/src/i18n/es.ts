@@ -682,6 +682,10 @@ const es: Dictionary = {
     toAccount: 'Ir a mi cuenta',
   },
 
+  popups: {
+    close: 'Cerrar',
+  },
+
   support: {
     seoTitle: 'Soporte',
     seoDescription: 'Ponte en contacto sobre un pedido.',
