@@ -8,6 +8,7 @@ import com.globalfutservice.config.AppProperties;
 import com.globalfutservice.domain.crypto.SecureIds;
 import com.globalfutservice.notify.AccountMailer;
 import com.globalfutservice.notify.email.AccountEmails;
+import com.globalfutservice.security.HumanCheck;
 import com.globalfutservice.security.JwtService;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
@@ -50,13 +51,15 @@ public class PasswordService {
     private final JwtService jwtService;
     private final SignInThrottle throttle;
     private final AccountMailer mailer;
+    private final HumanCheck humanCheck;
     private final AppProperties props;
     private final Clock clock;
 
     public PasswordService(AccountRepository accounts, PasswordResetTokenRepository resetTokens,
                            RefreshTokenRepository refreshTokens, PasswordEncoder passwordEncoder,
                            JwtService jwtService, SignInThrottle throttle, AccountMailer mailer,
-                           AppProperties props, Clock clock) {
+                           HumanCheck humanCheck, AppProperties props, Clock clock) {
+        this.humanCheck = humanCheck;
         this.accounts = accounts;
         this.resetTokens = resetTokens;
         this.refreshTokens = refreshTokens;
@@ -73,7 +76,8 @@ public class PasswordService {
      * otherwise does nothing. The caller answers {@link #FORGOT_REPLY} either way.
      */
     @Transactional
-    public void requestReset(String email, String language, String ip) {
+    public void requestReset(String email, String language, String humanToken, String ip) {
+        humanCheck.require(humanToken, ip, "forgot password");
         String normalised = AccountEntity.normalise(email);
         throttle.spendResetRequest(normalised, ip);
         accounts.findByEmailNormalised(normalised)

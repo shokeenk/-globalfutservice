@@ -111,9 +111,10 @@ class PasswordResetPostgresTest {
         JwtService jwt = new JwtService(props, clock);
         // A fresh throttle per service is enough here: the limits have their own tests.
         passwords = new PasswordService(accounts, resetTokens, refreshTokens, encoder, jwt,
-                new SignInThrottle(props, clock), mailer, props, clock);
+                new SignInThrottle(props, clock), mailer, TestSecurity.humanCheckOff(), props, clock);
         auth = new AuthService(accounts, refreshTokens, encoder, jwt, mock(LoyaltyService.class),
-                new SignInThrottle(props, clock), props, clock);
+                new SignInThrottle(props, clock), TestSecurity.humanCheckOff(), mock(com.globalfutservice.marketing.MarketingConsent.class),
+                mock(EmailVerificationService.class), props, clock);
     }
 
     @AfterAll
@@ -153,7 +154,7 @@ class PasswordResetPostgresTest {
 
     /** Asks for a link and returns the raw token the email would carry. */
     private String requestLink(String email) {
-        tx.executeWithoutResult(s -> passwords.requestReset(email, "en", "203.0.113.9"));
+        tx.executeWithoutResult(s -> passwords.requestReset(email, "en", null, "203.0.113.9"));
         ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
         verify(mailer).sendResetLink(eq(email), anyString(), eq(AccountEmails.Lang.EN), token.capture(), eq(30L));
         reset(mailer);
@@ -165,7 +166,7 @@ class PasswordResetPostgresTest {
     }
 
     private AuthService.Session login(String email, String password, Boolean rememberMe) {
-        return tx.execute(s -> auth.login(new AuthDtos.LoginRequest(email, password, rememberMe), "test", "198.51.100.7"));
+        return tx.execute(s -> auth.login(new AuthDtos.LoginRequest(email, password, rememberMe, null), "test", "198.51.100.7"));
     }
 
     private AuthService.Session refresh(String raw) {
@@ -200,7 +201,7 @@ class PasswordResetPostgresTest {
     @DisplayName("an unknown address gets the same treatment from the caller's side, and no link or email")
     void unknownAddress() {
         tx.executeWithoutResult(s -> passwords.requestReset("nobody-" + UUID.randomUUID() + "@example.test",
-                "fr", "203.0.113.10"));
+                "fr", null, "203.0.113.10"));
         verify(mailer, never()).sendResetLink(anyString(), anyString(), any(), anyString(), anyLong());
     }
 

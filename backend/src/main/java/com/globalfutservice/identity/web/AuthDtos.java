@@ -60,7 +60,13 @@ public final class AuthDtos {
              * from the body means false, which is the answer that does not mail people
              * who never said yes.
              */
-            boolean marketingOptIn) {
+            boolean marketingOptIn,
+
+            /** The storefront's language, for the verification email. */
+            @Size(max = 8) String language,
+
+            /** Cloudflare Turnstile's token, checked on the server. See HumanCheck. */
+            @Size(max = 4096) String humanToken) {
 
         @Override
         public String toString() {
@@ -76,7 +82,9 @@ public final class AuthDtos {
     public record LoginRequest(
             @Email @NotBlank String email,
             @NotBlank String password,
-            Boolean rememberMe) {
+            Boolean rememberMe,
+            /** Asked for after three failed sign-ins: see AuthService. */
+            @Size(max = 4096) String humanToken) {
 
         @Override
         public String toString() {
@@ -93,7 +101,8 @@ public final class AuthDtos {
             @NotBlank(message = "Email is required")
             @Size(max = 255)
             String email,
-            @Size(max = 8) String language) {
+            @Size(max = 8) String language,
+            @Size(max = 4096) String humanToken) {
     }
 
     /** The same length rule as sign-up: see {@link RegisterRequest#password()}. */
@@ -155,6 +164,23 @@ public final class AuthDtos {
             boolean firstOrder,
             String referredByCode,
             /** False for an account made with Google or Discord that has never set one. */
-            boolean hasPassword) {
+            boolean hasPassword,
+            /** False for an email and password account whose address is not verified yet. */
+            boolean emailVerified) {
+    }
+
+    /** A verification link opened: its token. */
+    public record VerifyEmailRequest(@NotBlank @Size(max = 512) String token) {
+    }
+
+    /** The Resend button: the language for the email. */
+    public record ResendVerificationRequest(@Size(max = 8) String language) {
+    }
+
+    /**
+     * What the sign-up and sign-in forms need before they render: whether the marketing box
+     * starts ticked, and the Turnstile site key -- null when the human check is off.
+     */
+    public record SignupConfigResponse(boolean prefillMarketingConsent, String turnstileSiteKey) {
     }
 }

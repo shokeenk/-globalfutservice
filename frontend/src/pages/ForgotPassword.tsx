@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthScreen } from '../components/AuthScreen'
+import { Turnstile } from '../components/Turnstile'
 import { Alert, Button, Field, Input, revealFirstError } from '../components/ui'
 import { useI18n } from '../i18n'
 import { api, ApiError } from '../lib/api'
 import { looksLikeEmail } from '../lib/validation'
 import { useSeo } from '../lib/seo'
+import { useSignupConfig } from '../lib/signupConfig'
 
 /**
  * "Forgot password?": an email address in, the same sentence out.
@@ -23,6 +25,10 @@ export default function ForgotPassword() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  // The human check, when it is set up: one token per request.
+  const siteKey = useSignupConfig()?.turnstileSiteKey ?? null
+  const [humanToken, setHumanToken] = useState<string | null>(null)
+  const [widget, setWidget] = useState(0)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -33,12 +39,23 @@ export default function ForgotPassword() {
       revealFirstError()
       return
     }
+    if (siteKey && !humanToken) {
+      setError(t.auth.humanCheckRequired)
+      return
+    }
+    const token = siteKey ? humanToken : null
+    if (token) {
+      setHumanToken(null)
+      setWidget((w) => w + 1)
+    }
     setBusy(true)
     try {
-      await api.post('/api/v1/auth/password/forgot', { email: email.trim(), language: lang })
+      await api.post('/api/v1/auth/password/forgot', { email: email.trim(), language: lang, humanToken: token })
       setSent(true)
     } catch (e) {
       setError(e instanceof ApiError && e.status === 429 ? t.auth.tooManyAttempts
+        : e instanceof ApiError && e.code === 'human_check_required' ? t.auth.humanCheckRequired
+        : e instanceof ApiError && e.code === 'human_check_failed' ? t.auth.humanCheckFailed
         : e instanceof ApiError && e.code === 'network_unreachable' ? e.message : t.auth.genericError)
     } finally {
       setBusy(false)
@@ -68,6 +85,7 @@ export default function ForgotPassword() {
                      onChange={(e) => setEmail(e.target.value)} />
             )}
           </Field>
+          <Turnstile key={widget} siteKey={siteKey} language={lang} onToken={setHumanToken} />
           {error && <Alert tone="warn">{error}</Alert>}
           <Button type="submit" full size="lg" loading={busy}>
             {t.auth.forgotButton}

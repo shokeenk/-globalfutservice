@@ -54,7 +54,7 @@ class CampaignServiceStepsTest {
         props = mock(AppProperties.class, RETURNS_DEEP_STUBS);
         when(props.notifications().emailEnabled()).thenReturn(true);
         service = new CampaignService(campaigns, recipients, mock(MarketingAudienceRepository.class),
-                accounts, sender, renderer, Clock.fixed(NOW, ZoneOffset.UTC), props);
+                accounts, sender, renderer, Clock.fixed(NOW, ZoneOffset.UTC), props, mock(MarketingConsent.class));
     }
 
     private CampaignEntity campaignIn(CampaignStatus status) {

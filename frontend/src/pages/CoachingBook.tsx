@@ -618,6 +618,8 @@ function OptionStep({
             {b.signInToContinue}
           </ButtonLink>
           <p className="text-center text-[12.5px] text-chalk-faint">{b.signInWhy}</p>
+          {/* Points need an account: a guest order earns none (OrderService.settleRewards). */}
+          <p className="text-center text-[12.5px] text-chalk-faint">{t.order.guestPoints}</p>
         </div>
       )}
 

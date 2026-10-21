@@ -7,6 +7,7 @@ import { Footer } from './components/Footer'
 import { AskWidget } from './components/AskWidget'
 import { isSupportPage } from './components/support/SupportCard'
 import { LiveChatButton, showsLiveChat } from './components/LiveChatButton'
+import { VerifyEmailBanner } from './components/VerifyEmailBanner'
 import { CursorLight } from './components/CursorLight'
 import { Header } from './components/Header'
 import { Spinner } from './components/ui'
@@ -39,6 +40,7 @@ const Login = lazy(() => import('./pages/Login'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const Account = lazy(() => import('./pages/Account'))
 const AdminShell = lazy(() => import('./pages/admin/shell/AdminShell'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
@@ -209,6 +211,7 @@ export default function App() {
               <Route path="/register" element={<Login mode="register" />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/confirm-email" element={<VerifyEmail />} />
               {/* Where Google and Discord send the browser back. */}
               <Route path="/auth/callback" element={<AuthCallback />} />
 
@@ -251,6 +254,7 @@ function PublicLayout() {
     <div className="relative isolate flex min-h-screen flex-col">
       <CursorLight />
       <Header />
+      {location.pathname !== '/confirm-email' && <VerifyEmailBanner />}
       <main id="main" className="relative z-10 flex-1">
         <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>

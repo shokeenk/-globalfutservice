@@ -47,7 +47,7 @@ class CampaignServiceRetryTest {
         when(props.notifications().emailEnabled()).thenReturn(true);
         service = new CampaignService(campaigns, recipients, mock(MarketingAudienceRepository.class),
                 mock(AccountRepository.class), sender, mock(CampaignRenderer.class),
-                Clock.fixed(NOW, ZoneOffset.UTC), props);
+                Clock.fixed(NOW, ZoneOffset.UTC), props, mock(MarketingConsent.class));
     }
 
     private CampaignEntity campaignIn(CampaignStatus status) {

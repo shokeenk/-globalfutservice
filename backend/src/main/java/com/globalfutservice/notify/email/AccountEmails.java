@@ -177,6 +177,66 @@ public final class AccountEmails {
         return new TransactionalEmails.Rendered(subject, EmailTemplate.render(content, brand), text);
     }
 
+    /** "Please verify your email", at sign-up and from the Resend button. */
+    public static TransactionalEmails.Rendered verifyEmail(Lang lang, EmailTemplate.Brand brand,
+                                                           String verifyUrl, long hours) {
+        String subject;
+        String preheader;
+        String headline;
+        String intro;
+        String body;
+        String ignore;
+        String button;
+        String footer;
+        switch (lang) {
+            case ES -> {
+                subject = "Verifica tu correo de GFS";
+                preheader = "Confirma que este correo es tuyo. El enlace caduca en " + hours + " horas.";
+                headline = "VERIFICA TU CORREO";
+                intro = "Gracias por crear tu cuenta de Global FUT Services. Confirma que este correo es tuyo.";
+                body = "Este enlace solo funciona una vez y caduca en " + hours + " horas. Tu cuenta ya funciona "
+                        + "mientras tanto.";
+                ignore = "Si no has creado una cuenta en GFS, ignora este correo.";
+                button = "VERIFICAR CORREO";
+                footer = "Recibes este correo porque se creó una cuenta de GFS con esta dirección. Es un aviso "
+                        + "de la cuenta y se envía sean cuales sean tus preferencias de correo.";
+            }
+            case FR -> {
+                subject = "Vérifie ton adresse e-mail GFS";
+                preheader = "Confirme que cette adresse est la tienne. Le lien expire dans " + hours + " heures.";
+                headline = "VÉRIFIE TON E-MAIL";
+                intro = "Merci d’avoir créé ton compte Global FUT Services. Confirme que cette adresse est la tienne.";
+                body = "Ce lien ne fonctionne qu'une fois et expire dans " + hours + " heures. Ton compte "
+                        + "fonctionne déjà en attendant.";
+                ignore = "Si tu n'as pas créé de compte GFS, ignore cet e-mail.";
+                button = "VÉRIFIER MON E-MAIL";
+                footer = "Tu reçois cet e-mail car un compte GFS a été créé avec cette adresse. C'est un avis "
+                        + "concernant le compte, envoyé quelles que soient tes préférences e-mail.";
+            }
+            default -> {
+                subject = "Verify your GFS email";
+                preheader = "Confirm this address is yours. The link expires in " + hours + " hours.";
+                headline = "VERIFY YOUR EMAIL";
+                intro = "Thanks for creating your Global FUT Services account. Please confirm this address is yours.";
+                body = "This link works once and expires in " + hours + " hours. Your account already works "
+                        + "in the meantime.";
+                ignore = "If you didn't create a GFS account, you can ignore this email.";
+                button = "VERIFY EMAIL";
+                footer = "You're receiving this because a GFS account was created with this address. It is an "
+                        + "account notice, sent whatever your email preferences.";
+            }
+        }
+
+        EmailTemplate.Content content = new EmailTemplate.Content(
+                preheader, "✓", null, headline, intro, List.of(),
+                EmailTemplate.paragraphs(body, ignore),
+                null, List.of(), null, button, verifyUrl, EmailTemplate.esc(footer));
+
+        String text = String.join("\n\n", headline, intro, button + ": " + verifyUrl, body, ignore,
+                "— Global FUT Services") + "\n";
+        return new TransactionalEmails.Rendered(subject, EmailTemplate.render(content, brand), text);
+    }
+
     private static Locale locale(Lang lang) {
         return switch (lang) {
             case ES -> Locale.forLanguageTag("es");

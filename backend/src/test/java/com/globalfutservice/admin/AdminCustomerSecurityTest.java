@@ -64,7 +64,7 @@ class AdminCustomerSecurityTest {
     private static AdminCustomerQueries.Row row() {
         return new AdminCustomerQueries.Row("a-acc_rahul", "ACCOUNT", "Rahul Sharma", "rahul07@example.test",
                 "rahul_07", "PLAYSTATION", 6, null, Instant.parse("2026-09-26T10:04:00Z"),
-                Instant.parse("2026-08-12T09:44:00Z"), "ACTIVE", true);
+                Instant.parse("2026-08-12T09:44:00Z"), "ACTIVE", true, true);
     }
 
     @Test

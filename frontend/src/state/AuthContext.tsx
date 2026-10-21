@@ -11,7 +11,7 @@ type AuthState = {
    * session cookie the browser drops when it closes. The password is sent once and kept
    * nowhere.
    */
-  login: (email: string, password: string, rememberMe: boolean) => Promise<void>
+  login: (email: string, password: string, rememberMe: boolean, humanToken?: string | null) => Promise<void>
   register: (input: RegisterInput) => Promise<void>
   logout: () => Promise<void>
   refreshAccount: () => Promise<void>
@@ -29,6 +29,10 @@ export type RegisterInput = {
    * would make every registration look like consent.
    */
   marketingOptIn: boolean
+  /** The storefront's language, for the verification email. */
+  language?: string
+  /** Cloudflare Turnstile's token, when the check is on. */
+  humanToken?: string | null
 }
 
 type TokenResponse = { accessToken: string; expiresInSeconds: number; account: Account }
@@ -72,8 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [adopt])
 
   const login = useCallback(
-    async (email: string, password: string, rememberMe: boolean) => {
-      adopt(await api.post<TokenResponse>('/api/v1/auth/login', { email, password, rememberMe }))
+    async (email: string, password: string, rememberMe: boolean, humanToken?: string | null) => {
+      adopt(await api.post<TokenResponse>('/api/v1/auth/login', { email, password, rememberMe, humanToken }))
     },
     [adopt],
   )

@@ -36,7 +36,8 @@ class MarketingPreferenceServiceTest {
     @BeforeEach
     void setUp() {
         accounts = mock(AccountRepository.class);
-        service = new MarketingPreferenceService(accounts);
+        service = new MarketingPreferenceService(accounts, new MarketingConsent(accounts,
+                mock(MarketingConsentEventRepository.class), java.time.Clock.systemUTC()));
         account = new AccountEntity("acc_test", "player@example.com", "hash",
                 AccountRole.CUSTOMER);
         when(accounts.findById(1L)).thenReturn(Optional.of(account));

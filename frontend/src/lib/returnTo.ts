@@ -25,7 +25,7 @@
 const KEY = 'gfs.returnTo'
 
 /** Returning to a sign-in page after signing in is a loop, not a destination. */
-const NOT_A_DESTINATION = new Set(['/login', '/register', '/auth/callback', '/forgot-password', '/reset-password'])
+const NOT_A_DESTINATION = new Set(['/login', '/register', '/auth/callback', '/forgot-password', '/reset-password', '/confirm-email'])
 
 export function safeReturnPath(value: unknown): string | null {
   if (typeof value !== 'string' || !value.startsWith('/')) return null

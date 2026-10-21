@@ -107,15 +107,24 @@ function parse(csp: string): Record<string, string[]> {
   return out
 }
 
+/**
+ * Cloudflare Turnstile, the human check on sign-up, forgot-password and repeated sign-ins:
+ * its script and its iframe, and nothing more (developers.cloudflare.com, Turnstile CSP).
+ */
+const TURNSTILE: Record<string, string[]> = {
+  'script-src': ['https://challenges.cloudflare.com'],
+  'frame-src': ['https://challenges.cloudflare.com'],
+}
+
 function expected(extra: Record<string, string[]> = {}): Record<string, string[]> {
   const out: Record<string, string[]> = {}
   for (const [name, values] of Object.entries(BEFORE)) {
-    out[name] = [...values, ...(TAWK[name] ?? []), ...(extra[name] ?? [])]
+    out[name] = [...values, ...(TAWK[name] ?? []), ...(TURNSTILE[name] ?? []), ...(extra[name] ?? [])]
   }
   return { ...out, ...TAWK_ONLY }
 }
 
-describe('the Content-Security-Policy lets the chat in, and nothing else changed', () => {
+describe('the Content-Security-Policy lets the chat and Turnstile in, and nothing else changed', () => {
   it('vercel.json', () => {
     const config = JSON.parse(vercelJson) as {
       headers: { headers: { key: string; value: string }[] }[]

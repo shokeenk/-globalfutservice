@@ -518,6 +518,12 @@ gfs:
     ecb-url: ${GFS_FX_ECB_URL:https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml}
     max-age: ${GFS_FX_MAX_AGE:5d}
 
+  # Cloudflare Turnstile (Cloudflare dashboard > Turnstile > the widget's Site Key and Secret
+  # Key). Either one empty: no human check, and a warning in the log.
+  turnstile:
+    site-key: ${GFS_TURNSTILE_SITE_KEY:}
+    secret-key: ${GFS_TURNSTILE_SECRET_KEY:}
+
   rate-limit:
     enabled: true
     quotes-per-minute: 30          # the price-scraping surface

@@ -74,7 +74,8 @@ public record AppProperties(
         @Valid @NotNull Tawk tawk,
         @Valid @NotNull Payop payop,
         @Valid @NotNull Fx fx,
-        @Valid @NotNull Champs champs) {
+        @Valid @NotNull Champs champs,
+        @Valid Turnstile turnstile) {
 
     public record Security(
             /** HS256 signing key for access tokens. Minimum 32 bytes. */
@@ -1010,5 +1011,23 @@ public record AppProperties(
             @DefaultValue("10") int authPerMinute,
             @DefaultValue("5") int orderCreationPerMinute,
             @DefaultValue("120") int defaultPerMinute) {
+    }
+
+    /**
+     * Cloudflare Turnstile, the human check on sign-up, forgot-password and repeated failed
+     * sign-ins. Both keys come from the Turnstile widget in the Cloudflare dashboard. With
+     * either one missing the check is skipped, and the application logs a warning.
+     *
+     * @param siteKey   public; handed to the storefront, which renders the widget with it
+     * @param secretKey private; used only to verify a token with Cloudflare
+     */
+    public record Turnstile(
+            String siteKey,
+            String secretKey,
+            @DefaultValue("https://challenges.cloudflare.com/turnstile/v0/siteverify") String verifyUrl) {
+
+        public boolean configured() {
+            return siteKey != null && !siteKey.isBlank() && secretKey != null && !secretKey.isBlank();
+        }
     }
 }

@@ -54,7 +54,7 @@ class CampaignServiceDetailsTest {
         when(props.notifications().emailEnabled()).thenReturn(true);
         service = new CampaignService(campaigns, mock(CampaignRecipientRepository.class), audience,
                 mock(AccountRepository.class), sender,
-                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC), props);
+                mock(CampaignRenderer.class), Clock.fixed(NOW, ZoneOffset.UTC), props, mock(MarketingConsent.class));
         when(campaigns.save(any(CampaignEntity.class))).thenAnswer(i -> i.getArgument(0));
     }
 

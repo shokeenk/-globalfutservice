@@ -617,8 +617,7 @@ const es: Dictionary = {
     acceptTerms: 'términos del servicio',
     acceptAnd: 'y la',
     acceptPrivacy: 'política de privacidad',
-    marketingOptIn:
-      'Quiero recibir ofertas de GFS y avisos de rebajas de monedas. Opcional: las actualizaciones de tus pedidos llegan igualmente.',
+    marketingOptIn: 'Envíame ofertas y novedades por correo',
     createAccount: 'Crear cuenta',
     signInButton: 'Iniciar sesión',
     haveAccount: '¿Ya tienes cuenta?',
@@ -629,6 +628,9 @@ const es: Dictionary = {
       'No necesitas cuenta para pedir: el pago como invitado funciona igual. La cuenta es ' +
       'la forma de acumular puntos.',
     genericError: 'Algo ha ido mal. Inténtalo de nuevo.',
+    marketingOptInNote: 'Opcional. Los correos de pedidos, pagos y de tu cuenta te llegan igualmente.',
+    humanCheckRequired: 'Completa la verificación de abajo para continuar.',
+    humanCheckFailed: 'La verificación no ha funcionado. Inténtalo de nuevo.',
     showPassword: 'Mostrar contraseña',
     hidePassword: 'Ocultar contraseña',
     rememberMe: 'Recordarme',
@@ -662,6 +664,22 @@ const es: Dictionary = {
   liveChat: {
     button: 'Chat en directo',
     failed: 'No se ha podido cargar el chat en directo. Inténtalo de nuevo o usa el formulario de la página de Soporte.',
+  },
+
+  verifyEmail: {
+    bannerTitle: 'Verifica tu correo',
+    bannerBody: (email: string) => `Te hemos enviado un enlace a ${email}. Ábrelo para confirmar que la dirección es tuya.`,
+    resend: 'Reenviar correo',
+    resent: 'Enviado. Revisa tu bandeja de entrada.',
+    resendTooMany: 'Ya te hemos enviado varios enlaces. Espera un rato antes de pedir otro.',
+    resendFailed: 'No se ha podido enviar. Inténtalo de nuevo.',
+    pageTitle: 'Verifica tu correo',
+    verifying: 'Verificando…',
+    done: 'Tu correo está verificado. ¡Gracias!',
+    invalid: 'Este enlace de verificación ha caducado o ya se ha usado.',
+    invalidSignedIn: 'Usa «Reenviar correo» para recibir uno nuevo.',
+    invalidSignedOut: 'Inicia sesión y usa «Reenviar correo» para recibir uno nuevo.',
+    toAccount: 'Ir a mi cuenta',
   },
 
   support: {
@@ -914,6 +932,7 @@ const es: Dictionary = {
     total: 'Total',
     earnsPoints: (points) =>
       `Ganarás unos ${points} puntos, cuando se cierre tu ventana de garantía.`,
+    guestPoints: 'Crea una cuenta para acumular puntos con este pedido.',
     earnsPointsGuest: (points) =>
       `Inicia sesión para ganar ${points} puntos en este pedido — los pedidos como invitado no acumulan.`,
     continue: 'Continuar',

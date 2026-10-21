@@ -1,5 +1,6 @@
 package com.globalfutservice.marketing;
 
+import com.globalfutservice.identity.ConsentSource;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.web.ApiExceptions;
@@ -25,9 +26,11 @@ public class MarketingPreferenceService {
     private static final Logger log = LoggerFactory.getLogger(MarketingPreferenceService.class);
 
     private final AccountRepository accounts;
+    private final MarketingConsent consent;
 
-    public MarketingPreferenceService(AccountRepository accounts) {
+    public MarketingPreferenceService(AccountRepository accounts, MarketingConsent consent) {
         this.accounts = accounts;
+        this.consent = consent;
     }
 
     @Transactional(readOnly = true)
@@ -49,12 +52,7 @@ public class MarketingPreferenceService {
             // say when they agreed, not when they last re-saved a settings page.
             return optIn;
         }
-        if (optIn) {
-            account.optInToMarketing();
-        } else {
-            account.optOutOfMarketing(null);
-        }
-        accounts.save(account);
+        consent.record(account, optIn, ConsentSource.ACCOUNT_SETTINGS, null);
         log.info("Account {} marketing consent set to {}", account.getPublicId(), optIn);
         return optIn;
     }

@@ -100,6 +100,10 @@ public class OAuthAccountService {
              */
             existing.setOauthProvider(identity.provider());
             existing.setOauthSubject(identity.subject());
+            // Linked only on an address the provider verified: that verifies it here too.
+            if (existing.getEmailVerifiedAt() == null) {
+                existing.setEmailVerifiedAt(java.time.Instant.now());
+            }
             return accounts.save(existing);
         }
 
@@ -118,6 +122,12 @@ public class OAuthAccountService {
         created.setDisplayName(identity.displayName());
         created.setOauthProvider(identity.provider());
         created.setOauthSubject(identity.subject());
+        // Google and Discord sign-ups count as verified when the provider says it checked the
+        // address (Google always does; Discord only once its user has). Otherwise the usual
+        // "please verify" banner asks, as it does for a password sign-up.
+        if (identity.emailVerified()) {
+            created.setEmailVerifiedAt(java.time.Instant.now());
+        }
         /*
          * No password hash. The column is nullable precisely so an account can exist
          * without one, and inventing a random password to fill it would leave a

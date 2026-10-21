@@ -18,6 +18,10 @@ export function authErrorMessage(e: unknown, t: Dictionary): string {
       return t.auth.resetInvalid
     case 'current_password_incorrect':
       return t.account.currentPasswordWrong
+    case 'human_check_required':
+      return t.auth.humanCheckRequired
+    case 'human_check_failed':
+      return t.auth.humanCheckFailed
     case 'network_unreachable':
       return e.message
     default:

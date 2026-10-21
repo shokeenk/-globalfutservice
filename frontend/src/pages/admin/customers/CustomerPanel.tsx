@@ -241,6 +241,7 @@ function Details({ customer: c, isAdmin, onRenamed }: { customer: AdminCustomer;
     ['Discord', c.discordConnected
       ? <span className="inline-flex items-center gap-1.5"><SiDiscord aria-hidden="true" className="h-4 w-4 text-[#5865F2]" />Connected</span>
       : 'Not connected'],
+    ...(c.kind === 'ACCOUNT' ? [['Email verified', c.emailVerified ? 'Yes' : 'No'] as [string, ReactNode]] : []),
     ['Joined', dateAndTime(c.joinedAt)],
     ['Last Order', dateAndTime(c.lastOrderAt)],
   ]

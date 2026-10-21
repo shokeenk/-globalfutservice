@@ -620,8 +620,7 @@ const fr: Dictionary = {
     acceptTerms: 'conditions d’utilisation',
     acceptAnd: 'et la',
     acceptPrivacy: 'politique de confidentialité',
-    marketingOptIn:
-      'Envoyez-moi les offres GFS et les annonces de promotions sur les crédits. Facultatif : les mises à jour de commande arrivent dans tous les cas.',
+    marketingOptIn: 'Envoie-moi des offres et des nouveautés par e-mail',
     createAccount: 'Créer un compte',
     signInButton: 'Se connecter',
     haveAccount: 'Tu as déjà un compte ?',
@@ -632,6 +631,9 @@ const fr: Dictionary = {
       'Pas besoin de compte pour commander — le paiement invité fonctionne très bien. Le ' +
       'compte sert à cumuler des points.',
     genericError: 'Une erreur est survenue. Réessaie.',
+    marketingOptInNote: 'Facultatif. Les e-mails de commande, de paiement et de compte t’arrivent dans tous les cas.',
+    humanCheckRequired: 'Termine la vérification ci-dessous pour continuer.',
+    humanCheckFailed: 'La vérification n’a pas abouti. Réessaie.',
     showPassword: 'Afficher le mot de passe',
     hidePassword: 'Masquer le mot de passe',
     rememberMe: 'Se souvenir de moi',
@@ -665,6 +667,22 @@ const fr: Dictionary = {
   liveChat: {
     button: 'Chat en direct',
     failed: 'Le chat en direct n’a pas pu se charger. Réessaie ou utilise le formulaire de la page Support.',
+  },
+
+  verifyEmail: {
+    bannerTitle: 'Vérifie ton adresse e-mail',
+    bannerBody: (email: string) => `Nous avons envoyé un lien à ${email}. Ouvre-le pour confirmer que cette adresse est la tienne.`,
+    resend: 'Renvoyer l’e-mail',
+    resent: 'Envoyé, vérifie ta boîte de réception.',
+    resendTooMany: 'Nous t’avons déjà envoyé plusieurs liens. Attends un peu avant d’en demander un autre.',
+    resendFailed: 'L’envoi a échoué. Réessaie.',
+    pageTitle: 'Vérifie ton adresse e-mail',
+    verifying: 'Vérification…',
+    done: 'Ton adresse e-mail est vérifiée. Merci !',
+    invalid: 'Ce lien de vérification a expiré ou a déjà été utilisé.',
+    invalidSignedIn: 'Utilise « Renvoyer l’e-mail » pour en recevoir un nouveau.',
+    invalidSignedOut: 'Connecte-toi et utilise « Renvoyer l’e-mail » pour en recevoir un nouveau.',
+    toAccount: 'Aller à mon compte',
   },
 
   support: {
@@ -914,6 +932,7 @@ const fr: Dictionary = {
     total: 'Total',
     earnsPoints: (points) =>
       `Tu gagneras environ ${points} points, une fois ta fenêtre de garantie fermée.`,
+    guestPoints: 'Crée un compte pour cumuler des points sur cette commande.',
     earnsPointsGuest: (points) =>
       `Connecte-toi pour gagner ${points} points sur cette commande — les commandes en invité n’en gagnent pas.`,
     continue: 'Continuer',

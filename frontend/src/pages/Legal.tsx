@@ -579,7 +579,10 @@ function Privacy({ policy }: { policy: Policy | null }) {
           Our payment provider processes your payment and sees what it needs to for that purpose;
           we never see or store your full card details. Our email provider delivers your receipts
           and, if you have opted in to them, our promotional emails. Live chat is provided by
-          tawk.to; section 8 says what it receives.
+          tawk.to; section 8 says what it receives. When you create an account, ask for a password
+          reset, or sign in after several failed attempts, Cloudflare Turnstile checks that you are a
+          person; Cloudflare sees your IP address and browser details for that check, and nothing
+          you type into the form.
           We do not sell data, and we do not share it for advertising.
         </p>
         {/*
@@ -685,8 +688,9 @@ function Privacy({ policy }: { policy: Policy | null }) {
       */}
       <Clause n={7} title="Promotional email">
         <p>
-          We send offers and news by email only if you have opted in, which you can do at
-          checkout or on your account page. Every promotional email has an unsubscribe link,
+          We send offers and news by email only if you have opted in, which you can do when you
+          create your account or on your account page. We keep when and how you gave or withdrew
+          that choice. Every promotional email has an unsubscribe link,
           and you can also switch them off on your account page at any time. Switching them off
           does not affect emails about your orders.
         </p>

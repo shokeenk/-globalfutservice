@@ -1115,7 +1115,7 @@ function QuotePanel({
                   />
                   {account
                     ? t.order.earnsPoints(quote.pointsEarned)
-                    : t.order.earnsPointsGuest(quote.pointsEarned)}
+                    : t.order.guestPoints}
                 </p>
               )}
 

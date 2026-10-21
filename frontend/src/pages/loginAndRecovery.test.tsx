@@ -119,7 +119,7 @@ describe('sign in', () => {
     await user.type(screen.getByLabelText(/Email/), 'ada@example.test')
     await user.type(screen.getByLabelText(/^Password/), 'correct horse battery')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(auth.login).toHaveBeenLastCalledWith('ada@example.test', 'correct horse battery', false)
+    expect(auth.login).toHaveBeenLastCalledWith('ada@example.test', 'correct horse battery', false, null)
   })
 
   it('sends Remember me ticked when it is ticked', async () => {
@@ -130,7 +130,7 @@ describe('sign in', () => {
     await user.type(screen.getByLabelText(/^Password/), 'correct horse battery')
     await user.click(screen.getByRole('checkbox', { name: 'Remember me' }))
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(auth.login).toHaveBeenLastCalledWith('ada@example.test', 'correct horse battery', true)
+    expect(auth.login).toHaveBeenLastCalledWith('ada@example.test', 'correct horse battery', true, null)
   })
 
   it('answers a failed sign-in with one generic sentence, in the chosen language', async () => {
@@ -169,7 +169,7 @@ describe('forgot password', () => {
       'Si un compte existe pour cette adresse e-mail, nous t’avons envoyé un lien de réinitialisation.'))
       .toBeInTheDocument()
     expect(api.post).toHaveBeenCalledWith('/api/v1/auth/password/forgot',
-      { email: 'nobody@example.test', language: 'fr' })
+      { email: 'nobody@example.test', language: 'fr', humanToken: null })
   })
 
   it('needs an email first', async () => {
