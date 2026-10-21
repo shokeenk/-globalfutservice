@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -238,6 +238,15 @@ describe('the centred modal', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/popups/pop_k/events', { event: 'CLOSE' })
   })
 
+  it('is drawn straight into the page body, above the header and the help button, not inside the layout', async () => {
+    serve([popup({ id: 'pop_portal' })])
+    const { container } = at('/')
+    const overlay = await screen.findByTestId('popup-overlay')
+    expect(overlay.parentElement).toBe(document.body)
+    expect(container.contains(overlay)).toBe(false)
+    expect(overlay.className).toMatch(/z-\[70\]/)
+  })
+
   it('uses the mobile image on a phone-width screen, and never wider than the screen', async () => {
     serve([popup({ id: 'pop_m', mobileImage: { url: '/api/v1/popups/images/2/def.webp', width: 390, height: 600 } })])
     at('/')
@@ -307,6 +316,38 @@ describe('the bottom-right card and checkout controls', () => {
     await waitFor(() => expect(screen.getByTestId('popup-card')).not.toHaveAttribute('aria-hidden'))
     await userEvent.setup().click(screen.getByTestId('pay'))
     expect(onPay).toHaveBeenCalledTimes(2)
+  })
+
+  it('on an order page every control counts, marked or not; elsewhere only the fields', () => {
+    Object.assign(window, { innerWidth: 1280, innerHeight: 800 })
+    const main = document.createElement('main')
+    main.innerHTML = '<span data-popup-avoid="" id="total"></span><button type="button" id="platform">PS5</button>'
+    document.body.appendChild(main)
+    const corner = rect(700, 1000, 200, 40)
+    vi.spyOn(main.querySelector('#total')!, 'getBoundingClientRect').mockReturnValue(rect(100, 100, 80, 20))
+    vi.spyOn(main.querySelector('#platform')!, 'getBoundingClientRect').mockReturnValue(corner)
+    // An order page (something is marked): the unmarked platform button in the corner hides the card.
+    expect(cardPlacement(340, 160)).toBeNull()
+    // A listing with nothing marked: a button may sit under the card...
+    main.querySelector('#total')!.remove()
+    expect(cardPlacement(340, 160)).toBe(16)
+    // ...but never a field.
+    const amount = document.createElement('input')
+    main.appendChild(amount)
+    vi.spyOn(amount, 'getBoundingClientRect').mockReturnValue(corner)
+    expect(cardPlacement(340, 160)).toBeNull()
+    main.remove()
+  })
+
+  it('Esc closes the card for anybody who has tabbed into it', async () => {
+    const user = userEvent.setup()
+    serve([popup({ id: 'pop_esc', type: 'BOTTOM_RIGHT' })])
+    at('/')
+    await screen.findByTestId('popup-card')
+    within(screen.getByTestId('popup-card')).getByRole('button', { name: 'Buy coins' }).focus()
+    await user.keyboard('{Escape}')
+    expect(card()).toBeNull()
+    expect(api.post).toHaveBeenCalledWith('/api/v1/popups/pop_esc/events', { event: 'CLOSE' })
   })
 
   it('on a phone with a sticky checkout bar: above the bar, or not shown when there is no room', () => {

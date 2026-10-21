@@ -258,7 +258,11 @@ function PublicLayout() {
       <CursorLight />
       <Header />
       {location.pathname !== '/confirm-email' && <VerifyEmailBanner />}
-      <main id="main" className="relative z-10 flex-1">
+      {/*
+        Clipped sideways: the washes and glows overhang the screen on purpose, but on a phone
+        anything past the edge widens the page, and every fixed layer (popups, menus) with it.
+      */}
+      <main id="main" className="relative z-10 flex-1 overflow-x-clip">
         <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Outlet />

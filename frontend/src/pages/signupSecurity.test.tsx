@@ -85,7 +85,10 @@ beforeEach(() => {
   auth.register.mockResolvedValue(undefined)
 })
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.restoreAllMocks()
+})
 
 describe('the marketing box at sign-up', () => {
   it('reads "Send me offers and news by email", starts unticked, and is its own grey control, apart from the terms', async () => {
@@ -203,6 +206,65 @@ describe('the human check (Cloudflare Turnstile)', () => {
     await user.click(screen.getByRole('button', { name: 'Send reset link' }))
     expect(api.post).toHaveBeenCalledWith('/api/v1/auth/password/forgot',
       { email: 'ada@example.test', language: 'en', humanToken: 'cf-token-3' })
+  })
+})
+
+describe('sign-up errors in the customer\'s language', () => {
+  it('a refused sign-up is the one translated sentence, never the server\'s English', async () => {
+    window.localStorage.setItem('gfs.language', 'es')
+    serverConfig({ prefillMarketingConsent: false, turnstileSiteKey: null })
+    auth.register.mockRejectedValue(new ApiError(409, { error: 'registration_failed',
+      message: 'We could not create that account. If you already have one, try signing in.' }))
+    const user = userEvent.setup()
+    at('/register', <Login mode="register" />)
+    await user.type(screen.getByLabelText(/^Correo|^Email/), 'new@example.test')
+    await user.type(screen.getByLabelText(/^Contraseña/), 'correct horse battery')
+    await user.click(screen.getByRole('checkbox', { name: new RegExp(es.auth.acceptTerms.slice(0, 8)) }))
+    await user.click(screen.getByRole('button', { name: es.auth.createAccount }))
+    expect(await screen.findByText(es.auth.registerFailed)).toBeInTheDocument()
+  })
+
+  it('the server\'s field errors are shown in the customer\'s words', async () => {
+    window.localStorage.setItem('gfs.language', 'fr')
+    serverConfig({ prefillMarketingConsent: false, turnstileSiteKey: null })
+    auth.register.mockRejectedValue(new ApiError(400, { error: 'validation_failed', message: 'Invalid',
+      details: { displayName: ['size must be between 0 and 80'] } }))
+    const user = userEvent.setup()
+    at('/register', <Login mode="register" />)
+    await user.type(screen.getByLabelText(/^E-mail|^Email/), 'new@example.test')
+    await user.type(screen.getByLabelText(/^Mot de passe/), 'correct horse battery')
+    await user.click(screen.getByRole('checkbox', { name: new RegExp(fr.auth.acceptTerms.slice(0, 8)) }))
+    await user.click(screen.getByRole('button', { name: fr.auth.createAccount }))
+    expect(await screen.findByText(fr.auth.displayNameTooLong)).toBeInTheDocument()
+    expect(screen.queryByText('size must be between 0 and 80')).toBeNull()
+  })
+
+  it('every new sentence is in each language', () => {
+    for (const d of [en, es, fr]) {
+      for (const k of ['registerFailed', 'passwordTooLong', 'displayNameTooLong', 'termsRequired'] as const) expect(d.auth[k]).toBeTruthy()
+    }
+    expect(es.auth.registerFailed).not.toBe(en.auth.registerFailed)
+    expect(fr.auth.registerFailed).not.toBe(en.auth.registerFailed)
+  })
+})
+
+describe('the human check on a narrow phone', () => {
+  it('uses the compact widget when the normal one (300px) would not fit', async () => {
+    serverConfig({ prefillMarketingConsent: false, turnstileSiteKey: '0x4AAA-site' })
+    turnstileSolves()
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(280)
+    at('/register', <Login mode="register" />)
+    await waitFor(() => expect(window.turnstile?.render).toHaveBeenCalledWith(expect.anything(),
+      expect.objectContaining({ size: 'compact' })))
+  })
+
+  it('and the normal one where it fits', async () => {
+    serverConfig({ prefillMarketingConsent: false, turnstileSiteKey: '0x4AAA-site' })
+    turnstileSolves()
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400)
+    at('/register', <Login mode="register" />)
+    await waitFor(() => expect(window.turnstile?.render).toHaveBeenCalledWith(expect.anything(),
+      expect.objectContaining({ size: 'normal' })))
   })
 })
 

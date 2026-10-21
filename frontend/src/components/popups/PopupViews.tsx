@@ -171,6 +171,8 @@ export function PopupCard({ popup, lang, onClose, onButton, preview, phone, clos
 }) {
   return (
     <div role="dialog" aria-modal="false" aria-label={localized(popup, lang).headline ?? 'Offer'}
+         // Esc closes it too, for anybody who has moved into it with the keyboard.
+         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
          aria-hidden={hidden || undefined} data-testid="popup-card" data-popup-card=""
          style={preview ? undefined : { bottom }}
          className={`${preview ? 'absolute bottom-4' : 'fixed'} right-4 z-40 w-[min(340px,calc(100%-32px))]

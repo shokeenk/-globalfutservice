@@ -66,6 +66,8 @@ export function Turnstile({ siteKey, onToken, language }: {
           sitekey: siteKey,
           language,
           theme: 'dark',
+          // The normal widget is 300px wide; on a narrow phone it would push the page sideways.
+          size: host.current.clientWidth > 0 && host.current.clientWidth < 300 ? 'compact' : 'normal',
           callback: (token: string) => callback.current(token),
           'expired-callback': () => callback.current(null),
           'error-callback': () => callback.current(null),
