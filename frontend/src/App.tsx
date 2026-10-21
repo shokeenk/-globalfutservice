@@ -6,6 +6,7 @@ import { NotificationToasts } from './components/NotificationToasts'
 import { Footer } from './components/Footer'
 import { AskWidget } from './components/AskWidget'
 import { isSupportPage } from './components/support/SupportCard'
+import { LiveChatButton, showsLiveChat } from './components/LiveChatButton'
 import { CursorLight } from './components/CursorLight'
 import { Header } from './components/Header'
 import { Spinner } from './components/ui'
@@ -261,12 +262,21 @@ function PublicLayout() {
 
       {/* Real-time only: anything older than this page load is read in the bell. */}
       <NotificationToasts />
-      {/* Outside <main> and fixed-positioned: it follows the reader across every
-          route rather than being a thing you have to navigate to -- except an order's
-          support page, which has the live chat in the page and needs no second one. */}
-      {!isSupportPage(location.pathname) && <AskWidget />}
+      {/* Outside <main> and fixed-positioned, bottom right. The pages with the live chat
+          button get that instead of the help assistant -- one red button in the corner,
+          not two. An order's support page has the live chat in the page and needs neither. */}
+      <CornerWidget pathname={location.pathname} />
     </div>
   )
+}
+
+/**
+ * The fixed button bottom right, by page: the live chat on the pages that have it, nothing
+ * on an order's support page (its chat is in the page), the help assistant everywhere else.
+ */
+export function CornerWidget({ pathname }: { pathname: string }) {
+  if (showsLiveChat(pathname)) return <LiveChatButton />
+  return isSupportPage(pathname) ? null : <AskWidget />
 }
 
 function RouteFallback() {

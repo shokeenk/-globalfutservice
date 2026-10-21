@@ -1,9 +1,15 @@
 /**
- * tawk.to, the live chat on order support pages -- and only there.
+ * tawk.to, the live chat: embedded in an order's support page, and behind the floating
+ * chat button on the few pages that have one (see {@code components/LiveChatButton}).
  *
- * <p><b>Loaded once, by the support page, as it opens.</b> Nothing here runs on any other
- * page: no other module imports this one, and the script is only added when a support page
- * opens. tawk.to's own loader guards against a second copy, and so does this one.
+ * <p><b>Two widgets, one at a time.</b> tawk.to runs one widget per page load -- its
+ * {@code Tawk_API} is a single global. So a page load is either embedded (the order
+ * support page) or floating (the button), never both: whichever starts second asks for a
+ * fresh page load, which tawk.to resumes from its server.
+ *
+ * <p><b>Loaded on demand.</b> The embedded chat loads as the order support page opens; the
+ * floating one when the customer presses the chat button, never before. No other page
+ * loads anything from tawk.to.
  *
  * <p><b>Embedded, never floating.</b> tawk.to reads {@code Tawk_API.embedded} once, when it
  * starts, and renders into the element with that id -- already open, since an embedded
@@ -54,6 +60,11 @@ interface TawkApi {
   embedded?: string
   visitor?: { name?: string; email?: string; hash?: string }
   onLoad?: () => void
+  onChatMinimized?: () => void
+  maximize?: () => void
+  minimize?: () => void
+  showWidget?: () => void
+  hideWidget?: () => void
   setAttributes?: (attributes: Record<string, string>, callback: (error?: unknown) => void) => void
   addEvent?: (name: string, metadata: Record<string, string>, callback: (error?: unknown) => void) => void
 }
@@ -75,6 +86,20 @@ export function tawkConfig(env: Record<string, string | undefined> = import.meta
   if (!ID.test(propertyId) || !ID.test(widgetId)) return null
   return { propertyId, widgetId }
 }
+
+/**
+ * The floating widget's ids: the same property, and a widget of the Floating type. Null when
+ * either is missing or malformed, and then no chat button is shown.
+ */
+export function floatingTawkConfig(env: Record<string, string | undefined> = import.meta.env): TawkConfig | null {
+  const propertyId = env.VITE_TAWK_PROPERTY_ID?.trim() ?? ''
+  const widgetId = env.VITE_TAWK_FLOATING_WIDGET_ID?.trim() ?? ''
+  if (!ID.test(propertyId) || !ID.test(widgetId)) return null
+  return { propertyId, widgetId }
+}
+
+/** Which widget this page load has started: tawk.to runs one, and cannot switch. */
+let mode: 'embedded' | 'floating' | null = null
 
 /** Which order the chat was started for in this page load, if any. */
 let startedFor: string | null = null
@@ -121,6 +146,7 @@ function refused(what: string): (error?: unknown) => void {
  */
 export function startTawk(config: TawkConfig, reference: string, chat: TawkChat, host: HTMLElement,
                           onError: () => void): 'started' | 'attached' | 'reload' {
+  if (mode === 'floating') return 'reload'
   if (startedFor !== null && (startedFor !== reference || drawn())) return 'reload'
   if (!container) {
     container = document.createElement('div')
@@ -130,6 +156,7 @@ export function startTawk(config: TawkConfig, reference: string, chat: TawkChat,
   host.appendChild(container)
   if (startedFor === reference) return 'attached'
   startedFor = reference
+  mode = 'embedded'
 
   const api: TawkApi = (window.Tawk_API = window.Tawk_API || {})
   api.embedded = container.id
@@ -181,8 +208,108 @@ export function reloadPage(): void {
   window.location.reload()
 }
 
+// ------------------------------------------------------------- floating ---
+
+/** An order reference as the site writes it; anything else is not given to the chat. */
+const ORDER_REF = /^[A-Za-z0-9-]{4,40}$/
+
+/** The floating chat's progress in this page load. */
+let floating: 'idle' | 'loading' | 'ready' | 'failed' = 'idle'
+/** Who is waiting for the floating chat to finish loading: each press while it loads. */
+let waiting: { ready: () => void; error: () => void }[] = []
+/** The order the page in view is about, to show staff in the chat. Never more than its reference. */
+let floatingOrder: string | null = null
+
+/**
+ * The order the page in view is about, or null. Passed to tawk.to as the {@code order-id}
+ * attribute -- the only thing the floating chat ever sends it. Never an email, a sign-in
+ * or backup codes: the visitor is anonymous to tawk.to until they type something.
+ */
+export function setFloatingOrder(reference: string | null): void {
+  const ref = reference && ORDER_REF.test(reference.trim()) ? reference.trim().toUpperCase() : null
+  if (ref === floatingOrder) return
+  floatingOrder = ref
+  if (floating === 'ready' && ref) sendFloatingOrder()
+}
+
+function sendFloatingOrder(): void {
+  if (!floatingOrder) return
+  window.Tawk_API?.setAttributes?.({ 'order-id': floatingOrder }, refused('the order reference'))
+}
+
+/**
+ * Opens the floating chat over the page: loads tawk.to the first time, then opens its
+ * window. tawk.to's own launcher is kept hidden -- the site's red button is the way in -- and
+ * goes again whenever the customer minimises the window.
+ *
+ * @return 'opening' when the chat is opening or loading; 'reload' when this page load has
+ *         the embedded chat, and only a fresh page load can switch widgets
+ */
+export function openFloatingTawk(config: TawkConfig, onReady: () => void, onError: () => void): 'opening' | 'reload' {
+  if (mode === 'embedded') return 'reload'
+  const api: TawkApi = (window.Tawk_API = window.Tawk_API || {})
+  if (floating === 'ready') {
+    api.showWidget?.()
+    api.maximize?.()
+    onReady()
+    return 'opening'
+  }
+  waiting.push({ ready: onReady, error: onError })
+  if (floating === 'loading') return 'opening'
+  floating = 'loading'
+  mode = 'floating'
+  api.onLoad = () => {
+    floating = 'ready'
+    sendFloatingOrder()
+    api.showWidget?.()
+    api.maximize?.()
+    settle((w) => w.ready())
+  }
+  api.onChatMinimized = () => api.hideWidget?.()
+  window.Tawk_LoadStart = new Date()
+
+  const script = document.createElement('script')
+  script.async = true
+  script.src = `https://embed.tawk.to/${config.propertyId}/${config.widgetId}`
+  script.charset = 'UTF-8'
+  script.setAttribute('crossorigin', '*')
+  script.dataset.gfsTawk = 'true'
+  script.onerror = () => {
+    floating = 'failed'
+    script.remove()
+    settle((w) => w.error())
+  }
+  document.body.appendChild(script)
+  return 'opening'
+}
+
+function settle(notify: (w: { ready: () => void; error: () => void }) => void): void {
+  const now = waiting
+  waiting = []
+  now.forEach(notify)
+}
+
+/**
+ * The customer has moved to a page without the chat button: the window closes and tawk.to's
+ * launcher stays hidden. The conversation itself is untouched and comes back with the button.
+ */
+export function hideFloatingTawk(): void {
+  if (floating !== 'ready') return
+  window.Tawk_API?.minimize?.()
+  window.Tawk_API?.hideWidget?.()
+}
+
+/** Which widget this page load has started, for the chat button. */
+export function tawkMode(): 'embedded' | 'floating' | null {
+  return mode
+}
+
 /** For tests: forget everything, as a fresh page load would. */
 export function resetTawkForTests(): void {
+  mode = null
+  floating = 'idle'
+  floatingOrder = null
+  waiting = []
   startedFor = null
   settled = false
   container?.remove()

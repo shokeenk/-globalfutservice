@@ -19,6 +19,7 @@ import { useCatalog } from '../state/CatalogContext'
 import { ChampionsResultCard } from '../components/champs/ChampionsResultCard'
 import { ListingSnapshotCard } from '../components/listing/ListingSnapshotCard'
 import { resultEventText } from '../components/champs/resultEvents'
+import { useLiveChatOrder } from '../components/LiveChatButton'
 
 /**
  * The tracking page. Staff who open a customer's tracking link -- from the admin's Orders
@@ -129,6 +130,8 @@ function CustomerTrack() {
   const [publicRef, setPublicRef] = useState(() => (params.get('ref') ?? '').toUpperCase())
   const [email, setEmail] = useState(account?.email ?? '')
   const [order, setOrder] = useState<Order | null>(null)
+  // The live chat shows staff which order this is: its reference, nothing else.
+  useLiveChatOrder(order?.publicRef)
   const [loading, setLoading] = useState(false)
   // Find has been pressed: from here on a missing answer is an error under its field.
   const [lookupTouched, setLookupTouched] = useState(false)

@@ -578,8 +578,8 @@ function Privacy({ policy }: { policy: Policy | null }) {
         <p>
           Our payment provider processes your payment and sees what it needs to for that purpose;
           we never see or store your full card details. Our email provider delivers your receipts
-          and, if you have opted in to them, our promotional emails. Live chat on an order's
-          support page is provided by tawk.to; section 8 says what it receives.
+          and, if you have opted in to them, our promotional emails. Live chat is provided by
+          tawk.to; section 8 says what it receives.
           We do not sell data, and we do not share it for advertising.
         </p>
         {/*
@@ -656,9 +656,8 @@ function Privacy({ policy }: { policy: Policy | null }) {
         <p>
           We use one cookie, and it exists to keep you signed in. It is not readable by scripts,
           is not sent to other sites, and is not used for tracking or advertising. There is no
-          analytics or advertising cookie on this site. The live chat on an order's support
-          page is the exception: when you open that page, tawk.to sets its own cookies and
-          stores data in your browser (section 8).
+          analytics or advertising cookie on this site. The live chat is the exception: once it
+          loads, tawk.to sets its own cookies and stores data in your browser (section 8).
         </p>
         {/*
           The banner is described rather than merely mentioned, because what it controls is
@@ -704,9 +703,11 @@ function Privacy({ policy }: { policy: Policy | null }) {
       {/*
         Added with the live chat on order support pages. Appended for the same reason as
         section 7: each clause's anchor is its number. Every statement is what the software
-        does: tawk.to loads on an order's support page as it opens, and on no other page, and
-        the server sends tawk.to only the allowlisted fields named here
-        (SupportChatService) -- never the sign-in, backup codes or payment details.
+        does: tawk.to loads on an order's support page as it opens, and on the pages with the
+        chat button (components/LiveChatButton) only when it is pressed; the server sends
+        tawk.to only the allowlisted fields named here (SupportChatService), and the button
+        only the order reference (lib/tawk setFloatingOrder) -- never the sign-in, backup
+        codes or payment details.
       */}
       <Clause n={8} title="Live chat">
         <p>
@@ -715,11 +716,14 @@ function Privacy({ policy }: { policy: Policy | null }) {
              href="https://www.tawk.to/privacy-policy/" target="_blank" rel="noreferrer">
             tawk.to/privacy-policy
           </a>
-          ). It appears only on that page, and loads when you open it; nothing from tawk.to
-          loads on any other page.
+          ). It loads in two places only: on an order's support page, when you open that page;
+          and on the Support, order tracking and checkout pages, when you press the red chat
+          button. Nothing from tawk.to loads on any other page, or before you press the button.
         </p>
         <p>
-          When it loads, tawk.to receives your name and email address; the order's
+          From the chat button, tawk.to receives the reference of the order you are looking at,
+          if there is one, and what you type into the chat. On an order's support page,
+          tawk.to receives your name and email address; the order's
           reference, service, platform and status; for a coin order, the amount; for a
           coaching order, the session reference and your coach's name; and the messages you
           and our team exchange in the chat. We never send it your password, EA sign-in,

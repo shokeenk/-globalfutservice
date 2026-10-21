@@ -29,6 +29,7 @@ import type {
 } from '../lib/types'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
+import { useLiveChatOrder } from '../components/LiveChatButton'
 
 /**
  * Coaching, from choosing a package to the order's support page.
@@ -123,6 +124,8 @@ export default function CoachingBook() {
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
   const [resumed, setResumed] = useState<Order | null>(null)
   const orderRef = created?.publicRef ?? resumed?.publicRef ?? null
+  // The live chat shows staff which order this is: its reference, nothing else.
+  useLiveChatOrder(orderRef)
 
   const selected = options.find((o) => o.variant === variant) ?? null
 

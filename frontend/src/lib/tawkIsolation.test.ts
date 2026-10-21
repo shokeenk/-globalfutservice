@@ -16,21 +16,23 @@ const SOURCES: Record<string, string> = Object.fromEntries(
     .map(([path, text]) => [path.replace(/^\/src\//, ''), text]),
 )
 
-describe('tawk.to is reachable from the support page only', () => {
+describe('tawk.to is reachable from the two chat components only', () => {
   it('only lib/tawk.ts knows tawk.to\'s script or its API', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(50)
     const mentions = Object.entries(SOURCES).filter(([, text]) => /embed\.tawk\.to|Tawk_API/.test(text))
     expect(mentions.map(([path]) => path)).toEqual(['lib/tawk.ts'])
   })
 
-  it('only the support chat imports it', () => {
+  it('only the support chat and the floating chat button import it', () => {
     const importers = Object.entries(SOURCES).filter(([, text]) => /from ['"](\.\.?\/)+lib\/tawk['"]/.test(text))
-    expect(importers.map(([path]) => path)).toEqual(['components/support/SupportChat.tsx'])
+    expect(importers.map(([path]) => path).sort())
+      .toEqual(['components/LiveChatButton.tsx', 'components/support/SupportChat.tsx'])
   })
 
   it('nothing global loads it: not index.html, not the app shell, not the layout', () => {
     expect(indexHtml).not.toMatch(/tawk/i)
     const app = SOURCES['App.tsx'] ?? ''
+    // The layout places the button; the button loads tawk.to only when pressed.
     expect(app).not.toMatch(/lib\/tawk|SupportChat/)
     // The support page itself is loaded on demand, like every other page.
     expect(app).toMatch(/const OrderSupport = lazy\(\(\) => import\('\.\/pages\/OrderSupport'\)\)/)
@@ -91,6 +93,11 @@ const TAWK: Record<string, string[]> = {
   'form-action': ['https://*.tawk.to'],
 }
 
+/** Directives the policy had none of before tawk.to: its notification sound. */
+const TAWK_ONLY: Record<string, string[]> = {
+  'media-src': ["'self'", 'https://*.tawk.to'],
+}
+
 function parse(csp: string): Record<string, string[]> {
   const out: Record<string, string[]> = {}
   for (const part of csp.split(';').map((p) => p.trim()).filter(Boolean)) {
@@ -105,7 +112,7 @@ function expected(extra: Record<string, string[]> = {}): Record<string, string[]
   for (const [name, values] of Object.entries(BEFORE)) {
     out[name] = [...values, ...(TAWK[name] ?? []), ...(extra[name] ?? [])]
   }
-  return out
+  return { ...out, ...TAWK_ONLY }
 }
 
 describe('the Content-Security-Policy lets the chat in, and nothing else changed', () => {
