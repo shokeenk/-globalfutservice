@@ -662,6 +662,11 @@ const fr: Dictionary = {
     requestNewLink: 'Demander un nouveau lien',
   },
 
+  liveChat: {
+    button: 'Chat en direct',
+    failed: 'Le chat en direct n’a pas pu se charger. Réessaie ou utilise le formulaire de la page Support.',
+  },
+
   support: {
     seoTitle: 'Assistance',
     seoDescription: 'Contacte-nous au sujet d’une commande.',
@@ -684,6 +689,17 @@ const fr: Dictionary = {
     messageRequired: 'Écris ton message.',
     confirmRequired: 'Coche cette case pour envoyer ton message.',
     sendFailed: 'Envoi impossible.',
+    sending: 'Envoi…',
+    sent: (ref: string) => `Merci, nous avons bien reçu ton message. Ta référence est ${ref} ; indique-la si tu nous recontactes. Nous te répondrons par e-mail.`,
+    sendError: 'Ton message n’a pas été envoyé. Vérifie ta connexion et réessaie.',
+    tooMany: 'Tu as envoyé plusieurs messages en peu de temps. Attends une minute et réessaie.',
+    discordButton: 'Rejoins notre Discord',
+    discordCaption: 'Notre serveur communautaire : actualités, concours et autres joueurs. Pour de l’aide sur une commande, utilise le chat en direct ou ce formulaire.',
+    contactTitle: 'Coordonnées',
+    operatedBy: (legal: string, discord: string, trading: string) =>
+      `Ce site est exploité par ${legal} (Discord : ${discord}), sous le nom commercial ${trading}.`,
+    contactEmail: 'E-mail',
+    contactDiscord: 'Communauté Discord',
     category: 'De quoi s’agit-il ?',
     categoryHint: 'Facultatif, mais ton message arrive ainsi à la bonne personne.',
     categoryNone: 'Choisis un sujet',

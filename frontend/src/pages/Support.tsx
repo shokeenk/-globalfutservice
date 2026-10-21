@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../motion/Reveal'
 import { Alert, Button, Checkbox, Field, Input, Section, Select, Textarea, revealFirstError } from '../components/ui'
@@ -34,6 +34,9 @@ export default function Support() {
   const [message, setMessage] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [sending, setSending] = useState(false)
+  // Set the instant Send is pressed, before React re-renders the busy button: a double
+  // click, or Enter pressed twice, would otherwise send the message twice.
+  const inFlight = useRef(false)
   const [result, setResult] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
   // Send has been pressed: from here on a missing answer is an error under its field.
   const [touched, setTouched] = useState(false)
@@ -53,11 +56,13 @@ export default function Support() {
   const shown = touched ? errors : {}
 
   async function submit() {
+    if (inFlight.current) return
     setTouched(true)
     if (Object.keys(errors).length > 0) {
       revealFirstError()
       return
     }
+    inFlight.current = true
     setSending(true)
     setResult(null)
     try {
@@ -69,7 +74,7 @@ export default function Support() {
         confirmedNoCredentials: confirmed,
         category: category || null,
       })
-      setResult({ tone: 'ok', text: response.message })
+      setResult({ tone: 'ok', text: t.support.sent(response.ref) })
       setCategory('')
       setSubject('')
       setMessage('')
@@ -77,8 +82,9 @@ export default function Support() {
       // A fresh, empty form: nothing in it has been left out yet.
       setTouched(false)
     } catch (e) {
-      setResult({ tone: 'warn', text: e instanceof ApiError ? e.message : t.support.sendFailed })
+      setResult({ tone: 'warn', text: e instanceof ApiError && e.status === 429 ? t.support.tooMany : t.support.sendError })
     } finally {
+      inFlight.current = false
       setSending(false)
     }
   }
@@ -164,7 +170,7 @@ export default function Support() {
               size="lg"
               loading={sending}
             >
-              {t.support.send}
+              {sending ? t.support.sending : t.support.send}
             </Button>
           </div>
         </Reveal>
@@ -180,13 +186,9 @@ export default function Support() {
             reviewer opens this page to find.
           */}
           {/*
-            The Discord CTA is a button, not another line in a list.
-
-            It is the channel the terms of service route safety-policy claims, coaching
-            scheduling and disputes through, so on the page someone opens when something
-            has gone wrong it should be the thing their eye lands on — not the fourth row
-            of a definition list. Labelled as official because the one scam this market
-            reliably runs is an impostor server.
+            The Discord community link. Community only: support is the live chat and the
+            form beside it. Discord's own blue and its mark, never the red of the live chat
+            button, so the two are not mistaken for each other.
           */}
           <Reveal delay={20}>
             <a
@@ -202,38 +204,32 @@ export default function Support() {
                    className="shrink-0">
                 <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.24.5a18.3 18.3 0 0 1 4.3 1.4c-2-1.1-4.1-1.6-6.4-1.6-2.3 0-4.4.5-6.4 1.6A18.3 18.3 0 0 1 11 3.5L10.7 3a19.8 19.8 0 0 0-4.9 1.4C2.6 9.1 1.7 13.7 2.1 18.2a19.9 19.9 0 0 0 6 3c.5-.65.9-1.35 1.25-2.1-.7-.25-1.35-.55-1.95-.9.16-.12.32-.25.47-.38a14.2 14.2 0 0 0 12.2 0c.16.14.31.26.47.38-.62.36-1.27.66-1.96.9.36.75.78 1.45 1.25 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.85-9.75-3.5-13.8ZM8.7 15.4c-1.18 0-2.15-1.07-2.15-2.4S7.5 10.6 8.7 10.6s2.17 1.08 2.15 2.4c0 1.33-.96 2.4-2.15 2.4Zm6.6 0c-1.18 0-2.15-1.07-2.15-2.4s.95-2.4 2.15-2.4 2.17 1.08 2.15 2.4c0 1.33-.95 2.4-2.15 2.4Z" />
               </svg>
-              Join our Discord
+              {t.support.discordButton}
             </a>
             <p className="mt-2 text-center text-[12px] leading-relaxed text-chalk-faint">
-              Our official support channel. Ask for {BUSINESS.discordName} — we will never
-              contact you from any other server.
+              {t.support.discordCaption}
             </p>
           </Reveal>
 
           <Reveal delay={40} className="surface p-5">
-            <h2 className="stamp mb-4">Contact details</h2>
+            <h2 className="stamp mb-4">{t.support.contactTitle}</h2>
             <p className="text-[13px] leading-relaxed text-chalk-muted">
-              This website is operated by{' '}
-              <strong className="text-chalk">{BUSINESS.legalName}</strong> (Discord:{' '}
-              {BUSINESS.discordName}), trading as {BUSINESS.tradingName}.
+              {/* The operator's name stays in bold, in whichever language the sentence is. */}
+              {t.support.operatedBy('\u0000', BUSINESS.discordName, BUSINESS.tradingName).split('\u0000')
+                .flatMap((part, i) => (i === 0 ? [part] : [<strong key={i} className="text-chalk">{BUSINESS.legalName}</strong>, part]))}
             </p>
             <dl className="mt-4 space-y-2.5 text-[13px]">
               <div>
-                <dt className="text-chalk-faint">Email</dt>
+                <dt className="text-chalk-faint">{t.support.contactEmail}</dt>
                 <dd className="mt-0.5">
                   <a className="break-all text-chalk underline" href={EMAIL_HREF}>
                     {BUSINESS.email}
                   </a>
                 </dd>
               </div>
-              {/*
-                Listed with the email, not with the social icons.
-                The terms of service route coaching scheduling, safety-policy claims and
-                disputes through it, so for a customer with a problem it is a support
-                channel first and a community second.
-              */}
+              {/* The community server's handle, so a customer can tell the real one from an impostor. */}
               <div>
-                <dt className="text-chalk-faint">Official Discord</dt>
+                <dt className="text-chalk-faint">{t.support.contactDiscord}</dt>
                 <dd className="mt-0.5">
                   <a
                     className="text-chalk underline"

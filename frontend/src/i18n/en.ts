@@ -762,6 +762,12 @@ const en = {
     requestNewLink: 'Ask for a new link',
   },
 
+  /* The floating live chat button: Support, tracking and the checkouts. */
+  liveChat: {
+    button: 'Live chat',
+    failed: 'The live chat could not load. Please try again, or use the form on the Support page.',
+  },
+
   support: {
     seoTitle: 'Support',
     seoDescription: 'Get in touch about an order.',
@@ -785,6 +791,18 @@ const en = {
     messageRequired: 'Write your message.',
     confirmRequired: 'Tick this to send your message.',
     sendFailed: 'Could not send that.',
+    sending: 'Sending…',
+    sent: (ref: string) => `Thanks — we have your message. Your reference is ${ref}; quote it if you follow up. We reply by email.`,
+    sendError: 'Your message was not sent. Please check your connection and try again.',
+    tooMany: 'You have sent several messages in a short time. Please wait a minute and try again.',
+    discordButton: 'Join our Discord',
+    // The community, not support: support is the live chat and this form.
+    discordCaption: 'Our community server — news, giveaways and other players. For help with an order, use the live chat or this form.',
+    contactTitle: 'Contact details',
+    operatedBy: (legal: string, discord: string, trading: string) =>
+      `This website is operated by ${legal} (Discord: ${discord}), trading as ${trading}.`,
+    contactEmail: 'Email',
+    contactDiscord: 'Discord community',
     category: 'What is it about?',
     categoryHint: 'Optional, but it gets your message to the right person.',
     categoryNone: 'Choose a topic',

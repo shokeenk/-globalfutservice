@@ -659,6 +659,11 @@ const es: Dictionary = {
     requestNewLink: 'Pedir un enlace nuevo',
   },
 
+  liveChat: {
+    button: 'Chat en directo',
+    failed: 'No se ha podido cargar el chat en directo. Inténtalo de nuevo o usa el formulario de la página de Soporte.',
+  },
+
   support: {
     seoTitle: 'Soporte',
     seoDescription: 'Ponte en contacto sobre un pedido.',
@@ -681,6 +686,17 @@ const es: Dictionary = {
     messageRequired: 'Escribe tu mensaje.',
     confirmRequired: 'Marca esta casilla para enviar tu mensaje.',
     sendFailed: 'No se ha podido enviar.',
+    sending: 'Enviando…',
+    sent: (ref: string) => `Gracias, hemos recibido tu mensaje. Tu referencia es ${ref}; indícala si vuelves a escribirnos. Te responderemos por correo.`,
+    sendError: 'Tu mensaje no se ha enviado. Comprueba tu conexión y vuelve a intentarlo.',
+    tooMany: 'Has enviado varios mensajes en poco tiempo. Espera un minuto y vuelve a intentarlo.',
+    discordButton: 'Únete a nuestro Discord',
+    discordCaption: 'Nuestro servidor de la comunidad: novedades, sorteos y otros jugadores. Para ayuda con un pedido, usa el chat en directo o este formulario.',
+    contactTitle: 'Datos de contacto',
+    operatedBy: (legal: string, discord: string, trading: string) =>
+      `Este sitio web lo gestiona ${legal} (Discord: ${discord}), con el nombre comercial ${trading}.`,
+    contactEmail: 'Correo electrónico',
+    contactDiscord: 'Comunidad de Discord',
     category: '¿Sobre qué es?',
     categoryHint: 'Opcional, pero hace que tu mensaje llegue a la persona adecuada.',
     categoryNone: 'Elige un tema',

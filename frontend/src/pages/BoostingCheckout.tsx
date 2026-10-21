@@ -28,6 +28,7 @@ import type {
 } from '../lib/types'
 import { useAuth } from '../state/AuthContext'
 import { useCatalog } from '../state/CatalogContext'
+import { useLiveChatOrder } from '../components/LiveChatButton'
 
 /**
  * Boosting, from "which account" to "we have your payment".
@@ -171,6 +172,8 @@ export default function BoostingCheckout() {
 
   const [created, setCreated] = useState<CreateOrderResponse | null>(null)
   const orderRef = created?.publicRef ?? resumed?.publicRef ?? null
+  // The live chat shows staff which order this is: its reference, nothing else.
+  useLiveChatOrder(orderRef)
 
   /*
    * A variant that came from a link but is not in the live catalogue would price nothing,

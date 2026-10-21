@@ -31,6 +31,7 @@ import { RankBadge, hasBadge } from '../components/RankBadge'
 import { coinsText, useCatalogLabels } from '../content/catalogLabels'
 import { Testimonials } from '../components/Testimonials'
 import type { TestimonialService } from '../data/testimonials'
+import { useLiveChatOrder } from '../components/LiveChatButton'
 
 type Step = 'configure' | 'details' | 'paying' | 'placed'
 
@@ -2315,6 +2316,7 @@ function DeliveryInformation({
 /** An order GFS Store Credit paid for in full: nothing to pay, and where to follow it. */
 function PaidWithStoreCredit({ order, onDone }: { order: CreateOrderResponse; onDone: () => void }) {
   const t = useT()
+  useLiveChatOrder(order.publicRef)
   return (
     <div className="animate-rise space-y-4 border-t border-ink-400 pt-5" data-testid="paid-with-credit">
       <div className="flex items-center gap-3">
@@ -2342,6 +2344,8 @@ function PaymentStage({
   onDone: () => void
 }) {
   const t = useT()
+  // Placed: the live chat shows staff which order this is -- its reference, nothing else.
+  useLiveChatOrder(order.publicRef)
   const [error, setError] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
   const [settled, setSettled] = useState(false)
