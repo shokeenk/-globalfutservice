@@ -15,10 +15,6 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedgerEntity
     @Query("select coalesce(sum(p.amount), 0) from PointsLedgerEntity p where p.accountId = :accountId")
     long balanceOf(@Param("accountId") Long accountId);
 
-    @Query("select coalesce(sum(p.amount), 0) from PointsLedgerEntity p "
-            + "where p.accountId = :accountId and p.amount > 0")
-    long lifetimeEarned(@Param("accountId") Long accountId);
-
     /**
      * Sum restricted to entry types the caller names.
      *

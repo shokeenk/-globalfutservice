@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import com.globalfutservice.config.SecurityConfig;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
+import com.globalfutservice.loyalty.PointsStatement;
 import com.globalfutservice.identity.AccountRole;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.JwtService;
@@ -55,6 +56,7 @@ class AdminCustomerSecurityTest {
     @MockBean private AdminCustomerQueries queries;
     @MockBean private AccountRepository accounts;
     @MockBean private JwtService jwtService;
+    @MockBean private PointsStatement points;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
         AccountPrincipal p = new AccountPrincipal(1L, "acc_staff", "t@example.test", role);
@@ -101,6 +103,29 @@ class AdminCustomerSecurityTest {
 
         when(queries.detail(eq("g-nothing"), anyBoolean())).thenReturn(Optional.empty());
         mvc.perform(get(BASE + "/g-nothing").with(authentication(as(AccountRole.ADMIN))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("staff see a customer's points and history; a customer cannot, and a guest has none")
+    void pointsForStaff() throws Exception {
+        for (String path : List.of(BASE + "/a-acc_rahul/points", BASE + "/a-acc_rahul/points/history")) {
+            mvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mvc.perform(get(path).with(authentication(as(AccountRole.CUSTOMER)))).andExpect(status().isForbidden());
+        }
+        when(queries.locate("a-acc_rahul")).thenReturn(Optional.of(new AdminCustomerQueries.Located("a42", "a-acc_rahul")));
+        when(points.breakdown(42L)).thenReturn(new PointsStatement.Breakdown(3, 49, 46, 0, 0, 0, List.of()));
+        mvc.perform(get(BASE + "/a-acc_rahul/points").with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isOk());
+        verify(points).breakdown(42L);
+        when(points.history(42L, 1, 25)).thenReturn(new PointsStatement.History(List.of(), 1, 25, 30));
+        mvc.perform(get(BASE + "/a-acc_rahul/points/history").param("page", "1")
+                        .with(authentication(as(AccountRole.OPERATOR))))
+                .andExpect(status().isOk());
+        verify(points).history(42L, 1, 25);
+
+        when(queries.locate("g-GFS-26-ABC")).thenReturn(Optional.of(new AdminCustomerQueries.Located("gx@example.test", "g-GFS-26-ABC")));
+        mvc.perform(get(BASE + "/g-GFS-26-ABC/points").with(authentication(as(AccountRole.ADMIN))))
                 .andExpect(status().isNotFound());
     }
 

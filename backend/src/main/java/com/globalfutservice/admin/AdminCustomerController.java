@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.identity.AccountRole;
+import com.globalfutservice.loyalty.PointsStatement;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
 import com.globalfutservice.web.ApiExceptions;
@@ -44,10 +45,36 @@ public class AdminCustomerController {
 
     private final AdminCustomerQueries queries;
     private final AccountRepository accounts;
+    private final PointsStatement points;
 
-    public AdminCustomerController(AdminCustomerQueries queries, AccountRepository accounts) {
+    public AdminCustomerController(AdminCustomerQueries queries, AccountRepository accounts, PointsStatement points) {
         this.queries = queries;
         this.accounts = accounts;
+        this.points = points;
+    }
+
+    /** The account behind an {@code a-} key, for its points; a guest has no points. */
+    private long pointsAccount(String key) {
+        return queries.locate(key)
+                .filter(found -> found.ckey().startsWith("a"))
+                .map(found -> Long.parseLong(found.ckey().substring(1)))
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("No such customer account."));
+    }
+
+    @GetMapping("/{key}/points")
+    @Operation(summary = "A customer's points: the same breakdown and points on the way they see")
+    public ResponseEntity<PointsStatement.Breakdown> points(@PathVariable String key) {
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(points.breakdown(pointsAccount(key)));
+    }
+
+    @GetMapping("/{key}/points/history")
+    @Operation(summary = "A customer's full points history, newest first, with the balance after each line")
+    public ResponseEntity<PointsStatement.History> pointsHistory(@PathVariable String key,
+                                                                 @RequestParam(defaultValue = "0") int page,
+                                                                 @RequestParam(defaultValue = "25") int size) {
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(points.history(pointsAccount(key), page, size));
     }
 
     private static boolean admin(AccountPrincipal me) {

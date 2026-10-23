@@ -64,11 +64,6 @@ public class LoyaltyService {
         return accountId == null ? 0L : repository.balanceOf(accountId);
     }
 
-    @Transactional(readOnly = true)
-    public long lifetimeEarned(Long accountId) {
-        return accountId == null ? 0L : repository.lifetimeEarned(accountId);
-    }
-
     /**
      * Every point ever earned, never reduced by spending. The number the tier ladder reads.
      *

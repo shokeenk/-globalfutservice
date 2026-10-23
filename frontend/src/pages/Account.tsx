@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChangePassword } from '../components/ChangePassword'
+import { MyPointsBreakdown, PointsHistory } from '../components/PointsBook'
 import { PageHeader } from '../components/PageHeader'
 import { StoreCreditBalance } from '../components/StoreCredit'
 import { Badge, ButtonLink, Checkbox, EmptyState, Section, Skeleton } from '../components/ui'
@@ -214,57 +215,15 @@ export default function Account() {
               </section>
             )}
 
-            {/* ------------------------------------------------- statement --- */}
-            {wallet && wallet.statement.length > 0 && (
-              <section>
-                <h2 className="stamp mb-5">{t.account.statement}</h2>
-                <div className="surface overflow-hidden">
-                  <ul className="divide-y divide-ink-400">
-                    {wallet.statement.map((entry, index) => (
-                      <li
-                        key={index}
-                        className="flex items-center justify-between gap-4 px-5 py-3.5"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-[13px] text-chalk">
-                            {entry.description ?? entry.type}
-                          </p>
-                          <p className="text-[11.5px] text-chalk-faint">{dateTime(entry.at)}</p>
-                        </div>
-                        {/*
-                          A sign, not only a colour. Someone who cannot separate gold
-                          from grey still reads the leading "+" — WCAG 1.4.1, and the
-                          reason this ledger does not rely on hue to say "credit".
-                        */}
-                        <span
-                          className={`tnum shrink-0 text-[14px] font-semibold ${
-                            entry.amount >= 0 ? 'text-gold-400' : 'text-chalk-muted'
-                          }`}
-                        >
-                          {entry.amount >= 0 ? '+' : ''}
-                          {fmtPoints(entry.amount)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </section>
-            )}
+            {/* ------------------------------------------------ points history --- */}
+            {wallet && <PointsHistory id="points-history" />}
           </div>
 
           {/* -------------------------------------------------------- rail --- */}
           <div className="space-y-4">
             {wallet && (
               <Reveal className="plate p-5">
-                <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-400">
-                  {t.account.rewardPoints}
-                </p>
-                <p className="mt-3 text-[12px] leading-relaxed text-chalk-faint">
-                  {t.account.earnedTotal(
-                    fmtPoints(wallet.lifetimeEarned),
-                    wallet.maxRedemptionBps / 100,
-                  )}
-                </p>
+                <MyPointsBreakdown capBps={wallet.maxRedemptionBps} />
               </Reveal>
             )}
 

@@ -12,6 +12,7 @@ import { buttonClasses } from '../ui/controls'
 import { dateAndTime, shortDate } from '../ui/format'
 import { PlatformMark } from '../ui/PlatformMark'
 import { PLATFORM_LABEL, type Tone } from '../ui/status'
+import { CustomerPoints } from './CustomerPoints'
 import { Avatar, CUSTOMER_STATUS, spentText } from './shared'
 
 const SKU_ICON: Record<string, [IconType, Tone]> = {
@@ -144,6 +145,9 @@ export function CustomerPanel({
             </Link>
 
             <Details customer={c} isAdmin={isAdmin} onRenamed={() => { void load(); onRenamed() }} />
+
+            {/* A guest has no account, so no points. */}
+            {c.key.startsWith('a-') && <CustomerPoints customerKey={c.key} />}
 
             <section aria-labelledby="customer-recent" className="mt-6">
               <div className="mb-2 flex items-center justify-between">

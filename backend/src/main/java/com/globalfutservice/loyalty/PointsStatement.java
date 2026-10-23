@@ -1,0 +1,122 @@
+package com.globalfutservice.loyalty;
+
+import com.globalfutservice.domain.loyalty.PointsEntryType;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Where a customer's points came from and went: the breakdown, the history with the
+ * balance after each line, and the points still on the way. The same answer for the
+ * customer's own pages and for staff.
+ *
+ * <p>Everything is read from the ledger, which stays the only record. The breakdown is
+ * split so that it always adds up:
+ * <pre>
+ *   earned − spent + returned − removed = available
+ * </pre>
+ * <ul>
+ *   <li><b>earned</b>: EARNED, DAILY_BONUS and positive MANUAL_ADJUSTMENT, less CLAWBACK and
+ *       SETTLEMENT_DEDUCTION (earnings taken back with the order they came from).
+ *       Never REFUND_REVERSAL: that is spent points coming back, not new ones.
+ *   <li><b>spent</b>: REDEEMED at checkout.
+ *   <li><b>returned</b>: REFUND_REVERSAL, spent points given back after a refund.
+ *   <li><b>removed</b>: negative MANUAL_ADJUSTMENT, points staff took off.
+ * </ul>
+ */
+@Service
+public class PointsStatement {
+
+    /** Orders still heading for COMPLETED, whose points land when the guarantee window closes. */
+    private static final List<String> ON_THE_WAY = List.of("PAID", "CREDENTIALS_PENDING",
+            "READY_FOR_DELIVERY", "IN_PROGRESS", "ON_HOLD", "DELIVERED");
+
+    private final NamedParameterJdbcTemplate jdbc;
+
+    public PointsStatement(NamedParameterJdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    public record Breakdown(long available, long earned, long spent, long returned, long removed,
+                            long onTheWay, List<Pending> pending) {
+    }
+
+    /** Points from one order that have not landed yet. {@code landsAt} is null until it is delivered. */
+    public record Pending(String orderRef, long points, Instant landsAt) {
+    }
+
+    /** What a history line was, in words the pages translate. */
+    public enum Kind { EARNED, SPENT, RETURNED, DAILY_BONUS, ADJUSTMENT, REMOVED }
+
+    public record Line(long id, Instant at, String orderRef, Kind kind, long amount, long balanceAfter) {
+    }
+
+    public record History(List<Line> entries, int page, int size, long total) {
+    }
+
+    public static Kind kindOf(PointsEntryType type) {
+        return switch (type) {
+            case EARNED -> Kind.EARNED;
+            case REDEEMED -> Kind.SPENT;
+            case REFUND_REVERSAL -> Kind.RETURNED;
+            case DAILY_BONUS -> Kind.DAILY_BONUS;
+            case MANUAL_ADJUSTMENT -> Kind.ADJUSTMENT;
+            case CLAWBACK, SETTLEMENT_DEDUCTION -> Kind.REMOVED;
+        };
+    }
+
+    @Transactional(readOnly = true)
+    public Breakdown breakdown(long accountId) {
+        MapSqlParameterSource params = new MapSqlParameterSource("account", accountId);
+        long[] sums = jdbc.queryForObject("""
+                select coalesce(sum(amount), 0) as available,
+                       coalesce(sum(amount) filter (where entry_type in ('EARNED', 'DAILY_BONUS', 'CLAWBACK',
+                                'SETTLEMENT_DEDUCTION')
+                             or (entry_type = 'MANUAL_ADJUSTMENT' and amount > 0)), 0) as earned,
+                       coalesce(-sum(amount) filter (where entry_type = 'REDEEMED'), 0) as spent,
+                       coalesce(sum(amount) filter (where entry_type = 'REFUND_REVERSAL'), 0) as returned,
+                       coalesce(-sum(amount) filter (where entry_type = 'MANUAL_ADJUSTMENT' and amount < 0), 0)
+                           as removed
+                  from points_ledger where account_id = :account
+                """, params, (rs, i) -> new long[]{rs.getLong("available"), rs.getLong("earned"),
+                rs.getLong("spent"), rs.getLong("returned"), rs.getLong("removed")});
+        List<Pending> pending = jdbc.query("""
+                select public_ref, points_earned, guarantee_expires_at from orders
+                 where account_id = :account and points_settled_at is null and points_earned > 0
+                   and status in (:statuses)
+                 order by guarantee_expires_at nulls last, created_at, id
+                """, params.addValue("statuses", ON_THE_WAY),
+                (rs, i) -> new Pending(rs.getString(1), rs.getLong(2),
+                        Optional.ofNullable(rs.getTimestamp(3)).map(Timestamp::toInstant).orElse(null)));
+        long onTheWay = pending.stream().mapToLong(Pending::points).sum();
+        return new Breakdown(sums[0], sums[1], sums[2], sums[3], sums[4], onTheWay, pending);
+    }
+
+    /** Newest first, with the balance as it stood just after each line. */
+    @Transactional(readOnly = true)
+    public History history(long accountId, int page, int size) {
+        int p = Math.max(0, page);
+        int s = Math.max(1, Math.min(size, 100));
+        MapSqlParameterSource params = new MapSqlParameterSource("account", accountId)
+                .addValue("limit", s).addValue("offset", (long) p * s);
+        long total = Optional.ofNullable(jdbc.queryForObject(
+                "select count(*) from points_ledger where account_id = :account", params, Long.class)).orElse(0L);
+        List<Line> lines = jdbc.query("""
+                select l.id, l.created_at, o.public_ref, l.entry_type, l.amount,
+                       sum(l.amount) over (order by l.created_at, l.id rows unbounded preceding) as balance_after
+                  from points_ledger l left join orders o on o.id = l.order_id
+                 where l.account_id = :account
+                 order by l.created_at desc, l.id desc
+                 limit :limit offset :offset
+                """, params, (rs, i) -> new Line(rs.getLong("id"), rs.getTimestamp("created_at").toInstant(),
+                rs.getString("public_ref"), kindOf(PointsEntryType.valueOf(rs.getString("entry_type"))),
+                rs.getLong("amount"), rs.getLong("balance_after")));
+        return new History(lines, p, s, total);
+    }
+}

@@ -855,6 +855,42 @@ export interface Wallet {
   statement: WalletEntry[]
 }
 
+/** Points still on the way from one order. `landsAt` is null until it is delivered. */
+export interface PendingPoints {
+  orderRef: string
+  points: number
+  landsAt: string | null
+}
+
+/** Where the points came from and went. Always: earned − spent + returned − removed = available. */
+export interface PointsBreakdown {
+  available: number
+  earned: number
+  spent: number
+  returned: number
+  removed: number
+  onTheWay: number
+  pending: PendingPoints[]
+}
+
+export type PointsKind = 'EARNED' | 'SPENT' | 'RETURNED' | 'DAILY_BONUS' | 'ADJUSTMENT' | 'REMOVED'
+
+export interface PointsLine {
+  id: number
+  at: string
+  orderRef: string | null
+  kind: PointsKind
+  amount: number
+  balanceAfter: number
+}
+
+export interface PointsHistoryPage {
+  entries: PointsLine[]
+  page: number
+  size: number
+  total: number
+}
+
 /** Loyalty standing. Assembled server-side — the tier is never derived in the browser. */
 export interface LoyaltyStatus {
   tier: string
