@@ -6,7 +6,8 @@ import { NotificationToasts } from './components/NotificationToasts'
 import { Footer } from './components/Footer'
 import { AskWidget } from './components/AskWidget'
 import { isSupportPage } from './components/support/SupportCard'
-import { LiveChatButton, showsLiveChat } from './components/LiveChatButton'
+import { isLiveChatPage, LiveChatButton, showsLiveChat } from './components/LiveChatButton'
+import { useChatIds } from './lib/chatConfig'
 import { VerifyEmailBanner } from './components/VerifyEmailBanner'
 import { PopupHost } from './components/popups/PopupHost'
 import { CursorLight } from './components/CursorLight'
@@ -288,7 +289,10 @@ function PublicLayout() {
  * on an order's support page (its chat is in the page), the help assistant everywhere else.
  */
 export function CornerWidget({ pathname }: { pathname: string }) {
-  if (showsLiveChat(pathname)) return <LiveChatButton />
+  const chatIds = useChatIds()
+  if (showsLiveChat(pathname, chatIds)) return <LiveChatButton />
+  // A chat page while the ids are still on their way: nothing yet, not the assistant first.
+  if (chatIds === null && isLiveChatPage(pathname)) return null
   return isSupportPage(pathname) ? null : <AskWidget />
 }
 

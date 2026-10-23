@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useT } from '../i18n'
+import type { ChatIds } from '../lib/chatConfig'
+import { useChatIds } from '../lib/chatConfig'
 import { floatingTawkConfig, hideFloatingTawk, openFloatingTawk, reloadPage, setFloatingOrder } from '../lib/tawk'
 import { Spinner } from './ui'
 
@@ -17,9 +19,12 @@ export function isLiveChatPage(pathname: string): boolean {
   return LIVE_CHAT_PAGES.has(path)
 }
 
-/** Whether this page shows the chat button: one of the pages, and the widget configured. */
-export function showsLiveChat(pathname: string): boolean {
-  return isLiveChatPage(pathname) && floatingTawkConfig() !== null
+/**
+ * Whether this page shows the chat button: one of the pages, and the floating widget set up
+ * (its ids come from the API when the site starts; until they arrive, no button).
+ */
+export function showsLiveChat(pathname: string, ids: ChatIds | null): boolean {
+  return isLiveChatPage(pathname) && floatingTawkConfig(ids) !== null
 }
 
 /**
@@ -47,7 +52,7 @@ const OPEN_AFTER_RELOAD = 'gfs.liveChat.open'
  */
 export function LiveChatButton() {
   const t = useT()
-  const config = floatingTawkConfig()
+  const config = floatingTawkConfig(useChatIds())
   const [state, setState] = useState<'idle' | 'opening' | 'failed'>('idle')
 
   function open() {

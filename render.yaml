@@ -127,6 +127,20 @@ services:
       - key: GFS_DISCORD_CLIENT_SECRET
         sync: false
 
+      # ---- live chat (tawk.to) ------------------------------------------------
+      # The property and the two widget ids are public and served to the storefront at
+      # runtime (GET /api/v1/chat/config), so they belong HERE, on the API -- not on
+      # gfs-web, whose bundle is built before any of its variables are read. The Secure
+      # Mode key is secret and stays on the server.
+      - key: GFS_TAWK_PROPERTY_ID
+        sync: false
+      - key: GFS_TAWK_EMBED_WIDGET_ID
+        sync: false
+      - key: GFS_TAWK_FLOATING_WIDGET_ID
+        sync: false
+      - key: GFS_TAWK_SECURE_KEY
+        sync: false
+
       # ---- coin fulfilment --------------------------------------------------
       # OFF here, always. The Render dashboard is the source of truth for this
       # integration, and it is switched on there by hand, after the supervised

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useT } from '../../i18n'
+import { useChatIds } from '../../lib/chatConfig'
 import { detachTawk, reloadPage, startTawk, tawkConfig } from '../../lib/tawk'
 import type { TawkChat } from '../../lib/tawk'
 import { Alert } from '../ui'
@@ -21,12 +22,15 @@ import { Alert } from '../ui'
 export function SupportChat({ reference, chat }: { reference: string; chat: TawkChat }) {
   const t = useT()
   const s = t.orderSupport
-  const config = tawkConfig()
+  const chatIds = useChatIds()
+  const config = tawkConfig(chatIds)
   const host = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
 
+  // Starts once the ids have arrived from the API (they load as the site starts).
+  const ready = config !== null
   useEffect(() => {
-    const ids = tawkConfig()
+    const ids = tawkConfig(chatIds)
     if (!ids || !host.current) return
     if (startTawk(ids, reference, chat, host.current, () => setFailed(true)) === 'reload') {
       // The chat in this page load is another order's, which tawk.to cannot be told to
@@ -36,7 +40,12 @@ export function SupportChat({ reference, chat }: { reference: string; chat: Tawk
       return
     }
     return () => detachTawk()
-  }, [reference]) // eslint-disable-line react-hooks/exhaustive-deps -- the chat's fields are read once, when it starts
+  }, [reference, ready]) // eslint-disable-line react-hooks/exhaustive-deps -- the chat's fields are read once, when it starts
+
+  // Still asking the API: nothing yet, rather than a "not available" that then vanishes.
+  if (chatIds === null) {
+    return <div data-testid="chat-loading" className="h-[560px] w-full rounded-panel border border-ink-400" />
+  }
 
   if (!config) {
     return (

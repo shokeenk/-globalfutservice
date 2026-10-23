@@ -4,6 +4,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const reloadPage = vi.hoisted(() => vi.fn())
+/** The ids the API served at start; set per test. */
+const chat = vi.hoisted(() => ({ ids: null as null | { propertyId: string | null; embedWidgetId: string | null;
+  floatingWidgetId: string | null } }))
+vi.mock('../../lib/chatConfig', async (original) => ({
+  ...(await original<typeof import('../../lib/chatConfig')>()),
+  useChatIds: () => chat.ids,
+}))
 vi.mock('../../lib/tawk', async (original) => ({
   ...(await original<typeof import('../../lib/tawk')>()),
   reloadPage,
@@ -26,8 +33,7 @@ function inRouter(node: React.ReactNode) {
 }
 
 function configured() {
-  vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-  vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+  chat.ids = { propertyId: 'prop123', embedWidgetId: 'widget1', floatingWidgetId: null }
 }
 
 beforeEach(() => {
@@ -35,7 +41,6 @@ beforeEach(() => {
 })
 afterEach(() => {
   resetTawkForTests()
-  vi.unstubAllEnvs()
 })
 
 describe('the card on an order', () => {
@@ -82,8 +87,7 @@ describe('the card on an order', () => {
 
 describe('the chat block', () => {
   it('without the ids: says live chat is unavailable and points to the Support page, never a broken box', () => {
-    vi.stubEnv('VITE_TAWK_PROPERTY_ID', '')
-    vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', '')
+    chat.ids = { propertyId: null, embedWidgetId: null, floatingWidgetId: null }
     inRouter(<SupportChat reference="GFS-26-70C4DPWH" chat={CHAT} />)
     expect(screen.getByText('Live chat is unavailable right now.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Go to the Support page' })).toHaveAttribute('href', '/support')

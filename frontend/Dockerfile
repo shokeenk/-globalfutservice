@@ -25,6 +25,17 @@ COPY . .
 # public URL would send the browser cross-origin and break the cookie.
 ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# Every other VITE_* variable the storefront reads, declared so a value given as a build
+# argument reaches the bundle: a Docker build sees only the variables declared here, and
+# the rest come out empty without a word (2026-10-23, the live chat). These three are
+# only a fallback now -- the live site reads tawk.to's ids from the API at runtime
+# (GFS_TAWK_* on the API service). A test fails if src/ reads a VITE_* not declared here.
+ARG VITE_TAWK_PROPERTY_ID=
+ARG VITE_TAWK_EMBED_WIDGET_ID=
+ARG VITE_TAWK_FLOATING_WIDGET_ID=
+ENV VITE_TAWK_PROPERTY_ID=$VITE_TAWK_PROPERTY_ID \
+    VITE_TAWK_EMBED_WIDGET_ID=$VITE_TAWK_EMBED_WIDGET_ID \
+    VITE_TAWK_FLOATING_WIDGET_ID=$VITE_TAWK_FLOATING_WIDGET_ID
 RUN npm run build
 
 # -----------------------------------------------------------------------------

@@ -244,6 +244,8 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/v1/discord/interactions").permitAll()
                     // Popups: which to show, their images, and the anonymous counters.
                     .requestMatchers(HttpMethod.GET, "/api/v1/popups", "/api/v1/popups/images/**").permitAll()
+                    // tawk.to's public ids, read by every storefront page at start.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/chat/config").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/popups/*/events").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
 

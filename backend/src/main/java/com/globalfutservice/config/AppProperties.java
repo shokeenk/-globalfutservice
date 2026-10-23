@@ -476,14 +476,21 @@ public record AppProperties(
     }
 
     /**
-     * tawk.to, the live chat on order support pages.
+     * tawk.to, the live chat: embedded on order support pages, and the floating chat button.
      *
-     * @param secureKey the property's Secure Mode key (tawk.to: Administration, Overview,
-     *                  JavaScript API). Server only: it signs the signed-in customer's email
-     *                  so the chat cannot be given somebody else's name. Blank means Secure
-     *                  Mode is not used and the name and email go unsigned.
+     * @param secureKey        the property's Secure Mode key (tawk.to: Administration, Overview,
+     *                         JavaScript API). Server only, never sent anywhere: it signs the
+     *                         signed-in customer's email so the chat cannot be given somebody
+     *                         else's name. Blank means Secure Mode is not used.
+     * @param propertyId       the property id. Public: it is in every page that loads the chat.
+     * @param embedWidgetId    the Embed widget, on order support pages. Public.
+     * @param floatingWidgetId the Floating widget, behind the chat button. Public.
+     *
+     * <p>The three ids are served to the storefront at runtime ({@code GET /api/v1/chat/config})
+     * rather than baked into its bundle at build time: the storefront's Docker build only ever
+     * received the variables its Dockerfile declared, so build-time ids came out empty.
      */
-    public record Tawk(String secureKey) {
+    public record Tawk(String secureKey, String propertyId, String embedWidgetId, String floatingWidgetId) {
 
         public boolean secureModeConfigured() {
             return secureKey != null && !secureKey.isBlank();
@@ -492,7 +499,8 @@ public record AppProperties(
         /** Never prints the key: a record's own toString would. */
         @Override
         public String toString() {
-            return "Tawk[secureKey=" + (secureModeConfigured() ? "[redacted]" : "unset") + "]";
+            return "Tawk[secureKey=" + (secureModeConfigured() ? "[redacted]" : "unset") + ", propertyId="
+                    + propertyId + ", embedWidgetId=" + embedWidgetId + ", floatingWidgetId=" + floatingWidgetId + "]";
         }
     }
 
