@@ -37,7 +37,12 @@ public interface StoreCreditRepository extends JpaRepository<StoreCreditEntryEnt
      * Holds the customer's account row until the transaction ends, so two checkouts spending
      * the same balance at once are taken one after the other and the second sees what the
      * first left.
+     *
+     * <p>{@code FOR NO KEY UPDATE}, not {@code FOR UPDATE}: it still makes a second spender
+     * wait, but not an insert elsewhere whose foreign key points at the account (a
+     * notification, a ledger line), which only needs a key-share lock. With {@code FOR
+     * UPDATE}, such an insert from another transaction during checkout waited on checkout.
      */
-    @Query(value = "select id from account where id = :accountId for update", nativeQuery = true)
+    @Query(value = "select id from account where id = :accountId for no key update", nativeQuery = true)
     Long lockAccount(@Param("accountId") Long accountId);
 }

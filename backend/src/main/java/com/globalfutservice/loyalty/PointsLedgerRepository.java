@@ -36,8 +36,11 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedgerEntity
 
     boolean existsByReversesId(Long reversesId);
 
-    /** Holds the customer's account row until the transaction ends: one correction at a time. */
-    @Query(value = "select id from account where id = :accountId for update", nativeQuery = true)
+    /**
+     * Holds the customer's account row until the transaction ends: one correction at a time.
+     * {@code FOR NO KEY UPDATE} so inserts pointing at the account are not held up by it.
+     */
+    @Query(value = "select id from account where id = :accountId for no key update", nativeQuery = true)
     Long lockAccount(@Param("accountId") Long accountId);
 
     Page<PointsLedgerEntity> findByAccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);

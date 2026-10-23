@@ -2,18 +2,25 @@ package com.globalfutservice.notify;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
- * Fans one event out to every configured channel, off the request thread.
+ * Fans one event out to every configured channel, off the request thread, and only once
+ * the change it reports has committed.
  *
- * <p>{@code @Async} on a virtual-thread executor means a slow WhatsApp API costs
- * notification latency and nothing else — in particular, it does not hold open the
- * transaction that just took a customer's money.
+ * <p>Sent on a virtual thread, so a slow WhatsApp API costs notification latency and
+ * nothing else -- in particular, it does not hold open the transaction that just took a
+ * customer's money. And sent only after that transaction commits: an email about an order
+ * that then rolled back is a lie, and a channel that writes to the database must never
+ * wait on rows the caller still holds locked (2026-10-23). Called outside a transaction,
+ * it sends straight away. A channel that fails is logged; nothing is thrown back.
  */
 @Service
 public class NotificationService {
@@ -21,9 +28,11 @@ public class NotificationService {
     private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     private final List<Notifier> notifiers;
+    private final Executor executor;
 
-    public NotificationService(List<Notifier> notifiers) {
+    public NotificationService(List<Notifier> notifiers, @Qualifier("applicationTaskExecutor") Executor executor) {
         this.notifiers = notifiers;
+        this.executor = executor;
         List<String> enabled = notifiers.stream()
                 .filter(Notifier::isEnabled)
                 .map(Notifier::channelName)
@@ -47,42 +56,34 @@ public class NotificationService {
         }
     }
 
-    @Async
     public void orderPlaced(OrderNotification n) {
         each(notifier -> notifier.orderPlaced(n));
     }
 
-    @Async
     public void credentialsNeeded(OrderNotification n) {
         each(notifier -> notifier.credentialsNeeded(n));
     }
 
-    @Async
     public void credentialsReminder(OrderNotification n) {
         each(notifier -> notifier.credentialsReminder(n));
     }
 
-    @Async
     public void supportReply(SupportReplyNotification n) {
         each(notifier -> notifier.supportReply(n));
     }
 
-    @Async
     public void fulfilmentAlert(FulfilmentAlert alert) {
-        each(notifier -> notifier.fulfilmentAlert(alert));
+        alert(notifier -> notifier.fulfilmentAlert(alert));
     }
 
-    @Async
     public void paymentAlert(PaymentAlert alert) {
-        each(notifier -> notifier.paymentAlert(alert));
+        alert(notifier -> notifier.paymentAlert(alert));
     }
 
-    @Async
     public void customerActionNeeded(CustomerActionNotification n) {
         each(notifier -> notifier.customerActionNeeded(n));
     }
 
-    @Async
     public void readyToFulfil(OrderNotification n) {
         each(notifier -> notifier.readyToFulfil(n));
     }
@@ -91,23 +92,19 @@ public class NotificationService {
      * Off the request thread: this runs inside the customer's own submit request, and a
      * slow SMTP server must not make submitting a payment reference look like it failed.
      */
-    @Async
     public void awaitingVerification(OrderNotification n) {
         each(notifier -> notifier.awaitingVerification(n));
     }
 
     /** Off the request thread too — this one runs inside an operator's verify click. */
-    @Async
     public void orderConfirmed(OrderNotification n) {
         each(notifier -> notifier.orderConfirmed(n));
     }
 
-    @Async
     public void coachingConfirmed(OrderNotification n) {
         each(notifier -> notifier.coachingConfirmed(n));
     }
 
-    @Async
     public void paymentClaimed(PaymentClaimNotification n) {
         each(notifier -> notifier.paymentClaimed(n));
     }
@@ -117,19 +114,16 @@ public class NotificationService {
      * so a slow Discord costs the operator a few seconds and the customer's upload nothing
      * -- before this it was posted inside the upload request itself.
      */
-    @Async
     public void paymentProofAttached(PaymentProofNotification n) {
         each(notifier -> notifier.paymentProofAttached(n));
     }
 
     /** Off any request thread: the sweep that sends it must not wait on SMTP. */
-    @Async
     public void transferStarted(OrderNotification n) {
         each(notifier -> notifier.transferStarted(n));
     }
 
     /** Off any request or poll thread. The link is passed apart from the order, never put on it. */
-    @Async
     public void coinsOnTheWay(OrderNotification n, String trackingUrl) {
         each(notifier -> notifier.coinsOnTheWay(n, trackingUrl));
     }
@@ -139,12 +133,10 @@ public class NotificationService {
     }
 
     /** Off the admin's request: raised after the settlement has committed. */
-    @Async
     public void settlementSettled(OrderNotification n) {
         each(notifier -> notifier.settlementSettled(n));
     }
 
-    @Async
     public void coachingReminder(String email, String sessionRef, Instant startsAt, String zone) {
         CoachingNotification n = new CoachingNotification(email, sessionRef, startsAt, zone);
         each(notifier -> notifier.coachingReminder(n));
@@ -153,39 +145,78 @@ public class NotificationService {
     /**
      * A session was booked, moved, or called off.
      *
-     * <p>{@code @Async} like the rest, so a slow Discord call cannot hold the booking
+     * <p>Off the request thread like the rest, so a slow Discord call cannot hold the booking
      * transaction open, and {@link #each} swallows a failing channel — a booking is
      * already committed by the time any of this runs and must never be undone by a
      * notification that did not send.
      */
-    @Async
     public void coachingBooked(CoachingBookingNotification n) {
         each(notifier -> notifier.coachingBooked(n));
     }
 
-    @Async
     public void coachingRescheduled(CoachingBookingNotification n) {
         each(notifier -> notifier.coachingRescheduled(n));
     }
 
-    @Async
     public void coachingCancelled(CoachingBookingNotification n) {
         each(notifier -> notifier.coachingCancelled(n));
     }
 
     /** A checkout hold became a booking: the payment was verified. */
-    @Async
     public void coachingSessionConfirmed(CoachingBookingNotification n) {
         each(notifier -> notifier.coachingSessionConfirmed(n));
     }
 
-    private void each(java.util.function.Consumer<Notifier> action) {
-        for (Notifier notifier : notifiers) {
-            try {
-                action.accept(notifier);
-            } catch (Exception e) {
-                log.warn("Notifier {} failed: {}", notifier.channelName(), e.getMessage());
+    /**
+     * An operator alert: sent once the caller's transaction is over, committed or not. An
+     * alert is often raised just before the change it reports is refused and rolled back,
+     * and that is when the operator most needs it.
+     */
+    private void alert(java.util.function.Consumer<Notifier> action) {
+        Runnable send = sender(action);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            dispatch(send);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                dispatch(send);
             }
+        });
+    }
+
+    private void each(java.util.function.Consumer<Notifier> action) {
+        Runnable send = sender(action);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            dispatch(send);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                dispatch(send);
+            }
+        });
+    }
+
+    private Runnable sender(java.util.function.Consumer<Notifier> action) {
+        return () -> {
+            for (Notifier notifier : notifiers) {
+                try {
+                    action.accept(notifier);
+                } catch (Exception e) {
+                    log.warn("Notifier {} failed: {}", notifier.channelName(), e.getMessage());
+                }
+            }
+        };
+    }
+
+    private void dispatch(Runnable send) {
+        try {
+            executor.execute(send);
+        } catch (RuntimeException e) {
+            log.warn("Notifications not sent: {}", e.toString());
         }
     }
 }
