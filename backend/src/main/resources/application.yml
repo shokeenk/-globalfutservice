@@ -55,17 +55,31 @@ spring:
     username: ${GFS_DB_USER:gfs}
     password: ${GFS_DB_PASSWORD:gfs}
     hikari:
-      # 8, not 10 (2026-10-20, Render memory limit), and not 5: eight scheduled jobs each hold
-      # one connection for the whole of their run (SchedulerLock's advisory lock) and, with
-      # virtual threads, can run at once -- the FUT Transfer poll, automatic sending, sign-in
-      # resends and transfer notices every 15-30 s -- each also needing one for its own work.
-      # At 5 they could take every connection and leave a customer's payment waiting.
+      # 8, not 10 (2026-10-20, Render memory limit). Requests and the scheduled jobs' own
+      # work share it, each holding a connection only for a transaction: milliseconds. The
+      # jobs' advisory locks, held for a whole run, come from SchedulerLock's own pool of
+      # 4 since 2026-10-23, so a busy scheduler can no longer take these from customers.
+      # Nothing may hold one of these while waiting on a browser or another service: that
+      # is what took the site down on 2026-10-23 (popup images written to slow browsers
+      # from inside a transaction).
       maximum-pool-size: ${GFS_DB_POOL_SIZE:8}
       minimum-idle: 2
       connection-timeout: 10000
       # Below Postgres' own idle timeout, so the pool discards connections before
       # the server does and nobody sees a "connection closed" on the money path.
       max-lifetime: 600000
+      # A connection out of the pool for 20 s is logged with the stack that took it.
+      # Nothing here should hold one that long; when something does, this names it.
+      leak-detection-threshold: ${GFS_DB_LEAK_DETECTION_MS:20000}
+      data-source-properties:
+        # Set on every connection by the server, so nothing can hold one for minutes
+        # (2026-10-23: popup images held them while slow browsers took the bytes):
+        # - a statement running 30 s is cancelled;
+        # - waiting 10 s for a row lock (SELECT ... FOR UPDATE) gives up;
+        # - a transaction left idle for 60 s is ended, and its connection with it.
+        # The scheduler's advisory-lock sessions sit idle outside any transaction, so
+        # the last one does not touch them.
+        options: "-c statement_timeout=30000 -c lock_timeout=10000 -c idle_in_transaction_session_timeout=60000"
 
   jpa:
     open-in-view: false          # An HTTP thread must not hold a database connection

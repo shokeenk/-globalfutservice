@@ -91,8 +91,12 @@ public class FxRateService {
         }
     }
 
-    /** @return how many new rates were stored; 0 when the ECB had nothing new or could not be read */
-    @Transactional
+    /**
+     * Not {@code @Transactional}: the ECB call can take its whole 20 s timeout, and no
+     * database connection may be held across it. Each rate is saved on its own.
+     *
+     * @return how many new rates were stored; 0 when the ECB had nothing new or could not be read
+     */
     public int refreshFromEcb() {
         EcbRates ecb;
         try {

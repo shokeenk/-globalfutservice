@@ -9,8 +9,11 @@ import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.identity.AccountRole;
 import com.globalfutservice.storecredit.StoreCreditService;
 import jakarta.persistence.EntityManager;
+import com.globalfutservice.testsupport.SmallPool;
+import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,7 +21,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.SharedEntityManagerCreator;
@@ -55,6 +57,7 @@ class PointsStatementPostgresTest {
     private static final Instant NOW = Instant.parse("2026-10-23T08:00:00Z");
 
     private String schema;
+    private HikariDataSource pool;
     private JdbcTemplate jdbc;
     private LocalContainerEntityManagerFactoryBean factory;
     private TransactionTemplate tx;
@@ -70,9 +73,10 @@ class PointsStatementPostgresTest {
         String url = System.getenv("GFS_TEST_PG_URL");
         assumeTrue(url != null && !url.isBlank(), "GFS_TEST_PG_URL not set: no database to test against");
         schema = "points_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        DriverManagerDataSource ds = new DriverManagerDataSource(
-                url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema,
-                System.getenv("GFS_TEST_PG_USER"), System.getenv("GFS_TEST_PG_PASSWORD"));
+        // Three connections: one not given back is noticed at once (2026-10-23).
+        HikariDataSource ds = SmallPool.of(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema,
+                System.getenv("GFS_TEST_PG_USER"), System.getenv("GFS_TEST_PG_PASSWORD"), 3);
+        pool = ds;
         jdbc = new JdbcTemplate(ds);
         Flyway.configure().dataSource(ds).schemas(schema).defaultSchema(schema).locations("classpath:db/migration")
                 .initSql("SET search_path TO " + schema + ", public").load().migrate();
@@ -111,6 +115,14 @@ class PointsStatementPostgresTest {
         if (jdbc != null) {
             jdbc.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
         }
+        if (pool != null) {
+            pool.close();
+        }
+    }
+
+    @AfterEach
+    void everyConnectionBack() {
+        SmallPool.assertAllReturned(pool);
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -406,5 +418,25 @@ class PointsStatementPostgresTest {
                 .isInstanceOfSatisfying(ApiExceptions.ConflictException.class,
                         e -> assertThat(e.code()).isEqualTo("no_change"));
         assertThat(loyalty.lifetimePoints(id)).isEqualTo(45);
+    }
+
+    @Test
+    @DisplayName("on a pool of 3, previews and corrections 25 times over, refusals included: every connection comes back")
+    void correctionsGiveBackTheirConnections() {
+        for (int i = 0; i < 25; i++) {
+            long id = oldCredit("loop" + i);
+            long line = creditLine(id);
+            corrections.previewReverse(id, line, "check", adminId);
+            corrections.reverse(id, line, "Credit belongs in store credit", adminId, "acc_staff");
+            assertThatThrownBy(() -> corrections.reverse(id, line, "again", adminId, "acc_staff"))
+                    .isInstanceOf(ApiExceptions.ConflictException.class);
+            corrections.previewSetBalance(id, 40, "check", adminId);
+            corrections.setBalance(id, 40, "Agreed", adminId, "acc_staff");
+            assertThatThrownBy(() -> corrections.setBalance(id, 40, "same", adminId, "acc_staff"))
+                    .isInstanceOf(ApiExceptions.ConflictException.class);
+            statement.breakdown(id);
+            statement.history(id, 0, 20, true);
+            SmallPool.assertAllReturned(pool);
+        }
     }
 }
