@@ -201,6 +201,33 @@ public class AdminCustomerQueries {
         });
     }
 
+    /** One order settled the old way, as points: its customer and whether the line was reversed since. */
+    public record PointsCredit(String orderRef, String customerKey, String customerName, String customerEmail,
+                               long points, Instant at, boolean reversed, long currentBalance) {
+    }
+
+    /**
+     * Every order whose "settled as store credit" added loyalty points: a MANUAL_ADJUSTMENT on
+     * an order, which nothing else writes. Newest first.
+     */
+    @Transactional(readOnly = true)
+    public List<PointsCredit> pointsCredits() {
+        return jdbc.query("""
+                select o.public_ref, a.public_id, a.display_name, a.email, l.amount, l.created_at,
+                       exists (select 1 from points_ledger r where r.reverses_id = l.id) as reversed,
+                       (select coalesce(sum(b.amount), 0) from points_ledger b where b.account_id = l.account_id)
+                           as balance
+                  from points_ledger l
+                  join orders o on o.id = l.order_id
+                  join account a on a.id = l.account_id
+                 where l.entry_type = 'MANUAL_ADJUSTMENT' and l.order_id is not null and l.amount > 0
+                 order by l.created_at desc, l.id desc
+                """, new MapSqlParameterSource(), (rs, i) -> new PointsCredit(rs.getString("public_ref"),
+                "a-" + rs.getString("public_id"), rs.getString("display_name"), rs.getString("email"),
+                rs.getLong("amount"), rs.getTimestamp("created_at").toInstant(), rs.getBoolean("reversed"),
+                rs.getLong("balance")));
+    }
+
     /**
      * An outside key to the customer it names, or empty. {@code a-} keys must be customer
      * accounts; {@code g-} keys must be a guest order whose email has no account.

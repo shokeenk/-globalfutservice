@@ -1,6 +1,8 @@
 package com.globalfutservice.loyalty;
 
 import com.globalfutservice.config.AppProperties;
+import com.globalfutservice.domain.loyalty.PointsEntryType;
+import com.globalfutservice.web.ApiExceptions;
 import com.globalfutservice.identity.web.AccountController;
 import com.globalfutservice.marketing.MarketingPreferenceService;
 import com.globalfutservice.security.AccountPrincipal;
@@ -35,6 +37,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
@@ -59,6 +62,8 @@ class PointsStatementPostgresTest {
     private LoyaltyService loyalty;
     private PointsStatement statement;
     private AccountController accountPages;
+    private PointsCorrections corrections;
+    private long adminId;
 
     @BeforeAll
     void migrate() {
@@ -85,7 +90,8 @@ class PointsStatementPostgresTest {
                 "hibernate.implicit_naming_strategy",
                 "org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy"));
         factory.afterPropertiesSet();
-        tx = new TransactionTemplate(new JpaTransactionManager(factory.getObject()));
+        JpaTransactionManager transactions = new JpaTransactionManager(factory.getObject());
+        tx = new TransactionTemplate(transactions);
         EntityManager shared = SharedEntityManagerCreator.createSharedEntityManager(factory.getObject());
         ledger = new JpaRepositoryFactory(shared).getRepository(PointsLedgerRepository.class);
         AppProperties props = mock(AppProperties.class, RETURNS_DEEP_STUBS);
@@ -93,6 +99,7 @@ class PointsStatementPostgresTest {
         statement = new PointsStatement(new NamedParameterJdbcTemplate(ds));
         accountPages = new AccountController(loyalty, props, mock(MarketingPreferenceService.class),
                 mock(StoreCreditService.class), statement);
+        corrections = new PointsCorrections(ledger, loyalty, statement, transactions);
         buildAccounts();
     }
 
@@ -167,6 +174,32 @@ class PointsStatementPostgresTest {
         run(() -> loyalty.adjust(refunded, null, -7, "Duplicate goodwill", null));
 
         quiet = account("quiet");
+
+        adminId = jdbc.queryForObject("""
+                insert into account (public_id, email, email_normalised, role, password_hash, display_name)
+                values ('acc_staff', 'staff@example.test', 'staff@example.test', 'ADMIN', 'x', 'Test Admin') returning id
+                """, Long.class);
+    }
+
+    /**
+     * An order settled the old way: its "store credit" added as points (a MANUAL_ADJUSTMENT on
+     * the order), some of them spent. 45 earned, 1,200 credited, 300 spent: 945 left.
+     */
+    private long oldCredit(String name) {
+        long id = account(name);
+        long earn = order(id, "GFS-26-" + name.toUpperCase() + "E", "COMPLETED", 45, NOW.minusSeconds(86_400), true);
+        long credit = order(id, "GFS-26-" + name.toUpperCase() + "C", "CREDITED", 0, NOW.minusSeconds(86_400), false);
+        long spend = order(id, "GFS-26-" + name.toUpperCase() + "S", "COMPLETED", 0, NOW.minusSeconds(86_400), true);
+        run(() -> loyalty.award(id, earn, 45, "earn"));
+        run(() -> ledger.save(new PointsLedgerEntity(id, credit, PointsEntryType.MANUAL_ADJUSTMENT, 1_200,
+                "Guarantee settled as store credit", null)));
+        run(() -> loyalty.redeem(id, spend, 300, "spend"));
+        return id;
+    }
+
+    private long creditLine(long accountId) {
+        return jdbc.queryForObject("select id from points_ledger where account_id = ? and entry_type = 'MANUAL_ADJUSTMENT'",
+                Long.class, accountId);
     }
 
     private List<Long> allAccounts() {
@@ -222,12 +255,12 @@ class PointsStatementPostgresTest {
     }
 
     @Test
-    @DisplayName("for every account: earned − spent + returned − removed = available = the ledger's sum")
+    @DisplayName("for every account: earned + credited − spent + returned − removed + corrected = available = the ledger's sum")
     void everyAccountAddsUp() {
         assertThat(allAccounts()).contains(customer, refunded, quiet);
         for (long id : allAccounts()) {
             PointsStatement.Breakdown b = statement.breakdown(id);
-            assertThat(b.earned() - b.spent() + b.returned() - b.removed())
+            assertThat(b.earned() + b.credited() - b.spent() + b.returned() - b.removed() + b.corrected())
                     .as("account %d", id).isEqualTo(b.available());
             assertThat(b.available()).as("account %d", id).isEqualTo(ledgerSum(id));
             assertThat(b.available()).as("account %d", id).isEqualTo(loyalty.balance(id));
@@ -278,5 +311,100 @@ class PointsStatementPostgresTest {
         }
         assertThat(accountPages.wallet(signedIn(refunded), 25).getBody().lifetimeEarned())
                 .as("not 180, which counted the 60 returned").isEqualTo(120);
+    }
+
+    // ------------------------------------------------------------------ corrections
+
+    @Test
+    @DisplayName("an old points credit is credit, not earnings, but still counts toward the tier until reversed")
+    void oldCreditIsNotEarned() {
+        long id = oldCredit("oldcredit");
+        PointsStatement.Breakdown b = statement.breakdown(id);
+        assertThat(b.earned()).isEqualTo(45);
+        assertThat(b.credited()).isEqualTo(1_200);
+        assertThat(b.available()).isEqualTo(945);
+        assertThat(loyalty.lifetimePoints(id)).isEqualTo(1_245);
+    }
+
+    @Test
+    @DisplayName("reverse an entry: previewed without changing anything, then a linked correction; neither counts "
+            + "as earned or toward the tier, and the customer sees the reason")
+    void reverseAnEntry() {
+        long id = oldCredit("reverse");
+        long line = creditLine(id);
+
+        PointsCorrections.Outcome preview = corrections.previewReverse(id, line, "Credit belongs in store credit", adminId);
+        assertThat(preview.before()).isEqualTo(new PointsCorrections.Standing(945, 45, 1_245, "SILVER"));
+        assertThat(preview.after()).isEqualTo(new PointsCorrections.Standing(-255, 45, 45, "BRONZE"));
+        assertThat(preview.change()).isEqualTo(-1_200);
+        assertThat(ledgerSum(id)).as("a preview changes nothing").isEqualTo(945);
+        assertThat(jdbc.queryForObject("select count(*) from points_ledger where entry_type = 'CORRECTION' "
+                + "and account_id = ?", Integer.class, id)).isZero();
+
+        PointsCorrections.Outcome done = corrections.reverse(id, line, "  Credit belongs in store credit  ", adminId,
+                "acc_staff");
+        assertThat(done.after()).isEqualTo(preview.after());
+        assertThat(loyalty.lifetimePoints(id)).isEqualTo(45);
+        assertThat(jdbc.queryForObject("select reverses_id from points_ledger where entry_type = 'CORRECTION' "
+                + "and account_id = ?", Long.class, id)).isEqualTo(line);
+
+        PointsStatement.Breakdown b = statement.breakdown(id);
+        assertThat(b.credited()).as("the reversed pair leaves every figure").isZero();
+        assertThat(b.earned()).isEqualTo(45);
+        assertThat(b.earned() + b.credited() - b.spent() + b.returned() - b.removed() + b.corrected())
+                .isEqualTo(b.available());
+
+        List<PointsStatement.Line> customer = statement.history(id, 0, 20).entries();
+        PointsStatement.Line correction = customer.get(0);
+        assertThat(correction.kind()).isEqualTo(PointsStatement.Kind.CORRECTION);
+        assertThat(correction.note()).isEqualTo("Credit belongs in store credit");
+        assertThat(correction.amount()).isEqualTo(-1_200);
+        assertThat(correction.by()).as("no admin names on the customer's page").isNull();
+        assertThat(customer).filteredOn(l -> l.id() == line).singleElement()
+                .satisfies(l -> assertThat(l.reversed()).isTrue());
+        assertThat(statement.history(id, 0, 20, true).entries().get(0).by()).isEqualTo("Test Admin");
+
+        assertThatThrownBy(() -> corrections.reverse(id, line, "again", adminId, "acc_staff"))
+                .isInstanceOfSatisfying(ApiExceptions.ConflictException.class,
+                        e -> assertThat(e.code()).isEqualTo("already_reversed"));
+        long reversal = correction.id();
+        assertThatThrownBy(() -> corrections.reverse(id, reversal, "undo", adminId, "acc_staff"))
+                .isInstanceOf(ApiExceptions.ConflictException.class);
+        assertThatThrownBy(() -> corrections.reverse(quiet, line, "not theirs", adminId, "acc_staff"))
+                .isInstanceOf(ApiExceptions.NotFoundException.class);
+        assertThatThrownBy(() -> corrections.previewReverse(id, line, "   ", adminId))
+                .isInstanceOf(ApiExceptions.BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName("set the balance to N: one correction for the difference, up or down, never below 0, "
+            + "not earned and not toward the tier")
+    void setTheBalance() {
+        long id = oldCredit("setbal");
+        corrections.reverse(id, creditLine(id), "Credit belongs in store credit", adminId, "acc_staff");
+        assertThat(ledgerSum(id)).isEqualTo(-255);
+
+        PointsCorrections.Outcome preview = corrections.previewSetBalance(id, 40, "Agreed with the customer", adminId);
+        assertThat(preview.after()).isEqualTo(new PointsCorrections.Standing(40, 45, 45, "BRONZE"));
+        assertThat(ledgerSum(id)).isEqualTo(-255);
+
+        PointsCorrections.Outcome done = corrections.setBalance(id, 40, "Agreed with the customer", adminId, "acc_staff");
+        assertThat(done.change()).isEqualTo(295);
+        assertThat(ledgerSum(id)).isEqualTo(40);
+        assertThat(loyalty.balance(id)).isEqualTo(40);
+        assertThat(loyalty.lifetimePoints(id)).isEqualTo(45);
+        PointsStatement.Breakdown b = statement.breakdown(id);
+        assertThat(b.earned()).isEqualTo(45);
+        assertThat(b.corrected()).isEqualTo(295);
+        assertThat(statement.history(id, 0, 20).entries().get(0).note()).isEqualTo("Agreed with the customer");
+
+        corrections.setBalance(id, 10, "Lowered", adminId, "acc_staff");
+        assertThat(ledgerSum(id)).isEqualTo(10);
+        assertThatThrownBy(() -> corrections.setBalance(id, -1, "below", adminId, "acc_staff"))
+                .isInstanceOf(ApiExceptions.BadRequestException.class);
+        assertThatThrownBy(() -> corrections.setBalance(id, 10, "same", adminId, "acc_staff"))
+                .isInstanceOfSatisfying(ApiExceptions.ConflictException.class,
+                        e -> assertThat(e.code()).isEqualTo("no_change"));
+        assertThat(loyalty.lifetimePoints(id)).isEqualTo(45);
     }
 }

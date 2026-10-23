@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -76,7 +77,18 @@ public class LoyaltyService {
         if (accountId == null) {
             return 0L;
         }
-        return Math.max(0L, repository.sumByEntryTypes(accountId, LIFETIME_TYPES));
+        return Math.max(0L, repository.lifetimeOf(accountId, LIFETIME_TYPES));
+    }
+
+    /**
+     * The points an old "settled as store credit" order added, if it was settled that way: a
+     * MANUAL_ADJUSTMENT on the order. Nothing else writes one with an order on it.
+     */
+    @Transactional(readOnly = true)
+    public Optional<PointsLedgerEntity> pointsCreditOn(Long orderId) {
+        return orderId == null ? Optional.empty()
+                : repository.findByOrderIdAndEntryType(orderId, PointsEntryType.MANUAL_ADJUSTMENT)
+                        .filter(e -> e.getAmount() > 0);
     }
 
     @Transactional(readOnly = true)
@@ -245,11 +257,12 @@ public class LoyaltyService {
     }
 
     /**
-     * Store credit and goodwill grants.
+     * A goodwill grant of points, not tied to an order.
      *
-     * <p>An upheld guarantee claim settled as credit is issued here: the wallet already
-     * has a balance, a statement and a redemption path, so store credit rides on it
-     * rather than becoming a second currency with its own bugs.
+     * <p>Never store credit. Store credit is money in the GFS Store Credit wallet
+     * ({@code StoreCreditService}); paid as points it was capped at checkout and counted
+     * toward the tier, which is how a settlement once came out wrong. Corrections an admin
+     * makes by hand are {@code PointsCorrections}.
      */
     @Transactional
     public void adjust(Long accountId, Long orderId, long points, String description, Long actorId) {

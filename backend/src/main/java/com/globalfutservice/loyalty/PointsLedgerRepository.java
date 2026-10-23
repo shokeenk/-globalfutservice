@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.Optional;
 
 public interface PointsLedgerRepository extends JpaRepository<PointsLedgerEntity, Long> {
 
@@ -16,17 +17,28 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedgerEntity
     long balanceOf(@Param("accountId") Long accountId);
 
     /**
-     * Sum restricted to entry types the caller names.
+     * The lifetime total behind the tier ladder: the entry types the caller names.
      *
-     * <p>Used for the lifetime total behind the tier ladder. The set of types comes from
-     * {@code PointsEntryType.countsTowardLifetime()} rather than being spelled out here, so
-     * a new entry type declares its own effect on tier standing in one place instead of
-     * silently defaulting into — or out of — this query.
+     * <p>The set of types comes from {@code PointsEntryType.countsTowardLifetime()} rather than
+     * being spelled out here, so a new entry type declares its own effect on tier standing in
+     * one place instead of silently defaulting into -- or out of -- this query.
+     *
+     * <p>Less any line an admin has reversed: a corrected mistake leaves the tier as if it had
+     * never been made. (The CORRECTION that reverses it never counts in the first place.)
      */
     @Query("select coalesce(sum(p.amount), 0) from PointsLedgerEntity p "
-            + "where p.accountId = :accountId and p.entryType in :types")
-    long sumByEntryTypes(@Param("accountId") Long accountId,
-                         @Param("types") Collection<PointsEntryType> types);
+            + "where p.accountId = :accountId and p.entryType in :types "
+            + "and not exists (select 1 from PointsLedgerEntity c where c.reversesId = p.id)")
+    long lifetimeOf(@Param("accountId") Long accountId,
+                    @Param("types") Collection<PointsEntryType> types);
+
+    Optional<PointsLedgerEntity> findByOrderIdAndEntryType(Long orderId, PointsEntryType entryType);
+
+    boolean existsByReversesId(Long reversesId);
+
+    /** Holds the customer's account row until the transaction ends: one correction at a time. */
+    @Query(value = "select id from account where id = :accountId for update", nativeQuery = true)
+    Long lockAccount(@Param("accountId") Long accountId);
 
     Page<PointsLedgerEntity> findByAccountIdOrderByCreatedAtDesc(Long accountId, Pageable pageable);
 

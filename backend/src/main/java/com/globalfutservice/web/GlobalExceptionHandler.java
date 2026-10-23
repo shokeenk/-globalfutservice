@@ -6,6 +6,8 @@ import com.globalfutservice.fulfilment.FutTransferClient;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -228,6 +230,32 @@ public class GlobalExceptionHandler {
                 "upstream_unavailable",
                 "We could not reach the payment provider. No money has moved — please try again.",
                 trace));
+    }
+
+    /**
+     * Someone else changed the same row first (an entity's version moved on). Nothing was
+     * saved; the admin refreshes and sees what is there now.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> changedMeanwhile(OptimisticLockingFailureException e) {
+        String trace = traceId();
+        log.warn("[{}] Changed meanwhile: {}", trace, e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of("changed_meanwhile",
+                "This was changed while you were looking at it. Refresh and try again.", trace));
+    }
+
+    /**
+     * A database rule refused the change: most often the same thing done twice (a second
+     * settlement, a double click). Nothing was saved. Logged in full, as an error, because
+     * the code should have caught it first with a clearer message.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> refusedByDatabase(DataIntegrityViolationException e) {
+        String trace = traceId();
+        log.error("[{}] Refused by the database: {}", trace, e.getMostSpecificCause().getMessage(), e);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of("conflict",
+                "That could not be saved: it conflicts with something already recorded. Refresh and check. "
+                        + "Reference: " + trace, trace));
     }
 
     /**

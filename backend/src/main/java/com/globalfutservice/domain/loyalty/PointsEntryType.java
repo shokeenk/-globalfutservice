@@ -27,7 +27,16 @@ public enum PointsEntryType {
      * landed: the share of them the settled amount paid for. Negative, and counted against
      * lifetime exactly like CLAWBACK -- it is part of the order being reversed.
      */
-    SETTLEMENT_DEDUCTION(-1, true);
+    SETTLEMENT_DEDUCTION(-1, true),
+    /**
+     * A correction an admin made by hand, with a reason the customer sees: either the
+     * reversal of one earlier line (linked to it by {@code reverses_id}, the exact opposite
+     * amount) or the difference that sets the balance to a chosen number. Either sign.
+     *
+     * <p>Never counts toward lifetime, and a line it reverses stops counting too: a mistake
+     * taken back leaves the tier as if it had never been made.
+     */
+    CORRECTION(1, false);
 
     private final int sign;
     private final boolean countsTowardLifetime;

@@ -7,6 +7,7 @@ import { useAuth } from '../../state/AuthContext'
 import type { AdminCustomer, AdminCustomerOverview, AdminCustomerPage } from '../../lib/types'
 import { AdminPage } from './shell/AdminPage'
 import { CustomerPanel } from './customers/CustomerPanel'
+import { OldPointsCredits } from './customers/OldPointsCredits'
 import { Avatar, spentText } from './customers/shared'
 import { MenuItem, RowMenu } from './ui/controls'
 import { shortDate } from './ui/format'
@@ -117,6 +118,7 @@ export default function AdminCustomers() {
       </div>
 
       {isAdmin && <SignupSettingsCard />}
+      <OldPointsCredits onOpen={(key) => update({ customer: key })} />
 
       <div className={open ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-4' : ''}>
         <div className="min-w-0">

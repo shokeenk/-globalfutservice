@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
 import com.globalfutservice.identity.AccountRole;
+import com.globalfutservice.loyalty.PointsCorrections;
 import com.globalfutservice.loyalty.PointsStatement;
 import com.globalfutservice.security.AccountPrincipal;
 import com.globalfutservice.security.CurrentAccount;
@@ -11,6 +12,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,11 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -46,11 +51,14 @@ public class AdminCustomerController {
     private final AdminCustomerQueries queries;
     private final AccountRepository accounts;
     private final PointsStatement points;
+    private final PointsCorrections corrections;
 
-    public AdminCustomerController(AdminCustomerQueries queries, AccountRepository accounts, PointsStatement points) {
+    public AdminCustomerController(AdminCustomerQueries queries, AccountRepository accounts, PointsStatement points,
+                                   PointsCorrections corrections) {
         this.queries = queries;
         this.accounts = accounts;
         this.points = points;
+        this.corrections = corrections;
     }
 
     /** The account behind an {@code a-} key, for its points; a guest has no points. */
@@ -74,7 +82,61 @@ public class AdminCustomerController {
                                                                  @RequestParam(defaultValue = "0") int page,
                                                                  @RequestParam(defaultValue = "25") int size) {
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(points.history(pointsAccount(key), page, size));
+                .body(points.history(pointsAccount(key), page, size, true));
+    }
+
+    /** A correction's reason, which the customer sees; nothing changes until {@code confirmed}. */
+    public record ReverseRequest(
+            @NotBlank(message = "Give a reason: the customer sees it")
+            @Size(max = PointsCorrections.MAX_REASON, message = "Keep the reason under 300 characters") String reason,
+            boolean confirmed) {
+    }
+
+    public record SetBalanceRequest(
+            @NotNull(message = "Enter the new balance")
+            @PositiveOrZero(message = "A points balance cannot be below 0") Long target,
+            @NotBlank(message = "Give a reason: the customer sees it")
+            @Size(max = PointsCorrections.MAX_REASON, message = "Keep the reason under 300 characters") String reason,
+            boolean confirmed) {
+    }
+
+    /**
+     * Reverses one line of a customer's points with a linked correction. Without
+     * {@code confirmed}, only says what the balance, earned total and tier would become.
+     */
+    @PostMapping("/{key}/points/entries/{entryId}/reverse")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Reverse one points line (admin): preview, then confirmed")
+    public ResponseEntity<PointsCorrections.Outcome> reverse(@PathVariable String key, @PathVariable long entryId,
+                                                             @Valid @RequestBody ReverseRequest request,
+                                                             @CurrentAccount AccountPrincipal me) {
+        long account = pointsAccount(key);
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(request.confirmed()
+                ? corrections.reverse(account, entryId, request.reason(), me.id(), me.publicId())
+                : corrections.previewReverse(account, entryId, request.reason(), me.id()));
+    }
+
+    /** Sets a customer's points balance with one correction for the difference. Preview first. */
+    @PostMapping("/{key}/points/balance")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Set a customer's points balance (admin): preview, then confirmed")
+    public ResponseEntity<PointsCorrections.Outcome> setBalance(@PathVariable String key,
+                                                                @Valid @RequestBody SetBalanceRequest request,
+                                                                @CurrentAccount AccountPrincipal me) {
+        long account = pointsAccount(key);
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(request.confirmed()
+                ? corrections.setBalance(account, request.target(), request.reason(), me.id(), me.publicId())
+                : corrections.previewSetBalance(account, request.target(), request.reason(), me.id()));
+    }
+
+    /**
+     * Orders settled the old way, as loyalty points rather than store credit, with their
+     * customers: the ones to look at and correct.
+     */
+    @GetMapping("/points-credits")
+    @Operation(summary = "Orders settled as store credit the old way, as points")
+    public ResponseEntity<List<AdminCustomerQueries.PointsCredit>> pointsCredits() {
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(queries.pointsCredits());
     }
 
     private static boolean admin(AccountPrincipal me) {

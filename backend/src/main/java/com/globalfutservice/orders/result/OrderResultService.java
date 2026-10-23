@@ -13,6 +13,7 @@ import com.globalfutservice.notify.OrderNotification;
 import com.globalfutservice.orders.OrderEntity;
 import com.globalfutservice.orders.OrderRepository;
 import com.globalfutservice.orders.OrderService;
+import com.globalfutservice.orders.Settlements;
 import com.globalfutservice.payments.RefundEntity;
 import com.globalfutservice.payments.RefundMethod;
 import com.globalfutservice.payments.RefundRepository;
@@ -88,6 +89,8 @@ public class OrderResultService {
     private final AppProperties props;
     private final Clock clock;
 
+    private final Settlements settlements;
+
     public OrderResultService(OrderService orders, OrderRepository orderRepository, OrderResultRepository results,
                               SettlementProofRepository proofs, ResultRules rules,
                               StoreCreditService storeCredit, LoyaltyService loyalty, RefundRepository refunds,
@@ -96,6 +99,7 @@ public class OrderResultService {
         this.orders = orders;
         this.orderRepository = orderRepository;
         this.results = results;
+        this.settlements = new Settlements(loyalty, storeCredit, results);
         this.proofs = proofs;
         this.rules = rules;
         this.storeCredit = storeCredit;
@@ -360,9 +364,11 @@ public class OrderResultService {
      * reference. Also recorded as a settlement refund, so it shows on the Payments page.
      */
     @Transactional
-    public void markPaid(OrderEntity order, ResultDtos.PaidRequest request, Staff actor) {
+    public void markPaid(OrderEntity given, ResultDtos.PaidRequest request, Staff actor) {
         requireAdmin(actor);
+        OrderEntity order = current(given);
         OrderResultEntity result = requireOpen(order);
+        settlements.requireNone(order.getId());
         if (!request.confirmed()) {
             throw new ApiExceptions.BadRequestException("Confirm the refund has actually been sent.");
         }
@@ -405,9 +411,11 @@ public class OrderResultService {
 
     /** Issues the store credit, adding it to the customer's balance in the same transaction. */
     @Transactional
-    public void issue(OrderEntity order, ResultDtos.IssueRequest request, Staff actor) {
+    public void issue(OrderEntity given, ResultDtos.IssueRequest request, Staff actor) {
         requireAdmin(actor);
+        OrderEntity order = current(given);
         OrderResultEntity result = requireOpen(order);
+        settlements.requireNone(order.getId());
         if (!request.confirmed()) {
             throw new ApiExceptions.BadRequestException("Confirm the store credit to add.");
         }
@@ -436,6 +444,11 @@ public class OrderResultService {
         OrderResultEntity result = found.get();
         OrderEntity order = orderRepository.findById(orderId).orElse(null);
         if (order == null || EnumSet.of(OrderStatus.REFUNDED, OrderStatus.CREDITED).contains(order.getStatus())) {
+            return false;
+        }
+        Optional<String> settled = settlements.existing(orderId);
+        if (settled.isPresent()) {
+            log.warn("Order {}: no settlement default; {}", order.getPublicRef(), settled.get());
             return false;
         }
         int days = props.champs().choiceDays();
@@ -542,6 +555,16 @@ public class OrderResultService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * The order as it is now, in this transaction. Controllers load it before the transaction
+     * starts, so the copy they pass is detached and may be behind: saving that copy could
+     * overwrite a newer row, or fail its version check as a 500.
+     */
+    private OrderEntity current(OrderEntity order) {
+        return orderRepository.findById(order.getId())
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("No such order."));
+    }
 
     private OrderResultEntity requireOpen(OrderEntity order) {
         OrderResultEntity result = results.findById(order.getId()).orElseThrow(() ->

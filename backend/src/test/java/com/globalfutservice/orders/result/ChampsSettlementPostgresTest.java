@@ -717,4 +717,103 @@ class ChampsSettlementPostgresTest {
         assertThat(inTx(() -> credit.balanceOf(buyer, Currency.EUR))).as("one currency at a time").isZero();
         verify(notifications, never()).settlementSettled(null);
     }
+
+    // ------------------------------------------------------------------ one settlement, in the wallet
+
+    private void transition(OrderEntity o, OrderStatus to) {
+        run(() -> orderService.transition(orders.findById(o.getId()).orElseThrow(), to, Actor.OPERATOR, adminId,
+                "acc_admin", "test"));
+    }
+
+    private int pointsLines(long accountId, String type) {
+        return jdbc.queryForObject("select count(*) from points_ledger where account_id = ? and entry_type = ?",
+                Integer.class, accountId, type);
+    }
+
+    @Test
+    @DisplayName("settled as store credit: the order total lands in the store credit wallet, in its currency, never as points")
+    void creditedLandsInTheWallet() {
+        long buyer = customer();
+        OrderEntity source = deliver(order(buyer), 15);
+        transition(source, OrderStatus.DISPUTED);
+        transition(source, OrderStatus.CREDITED);
+        assertThat(creditBalance(buyer)).isEqualTo(389_500);
+        assertThat(pointsLines(buyer, "MANUAL_ADJUSTMENT")).isZero();
+        assertThat(inTx(() -> credit.findByOrderIdAndEntryType(source.getId(), StoreCreditEntryEntity.Type.ISSUED))
+                .orElseThrow().getDescription()).startsWith("Guarantee settled as store credit on ");
+        // The whole of it can pay for the next order: store credit has no 20% cap.
+        StoreCreditService storeCredit = new StoreCreditService(credit, clock);
+        long next = jdbc.queryForObject("""
+                insert into orders (public_ref, account_id, season, sku, quantity, delivery_method, currency,
+                                    subtotal_minor, total_minor, price_breakdown, status, quote_id, guest_email,
+                                    store_credit_minor)
+                values ('GFS-27-WHOLE001', ?, 'FC27', 'TRADING_SERVICE', 1, 'PLAYER_AUCTION', 'INR', 389500, 0,
+                        '{"lines":[]}'::jsonb, 'AWAITING_PAYMENT', 'q_whole001', 'buyer@example.test', 389500)
+                returning id
+                """, Long.class, buyer);
+        run(() -> storeCredit.spend(buyer, next, Currency.INR, 389_500, "GFS-27-WHOLE001"));
+        assertThat(creditBalance(buyer)).isZero();
+    }
+
+    @Test
+    @DisplayName("a guest order cannot be settled as store credit, and stays as it was")
+    void creditedNeedsAnAccount() {
+        OrderEntity guest = deliver(order(null), 15);
+        transition(guest, OrderStatus.DISPUTED);
+        assertThatThrownBy(() -> transition(guest, OrderStatus.CREDITED))
+                .isInstanceOfSatisfying(ApiExceptions.ConflictException.class,
+                        e -> assertThat(e.code()).isEqualTo("no_account"));
+        assertThat(load(guest.getId()).getStatus()).isEqualTo(OrderStatus.DISPUTED);
+    }
+
+    @Test
+    @DisplayName("one settlement per order: store credit already issued, so \"settle as store credit\" is refused, "
+            + "saying when and what")
+    void noSecondSettlementAfterIssue() {
+        long buyer = customer();
+        OrderEntity source = deliver(order(buyer), 9);
+        choose(source, "STORE_CREDIT");
+        issue(source);
+        long held = creditBalance(buyer);
+        transition(source, OrderStatus.DISPUTED);
+        assertThatThrownBy(() -> transition(source, OrderStatus.CREDITED))
+                .isInstanceOfSatisfying(ApiExceptions.ConflictException.class, e -> {
+                    assertThat(e.code()).isEqualTo("already_settled");
+                    assertThat(e.getMessage()).startsWith("Already settled on 13 Oct: ").endsWith(" GFS Store Credit.");
+                });
+        assertThat(creditBalance(buyer)).isEqualTo(held);
+        assertThat(load(source.getId()).getStatus()).isEqualTo(OrderStatus.DISPUTED);
+    }
+
+    @Test
+    @DisplayName("one settlement per order: settled the old way as points, so Issue is refused with a clear message")
+    void noSecondSettlementAfterPoints() {
+        long buyer = customer();
+        OrderEntity source = deliver(order(buyer), 9);
+        choose(source, "STORE_CREDIT");
+        run(() -> points.save(new com.globalfutservice.loyalty.PointsLedgerEntity(buyer, source.getId(),
+                com.globalfutservice.domain.loyalty.PointsEntryType.MANUAL_ADJUSTMENT, 1_234,
+                "Guarantee settled as store credit", adminId)));
+        assertThatThrownBy(() -> issue(source))
+                .isInstanceOfSatisfying(ApiExceptions.ConflictException.class, e -> {
+                    assertThat(e.code()).isEqualTo("already_settled");
+                    assertThat(e.getMessage()).matches("Already settled on \\d{1,2} [A-Z][a-z]{2}: 1,234 points\\.");
+                });
+        assertThat(creditBalance(buyer)).isZero();
+        assertThat(result(source).getStatus()).isEqualTo(OrderResultEntity.Status.PENDING);
+    }
+
+    @Test
+    @DisplayName("Issue works from a copy of the order loaded before the transaction, as the admin page sends it")
+    void issueFromADetachedOrder() {
+        long buyer = customer();
+        OrderEntity source = deliver(order(buyer), 9);
+        update(source, new ResultDtos.ResultUpdate(null, null, null, "STORE_CREDIT", null), admin);
+        OrderEntity copy = load(source.getId());
+        run(() -> service.issue(copy, new ResultDtos.IssueRequest(true), admin));
+        assertThat(result(source).getStatus()).isEqualTo(OrderResultEntity.Status.ISSUED);
+        assertThat(creditBalance(buyer)).isEqualTo(result(source).getSettlementMinor());
+        assertThatThrownBy(() -> run(() -> service.issue(copy, new ResultDtos.IssueRequest(true), admin)))
+                .isInstanceOf(ApiExceptions.ConflictException.class);
+    }
 }
