@@ -3,6 +3,7 @@ package com.globalfutservice.admin;
 import com.globalfutservice.config.SecurityConfig;
 import com.globalfutservice.identity.AccountEntity;
 import com.globalfutservice.identity.AccountRepository;
+import com.globalfutservice.loyalty.PointsCorrections;
 import com.globalfutservice.loyalty.PointsStatement;
 import com.globalfutservice.identity.AccountRole;
 import com.globalfutservice.security.AccountPrincipal;
@@ -25,14 +26,17 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -57,6 +61,7 @@ class AdminCustomerSecurityTest {
     @MockBean private AccountRepository accounts;
     @MockBean private JwtService jwtService;
     @MockBean private PointsStatement points;
+    @MockBean private PointsCorrections corrections;
 
     private static UsernamePasswordAuthenticationToken as(AccountRole role) {
         AccountPrincipal p = new AccountPrincipal(1L, "acc_staff", "t@example.test", role);
@@ -114,19 +119,57 @@ class AdminCustomerSecurityTest {
             mvc.perform(get(path).with(authentication(as(AccountRole.CUSTOMER)))).andExpect(status().isForbidden());
         }
         when(queries.locate("a-acc_rahul")).thenReturn(Optional.of(new AdminCustomerQueries.Located("a42", "a-acc_rahul")));
-        when(points.breakdown(42L)).thenReturn(new PointsStatement.Breakdown(3, 49, 46, 0, 0, 0, List.of()));
+        when(points.breakdown(42L)).thenReturn(new PointsStatement.Breakdown(3, 49, 46, 0, 0, 0, List.of(), 0, 0));
         mvc.perform(get(BASE + "/a-acc_rahul/points").with(authentication(as(AccountRole.OPERATOR))))
                 .andExpect(status().isOk());
         verify(points).breakdown(42L);
-        when(points.history(42L, 1, 25)).thenReturn(new PointsStatement.History(List.of(), 1, 25, 30));
+        when(points.history(42L, 1, 25, true)).thenReturn(new PointsStatement.History(List.of(), 1, 25, 30));
         mvc.perform(get(BASE + "/a-acc_rahul/points/history").param("page", "1")
                         .with(authentication(as(AccountRole.OPERATOR))))
                 .andExpect(status().isOk());
-        verify(points).history(42L, 1, 25);
+        verify(points).history(42L, 1, 25, true);
 
         when(queries.locate("g-GFS-26-ABC")).thenReturn(Optional.of(new AdminCustomerQueries.Located("gx@example.test", "g-GFS-26-ABC")));
         mvc.perform(get(BASE + "/g-GFS-26-ABC/points").with(authentication(as(AccountRole.ADMIN))))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("only an admin corrects points; unconfirmed is only a preview; a reason is required")
+    void corrections() throws Exception {
+        when(queries.locate("a-acc_rahul")).thenReturn(Optional.of(new AdminCustomerQueries.Located("a42", "a-acc_rahul")));
+        PointsCorrections.Standing standing = new PointsCorrections.Standing(40, 45, 45, "BRONZE");
+        PointsCorrections.Outcome outcome = new PointsCorrections.Outcome(standing, standing, 0);
+        when(corrections.previewReverse(anyLong(), anyLong(), any(), anyLong())).thenReturn(outcome);
+        when(corrections.reverse(anyLong(), anyLong(), any(), anyLong(), any())).thenReturn(outcome);
+        when(corrections.previewSetBalance(anyLong(), anyLong(), any(), anyLong())).thenReturn(outcome);
+        when(corrections.setBalance(anyLong(), anyLong(), any(), anyLong(), any())).thenReturn(outcome);
+        String reverse = BASE + "/a-acc_rahul/points/entries/7/reverse";
+        String balance = BASE + "/a-acc_rahul/points/balance";
+
+        mvc.perform(post(reverse).contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}")
+                .with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isForbidden());
+        mvc.perform(post(balance).contentType(MediaType.APPLICATION_JSON).content("{\"target\":40,\"reason\":\"x\"}")
+                .with(authentication(as(AccountRole.OPERATOR)))).andExpect(status().isForbidden());
+        verifyNoInteractions(corrections);
+
+        mvc.perform(post(reverse).contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Wrong credit\"}")
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isOk());
+        verify(corrections).previewReverse(42L, 7L, "Wrong credit", 1L);
+        verify(corrections, never()).reverse(anyLong(), anyLong(), any(), anyLong(), any());
+        mvc.perform(post(reverse).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"Wrong credit\",\"confirmed\":true}")
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isOk());
+        verify(corrections).reverse(42L, 7L, "Wrong credit", 1L, "acc_staff");
+
+        mvc.perform(post(balance).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"target\":40,\"reason\":\"Agreed\",\"confirmed\":true}")
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isOk());
+        verify(corrections).setBalance(42L, 40L, "Agreed", 1L, "acc_staff");
+        mvc.perform(post(balance).contentType(MediaType.APPLICATION_JSON).content("{\"target\":40,\"reason\":\" \"}")
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isBadRequest());
+        mvc.perform(post(balance).contentType(MediaType.APPLICATION_JSON).content("{\"target\":-1,\"reason\":\"x\"}")
+                .with(authentication(as(AccountRole.ADMIN)))).andExpect(status().isBadRequest());
     }
 
     @Test

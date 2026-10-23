@@ -4,6 +4,7 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.web.ApiExceptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * GFS Store Credit: a balance per currency, issued by a settlement and spent at checkout.
@@ -61,30 +63,58 @@ public class StoreCreditService {
         return out;
     }
 
+    /** The store credit an order was settled with, if any. */
+    @Transactional(readOnly = true)
+    public Optional<StoreCreditEntryEntity> issuedOn(Long orderId) {
+        return orderId == null ? Optional.empty()
+                : ledger.findByOrderIdAndEntryType(orderId, StoreCreditEntryEntity.Type.ISSUED);
+    }
+
     @Transactional(readOnly = true)
     public Page<StoreCreditEntryEntity> statement(Long accountId, Pageable page) {
         return ledger.findByAccountIdOrderByCreatedAtDescIdDesc(accountId, page);
     }
 
     /**
-     * Adds a settlement to the customer's balance. Part of the settlement's own transaction:
-     * if this fails, the settlement is not marked Issued.
+     * Adds a Champions settlement to the customer's balance. Part of the settlement's own
+     * transaction: if this fails, the settlement is not marked Issued.
      */
     @Transactional
     public StoreCreditEntryEntity issue(Long accountId, Long orderId, Currency currency, long amountMinor,
                                         String orderRef, Long actorId) {
+        return issue(accountId, orderId, currency, amountMinor, orderRef,
+                "Champions settlement on order " + orderRef, actorId);
+    }
+
+    /**
+     * Adds store credit for an order: a settlement, or an old points credit moved across. At
+     * most once per order, whatever the reason -- an order is settled once.
+     */
+    @Transactional
+    public StoreCreditEntryEntity issue(Long accountId, Long orderId, Currency currency, long amountMinor,
+                                        String orderRef, String description, Long actorId) {
         if (accountId == null) {
             throw new ApiExceptions.ConflictException("no_account",
                     "This order has no customer account to hold store credit.");
+        }
+        if (amountMinor <= 0) {
+            throw new ApiExceptions.ConflictException("nothing_to_issue",
+                    "There is no store credit to add on " + orderRef + ".");
         }
         if (ledger.existsByOrderIdAndEntryType(orderId, StoreCreditEntryEntity.Type.ISSUED)) {
             throw new ApiExceptions.ConflictException("already_issued",
                     "Store credit has already been issued for " + orderRef + ".");
         }
-        StoreCreditEntryEntity entry = ledger.saveAndFlush(new StoreCreditEntryEntity(accountId, currency,
-                StoreCreditEntryEntity.Type.ISSUED, amountMinor, orderId,
-                "Champions settlement on order " + orderRef, actorId, clock.instant()));
-        log.info("Store credit of {} {} issued on order {}", amountMinor, currency, orderRef);
+        StoreCreditEntryEntity entry;
+        try {
+            entry = ledger.saveAndFlush(new StoreCreditEntryEntity(accountId, currency,
+                    StoreCreditEntryEntity.Type.ISSUED, amountMinor, orderId, description, actorId, clock.instant()));
+        } catch (DataIntegrityViolationException raced) {
+            // Two clicks at once: the unique index let one through.
+            throw new ApiExceptions.ConflictException("already_issued",
+                    "Store credit has already been issued for " + orderRef + ".");
+        }
+        log.info("Store credit of {} {} issued on order {}: {}", amountMinor, currency, orderRef, description);
         return entry;
     }
 

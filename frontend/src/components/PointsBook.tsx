@@ -35,12 +35,17 @@ export function PointsBreakdownCard({ breakdown: b, capBps, className = '' }: {
     [p.returned, b.returned > 0 ? `+${fmtPoints(b.returned)}` : '0'],
   ]
   if (b.removed > 0) rows.push([p.removed, `−${fmtPoints(b.removed)}`])
+  if (b.credited > 0) rows.push([p.credited, `+${fmtPoints(b.credited)}`])
+  if (b.corrected !== 0) rows.push([p.corrected, signed(b.corrected)])
 
   const sum = [
     `${fmtPoints(b.earned)} ${p.earnedWord}`,
     `− ${fmtPoints(b.spent)} ${p.spentWord}`,
     ...(b.returned > 0 ? [`+ ${fmtPoints(b.returned)} ${p.returnedWord}`] : []),
     ...(b.removed > 0 ? [`− ${fmtPoints(b.removed)} ${p.removedWord}`] : []),
+    ...(b.credited > 0 ? [`+ ${fmtPoints(b.credited)} ${p.creditedWord}`] : []),
+    ...(b.corrected !== 0
+      ? [`${b.corrected > 0 ? '+' : '−'} ${fmtPoints(Math.abs(b.corrected))} ${p.correctedWord}`] : []),
     `= ${fmtPoints(b.available)} ${p.availableWord}`,
   ].join(' ')
 
@@ -171,7 +176,12 @@ function HistoryLine({ line, lang }: { line: PointsLine; lang: string }) {
     <li className="flex items-start justify-between gap-4 px-5 py-3.5" data-testid="points-line">
       <div className="min-w-0">
         <p className="text-[13px] text-chalk">
-          {p.kinds[line.kind]}
+          {line.kind === 'CORRECTION' && line.note ? p.correction(line.note) : p.kinds[line.kind]}
+          {line.reversed && (
+            <span className="ml-2 rounded-edge border border-ink-400 px-1.5 py-px text-[10.5px] text-chalk-faint">
+              {p.reversedTag}
+            </span>
+          )}
           {line.orderRef && (
             <>
               {' · '}

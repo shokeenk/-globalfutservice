@@ -59,6 +59,10 @@ public class PointsLedgerEntity {
     @Column(name = "claim_date")
     private LocalDate claimDate;
 
+    /** For a CORRECTION that reverses one line: that line. */
+    @Column(name = "reverses_id")
+    private Long reversesId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -82,6 +86,26 @@ public class PointsLedgerEntity {
                 "Daily check-in " + claimDate, null);
         entry.claimDate = claimDate;
         return entry;
+    }
+
+    /**
+     * An admin's correction, with the reason the customer sees: the reversal of {@code reverses}
+     * when given, otherwise a balance correction of {@code signedAmount}.
+     */
+    public static PointsLedgerEntity correction(Long accountId, long signedAmount, String reason, Long actorId,
+                                                Long reverses) {
+        PointsLedgerEntity entry = new PointsLedgerEntity(accountId, null, PointsEntryType.CORRECTION,
+                signedAmount, reason, actorId);
+        entry.reversesId = reverses;
+        return entry;
+    }
+
+    public Long getReversesId() {
+        return reversesId;
+    }
+
+    public Long getActorId() {
+        return actorId;
     }
 
     public Long getId() {

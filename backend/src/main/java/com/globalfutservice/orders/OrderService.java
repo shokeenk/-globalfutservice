@@ -99,6 +99,7 @@ public class OrderService {
     /** Champions results: the one a delivery needs, and the settlement a refund accounts for. */
     private final ResultRules resultRules;
     private final OrderResultRepository results;
+    private final Settlements settlements;
     /** Objectives and Tournaments: the listing an order freezes when it is placed. */
     private final ServiceListingService serviceListings;
 
@@ -133,6 +134,7 @@ public class OrderService {
         this.storeCredit = storeCredit;
         this.resultRules = resultRules;
         this.results = results;
+        this.settlements = new Settlements(loyaltyService, storeCredit, results);
         this.afterCommit = afterCommit;
         this.autoDispatch = autoDispatch;
         this.feed = feed;
@@ -492,15 +494,17 @@ public class OrderService {
                 vaultService.purge(order.getId(), "order refunded");
             }
             case CREDITED -> {
-                // An upheld guarantee claim settled as store credit rather than cash.
-                // Credit rides on the existing points wallet: it already has a balance, a
-                // statement and a redemption path, so there is no second currency to
-                // maintain. The credit is deliberately worth more than the cash option.
-                long creditPoints = order.getTotalMinor()
-                        * props.fulfilment().guaranteeCreditBps() / 10_000
-                        / props.pricing().pointValueMinor();
-                loyaltyService.adjust(order.getAccountId(), order.getId(), creditPoints,
-                        "Guarantee settled as store credit on " + order.getPublicRef(), actorId);
+                // An upheld guarantee claim settled as GFS Store Credit rather than cash: money
+                // in the order's currency, in the store credit wallet -- spendable in full at
+                // checkout and nothing to do with tiers. Never loyalty points: those were
+                // capped at 20% of an order and counted toward the tier. Once per order, and
+                // never on an order already settled another way.
+                settlements.requireNone(order.getId());
+                long creditMinor = Math.multiplyExact(order.getTotalMinor(),
+                        (long) props.fulfilment().guaranteeCreditBps()) / 10_000;
+                storeCredit.issue(order.getAccountId(), order.getId(), order.getCurrency(), creditMinor,
+                        order.getPublicRef(), "Guarantee settled as store credit on " + order.getPublicRef(),
+                        actorId);
                 closeOwedResult(order, now);
                 vaultService.purge(order.getId(), "guarantee settled as credit");
             }

@@ -871,9 +871,14 @@ export interface PointsBreakdown {
   removed: number
   onTheWay: number
   pending: PendingPoints[]
+  /** Points an old "settled as store credit" added. Zero for nearly everyone. */
+  credited: number
+  /** An admin's "set the balance" corrections, either sign. */
+  corrected: number
 }
 
 export type PointsKind = 'EARNED' | 'SPENT' | 'RETURNED' | 'DAILY_BONUS' | 'ADJUSTMENT' | 'REMOVED'
+  | 'STORE_CREDIT_POINTS' | 'CORRECTION'
 
 export interface PointsLine {
   id: number
@@ -882,6 +887,13 @@ export interface PointsLine {
   kind: PointsKind
   amount: number
   balanceAfter: number
+  /** A correction's reason, which the customer sees. */
+  note: string | null
+  /** An admin has reversed this line. */
+  reversed: boolean
+  reversesId: number | null
+  /** The admin who made a correction: staff views only. */
+  by: string | null
 }
 
 export interface PointsHistoryPage {
