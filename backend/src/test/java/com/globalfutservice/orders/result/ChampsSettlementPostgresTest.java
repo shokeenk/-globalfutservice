@@ -56,8 +56,11 @@ import com.globalfutservice.storecredit.StoreCreditRepository;
 import com.globalfutservice.storecredit.StoreCreditService;
 import com.globalfutservice.web.ApiExceptions;
 import jakarta.persistence.EntityManager;
+import com.globalfutservice.testsupport.SmallPool;
+import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -69,7 +72,6 @@ import org.springframework.boot.context.properties.source.MapConfigurationProper
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.SharedEntityManagerCreator;
@@ -129,6 +131,7 @@ class ChampsSettlementPostgresTest {
     }
 
     private String schema;
+    private HikariDataSource pool;
     private JdbcTemplate jdbc;
     private LocalContainerEntityManagerFactoryBean factory;
     private TransactionTemplate tx;
@@ -158,9 +161,10 @@ class ChampsSettlementPostgresTest {
         String url = System.getenv("GFS_TEST_PG_URL");
         assumeTrue(url != null && !url.isBlank(), "GFS_TEST_PG_URL not set: no database to test against");
         schema = "champs_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        DriverManagerDataSource ds = new DriverManagerDataSource(
-                url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema,
-                System.getenv("GFS_TEST_PG_USER"), System.getenv("GFS_TEST_PG_PASSWORD"));
+        // Three connections: one not given back is noticed at once (2026-10-23).
+        HikariDataSource ds = SmallPool.of(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema,
+                System.getenv("GFS_TEST_PG_USER"), System.getenv("GFS_TEST_PG_PASSWORD"), 3);
+        pool = ds;
         jdbc = new JdbcTemplate(ds);
         Flyway.configure().dataSource(ds).schemas(schema).defaultSchema(schema).locations("classpath:db/migration")
                 .initSql("SET search_path TO " + schema + ", public").load().migrate();
@@ -258,6 +262,14 @@ class ChampsSettlementPostgresTest {
         if (jdbc != null) {
             jdbc.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
         }
+        if (pool != null) {
+            pool.close();
+        }
+    }
+
+    @AfterEach
+    void everyConnectionBack() {
+        SmallPool.assertAllReturned(pool);
     }
 
     @BeforeEach
@@ -815,5 +827,42 @@ class ChampsSettlementPostgresTest {
         assertThat(creditBalance(buyer)).isEqualTo(result(source).getSettlementMinor());
         assertThatThrownBy(() -> run(() -> service.issue(copy, new ResultDtos.IssueRequest(true), admin)))
                 .isInstanceOf(ApiExceptions.ConflictException.class);
+    }
+
+    @Test
+    @DisplayName("on a pool of 3, issue store credit, settle as store credit and pay with it, 25 times over: "
+            + "every connection comes back, refusals included")
+    void settlementsGiveBackTheirConnections() {
+        for (int i = 0; i < 25; i++) {
+            long buyer = customer();
+            OrderEntity champs = deliver(order(buyer), 9);
+            update(champs, new ResultDtos.ResultUpdate(null, null, null, "STORE_CREDIT", null), admin);
+            OrderEntity copy = load(champs.getId());
+            run(() -> service.issue(copy, new ResultDtos.IssueRequest(true), admin));
+            assertThatThrownBy(() -> run(() -> service.issue(copy, new ResultDtos.IssueRequest(true), admin)))
+                    .isInstanceOf(ApiExceptions.ConflictException.class);
+
+            OrderEntity disputed = deliver(order(buyer), 15);
+            transition(disputed, OrderStatus.DISPUTED);
+            transition(disputed, OrderStatus.CREDITED);
+            transition(champs, OrderStatus.DISPUTED);
+            assertThatThrownBy(() -> transition(champs, OrderStatus.CREDITED))
+                    .isInstanceOf(ApiExceptions.ConflictException.class);
+
+            StoreCreditService storeCredit = new StoreCreditService(credit, clock);
+            long held = creditBalance(buyer);
+            String ref = "GFS-27-LOOP" + i;
+            long next = jdbc.queryForObject("""
+                    insert into orders (public_ref, account_id, season, sku, quantity, delivery_method, currency,
+                                        subtotal_minor, total_minor, price_breakdown, status, quote_id, guest_email,
+                                        store_credit_minor)
+                    values (?, ?, 'FC27', 'TRADING_SERVICE', 1, 'PLAYER_AUCTION', 'INR', ?, 0,
+                            '{"lines":[]}'::jsonb, 'AWAITING_PAYMENT', ?, 'buyer@example.test', ?)
+                    returning id
+                    """, Long.class, ref, buyer, held, "q_" + ref, held);
+            run(() -> storeCredit.spend(buyer, next, Currency.INR, held, ref));
+            assertThat(creditBalance(buyer)).isZero();
+            SmallPool.assertAllReturned(pool);
+        }
     }
 }

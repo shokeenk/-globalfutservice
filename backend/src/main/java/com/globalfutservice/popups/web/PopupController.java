@@ -60,8 +60,11 @@ public class PopupController {
     }
 
     /**
-     * One image, streamed from the database in chunks. The URL carries the id and the
-     * start of the SHA-256: the bytes behind it never change, so it is cached for a year.
+     * One image. The URL carries the id and the start of the SHA-256: the bytes behind it
+     * never change, so it is cached for a year.
+     *
+     * <p>Read whole first, then written: no database connection is held while a slow or
+     * stalled browser takes the bytes. See {@link PopupImageStore}.
      */
     @GetMapping("/images/{id}/{file}")
     @Operation(summary = "A popup image")
@@ -71,11 +74,12 @@ public class PopupController {
                 .filter(r -> file.equals(r.version() + "." + r.extension()))
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("No such image."));
         response.setContentType(row.contentType());
-        response.setContentLengthLong(row.sizeBytes());
         response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable");
         response.setHeader(HttpHeaders.ETAG, "\"" + row.sha256() + "\"");
         response.setHeader("X-Content-Type-Options", "nosniff");
-        images.stream(id, response.getOutputStream());
+        byte[] bytes = images.read(id);
+        response.setContentLength(bytes.length);
+        response.getOutputStream().write(bytes);
     }
 
     @PostMapping("/{id}/events")

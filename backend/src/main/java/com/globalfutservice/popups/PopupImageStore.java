@@ -1,12 +1,14 @@
 package com.globalfutservice.popups;
 
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
 import java.util.HexFormat;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,12 +22,17 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p><b>Why the database.</b> Render wipes the disk on every deploy, and nothing else here
  * stores files: listing artwork and payment screenshots are in Postgres too.
  *
- * <p><b>Why large objects, not BYTEA.</b> A BYTEA value comes back from the driver whole:
- * serving a 1.5 MB image would hold 1.5 MB per request on a 512 MB server, and a burst of
- * first visitors would hold it many times over. A large object is read in chunks, so
- * {@link #stream} asks the server for {@link #CHUNK} bytes at a time ({@code lo_get} with an
- * offset) and copies each to the response, so it never has more of the image in memory
- * than that. Reads run in one read-only transaction, so an image cannot change under them.
+ * <p><b>Reading: whole, then let go of the connection.</b> {@link #read} reads the image in
+ * {@link #CHUNK}-byte pieces ({@code lo_get} with an offset) inside one short read-only
+ * transaction, and returns the bytes; only then does the caller write them to the browser.
+ * It once copied each piece straight to the response from inside the transaction, which
+ * held a pooled connection for as long as the browser took to take the bytes -- and a phone
+ * on a bad network, or a connection left half-open, took forever. A few of those held every
+ * connection in the pool and took the site down (2026-10-23). An image is at most 1.5 MB.
+ *
+ * <p><b>A small cache.</b> An image never changes once stored, so the bytes are kept in
+ * memory, newest-used first, up to {@link #CACHE_BYTES} in all: a popup on the home page is
+ * read from the database once, not on every first visit.
  *
  * <p>A row is never changed. A new upload is a new row with a new id, and the URL carries
  * the id and the first characters of the SHA-256, so it can be cached for a year.
@@ -34,6 +41,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class PopupImageStore {
 
     static final int CHUNK = 64 * 1024;
+
+    /** All cached images together: a handful of popups' desktop and phone images. */
+    static final long CACHE_BYTES = 8L * 1024 * 1024;
+
+    /** Bytes by image id, least recently used first. Guarded by itself. */
+    private final LinkedHashMap<Long, byte[]> cache = new LinkedHashMap<>(16, 0.75f, true);
+    private long cachedBytes;
 
     public record ImageRow(long id, long campaignId, String contentType, int sizeBytes, int width, int height,
                            String sha256) {
@@ -86,28 +100,47 @@ public class PopupImageStore {
     }
 
     /**
-     * Copies the image to {@code out}, {@link #CHUNK} bytes at a time. Headers are the
-     * caller's, set before this is called.
+     * The whole image, read in one short read-only transaction that is closed before this
+     * returns: the caller writes the bytes to the browser with no connection held.
      */
-    public void stream(long id, OutputStream out) {
-        readOnly.executeWithoutResult(s -> {
-            Integer size = jdbc.queryForObject("select size_bytes from popup_image where id = ?", Integer.class, id);
-            try {
-                for (long offset = 0; offset < size; offset += CHUNK) {
-                    byte[] chunk = jdbc.queryForObject(
-                            "select lo_get(data_oid, ?, ?) from popup_image where id = ?",
-                            byte[].class, offset, CHUNK, id);
-                    if (chunk == null || chunk.length == 0) {
-                        break;
-                    }
-                    out.write(chunk);
-                }
-                out.flush();
-            } catch (IOException e) {
-                // The browser went away mid-image. Nothing to do but stop.
-                throw new IllegalStateException("image stream interrupted", e);
+    public byte[] read(long id) {
+        synchronized (cache) {
+            byte[] hit = cache.get(id);
+            if (hit != null) {
+                return hit;
             }
+        }
+        byte[] bytes = readOnly.execute(s -> {
+            Integer size = jdbc.queryForObject("select size_bytes from popup_image where id = ?", Integer.class, id);
+            ByteArrayOutputStream out = new ByteArrayOutputStream(size);
+            for (long offset = 0; offset < size; offset += CHUNK) {
+                byte[] chunk = jdbc.queryForObject("select lo_get(data_oid, ?, ?) from popup_image where id = ?",
+                        byte[].class, offset, CHUNK, id);
+                if (chunk == null || chunk.length == 0) {
+                    break;
+                }
+                out.writeBytes(chunk);
+            }
+            return out.toByteArray();
         });
+        remember(id, bytes);
+        return bytes;
+    }
+
+    private void remember(long id, byte[] bytes) {
+        if (bytes.length > CACHE_BYTES) {
+            return;
+        }
+        synchronized (cache) {
+            if (cache.put(id, bytes) == null) {
+                cachedBytes += bytes.length;
+            }
+            Iterator<Map.Entry<Long, byte[]>> oldest = cache.entrySet().iterator();
+            while (cachedBytes > CACHE_BYTES && oldest.hasNext()) {
+                cachedBytes -= oldest.next().getValue().length;
+                oldest.remove();
+            }
+        }
     }
 
     /** Removes images and their bytes. Rows still pointed at must be let go first. */
@@ -121,6 +154,14 @@ public class PopupImageStore {
                 jdbc.update("delete from popup_image where id = ?", id);
             }
         });
+        synchronized (cache) {
+            for (Long id : ids) {
+                byte[] gone = cache.remove(id);
+                if (gone != null) {
+                    cachedBytes -= gone.length;
+                }
+            }
+        }
     }
 
     /** Every image of a campaign, newest first. */

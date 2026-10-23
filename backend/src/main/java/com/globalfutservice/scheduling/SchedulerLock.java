@@ -9,8 +9,12 @@ import java.util.zip.CRC32;
 
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariDataSource;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,6 +31,12 @@ import org.springframework.stereotype.Component;
  * aborted rather than returned to the pool, because a session lock stays held for as long
  * as its session lives -- and a crashed instance's session ends with it, which is what
  * makes a dead runner release the lock by itself.
+ *
+ * <p><b>Its own pool.</b> The lock connections come from a small pool of their own, not the
+ * application's: a lock sits on its connection for a whole run, and drawn from the main
+ * pool, enough jobs at once could leave a customer's request waiting for a connection. Here
+ * the worst a busy scheduler can do is skip a run (see {@link #LOCK_POOL_SIZE}). The job's
+ * own work still uses the main pool, a connection at a time like any request.
  */
 @Component
 public class SchedulerLock {
@@ -36,10 +46,41 @@ public class SchedulerLock {
     /** The high half of every key, so these never collide with another use of advisory locks. */
     private static final long NAMESPACE = 0x4746_5300L << 32;
 
-    private final DataSource dataSource;
+    /** Lock sessions at once. A run that finds none free within 5 s is skipped, never queued. */
+    static final int LOCK_POOL_SIZE = 4;
 
+    private final DataSource dataSource;
+    private final HikariDataSource owned;
+
+    /** The application's: a pool of its own on the same database. */
+    @Autowired
+    public SchedulerLock(DataSourceProperties database) {
+        this.owned = lockPool(database);
+        this.dataSource = owned;
+    }
+
+    /** Locks on a given data source; the caller owns it. For tests. */
     public SchedulerLock(DataSource dataSource) {
         this.dataSource = dataSource;
+        this.owned = null;
+    }
+
+    private static HikariDataSource lockPool(DataSourceProperties database) {
+        HikariDataSource pool = database.initializeDataSourceBuilder().type(HikariDataSource.class).build();
+        pool.setPoolName("SchedulerLocks");
+        pool.setMaximumPoolSize(LOCK_POOL_SIZE);
+        pool.setMinimumIdle(0);
+        pool.setConnectionTimeout(5_000);
+        pool.setIdleTimeout(60_000);
+        pool.setMaxLifetime(600_000);
+        return pool;
+    }
+
+    @PreDestroy
+    void close() {
+        if (owned != null) {
+            owned.close();
+        }
     }
 
     /**

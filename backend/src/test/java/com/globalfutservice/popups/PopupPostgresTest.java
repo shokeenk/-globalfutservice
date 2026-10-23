@@ -11,23 +11,35 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.globalfutservice.popups.web.PopupController;
+import com.globalfutservice.testsupport.SmallPool;
+import com.zaxxer.hikari.HikariDataSource;
 import com.globalfutservice.popups.PopupPublicService.Event;
 import com.globalfutservice.popups.PopupService.PopupInput;
 import com.globalfutservice.popups.PopupTypes.Page;
 import com.globalfutservice.web.ApiExceptions;
 import jakarta.persistence.EntityManager;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.WriteListener;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
@@ -55,6 +67,8 @@ class PopupPostgresTest {
     private PopupService popups;
     private PopupPublicService live;
     private PopupImageStore images;
+    private HikariDataSource pool;
+    private JpaTransactionManager transactions;
     private long adminId;
 
     @BeforeAll
@@ -62,9 +76,10 @@ class PopupPostgresTest {
         String url = System.getenv("GFS_TEST_PG_URL");
         assumeTrue(url != null && !url.isBlank(), "GFS_TEST_PG_URL not set: no database to test against");
         schema = "popups_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        DriverManagerDataSource ds = new DriverManagerDataSource(
-                url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema,
-                System.getenv("GFS_TEST_PG_USER"), System.getenv("GFS_TEST_PG_PASSWORD"));
+        // Three connections: one not given back is noticed at once.
+        HikariDataSource ds = SmallPool.of(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema,
+                System.getenv("GFS_TEST_PG_USER"), System.getenv("GFS_TEST_PG_PASSWORD"), 3);
+        pool = ds;
         jdbc = new JdbcTemplate(ds);
         Flyway.configure().dataSource(ds).schemas(schema).defaultSchema(schema).locations("classpath:db/migration")
                 .initSql("SET search_path TO " + schema + ", public").load().migrate();
@@ -81,7 +96,7 @@ class PopupPostgresTest {
                 "hibernate.implicit_naming_strategy",
                 "org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy"));
         factory.afterPropertiesSet();
-        JpaTransactionManager transactions = new JpaTransactionManager(factory.getObject());
+        transactions = new JpaTransactionManager(factory.getObject());
         transactions.setDataSource(ds);
         tx = new TransactionTemplate(transactions);
         EntityManager shared = SharedEntityManagerCreator.createSharedEntityManager(factory.getObject());
@@ -105,6 +120,14 @@ class PopupPostgresTest {
             jdbc.execute("select lo_unlink(data_oid) from " + schema + ".popup_image");
             jdbc.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
         }
+        if (pool != null) {
+            pool.close();
+        }
+    }
+
+    @AfterEach
+    void everyConnectionBack() {
+        SmallPool.assertAllReturned(pool);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -188,7 +211,7 @@ class PopupPostgresTest {
     }
 
     @Test
-    @DisplayName("an image is stored as a large object and streamed back byte for byte, in 64 KB chunks")
+    @DisplayName("an image is stored as a large object and read back byte for byte, in 64 KB chunks")
     void imageRoundTrip() throws IOException {
         PopupService.PopupView p = create(schedule(null, null));
         byte[] big = noisyPng(700, 500);
@@ -198,18 +221,9 @@ class PopupPostgresTest {
         assertThat(image.contentType()).isEqualTo("image/png");
         assertThat(image.url()).matches("/api/v1/popups/images/\\d+/[0-9a-f]{12}\\.png");
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        int[] writes = {0};
-        images.stream(image.id(), new OutputStream() {
-            @Override public void write(int b) { out.write(b); }
-            @Override public void write(byte[] b, int off, int len) {
-                assertThat(len).isLessThanOrEqualTo(PopupImageStore.CHUNK);
-                writes[0]++;
-                out.write(b, off, len);
-            }
-        });
-        assertThat(out.toByteArray()).isEqualTo(big);
-        assertThat(writes[0]).isGreaterThanOrEqualTo(3);
+        assertThat(images.read(image.id())).isEqualTo(big);
+        // The second read is the cache's: the same bytes.
+        assertThat(images.read(image.id())).isEqualTo(big);
     }
 
     @Test
@@ -317,5 +331,99 @@ class PopupPostgresTest {
         @Override public ZoneId getZone() { return ZoneOffset.UTC; }
         @Override public Clock withZone(ZoneId zone) { return this; }
         @Override public Instant instant() { return now; }
+    }
+
+    // ------------------------------------------------------------------ connections (2026-10-23)
+
+    /** A browser on the other end of the image download: how it takes the bytes. */
+    private interface Browser {
+        void write(byte[] b, int off, int len) throws IOException;
+    }
+
+    /** The image endpoint as the browser calls it, with a fresh store (an empty cache) unless given one. */
+    private byte[] download(PopupController controller, PopupService.ImageView image, Browser browser)
+            throws IOException {
+        ByteArrayOutputStream received = new ByteArrayOutputStream();
+        MockHttpServletResponse mock = new MockHttpServletResponse();
+        ServletOutputStream out = new ServletOutputStream() {
+            @Override public boolean isReady() { return true; }
+            @Override public void setWriteListener(WriteListener listener) { }
+            @Override public void write(int b) throws IOException { write(new byte[]{(byte) b}, 0, 1); }
+            @Override public void write(byte[] b, int off, int len) throws IOException {
+                browser.write(b, off, len);
+                received.write(b, off, len);
+            }
+        };
+        String file = image.url().substring(image.url().lastIndexOf('/') + 1);
+        controller.image(image.id(), file, new HttpServletResponseWrapper(mock) {
+            @Override public ServletOutputStream getOutputStream() { return out; }
+        });
+        return received.toByteArray();
+    }
+
+    private PopupController freshController() {
+        return new PopupController(live, new PopupImageStore(jdbc, transactions));
+    }
+
+    private PopupService.ImageView bigImage() throws IOException {
+        PopupService.PopupView p = create(schedule(null, null));
+        return withImage(p.id(), noisyPng(700, 500), false).desktopImage();
+    }
+
+    @Test
+    @DisplayName("200 image downloads on a pool of 3, from the database every time: every connection comes back")
+    void manyDownloads() throws IOException {
+        PopupService.ImageView image = bigImage();
+        byte[] expected = images.read(image.id());
+        for (int i = 0; i < 200; i++) {
+            assertThat(download(freshController(), image, (b, off, len) -> { })).isEqualTo(expected);
+        }
+        SmallPool.assertAllReturned(pool);
+    }
+
+    @Test
+    @DisplayName("aborted downloads (the browser goes away mid-image) give every connection back")
+    void abortedDownloads() throws IOException {
+        PopupService.ImageView image = bigImage();
+        for (int i = 0; i < 50; i++) {
+            assertThatThrownBy(() -> download(freshController(), image, (b, off, len) -> {
+                throw new IOException("Broken pipe");
+            })).isInstanceOf(IOException.class);
+        }
+        SmallPool.assertAllReturned(pool);
+    }
+
+    @Test
+    @DisplayName("ten stalled browsers holding image downloads open hold no connection: the site still answers")
+    void stalledBrowsersHoldNoConnection() throws Exception {
+        PopupService.ImageView image = bigImage();
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch writing = new CountDownLatch(10);
+        ExecutorService browsers = Executors.newFixedThreadPool(10);
+        try {
+            List<Future<byte[]>> downloads = new java.util.ArrayList<>();
+            for (int i = 0; i < 10; i++) {
+                downloads.add(browsers.submit(() -> download(freshController(), image, (b, off, len) -> {
+                    writing.countDown();
+                    try {
+                        release.await();   // a phone on a bad network: the bytes go nowhere
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                })));
+            }
+            assertThat(writing.await(10, TimeUnit.SECONDS)).as("all ten are writing").isTrue();
+            // Ten downloads stuck mid-write, a pool of three: none of them is holding one.
+            assertThat(SmallPool.active(pool)).isZero();
+            assertThat(jdbc.queryForObject("select 1", Integer.class)).isEqualTo(1);
+            release.countDown();
+            for (Future<byte[]> d : downloads) {
+                assertThat(d.get(10, TimeUnit.SECONDS)).hasSize(images.read(image.id()).length);
+            }
+        } finally {
+            release.countDown();
+            browsers.shutdownNow();
+        }
+        SmallPool.assertAllReturned(pool);
     }
 }
