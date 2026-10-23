@@ -28,13 +28,15 @@ afterEach(() => {
 
 describe('tawk.to configuration', () => {
   it('needs both ids, as plain tokens, or there is no chat at all', () => {
-    expect(tawkConfig({ VITE_TAWK_PROPERTY_ID: 'abc123', VITE_TAWK_EMBED_WIDGET_ID: 'w1' }))
-      .toEqual({ propertyId: 'abc123', widgetId: 'w1' })
-    expect(tawkConfig({ VITE_TAWK_PROPERTY_ID: 'abc123' })).toBeNull()
-    expect(tawkConfig({ VITE_TAWK_PROPERTY_ID: '', VITE_TAWK_EMBED_WIDGET_ID: 'w1' })).toBeNull()
+    const ids = (propertyId: string | null, embedWidgetId: string | null) =>
+      ({ propertyId, embedWidgetId, floatingWidgetId: null })
+    expect(tawkConfig(ids('abc123', 'w1'))).toEqual({ propertyId: 'abc123', widgetId: 'w1' })
+    expect(tawkConfig(ids('abc123', null))).toBeNull()
+    expect(tawkConfig(ids('', 'w1'))).toBeNull()
+    expect(tawkConfig(null)).toBeNull()
     // Never something that could change the script's address.
-    expect(tawkConfig({ VITE_TAWK_PROPERTY_ID: 'abc/../x', VITE_TAWK_EMBED_WIDGET_ID: 'w1' })).toBeNull()
-    expect(tawkConfig({ VITE_TAWK_PROPERTY_ID: 'abc', VITE_TAWK_EMBED_WIDGET_ID: 'w1?x=1' })).toBeNull()
+    expect(tawkConfig(ids('abc/../x', 'w1'))).toBeNull()
+    expect(tawkConfig(ids('abc', 'w1?x=1'))).toBeNull()
   })
 })
 

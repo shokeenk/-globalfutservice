@@ -73,7 +73,7 @@ class SupportChatServiceTest {
         sessions = mock(CoachingSessionRepository.class);
         coaches = mock(CoachRepository.class);
         props = mock(AppProperties.class);
-        when(props.tawk()).thenReturn(new AppProperties.Tawk(KEY));
+        when(props.tawk()).thenReturn(new AppProperties.Tawk(KEY, null, null, null));
         service = new SupportChatService(orders, accounts, sessions, coaches, props,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         AccountEntity account = secretive(AccountEntity.class);
@@ -234,9 +234,9 @@ class SupportChatServiceTest {
 
         assertThat(service.contextFor(REF, ACCOUNT).chat().hash()).isEqualTo(expected).hasSize(64);
 
-        when(props.tawk()).thenReturn(new AppProperties.Tawk(""));
+        when(props.tawk()).thenReturn(new AppProperties.Tawk("", null, null, null));
         assertThat(service.contextFor(REF, ACCOUNT).chat().hash()).isNull();
-        assertThat(new AppProperties.Tawk(KEY).toString()).doesNotContain(KEY).contains("[redacted]");
+        assertThat(new AppProperties.Tawk(KEY, null, null, null).toString()).doesNotContain(KEY).contains("[redacted]");
     }
 
     @Test

@@ -82,9 +82,10 @@ function renderAt(path: string) {
 const tawkLoaded = () => [...document.querySelectorAll('script')].some((s) => s.src.includes('tawk.to'))
   || window.Tawk_API !== undefined
 
-beforeEach(() => {
+beforeEach(async () => {
   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo
   api.get.mockReset()
+  ;(await import('../lib/chatConfig')).resetChatIdsForTests()
   auth.account = OWNER
 })
 afterEach(() => {
@@ -97,7 +98,8 @@ describe('who may open a support page', () => {
     auth.account = null
     renderAt('/orders/GFS-26-70C4DPWH/support')
     expect(await screen.findByText('login page, then back to /orders/GFS-26-70C4DPWH/support')).toBeInTheDocument()
-    expect(api.get).not.toHaveBeenCalled()
+    // Nothing about the order is asked for; only the chat's public ids, which every page reads.
+    expect(api.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/api/v1/chat/config')).toEqual([])
   })
 
   it('somebody else\'s order, or one that does not exist: the ordinary not-found page, alike', async () => {
@@ -176,11 +178,18 @@ describe('the page', () => {
     })
 })
 
+/** The API serving tawk.to's ids, as the live site does since they left the build; anything else as before. */
+function serveChatIds() {
+  const before = api.get.getMockImplementation()
+  api.get.mockImplementation(async (path: string) => (path === '/api/v1/chat/config'
+    ? { propertyId: 'prop123', embedWidgetId: 'widget1', floatingWidgetId: null }
+    : before ? before(path) : context('BOOSTING')))
+}
+
 describe('tawk.to stays on support pages', () => {
   it.each([['/'], ['/order'], ['/boosting/checkout'], ['/admin/orders']])(
     '%s loads nothing of it, with the chat configured', async (path) => {
-      vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-      vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
+      serveChatIds()
       auth.account = { ...OWNER, role: 'ADMIN' }
       renderAt(path)
       await screen.findByText(/home page|order page|checkout page|admin orders/)
@@ -189,9 +198,8 @@ describe('tawk.to stays on support pages', () => {
 
   it('on a support page it loads as the page opens, below the order and the notice, with no Start chat step',
     async () => {
-      vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-      vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'widget1')
       api.get.mockResolvedValue(context('BOOSTING'))
+      serveChatIds()
       renderAt('/orders/GFS-26-70C4DPWH/support')
       expect(await screen.findByTestId('chat-notice')).toHaveTextContent('Live chat is provided by tawk.to.')
       expect(screen.queryByRole('button', { name: /start chat/i })).toBeNull()

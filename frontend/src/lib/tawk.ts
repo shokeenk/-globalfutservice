@@ -1,3 +1,5 @@
+import type { ChatIds } from './chatConfig'
+
 /**
  * tawk.to, the live chat: embedded in an order's support page, and behind the floating
  * chat button on the few pages that have one (see {@code components/LiveChatButton}).
@@ -79,10 +81,13 @@ declare global {
 /** tawk.to's ids are plain tokens; anything else is treated as not configured rather than put in a URL. */
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 
-/** The property and Embed Widget ids, or null when either is missing or malformed. */
-export function tawkConfig(env: Record<string, string | undefined> = import.meta.env): TawkConfig | null {
-  const propertyId = env.VITE_TAWK_PROPERTY_ID?.trim() ?? ''
-  const widgetId = env.VITE_TAWK_EMBED_WIDGET_ID?.trim() ?? ''
+/**
+ * The property and Embed Widget ids, from the ids the API serves (see {@code chatConfig}),
+ * or null when either is missing or malformed.
+ */
+export function tawkConfig(ids: ChatIds | null | undefined): TawkConfig | null {
+  const propertyId = ids?.propertyId?.trim() ?? ''
+  const widgetId = ids?.embedWidgetId?.trim() ?? ''
   if (!ID.test(propertyId) || !ID.test(widgetId)) return null
   return { propertyId, widgetId }
 }
@@ -91,9 +96,9 @@ export function tawkConfig(env: Record<string, string | undefined> = import.meta
  * The floating widget's ids: the same property, and a widget of the Floating type. Null when
  * either is missing or malformed, and then no chat button is shown.
  */
-export function floatingTawkConfig(env: Record<string, string | undefined> = import.meta.env): TawkConfig | null {
-  const propertyId = env.VITE_TAWK_PROPERTY_ID?.trim() ?? ''
-  const widgetId = env.VITE_TAWK_FLOATING_WIDGET_ID?.trim() ?? ''
+export function floatingTawkConfig(ids: ChatIds | null | undefined): TawkConfig | null {
+  const propertyId = ids?.propertyId?.trim() ?? ''
+  const widgetId = ids?.floatingWidgetId?.trim() ?? ''
   if (!ID.test(propertyId) || !ID.test(widgetId)) return null
   return { propertyId, widgetId }
 }

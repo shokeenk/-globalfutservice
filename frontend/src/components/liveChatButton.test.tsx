@@ -8,6 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 vi.mock('./AskWidget', () => ({ AskWidget: () => <div data-testid="ask-widget" /> }))
+/** The ids the API served at start; set per test. */
+const chat = vi.hoisted(() => ({ ids: null as null | { propertyId: string | null; embedWidgetId: string | null;
+  floatingWidgetId: string | null } }))
+vi.mock('../lib/chatConfig', async (original) => ({
+  ...(await original<typeof import('../lib/chatConfig')>()),
+  useChatIds: () => chat.ids,
+}))
 const reload = vi.hoisted(() => vi.fn())
 vi.mock('../lib/tawk', async (original) => ({
   ...(await original<typeof import('../lib/tawk')>()),
@@ -50,13 +57,10 @@ function tawkLoads() {
 beforeEach(() => {
   resetTawkForTests()
   window.sessionStorage.clear()
-  vi.stubEnv('VITE_TAWK_PROPERTY_ID', 'prop123')
-  vi.stubEnv('VITE_TAWK_FLOATING_WIDGET_ID', 'float456')
-  vi.stubEnv('VITE_TAWK_EMBED_WIDGET_ID', 'embed789')
+  chat.ids = { propertyId: 'prop123', floatingWidgetId: 'float456', embedWidgetId: 'embed789' }
 })
 
 afterEach(() => {
-  vi.unstubAllEnvs()
   vi.clearAllMocks()
   resetTawkForTests()
 })
@@ -87,7 +91,7 @@ describe('which pages have the chat button', () => {
   })
 
   it('without the floating widget id, the chat pages show no chat button, only what they had before', () => {
-    vi.stubEnv('VITE_TAWK_FLOATING_WIDGET_ID', '')
+    chat.ids = { propertyId: 'prop123', floatingWidgetId: null, embedWidgetId: 'embed789' }
     corner('/support')
     expect(screen.queryByRole('button', { name: 'Live chat' })).not.toBeInTheDocument()
     expect(screen.getByTestId('ask-widget')).toBeInTheDocument()
