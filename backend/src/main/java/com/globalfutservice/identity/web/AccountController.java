@@ -5,6 +5,7 @@ import com.globalfutservice.domain.money.Currency;
 import com.globalfutservice.domain.money.Money;
 import com.globalfutservice.domain.loyalty.LoyaltyTier;
 import com.globalfutservice.loyalty.LoyaltyService;
+import com.globalfutservice.loyalty.PointsStatement;
 import com.globalfutservice.storecredit.StoreCreditService;
 import com.globalfutservice.loyalty.LoyaltyStatus;
 import com.globalfutservice.marketing.MarketingPreferenceService;
@@ -43,9 +44,12 @@ public class AccountController {
     private final AppProperties props;
     private final MarketingPreferenceService marketing;
     private final StoreCreditService storeCredit;
+    private final PointsStatement points;
 
     public AccountController(LoyaltyService loyaltyService, AppProperties props,
-                             MarketingPreferenceService marketing, StoreCreditService storeCredit) {
+                             MarketingPreferenceService marketing, StoreCreditService storeCredit,
+                             PointsStatement points) {
+        this.points = points;
         this.storeCredit = storeCredit;
         this.loyaltyService = loyaltyService;
         this.props = props;
@@ -98,7 +102,8 @@ public class AccountController {
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(new WalletResponse(
                         balance,
-                        loyaltyService.lifetimeEarned(principal.id()),
+                        // Real earnings only: never spent points coming back after a refund.
+                        points.breakdown(principal.id()).earned(),
                         valueMinor,
                         Money.ofMinor(valueMinor, Currency.INR).format(),
                         props.pricing().pointValueMinor(),
@@ -106,6 +111,33 @@ public class AccountController {
                         props.pricing().earnPointsPerUnit(),
                         props.pricing().maxWalletRedemptionBps(),
                         statement));
+    }
+
+    /**
+     * Where the points came from and went: available, earned, spent, returned, removed, and
+     * what is still on the way with the date each lands. Always adds up to the balance.
+     */
+    @GetMapping("/points")
+    @Operation(summary = "Points breakdown and points on the way")
+    public ResponseEntity<PointsStatement.Breakdown> points(@CurrentAccount AccountPrincipal principal) {
+        if (principal == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in.");
+        }
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(points.breakdown(principal.id()));
+    }
+
+    @GetMapping("/points/history")
+    @Operation(summary = "Points history, newest first, with the balance after each line")
+    public ResponseEntity<PointsStatement.History> pointsHistory(
+            @CurrentAccount AccountPrincipal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) {
+            throw new ApiExceptions.ForbiddenException("Please sign in.");
+        }
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(points.history(principal.id(), page, size));
     }
 
     public record CreditBalance(String currency, long minor, String formatted) {

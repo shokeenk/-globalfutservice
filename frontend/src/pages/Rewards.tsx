@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LoyaltyCurrencyNotice } from '../components/LoyaltyNotice'
 import { PageHeader } from '../components/PageHeader'
+import { MyPointsBreakdown } from '../components/PointsBook'
 import { StoreCreditBalance } from '../components/StoreCredit'
 import { Reveal } from '../motion/Reveal'
 import { Alert, Badge, Button, ButtonLink, Card, Section, Spinner } from '../components/ui'
@@ -374,6 +376,12 @@ function YourStanding() {
           </div>
         )}
       </div>
+
+      {/* Where the points came from and went, so the balance never looks like points went missing. */}
+      <MyPointsBreakdown className="mt-6 border-t border-ink-400 pt-5" />
+      <Link to="/account#points-history" className="mt-3 inline-block text-[13px] font-semibold text-gold-400 hover:underline">
+        {t.pointsBook.seeHistory}
+      </Link>
 
       {/* GFS Store Credit beside the points: money in a currency, apart from the tier ladder. */}
       <StoreCreditBalance className="mt-6 border-t border-ink-400 pt-5" />
